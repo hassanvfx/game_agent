@@ -53,6 +53,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a bounded parallel Game Remixer batch.")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--run-id")
+    parser.add_argument("--run-dir")
+    parser.add_argument("--runs-root")
     parser.add_argument("--model", default="gpt-5.4")
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--max-concurrency", type=int, default=2)
@@ -294,21 +296,24 @@ def main() -> None:
     args = parse_args()
     remix_prompt = resolve_remix_prompt(args)
 
-    run_dir = ROOT / "runs" / args.run_id if args.run_id else None
+    run_dir = Path(args.run_dir).resolve() if args.run_dir else (ROOT / "runs" / args.run_id if args.run_id else None)
     if run_dir is not None and run_dir.exists():
         trace_path = run_dir / DEBUG_TRACE_FILENAME
-        append_debug_trace(trace_path, f"Reusing existing run_dir={run_dir} supplied via --run-id")
+        source_label = "--run-dir" if args.run_dir else "--run-id"
+        append_debug_trace(trace_path, f"Reusing existing run_dir={run_dir} supplied via {source_label}")
     else:
-        create_cmd = [str(ROOT / "scripts" / "create_run.py"), "--manifest", args.manifest]
+        create_cmd = [str(ROOT / "scripts" / "create_run.py"), "--manifest", args.manifest, "--source-mode", args.source_mode]
         if args.run_id:
             create_cmd.extend(["--run-id", args.run_id])
+        if args.runs_root:
+            create_cmd.extend(["--runs-root", args.runs_root])
         run_dir = Path(run_python(*create_cmd))
         trace_path = run_dir / DEBUG_TRACE_FILENAME
         append_debug_trace(trace_path, f"Created run_dir={run_dir} via create_run.py")
     append_debug_trace(trace_path, f"run_operator_pipeline_batch.py starting for run_dir={run_dir}")
     append_debug_trace(
         trace_path,
-        f"Arguments: manifest={args.manifest}, run_id={args.run_id}, model={args.model}, agent_timeout={args.agent_timeout}, max_concurrency={args.max_concurrency}, poll_seconds={args.poll_seconds}, stale_heartbeat_seconds={args.stale_heartbeat_seconds}, source_mode={args.source_mode}, through={args.through}, registry_config={args.registry_config}, remix_prompt_present={bool(remix_prompt)} dry_run_operators={args.dry_run_operators} dry_run_spec_adaptor={args.dry_run_spec_adaptor}",
+        f"Arguments: manifest={args.manifest}, run_id={args.run_id}, run_dir={args.run_dir}, runs_root={args.runs_root}, model={args.model}, agent_timeout={args.agent_timeout}, max_concurrency={args.max_concurrency}, poll_seconds={args.poll_seconds}, stale_heartbeat_seconds={args.stale_heartbeat_seconds}, source_mode={args.source_mode}, through={args.through}, registry_config={args.registry_config}, remix_prompt_present={bool(remix_prompt)} dry_run_operators={args.dry_run_operators} dry_run_spec_adaptor={args.dry_run_spec_adaptor}",
     )
 
     append_debug_trace(trace_path, "Starting prepare_inputs.py")

@@ -211,6 +211,7 @@ def parse_args() -> argparse.Namespace:
         help="Manifest containing the required games list to inject into the workflow.",
     )
     parser.add_argument("--run-id", help="Optional explicit run id.")
+    parser.add_argument("--runs-root", help="Optional custom runs root directory.")
     parser.add_argument(
         "--source-mode",
         choices=["copy", "inplace"],
@@ -309,6 +310,8 @@ def launch_batch(args: argparse.Namespace, manifest_path: Path) -> dict[str, Any
     ]
     if args.run_id:
         command.extend(["--run-id", args.run_id])
+    if args.runs_root:
+        command.extend(["--runs-root", args.runs_root])
     if args.remix_prompt:
         command.extend(["--remix-prompt", args.remix_prompt])
     if args.remix_prompt_file:

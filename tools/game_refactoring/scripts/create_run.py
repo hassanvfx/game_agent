@@ -29,6 +29,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--run-id")
     parser.add_argument(
+        "--runs-root",
+        help="Optional custom root directory under which the run directory should be created. Defaults to the repo-local runs/ directory.",
+    )
+    parser.add_argument(
         "--source-mode",
         choices=["copy", "inplace"],
         default="copy",
@@ -40,7 +44,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     run_id = args.run_id or default_run_id()
-    run_dir = RUNS_ROOT / run_id
+    runs_root = Path(args.runs_root).resolve() if args.runs_root else RUNS_ROOT
+    run_dir = runs_root / run_id
     if run_dir.exists():
         raise SystemExit(f"Run directory already exists: {run_dir}")
 
@@ -74,6 +79,8 @@ def main() -> None:
 
     run_state = {
         "run_id": run_id,
+        "run_dir": str(run_dir),
+        "runs_root": str(runs_root),
         "status": "created",
         "current_phase": "run_created",
         "created_at": utc_now(),
@@ -89,6 +96,7 @@ def main() -> None:
             "Game Remixer run scaffold created.",
             "No transform execution has occurred yet.",
             f"Source mode configured: {args.source_mode}.",
+            f"Runs root configured: {runs_root}.",
         ],
     }
     write_json(run_dir / "run_state.json", run_state)

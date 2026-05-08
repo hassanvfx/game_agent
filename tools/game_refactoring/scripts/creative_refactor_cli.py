@@ -64,6 +64,10 @@ def add_batch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--manifest", required=True, help="Manifest file containing the list of games.")
     parser.add_argument("--run-id", help="Optional explicit run id. Defaults to create_run.py timestamp behavior.")
     parser.add_argument(
+        "--runs-root",
+        help="Optional custom runs root directory. Defaults to the repo-local runs/ directory.",
+    )
+    parser.add_argument(
         "--source-mode",
         choices=["copy", "inplace"],
         default="copy",
@@ -455,6 +459,8 @@ def start_batch(args: argparse.Namespace) -> dict:
     ]
     if args.run_id:
         create_cmd.extend(["--run-id", args.run_id])
+    if args.runs_root:
+        create_cmd.extend(["--runs-root", args.runs_root])
 
     run_dir = Path(run_python(*create_cmd))
     remix_prompt = resolve_remix_prompt_from_args(args)
@@ -465,8 +471,8 @@ def start_batch(args: argparse.Namespace) -> dict:
         str(ROOT / "scripts" / batch_runner),
         "--manifest",
         args.manifest,
-        "--run-id",
-        run_dir.name,
+        "--run-dir",
+        str(run_dir),
         "--model",
         args.model,
         "--agent-timeout",
@@ -521,6 +527,7 @@ def start_batch(args: argparse.Namespace) -> dict:
             "poll_seconds": args.poll_seconds,
             "stale_heartbeat_seconds": args.stale_heartbeat_seconds,
             "source_mode": args.source_mode,
+            "runs_root": str(Path(args.runs_root).resolve()) if args.runs_root else None,
             "remix_prompt_present": bool(remix_prompt),
             "dry_run_operators": args.dry_run_operators,
             "dry_run_spec_adaptor": args.dry_run_spec_adaptor,

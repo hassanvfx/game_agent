@@ -30,7 +30,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def relative_url(path: Path, root: Path) -> str:
-    return "/" + path.relative_to(root).as_posix()
+    try:
+        return "/" + path.relative_to(root).as_posix()
+    except ValueError:
+        return path.resolve().as_uri()
 
 
 def parse_utc(value: str | None) -> datetime | None:
