@@ -392,3 +392,196 @@ python3 scripts/kill_all_tool_runtimes.py \
 ---
 
 *This journal documents the emerging pattern for running `game_refactoring` in-place against external/shared game sources while storing run outputs under an external volume root for future repeatable workflows.*
+
+---
+
+### 2026-05-08 18:15 - Deterministic leased-port scaffolding and prompt contract hardening
+
+**Achievement:**
+Implemented the first concrete deterministic/exclusive browser-port refactor slice for `game_refactoring`: shared lease-state scaffolding, scheduler/worker propagation of assigned ports, and prompt hardening for the highest-risk browser-grounded operators.
+
+**Implementation Details:**
+- Created `tools/game_refactoring/scripts/port_lease_service.py`
+  - shared JSON-backed lease map
+  - one-time pool initialization
+  - passive stale eviction
+  - lease acquire / refresh / release helpers
+  - default unusual port pool rooted at `43100`
+  - default pool size increased to `1000`
+  - default lease TTL set to `3 hours`
+- Modified `tools/game_refactoring/scripts/run_operator_pipeline_batch.py`
+  - added batch-level playwright port pool flags
+  - acquires a leased port before each worker launch
+  - passes `--playwright-port` into per-game workers
+  - releases the lease when the worker finishes
+- Modified `tools/game_refactoring/scripts/run_operator_pipeline_game.py`
+  - added `--playwright-port`
+  - persists assigned port + validation root URL into run/game/stage/result metadata
+  - injects a `Validation Runtime Contract` block into the operator prompt header
+- Updated the most urgent conflicting prompts:
+  - `tools/game_refactoring/prompts/operators_v2/01_specimen_runtime_qa.md`
+  - `tools/game_refactoring/prompts/operators_v2/02_specimen_runtime_qa.md`
+  - `tools/game_refactoring/prompts/operators_v2/03_specimen_playwright_fix.md`
+  - `tools/game_refactoring/prompts/operators_v2/05_creative_remix_v1_visual_judge.md`
+
+**Why:**
+The earlier concurrency bug analysis strongly suggested that browser-grounded workers were still free to improvise localhost ports and therefore could attach to the wrong local server or generate screenshot evidence from the wrong runtime. The first goal here was to create an explicit runtime contract and begin enforcing exclusive assigned-port behavior end-to-end.
+
+**Key Technical Decisions:**
+- Did **not** overload `#PROMPT#`; instead added a dedicated `Validation Runtime Contract` header block.
+- Kept the lease state inside the run tree via a shared `_shared/port_leases.json` path.
+- Used passive cleanup on acquisition rather than full destructive pool reclaims.
+- Preserved backward compatibility for non-browser nodes by allowing `--playwright-port` to remain optional.
+- Kept the pool size / TTL easily configurable because the schedulers expose them as CLI flags.
+
+**Validation:**
+- Ran Python syntax compilation for:
+  - `tools/game_refactoring/scripts/port_lease_service.py`
+  - `tools/game_refactoring/scripts/run_operator_pipeline_batch.py`
+  - `tools/game_refactoring/scripts/run_operator_pipeline_game.py`
+
+**Remaining Follow-Up:**
+- Run an end-to-end batch smoke test to verify lease acquire/release behavior in live worker launches.
+- Continue evaluating whether lease refresh should be added for very long-running workers.
+
+**Follow-Up Intent:**
+- Fix Playwright behavior in the next pass after this checkpoint commit, using the restored workflow launch path as the new baseline for observation and debugging.
+
+**Status:** In Progress
+
+---
+
+### 2026-05-08 18:21 - Legacy extracted batch path aligned with deterministic port contract
+
+**Achievement:**
+Extended the deterministic/exclusive port refactor into the legacy extracted remixer batch path for consistency and future safety.
+
+**Implementation Details:**
+- Modified `tools/game_refactoring/scripts/run_parallel_batch.py`
+  - added the same leased-port CLI flags used by the operator-pipeline scheduler
+  - acquires a leased port before each `run_single_game.py` worker launch
+  - passes `--playwright-port` to the worker
+  - releases the lease on worker completion
+- Modified `tools/game_refactoring/scripts/run_single_game.py`
+  - added `--playwright-port`
+  - injects a `Validation Runtime Contract` block into the legacy in-place remix prompt
+  - persists assigned port / validation URL into job, result, game, invocation, and run metadata
+
+**Why:**
+Even though `run_parallel_batch.py` targets the older extracted remixer flow rather than the newer operator-pipeline browser stages, aligning both paths reduces future divergence and makes browser/runtime isolation rules consistent across the tool.
+
+**Validation:**
+- Verified Python syntax compilation for:
+  - `tools/game_refactoring/scripts/run_parallel_batch.py`
+  - `tools/game_refactoring/scripts/run_single_game.py`
+
+**Current State:**
+- operator-pipeline batch path: leased-port aware
+- legacy extracted batch path: leased-port aware
+- prompt/runtime contract rollout: applied to both browser-heavy operator prompts and the legacy extracted single-game prompt
+
+**Remaining Follow-Up:**
+- Run a real concurrent smoke test to validate unique lease assignment and release behavior under load.
+
+**Status:** In Progress
+
+---
+
+### 2026-05-08 18:28 - Disposable four-game lane-collision experiment scaffold
+
+**Achievement:**
+Created a disposable/retryable experiment scaffold for observing whether browser/runtime lanes collide over time when four different `creative_remix_v3` jobs are launched one minute apart against random games from `games/top100_vatsal`.
+
+**Implementation Details:**
+- Created:
+  - `tmp/game_refactoring_experiments/scripts/setup_four_game_lane_collision_experiment.py`
+- The setup script:
+  - randomly samples 4 games from `games/top100_vatsal`
+  - binds them to these primary prompts:
+    - `rick and morty`
+    - `harry potter`
+    - `my mom is a meme`
+    - `demon hunters anime`
+  - keeps these as alternates for future reruns:
+    - `flappy bird`
+    - `harry  potter vibe with flappy birds gamepelay`
+  - writes one-game manifests, prompt text files, a machine-readable experiment plan, a staggered launch shell script, and a single-job retry helper under:
+    - `tmp/game_refactoring_experiments/experiments/four_game_lane_collision/`
+- Generated scaffold artifacts:
+  - `tmp/game_refactoring_experiments/experiments/four_game_lane_collision/metadata/experiment_plan.json`
+  - `tmp/game_refactoring_experiments/experiments/four_game_lane_collision/launch_staggered.sh`
+  - `tmp/game_refactoring_experiments/experiments/four_game_lane_collision/retry_single_job.py`
+  - per-job manifests under `manifests/`
+  - per-job prompt files under `prompts/`
+  - per-job launch logs under `logs/`
+- The generated launch commands target:
+  - `tools/game_refactoring/scripts/creative_refactor_cli.py`
+  - `start-batch`
+  - `--pipeline v2`
+  - `--source-mode inplace`
+  - `--max-concurrency 1`
+  - `--runs-root /Volumes/backup/output/remixed`
+
+**Generated Sample Selection:**
+- `job_01`
+  - prompt: `rick and morty`
+  - game: `gamezone-0f3dc736-8159-48cf-93d0-bd78a54b8cd0`
+  - run_id: `run_lane_collision_20260509T002856Z_job_01_rick-and-morty`
+- `job_02`
+  - prompt: `harry potter`
+  - game: `gamezone-27ce7533-9ca8-46f9-96b6-2463b3441495`
+  - run_id: `run_lane_collision_20260509T002856Z_job_02_harry-potter`
+- `job_03`
+  - prompt: `my mom is a meme`
+  - game: `gamezone-021fa461-bb56-4b35-ab57-25d8b29813e1`
+  - run_id: `run_lane_collision_20260509T002856Z_job_03_my-mom-is-a-meme`
+- `job_04`
+  - prompt: `demon hunters anime`
+  - game: `gamezone-2b68136d-91f0-43a1-992b-4cef879ef733`
+  - run_id: `run_lane_collision_20260509T002856Z_job_04_demon-hunters-anime`
+
+**Why:**
+The immediate goal is not just to run another batch, but to make the concurrency observation loop easy to retry after partial failure. Disposable scaffolding keeps the selection, prompts, launch order, and retry commands explicit so we can reproduce the same experiment shape while inspecting whether assigned validation lanes drift or collide over time.
+
+**Validation:**
+- Verified syntax compilation for:
+  - `tmp/game_refactoring_experiments/scripts/setup_four_game_lane_collision_experiment.py`
+- Executed the setup script with `--force` to generate the full experiment scaffold and capture the selected games / run ids.
+
+**Next Operational Step:**
+Launch the generated staggered runner and then inspect each run’s assigned validation port metadata versus any browser-grounded evidence during execution.
+
+**Regression Follow-Up:**
+- The first disposable experiment scaffold accidentally launched `creative_refactor_cli.py start-batch` directly in order to pass the newly added leased-port flags.
+- That bypassed the prior `game_workflow.py` launch shape that had been used to select the intended workflow identity.
+- Fixed the regression by:
+  - adding leased-port override flags to `tools/game_refactoring/scripts/creative_refactor_cli.py`
+  - adding the same leased-port override flags to `tools/game_refactoring/scripts/game_workflow.py`
+  - restoring `tmp/game_refactoring_experiments/scripts/setup_four_game_lane_collision_experiment.py` to launch through `game_workflow.py` again
+- This preserves the pre-refactor entrypoint shape while still allowing the deterministic port settings to be forwarded end to end.
+
+**Validation:**
+- Ran Python syntax compilation for:
+  - `tools/game_refactoring/scripts/creative_refactor_cli.py`
+  - `tools/game_refactoring/scripts/game_workflow.py`
+  - `tmp/game_refactoring_experiments/scripts/setup_four_game_lane_collision_experiment.py`
+
+**Single-Batch Retry Setup:**
+- Created:
+  - `tmp/game_refactoring_experiments/fixtures/top100_vatsal_rick_and_morty_random4_manifest.json`
+- Selected the same 4 random games used by the earlier seed-driven experiment:
+  - `gamezone-0f3dc736-8159-48cf-93d0-bd78a54b8cd0`
+  - `gamezone-27ce7533-9ca8-46f9-96b6-2463b3441495`
+  - `gamezone-021fa461-bb56-4b35-ab57-25d8b29813e1`
+  - `gamezone-2b68136d-91f0-43a1-992b-4cef879ef733`
+- Relaunched as a single `creative_remix_v3` workflow run with:
+  - remix prompt: `rick and morty`
+  - source mode: `inplace`
+  - runs root: `/Volumes/backup/output/remixed`
+  - max concurrency: `1`
+- New run metadata:
+  - `run_id`: `run_game_remixer_20260509T004747Z`
+  - `run_dir`: `/Volumes/backup/output/remixed/run_game_remixer_20260509T004747Z`
+  - `workflow_manifest_path`: `/Users/hassan/repos/game_agent/tools/game_refactoring/runs/_workflow_manifests/creative_remix_v3__top100_vatsal_rick_and_morty_random4_manifest.json`
+
+**Status:** In Progress

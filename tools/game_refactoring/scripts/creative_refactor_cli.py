@@ -91,6 +91,17 @@ def add_batch_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--remix-prompt", help="Optional remix prompt.")
     parser.add_argument("--remix-prompt-file", help="Optional file containing remix prompt text.")
+    parser.add_argument("--playwright-port-base", type=int, help="Optional leased-port pool base for browser-grounded workers.")
+    parser.add_argument(
+        "--playwright-port-pool-size",
+        type=int,
+        help="Optional leased-port pool size for browser-grounded workers.",
+    )
+    parser.add_argument(
+        "--playwright-port-lease-ttl-seconds",
+        type=int,
+        help="Optional leased-port TTL in seconds for browser-grounded workers.",
+    )
     parser.add_argument(
         "--dry-run-operators",
         action="store_true",
@@ -488,6 +499,14 @@ def start_batch(args: argparse.Namespace) -> dict:
     ]
     if remix_prompt:
         run_parallel_command.extend(["--remix-prompt", remix_prompt])
+    if getattr(args, "playwright_port_base", None) is not None:
+        run_parallel_command.extend(["--playwright-port-base", str(args.playwright_port_base)])
+    if getattr(args, "playwright_port_pool_size", None) is not None:
+        run_parallel_command.extend(["--playwright-port-pool-size", str(args.playwright_port_pool_size)])
+    if getattr(args, "playwright_port_lease_ttl_seconds", None) is not None:
+        run_parallel_command.extend(
+            ["--playwright-port-lease-ttl-seconds", str(args.playwright_port_lease_ttl_seconds)]
+        )
     if args.dry_run_operators:
         run_parallel_command.append("--dry-run-operators")
     if args.dry_run_spec_adaptor:
@@ -529,6 +548,9 @@ def start_batch(args: argparse.Namespace) -> dict:
             "source_mode": args.source_mode,
             "runs_root": str(Path(args.runs_root).resolve()) if args.runs_root else None,
             "remix_prompt_present": bool(remix_prompt),
+            "playwright_port_base": getattr(args, "playwright_port_base", None),
+            "playwright_port_pool_size": getattr(args, "playwright_port_pool_size", None),
+            "playwright_port_lease_ttl_seconds": getattr(args, "playwright_port_lease_ttl_seconds", None),
             "dry_run_operators": args.dry_run_operators,
             "dry_run_spec_adaptor": args.dry_run_spec_adaptor,
             "stdout_path": str(launcher_stdout_path),

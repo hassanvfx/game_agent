@@ -229,6 +229,13 @@ def parse_args() -> argparse.Namespace:
         default=900,
         help="Heartbeat age threshold after which a worker is considered stale.",
     )
+    parser.add_argument("--playwright-port-base", type=int, help="Optional leased-port pool base override.")
+    parser.add_argument("--playwright-port-pool-size", type=int, help="Optional leased-port pool size override.")
+    parser.add_argument(
+        "--playwright-port-lease-ttl-seconds",
+        type=int,
+        help="Optional leased-port TTL override in seconds.",
+    )
     parser.add_argument("--remix-prompt", help="Optional remix prompt override.")
     parser.add_argument("--remix-prompt-file", help="Optional file containing remix prompt override text.")
     parser.add_argument(
@@ -316,6 +323,12 @@ def launch_batch(args: argparse.Namespace, manifest_path: Path) -> dict[str, Any
         command.extend(["--remix-prompt", args.remix_prompt])
     if args.remix_prompt_file:
         command.extend(["--remix-prompt-file", args.remix_prompt_file])
+    if args.playwright_port_base is not None:
+        command.extend(["--playwright-port-base", str(args.playwright_port_base)])
+    if args.playwright_port_pool_size is not None:
+        command.extend(["--playwright-port-pool-size", str(args.playwright_port_pool_size)])
+    if args.playwright_port_lease_ttl_seconds is not None:
+        command.extend(["--playwright-port-lease-ttl-seconds", str(args.playwright_port_lease_ttl_seconds)])
     if args.dry_run_operators:
         command.append("--dry-run-operators")
     if args.dry_run_spec_adaptor:
