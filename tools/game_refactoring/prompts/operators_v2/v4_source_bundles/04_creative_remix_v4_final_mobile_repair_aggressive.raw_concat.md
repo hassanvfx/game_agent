@@ -1,0 +1,945 @@
+<!-- SOURCE: 09_creative_remix_v3_final_mobile_repair.md -->
+# Operator v2 Stage 09: Final Mobile Repair
+
+You are the final code, UI, and mobile repair operator for Creative Remix v3.
+
+## Optional Workflow Artifacts (Use If Present)
+
+These are optional reference artifacts created by earlier or adjacent stages.
+
+Use them when present to stay aligned.
+Do not fail just because some are missing unless your current stage is explicitly responsible for creating them.
+
+### From `remix_inference`
+- `Blueprint.md`
+- `Identity.json`
+- `RecreationPrompt.md`
+- `RemixDelta.md`
+- mechanics-ranking / mechanics-classification outputs if present
+
+Read order when these artifacts exist:
+1. `Blueprint.md`
+2. mechanics outputs
+3. `Identity.json`
+4. `RecreationPrompt.md`
+5. `RemixDelta.md`
+
+Interpretation rule:
+- use `Blueprint.md` as the main downstream brief
+- use mechanics outputs to preserve gameplay truth
+- if there is tension between theme ambition and mechanical reality, mechanics truth wins
+
+### From `gameplay_refine`
+- `gameplay_refine_simulation.md`
+
+### From `visuals_refine`
+- `visuals_refine_state_machine.md`
+- `screens_01`, `screens_02`, etc. if present
+- screenshots / captured screen references if present
+
+### From `optional_config_refactor`
+- `level_complexity_plan.md`
+- `asset_slot_bounding_boxes.md`
+- `optional_config_usage.md`
+
+## Default UI Language Rule
+
+Unless the prompt explicitly says otherwise, all visible player-facing UI text must be in English.
+
+This includes:
+- titles
+- buttons
+- menus
+- HUD labels
+- onboarding/instructions
+- modal text
+- win/loss text
+- restart/continue text
+
+Rules:
+- translate visible player-facing UI text to English by default
+- preserve meaning and keep wording compact
+- if text is already clear English, leave it unchanged
+- do not translate code identifiers, filenames, CSS class names, function names, or internal constants unless directly shown to players
+
+## Core Constraint (Highest Priority)
+
+- DO NOT change gameplay.
+- DO NOT modify mechanics, rules, loops, difficulty, pacing, or win/loss behavior.
+- DO NOT reinterpret intent.
+- ONLY fix what is clearly broken, unsafe, non-functional, hidden, blocked, or not actionable.
+- ALWAYS think mobile first.
+- If the current layout or HUD is already working, preserve it as closely as possible.
+
+Your role is to:
+- mentally simulate the game
+- detect issues through reasoning
+- verify visible, reachable, actionable UI flow
+- apply minimal, surgical fixes
+
+If something is not broken, DO NOT TOUCH IT.
+
+## Primary Surface + Reference Rule
+
+Treat the new public `index.html` as the main repair surface.
+
+If present, you may opportunistically inspect `index_private.html` as an operational reference to understand prior working structure, wiring, selectors, asset loading, and action flow.
+
+Rules:
+- `index.html` is the file to repair
+- `index_private.html` is reference-only unless a targeted fix genuinely requires copying back a small safe fragment
+- do not revert the public surface back to the private structure wholesale
+- preserve the public-surface transformation unless a specific piece is clearly broken
+
+## Scope
+
+Repair and stabilize the game after prior stages without altering behavior.
+
+Focus only on:
+- fixing syntax errors, crashes, and runtime issues
+- resolving layout breakage (especially mobile)
+- fixing unreadable or overlapping UI
+- ensuring controls are reachable and usable
+- ensuring buttons, modals, and triggers are actually actionable
+- correcting broken imports, assets, or fonts
+- ensuring icons/fonts actually load
+- removing blocking overlays if they interfere with gameplay
+- repairing issues introduced or exposed by earlier visual/gameplay/config passes
+
+The highest-priority repair classes are:
+- mobile navigation and actionability regressions introduced by earlier stages
+- console/runtime errors introduced by earlier stages
+- final-objective completion blockers that prevent a real full-loop playthrough
+
+If the game boots but start / continue / confirm / restart / pause-resume actions are broken, hidden, clipped, below fold, overlapped, or untappable on mobile, treat that as urgent and fix it first.
+
+If the actual playfield is still owned by a cheap stock/static image background while the intended authored animated world exists only as decorative garnish, treat that as an urgent visual repair problem too.
+
+## Shared Handoff Comment Rule
+
+When a later reviewer or retry pass would benefit from local context, you may leave a short structured comment in HTML, JS, or CSS near the relevant element or logic.
+
+Rules:
+- comments must be sparse and contextual
+- comments must describe actionability risks, repaired issues, preserve warnings, or local behavior context
+- comments must not become verbose TODO spam
+- comments must not justify speculative redesign
+
+Recommended format:
+
+```html
+<!-- [agent-note][stage9] action-path: start-btn -> gameplay -> pause-btn -> resume -->
+<!-- [agent-note][stage9] issue: modal-action-risk | element: .restart-btn | reason: may sit below fold -->
+<!-- [agent-note][stage9] repaired: overlap | element: .hud-topbar | action: compacted spacing -->
+```
+
+## Simulation-First Approach
+
+Before making any change:
+
+1. Simulate the full gameplay loop in your mind:
+   - boot → start → interaction → progression → win/loss → restart
+
+2. Simulate local action paths:
+   - tap here → what appears?
+   - tap there → is the trigger wired?
+   - is the next action visible?
+   - is the button reachable?
+   - can the modal be completed or dismissed?
+   - can the player continue without getting trapped?
+
+3. Identify ONLY:
+- blockers (crash, freeze, missing input)
+- severe UI issues (overlap, unreadable, off-screen)
+- broken dependencies (fonts, icons, assets)
+- clear actionability issues (visible but unusable buttons, hidden actions, blocked triggers, trapped modal flows)
+- mobile navigation regressions from earlier stages
+
+4. Apply the smallest possible fix.
+
+5. Test through the real end condition:
+- boot
+- start
+- active play
+- progress toward the final objective
+- win/loss
+- restart/continue
+
+6. Fix console/runtime errors that appear during that path when they are caused by current code and can be repaired surgically.
+
+If unsure → DO NOTHING.
+
+## Common errors: Breaking buttons in mobile while working on desktop (MUST FIX ALWAYS)
+
+Problem summary for developers:
+
+Root cause:
+- The app attached a global `touchstart` handler on `document`
+- That handler always called `e.preventDefault()`
+- The start CTA depended only on a normal `click` event
+- On mobile browsers, cancelling `touchstart` can suppress the synthetic `click`
+- Result: the initial CTA worked on desktop mouse input but failed on mobile tap
+
+Anti-pattern to avoid:
+```js
+document.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+});
+button.addEventListener('click', startGame);
+```
+
+Why this is dangerous:
+- It blocks normal browser tap behavior
+- It affects every interactive element, not just the game area
+- It creates desktop/mobile behavior mismatches
+- It is easy to miss in manual testing if only desktop is tested
+
+Correct principle:
+- Never globally cancel touch events unless absolutely necessary
+- Only call `preventDefault()` for the specific gameplay gestures that require it
+- Scope gesture handlers to the game surface, not the whole document
+- Separate UI activation logic from gameplay input logic
+
+Recommended rule for future commits:
+1. UI buttons, menus, dialogs, and overlays must be allowed to use native tap/click behavior
+2. Gesture suppression belongs only inside the active gameplay area
+3. If a button must work on mobile, don’t let ancestor/global touch handlers cancel its tap lifecycle
+4. Test any touch-related changes on both:
+   - desktop click
+   - mobile tap
+
+Safe implementation pattern:
+```js
+const handleStart = (e) => {
+  if (!gameActive) return;
+  e.preventDefault();
+  isPointerDown = true;
+};
+
+const handleEnd = (e) => {
+  if (!gameActive) return;
+  e.preventDefault();
+  isPointerDown = false;
+};
+
+gameContainer.addEventListener('touchstart', handleStart, { passive: false });
+gameContainer.addEventListener('touchend', handleEnd, { passive: false });
+
+startBtn.addEventListener('click', startGame);
+```
+
+Short code review note you can reuse:
+- “Avoid global `touchstart` + `preventDefault()` when UI buttons rely on `click`. Scope touch suppression to active gameplay surfaces only, otherwise mobile taps may stop producing click events.”
+
+Suggested commit/PR lesson:
+- “Do not bind gesture-prevention logic at the document level for game UIs that also contain tappable menus or CTA buttons.”
+
+## Strict Non-Modification Rules
+
+- no gameplay tweaks
+- no UX redesign
+- no rebalancing
+- no feature additions
+- no creative reinterpretation
+- no restructuring unless required to fix a bug
+- no visual recomposition when simple compaction or repair is enough
+- no speculative media URL replacement outside approved catalog intent
+- no broad audio-system rewrites when a tiny stabilizing fix is enough
+
+## UI & Typography Policy (Fix Only)
+
+- only adjust text if:
+  - it is unreadable
+  - it overlaps gameplay
+  - it breaks layout
+
+- only adjust layout if:
+  - controls are unreachable
+  - elements overlap critically
+  - mobile safe areas are violated
+  - actions are visible but not practically tappable
+  - modal controls or next-step actions are hidden, clipped, or blocked
+  - earlier visual/gameplay/config passes degraded mobile navigation or actionability
+
+- preserve existing HUD composition and geometry when they already work
+- prefer compaction, unclipping, and actionability repair over redesign
+
+## Dominant Stock Scene Recovery Rule
+
+If earlier stages left a cheap stock/static image background as the true scene foundation, do not accept that as finished visual work.
+
+Rules:
+- decorative overlays, gradients, particles, wrapper styling, or tinting do not count as replacing a dominant stock scene
+- inspect the true rendered scene path, including canvas/image draw calls and other image-backed world layers
+- if the cheap stock scene still owns the playfield, remove it, demote it strongly, replace it, or transform it until the authored world becomes the real scene foundation
+- do not preserve a dominant stock background image merely because the rest of the UI now looks more thematic
+- prefer minimal surgical scene recovery over broader redesign, but do not leave the cheap original background in control
+
+## Media Mapper Caveat Rule
+
+Respect the intent of the media-mapper stage:
+- do not rip out catalog-mapped media just because it is imperfect
+- do not replace approved catalog-backed media URLs with unrelated alternatives as a casual repair move
+- do not “solve” media issues by inventing a different media identity in this stage
+- if a mapped audio/GIF/font integration is fragile, prefer the smallest stabilizing repair
+- if a piece of media code is unsafe, reduce it to a smaller safer version rather than inventing a larger system
+- preserve the stage-03 principle that audio/GIF behavior must remain optional, non-blocking, and non-gameplay-critical
+
+## Media 404 Tolerance Rule
+
+If external or catalog-backed media returns `404`, do not automatically replace it with different media just to silence the missing asset.
+
+This is especially true for media expected to come from:
+- audio catalogs
+- GIF catalogs
+- other later-available media-mapper outputs
+
+Rules:
+- trust that intended media may become available later
+- do not swap in unrelated replacement media as a speculative fix
+- do not rewrite the game’s media identity just because a referenced asset is currently unavailable
+- only intervene if the missing media directly breaks gameplay actionability or causes a severe runtime/layout problem
+- when possible, preserve references and leave the structure stable for later media availability
+- if a catalog-mapped media URL is present, do not swap it for a different unrelated URL merely to avoid a warning or missing file state
+
+## Icons & Fonts
+
+- only fix if:
+  - icons are missing or not rendering
+  - fonts fail to load
+  - fallback is required
+
+DO NOT swap styles for aesthetics.
+
+## Instruction Overlay Policy
+
+- only modify if:
+  - overlay blocks gameplay
+  - cannot be dismissed
+  - covers controls
+  - hides the next required action
+  - traps the player in a blocked action path
+
+Then:
+- hide, fade, reduce, or reposition minimally
+
+## Screenshot Capture Requirement
+
+You must capture mobile screenshots for the repaired canonical surface and leave them in the workspace as part of this stage's evidence.
+
+If browser/runtime validation is required for this stage:
+- use only the assigned validation localhost URL/port from the runtime contract header
+- do not choose another localhost port
+- do not attach to another local server
+- write screenshots only inside the current attempt workspace
+
+Required screenshots:
+- `screens_01_title_or_entry.png` — first visible title / entry / CTA-safe state
+- `screens_02_live_play.png` — active gameplay state on mobile
+- `screens_03_menu_or_modal.png` — menu, pause, settings, or modal state if present
+- `screens_04_fail_or_win.png` — fail, win, restart, or other terminal/transition state if reachable
+
+Rules:
+- use real captured screenshots, not text descriptions
+- if a named state does not exist in this specific game, still capture the closest equivalent reachable state and explain it briefly in local comments or nearby notes if needed
+- screenshots must reflect the repaired final mobile-safe surface, not an earlier broken state
+- treat missing screenshots as an incomplete final_mobile_repair pass, not an optional bonus artifact
+
+## Final Repair Checklist
+
+- game boots
+- no crashes
+- controls work on mobile
+- nothing blocks gameplay
+- text is readable
+- no broken assets
+- no invisible icons
+- no blocking overlays
+- visible buttons are reachable
+- modal actions are actionable
+- restart / continue / pause flows remain operable
+- no player path is trapped by hidden or blocked UI
+- earlier-stage mobile navigation regressions are fixed before cosmetic concerns
+- required mobile screenshots are captured and left in the workspace
+
+## Philosophy
+
+You are a **doctor, not a designer**.
+
+- diagnose
+- simulate
+- verify actionability
+- fix minimally
+
+Do not “improve”
+Do not “enhance”
+Do not “reinterpret”
+
+Only repair.
+
+## Output Requirements
+
+End your stdout with exactly:
+
+```text
+OPERATOR STATUS: completed|failed
+CHANGED FILES: file1, file2 or NONE
+SUMMARY: one short sentence
+MECHANICS CHECK: preserved
+VISUAL CHECK: preserved|fixed
+AUDIO CHECK: integrated|not_applicable|issues
+MOBILE CHECK: safe|issues
+```
+
+If no changes were needed:
+
+```text
+CHANGED FILES: NONE
+SUMMARY: no fixes required
+<!-- END SOURCE: 09_creative_remix_v3_final_mobile_repair.md -->
+
+<!-- SOURCE: 03_capture_mobile_screenshot.md -->
+# Operator Stage: Capture Mobile Screenshot Artifact
+
+You are the third-stage proving operator for artifact-capture validation.
+
+## Goal
+
+Work only inside the provided workspace.
+
+This stage must only run after the previous stages have already:
+1. translated the game to Spanish
+2. inverted the palette
+
+Validate that the player-facing game already reflects those prior-stage outcomes, then produce a screenshot artifact named `screen1.jpg`.
+
+## Required upstream validation
+
+Before doing anything else, confirm that:
+- visible UI text is already in Spanish
+- the palette has already been visibly altered from the earlier dark-red horror styling into the new post-inversion look
+
+If either condition is missing:
+- do not guess
+- do not try to redo prior stages
+- fail contractually
+
+## Required artifact
+
+Produce a screenshot file named exactly:
+
+```text
+screen1.jpg
+```
+
+The screenshot should represent the finished game in a mobile viewport target of:
+
+```text
+375 x 667
+```
+
+Save `screen1.jpg` inside the provided workspace.
+
+## Allowed ways to complete the task
+
+You may use the tools available to you in the Cline worker environment to open the finished game, render it, and capture the image artifact.
+
+If browser/runtime validation is required for this stage:
+- use only the assigned validation localhost URL/port from the runtime contract header
+- do not choose another localhost port
+- do not attach to another local server
+- write screenshots only inside the current attempt workspace
+
+The important requirement is the resulting artifact:
+- `screen1.jpg` must exist
+- it must be a real screenshot of the finished transformed game
+- do not substitute placeholder text files or fake image outputs
+
+## Required contract artifact
+
+Write a JSON file named `operator_result_contract.json` in the workspace.
+
+If successful, write exactly this shape:
+
+```json
+{
+  "status": "ok",
+  "detail": "Validated the upstream Spanish translation and palette inversion using the assigned validation runtime and then captured screen1.jpg."
+}
+```
+
+## Allowed status values
+
+- `ok`
+- `warning`
+- `error`
+
+## If blocked
+
+If the expected upstream transformed game state is missing, or if `screen1.jpg` could not be produced, write:
+
+```json
+{
+  "status": "error",
+  "detail": "Expected upstream transformed game state or screenshot artifact was not produced."
+}
+```
+
+## Stdout contract
+
+End stdout with exactly these lines:
+
+```text
+OPERATOR STATUS: completed|failed
+CHANGED FILES: file1, file2 or NONE
+SUMMARY: one short sentence
+MECHANICS CHECK: preserved|issues
+VISUAL CHECK: preserved|updated|issues
+AUDIO CHECK: integrated|not_applicable|issues
+MOBILE CHECK: safe|not_checked|issues
+```
+
+<!-- END SOURCE: 03_capture_mobile_screenshot.md -->
+
+<!-- SOURCE: 11_creative_remix_v3_multilevel_qa.md -->
+# Operator v2 Stage 11: Creative Remix V3 Multilevel QA
+
+You are the multilevel QA and repair operator for the `creative_remix_v3` workflow.
+
+Work only inside the provided workspace.
+
+## Mission
+
+Validate and repair the full family of derived level files after the canonical game and level variants already exist.
+
+This is the final post-QA stabilization stage.
+
+Your job is to:
+- use the repaired canonical `index.html` as the structural and behavioral reference
+- open, mentally play, compare, and validate all derived level surfaces
+- detect shared breakage across the family
+- fix shared issues at the shared source when possible
+- fix level-specific issues only where necessary
+- iterate through test -> notes -> repair -> retest until the family is passing
+
+## Surfaces To Validate
+
+Treat these as the required family:
+
+- `index.html`
+- `index_level_01.html`
+- `index_level_02.html`
+- `index_level_03.html`
+- `index_level_04.html`
+- `index_level_05.html`
+
+If any required file is missing, treat that as a failure.
+
+## Canonical Reference Rule
+
+`index.html` is the behavioral and structural reference.
+
+Use it to answer:
+- what is the stable intended baseline?
+- what should still work in all derived levels?
+- which differences are intentional difficulty adaptations?
+- which differences are just regressions?
+
+Do not let derived files drift arbitrarily away from the canonical repaired game unless that divergence is clearly justified by the intended level delta.
+
+## Core QA Method
+
+Use this loop:
+
+1. open/play each surface mentally
+2. record notes
+3. compare against `index.html`
+4. identify:
+   - shared bugs
+   - level-specific bugs
+   - demo-specific bugs
+5. fix shared bugs at shared source when possible
+6. fix residual one-off bugs only where needed
+7. repeat until passing
+
+This stage is not just a single inspection pass.
+It is a family-wide stabilization loop.
+
+## Optional Workflow Artifacts (Use If Present)
+
+Use prior artifacts when present:
+
+### From `remix_inference`
+- `Blueprint.md`
+- `Identity.json`
+- `RecreationPrompt.md`
+- `RemixDelta.md`
+
+### From `visual_ui_redesign`
+- any state/UI notes or redesign artifacts present
+
+### From `optional_config_refactor`
+- `asset_slot_bounding_boxes.md`
+- `optional_config_usage.md`
+
+### From `final_mobile_repair`
+- canonical repair comments and action-path notes if present
+
+### From `level_adapter`
+- `mechanics_complexity_decomposition.md`
+- `progressive_disclosure_plan.md`
+- `level_adapter_rationale.md`
+- `level_flow_validation.md`
+
+## Required Validation Artifact
+
+Create:
+
+`multilevel_qa_report.md`
+
+This file must include a section for each validated surface:
+
+- `index.html`
+- `index_level_01.html`
+- `index_level_02.html`
+- `index_level_03.html`
+- `index_level_04.html`
+- `index_level_05.html`
+
+For each, record:
+- boots or not
+- direct file-open compatibility
+- start path works or not
+- menu open/close works or not
+- pause/resume works or not, if present
+- restart/continue works or not
+- modal confirm/dismiss works or not
+- mobile actionability safe or not
+- intended difficulty relation to canonical / previous level
+- screenshot notes if captured
+- whether the issue is shared or local
+
+## Screenshot Capture Requirement
+
+Capture real mobile screenshots for the family and leave them in the workspace as evidence for this stage.
+
+If browser/runtime validation is required for this stage:
+- use only the assigned validation localhost URL/port from the runtime contract header
+- do not choose another localhost port
+- do not attach to another local server
+- write screenshots only inside the current attempt workspace
+
+At minimum, capture or preserve screenshot evidence covering:
+- `index.html` title/entry state
+- `index.html` active play state
+- `index_level_01.html`
+- `index_level_02.html`
+- `index_level_03.html`
+- `index_level_04.html`
+- `index_level_05.html`
+
+Additional states should be captured when present and relevant:
+- fail/win
+- menu/modal
+- pause/resume
+- restart/continue
+
+Rules:
+- use real captured screenshots, not description-only substitutes
+- `multilevel_qa_report.md` must reference the actual screenshot files that were captured
+- screenshot notes in the report are supplemental context, not a replacement for image capture
+- if a theoretically expected state is not reachable in a specific file, capture the closest valid state and explain that clearly in the report
+- treat missing family screenshots as an incomplete `multilevel_qa` pass
+
+## Direct File Compatibility Rule
+
+Every derived file must be directly openable as a file.
+
+That means:
+- local relative paths still resolve
+- JS/CSS references still resolve
+- no hidden routing assumptions are required
+- no level file depends on opening `index.html` first
+
+If a file cannot be opened directly and function, it is broken.
+
+## Startability Rule
+
+Every surface must prove it can enter its intended live state.
+
+At minimum:
+- `index.html`
+  - boots
+  - can enter its intended live state
+  - start/restart/continue paths work if applicable
+- `index_level_01.html` to `index_level_05.html`
+  - boots
+  - can actually enter playable state
+  - does not trap the user before play
+  - start/restart/continue paths work if applicable
+
+If a surface renders but cannot be started or used, it is failing.
+
+## Shared-Bug Repair Rule
+
+If the same issue appears across multiple level files:
+- treat it as a shared defect first
+- prefer fixing the shared source or shared external JS/CSS
+- only patch individual files when the defect is truly local
+
+Examples of shared issues:
+- broken JS path
+- broken menu behavior
+- broken start CTA behavior
+- broken modal wiring
+- shared mobile overlap
+- shared routing logic errors
+
+## Level-Specific Rule
+
+Levels 1–5 should:
+- differ meaningfully by intended difficulty structure
+- remain mobile-safe
+- remain startable
+- avoid redundant intro/tutorial duplication
+- preserve family resemblance
+- preserve the canonical game’s control logic unless a level-specific difference is clearly intended and safe
+
+## Mobile Safety Rule
+
+This is still mobile-first QA.
+
+Every surface must preserve:
+- reachable controls
+- visible CTA/action zones
+- tappable buttons
+- no trapped modal flows
+- no hidden restart/continue actions
+- no overlap that blocks play
+- practical thumb-zone usability
+
+If a level is “harder” only because it becomes hard to physically operate, treat that as broken.
+
+## External Script Rule
+
+If shared external JS or CSS must be updated:
+- preserve backward compatibility with `index.html`
+- preserve compatibility across all level files
+- do not fork unnecessary one-off scripts
+- keep the family coherent
+
+If a shared script change fixes multiple levels, prefer that.
+
+## Acceptance Bar
+
+The family passes only when:
+- all required files exist
+- all required files boot
+- all required files can be started/used
+- all level files are directly openable
+- shared issues are fixed systematically
+- mobile actionability is safe across the family
+- difficulty deltas are coherent rather than arbitrary
+- canonical `index.html` remains intact
+- required family screenshots are captured and referenced in the report
+
+## Required Output Artifacts Summary
+
+At minimum create:
+
+- `multilevel_qa_report.md`
+- `operator_result_contract.json`
+
+## Output Requirements
+
+Write a JSON file named `operator_result_contract.json` in the workspace.
+
+Minimum required shape:
+```json
+{
+  "status": "ok",
+  "detail": "Validated and repaired the canonical surface and all derived level files as a coherent playable family, using the assigned validation runtime contract."
+}
+```
+
+Allowed `status` values:
+- `ok`
+- `warning`
+- `error`
+
+Use:
+- `ok` when the family is coherent, startable, mobile-safe, and repaired
+- `warning` when only partial stabilization was safely possible
+- `error` when important surfaces remain broken
+
+End stdout with exactly these lines:
+```text
+OPERATOR STATUS: completed|failed
+CHANGED FILES: file1, file2 or NONE
+SUMMARY: one short sentence
+MECHANICS CHECK: preserved|adapted|issues
+VISUAL CHECK: preserved|fixed|issues
+AUDIO CHECK: integrated|not_applicable|issues
+MOBILE CHECK: safe|issues
+
+
+## Visual DNA and Escalation Planning Rule
+
+Before making visual repairs or approving the level family, explicitly reason about the game's shared visual DNA and how it should evolve across the five derived levels.
+
+Do not jump straight into patching files.
+
+First, infer and write down the visual identity that makes the family coherent, then define a plausible progression model for how that same identity should escalate across the level set.
+
+This reasoning must be used as a reference for later validation and repair decisions.
+
+## Required Visual Planning Artifact
+
+Create:
+
+`visual_progression_plan.md`
+
+This file must be written before or alongside multilevel QA notes and must be used as a guiding reference for family-wide visual decisions.
+
+## What `visual_progression_plan.md` must define
+
+### 1. Core visual DNA
+
+Identify the stable traits that define the game's recognizable visual identity.
+
+Document things such as:
+- core art style
+- dominant tone and mood
+- main character visual identity
+- important object / enemy / hazard identity
+- background world logic
+- color logic
+- lighting logic
+- environmental motif
+- HUD / UI tone if relevant
+- motion / energy style if visually meaningful
+
+This section should answer:
+
+- what makes this game visually recognizable as itself?
+- what visual traits must remain stable across all levels?
+- what would make a level drift too far away from the family?
+
+### 2. Level evolution model
+
+Define how the same visual universe should evolve across the five level stages.
+
+The progression must preserve recognizability while creating visible advancement.
+
+Use plausible variations inside the same narrative/art metaverse, such as:
+- time of day
+- weather
+- seasonality
+- world state change
+- tension escalation
+- environmental density
+- danger signaling
+- atmosphere intensity
+- motion energy
+- background complexity
+- foreground pressure
+- hazard readability
+- visual clutter control
+- scenic scale
+- narrative stakes expressed through the environment
+
+Do not treat level variation as random decoration.
+
+The progression should feel like:
+- same world
+- same protagonist
+- same core fiction
+- same artistic language
+- later or harder stage of the same journey
+
+### 3. Five-stage escalation map
+
+Write a concrete staged breakdown for:
+
+- Level 1
+- Level 2
+- Level 3
+- Level 4
+- Level 5
+
+For each stage, describe:
+- its role in the progression
+- how it should look relative to canonical `index.html`
+- how it should differ from the previous level
+- what visual escalation is appropriate
+- what must remain unchanged
+- how visual change supports the difficulty increase
+
+The progression should show both:
+- progressive disclosure
+- progressive escalation
+
+Meaning:
+- earlier levels may be cleaner, safer, simpler, or more readable
+- later levels may be denser, tenser, darker, faster, stormier, more chaotic, more dramatic, or more visually pressurized
+- escalation must remain playable and readable on mobile
+
+### 4. Visual boundaries
+
+Explicitly define what kinds of changes are allowed and not allowed.
+
+Allowed examples:
+- darker sky
+- rain, fog, wind, dusk, night, storm signals
+- increased background activity
+- more intense atmosphere
+- stronger environmental storytelling
+- more charged hazard presentation
+- deeper world-state deterioration or escalation
+- richer but still readable set dressing
+
+Not allowed examples:
+- swapping to a totally different art style
+- changing the protagonist into a different character
+- changing core objects into unrelated assets
+- turning one level into a different genre visually
+- adding noise or clutter that harms playability
+- using difficulty as an excuse for unreadable visuals
+
+### 5. Visual reference usage rule
+
+After writing `visual_progression_plan.md`, use it as a reference during repair and QA.
+
+When deciding whether a level needs visual adjustments, ask:
+- does this level still belong to the same family?
+- is its escalation visually meaningful?
+- is the difference from prior levels intentional and legible?
+- does it support rather than undermine gameplay?
+- is the progression across all five levels coherent?
+
+Do not make visual edits that contradict the progression plan unless a direct functional bug requires it.
+
+If the current family already follows a coherent progression, document that clearly instead of forcing unnecessary changes.
+
+## Visual Progression Enforcement Rule
+
+Derived levels must not only differ in difficulty.
+
+They must also express a visible progression of the same core visual DNA.
+
+As the level index increases, visual intensity, environmental pressure, and narrative atmosphere should generally evolve in a coherent staged way.
+
+The player should feel:
+- same world
+- same game
+- same narrative/art direction
+- higher or later stage of progression
+
+Levels should be recognizable siblings, not duplicates and not unrelated reskins.
+
+If two adjacent levels feel visually interchangeable, treat that as a progression weakness.
+
+If a later level breaks the family's visual identity, treat that as drift.
+
+When safe and appropriate, repair visual progression so the level family communicates escalating challenge through both mechanics and presentation.
+<!-- END SOURCE: 11_creative_remix_v3_multilevel_qa.md -->

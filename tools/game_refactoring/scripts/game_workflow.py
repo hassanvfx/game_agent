@@ -196,6 +196,36 @@ WORKFLOWS: dict[str, WorkflowDefinition] = {
             },
         ],
     ),
+    "creative_remix_v4": WorkflowDefinition(
+        workflow_id="creative_remix_v4",
+        run_label="creative-remix-v4",
+        nodes=[
+            {
+                "id": "remix_inference_plus",
+                "prompt_file": "prompts/operators_v2/00_creative_remix_v4_remix_inference_plus.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            },
+            {
+                "id": "world_design_superprompt",
+                "prompt_file": "prompts/operators_v2/01_creative_remix_v4_world_design_superprompt.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+            {
+                "id": "visuals_unified",
+                "prompt_file": "prompts/operators_v2/03_creative_remix_v4_visuals_unified.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+            {
+                "id": "final_mobile_repair_aggressive",
+                "prompt_file": "prompts/operators_v2/04_creative_remix_v4_final_mobile_repair_aggressive.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+        ],
+    ),
 }
 
 
