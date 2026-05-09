@@ -119,6 +119,12 @@ For each, record:
 
 Capture real mobile screenshots for the family and leave them in the workspace as evidence for this stage.
 
+If browser/runtime validation is required for this stage:
+- use only the assigned validation localhost URL/port from the runtime contract header
+- do not choose another localhost port
+- do not attach to another local server
+- write screenshots only inside the current attempt workspace
+
 At minimum, capture or preserve screenshot evidence covering:
 - `index.html` title/entry state
 - `index.html` active play state
@@ -248,7 +254,7 @@ Minimum required shape:
 ```json
 {
   "status": "ok",
-  "detail": "Validated and repaired the canonical surface, demo surface, and all derived level files as a coherent playable family."
+  "detail": "Validated and repaired the canonical surface and all derived level files as a coherent playable family, using the assigned validation runtime contract."
 }
 ```
 
@@ -271,3 +277,164 @@ MECHANICS CHECK: preserved|adapted|issues
 VISUAL CHECK: preserved|fixed|issues
 AUDIO CHECK: integrated|not_applicable|issues
 MOBILE CHECK: safe|issues
+
+
+## Visual DNA and Escalation Planning Rule
+
+Before making visual repairs or approving the level family, explicitly reason about the game's shared visual DNA and how it should evolve across the five derived levels.
+
+Do not jump straight into patching files.
+
+First, infer and write down the visual identity that makes the family coherent, then define a plausible progression model for how that same identity should escalate across the level set.
+
+This reasoning must be used as a reference for later validation and repair decisions.
+
+## Required Visual Planning Artifact
+
+Create:
+
+`visual_progression_plan.md`
+
+This file must be written before or alongside multilevel QA notes and must be used as a guiding reference for family-wide visual decisions.
+
+## What `visual_progression_plan.md` must define
+
+### 1. Core visual DNA
+
+Identify the stable traits that define the game's recognizable visual identity.
+
+Document things such as:
+- core art style
+- dominant tone and mood
+- main character visual identity
+- important object / enemy / hazard identity
+- background world logic
+- color logic
+- lighting logic
+- environmental motif
+- HUD / UI tone if relevant
+- motion / energy style if visually meaningful
+
+This section should answer:
+
+- what makes this game visually recognizable as itself?
+- what visual traits must remain stable across all levels?
+- what would make a level drift too far away from the family?
+
+### 2. Level evolution model
+
+Define how the same visual universe should evolve across the five level stages.
+
+The progression must preserve recognizability while creating visible advancement.
+
+Use plausible variations inside the same narrative/art metaverse, such as:
+- time of day
+- weather
+- seasonality
+- world state change
+- tension escalation
+- environmental density
+- danger signaling
+- atmosphere intensity
+- motion energy
+- background complexity
+- foreground pressure
+- hazard readability
+- visual clutter control
+- scenic scale
+- narrative stakes expressed through the environment
+
+Do not treat level variation as random decoration.
+
+The progression should feel like:
+- same world
+- same protagonist
+- same core fiction
+- same artistic language
+- later or harder stage of the same journey
+
+### 3. Five-stage escalation map
+
+Write a concrete staged breakdown for:
+
+- Level 1
+- Level 2
+- Level 3
+- Level 4
+- Level 5
+
+For each stage, describe:
+- its role in the progression
+- how it should look relative to canonical `index.html`
+- how it should differ from the previous level
+- what visual escalation is appropriate
+- what must remain unchanged
+- how visual change supports the difficulty increase
+
+The progression should show both:
+- progressive disclosure
+- progressive escalation
+
+Meaning:
+- earlier levels may be cleaner, safer, simpler, or more readable
+- later levels may be denser, tenser, darker, faster, stormier, more chaotic, more dramatic, or more visually pressurized
+- escalation must remain playable and readable on mobile
+
+### 4. Visual boundaries
+
+Explicitly define what kinds of changes are allowed and not allowed.
+
+Allowed examples:
+- darker sky
+- rain, fog, wind, dusk, night, storm signals
+- increased background activity
+- more intense atmosphere
+- stronger environmental storytelling
+- more charged hazard presentation
+- deeper world-state deterioration or escalation
+- richer but still readable set dressing
+
+Not allowed examples:
+- swapping to a totally different art style
+- changing the protagonist into a different character
+- changing core objects into unrelated assets
+- turning one level into a different genre visually
+- adding noise or clutter that harms playability
+- using difficulty as an excuse for unreadable visuals
+
+### 5. Visual reference usage rule
+
+After writing `visual_progression_plan.md`, use it as a reference during repair and QA.
+
+When deciding whether a level needs visual adjustments, ask:
+- does this level still belong to the same family?
+- is its escalation visually meaningful?
+- is the difference from prior levels intentional and legible?
+- does it support rather than undermine gameplay?
+- is the progression across all five levels coherent?
+
+Do not make visual edits that contradict the progression plan unless a direct functional bug requires it.
+
+If the current family already follows a coherent progression, document that clearly instead of forcing unnecessary changes.
+
+## Visual Progression Enforcement Rule
+
+Derived levels must not only differ in difficulty.
+
+They must also express a visible progression of the same core visual DNA.
+
+As the level index increases, visual intensity, environmental pressure, and narrative atmosphere should generally evolve in a coherent staged way.
+
+The player should feel:
+- same world
+- same game
+- same narrative/art direction
+- higher or later stage of progression
+
+Levels should be recognizable siblings, not duplicates and not unrelated reskins.
+
+If two adjacent levels feel visually interchangeable, treat that as a progression weakness.
+
+If a later level breaks the family's visual identity, treat that as drift.
+
+When safe and appropriate, repair visual progression so the level family communicates escalating challenge through both mechanics and presentation.

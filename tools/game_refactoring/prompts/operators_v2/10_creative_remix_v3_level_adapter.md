@@ -201,6 +201,69 @@ This **is**:
 - same stack under greater pressure
 - full stack near readable overload
 
+## World Identity Across Levels
+
+The five levels should not feel like the same screen with only numeric tuning changes.
+
+Treat the ladder more like a Mario-style world progression:
+- five distinct worlds
+- one shared metaverse
+- one shared gameplay identity
+- one shared narrative thread
+
+Each level must be immediately identifiable at a glance as its own world while still clearly belonging to the same game family.
+
+Preserve continuity through:
+- the same focal character or core play identity
+- the same UI language
+- the same motif family
+- the same underlying shape logic
+- the same metaverse narrative arc
+
+Differentiate worlds through controlled changes such as:
+- background scene composition
+- skyline / terrain / architecture cues
+- palette family
+- atmospheric animation
+- particles / weather / energy style
+- environmental storytelling details
+- the visible stage of the metaverse journey
+
+Do not make levels feel disconnected, randomly re-skinned, or like unrelated games.
+
+## Visual Evolution Across Levels
+
+In addition to mechanical progression, define a visual progression across levels.
+
+The animated background and scene framing should help convey:
+- evolving time
+- evolving stakes
+- evolving world state
+- evolving storyline across the metaverse narrative
+
+Examples of safe visual evolution include:
+- time-of-day drift
+- palette pressure or tonal shift
+- stronger ambient motion
+- increased particle density
+- environmental transformation
+- growing corruption, energy, weather, ruin, bloom, or calm
+- clearer signs that the player is traveling through distinct but related worlds
+
+Visual evolution must:
+- remain secondary to gameplay readability
+- remain subordinate to interactives, hazards, targets, HUD, and controls
+- never imply new mechanics by itself
+- never become clutter for its own sake
+- preserve the authored world established by the repaired canonical game
+- continue the same authored world family rather than falling back to cheap stock scene ownership in later levels
+
+If a cheap stock/static image background still owns the playfield, that does not count as level evolution.
+Levels should evolve the authored world, not preserve a generic placeholder scene while adding atmospheric garnish around it.
+
+The goal is not just “harder levels.”
+The goal is a five-world journey where gameplay complexity and world identity evolve together.
+
 ## Required Artifact 1: Mechanics Complexity Decomposition
 
 Create:
@@ -244,9 +307,12 @@ This file must explain, level by level:
 - what is being withheld
 - what is being added
 - what remains constant
-- why the next level is a sensible additive step
+- what visual world identity defines that level
+- how the background or scene framing evolves the metaverse storyline
+- what visual elements stay continuous across all five levels
+- why the next level is a sensible additive step mechanically and visually
 
-This should read like an intentional learning/pressure curve, not arbitrary tuning notes.
+This should read like an intentional learning/pressure curve and world journey, not arbitrary tuning notes.
 
 ## Required Artifact 3: Level Adapter Rationale
 
@@ -260,6 +326,8 @@ This file must explain:
 - which complexity dimensions are used for escalation
 - which dimensions are intentionally *not* used
 - how the ladder avoids random clutter
+- how the five levels become visually unique worlds within one metaverse family
+- how background/scene evolution supports storyline and world progression without implying new mechanics
 - how mobile readability and control safety are preserved
 - why level 5 is still readable enough to be meaningful rather than just broken
 
@@ -366,6 +434,12 @@ If the game is not that type, adapt the logic accordingly.
 
 Capture real mobile screenshots for the derived family and leave them in the workspace as evidence for this stage.
 
+If browser/runtime validation is required for this stage:
+- use only the assigned validation localhost URL/port from the runtime contract header
+- do not choose another localhost port
+- do not attach to another local server
+- write screenshots only inside the current attempt workspace
+
 At minimum capture:
 - `screens_index_canonical.png`
 - `screens_level_01.png`
@@ -462,7 +536,7 @@ Minimum required shape:
 ```json
 {
   "status": "ok",
-  "detail": "Created a five-level post-repair variant ladder using mechanics decomposition and progressive disclosure."
+  "detail": "Created a five-level post-repair variant ladder using mechanics decomposition and progressive disclosure, with validation scoped to the assigned runtime contract."
 }
 ```
 

@@ -24,6 +24,8 @@ Use `#PROMPT#` as the primary visual steering signal.
 
 Your job is to reshape the game's visual identity so the art direction, color logic, UI tone, typography, presentational feel, and procedural graphic language feel uniquely authored for `#PROMPT#` without breaking gameplay clarity.
 
+If `remix_theme.json` is present from the narrative stage, treat it as a required design-system contract for this stage rather than a loose optional suggestion.
+
 This stage is visual-first:
 - read `#PROMPT#` carefully
 - infer the strongest visual identity implied by `#PROMPT#`
@@ -36,6 +38,8 @@ This stage is visual-first:
 ## Scope
 
 Before making visual changes, preserve and protect all existing action paths.
+
+Read `remix_theme.json` if present and use it to map the current game's colors, shapes, panel treatments, CTA styling, and visual primitives into the intended remix system.
 
 You may adapt:
 - colors
@@ -140,8 +144,15 @@ That focal identity should be:
 - immediately recognizable
 - visually expressive even when idle
 - the clearest embodiment of `#PROMPT#`
+- memorable in silhouette, shape rhythm, palette, and repeated motif
+- strong enough that a screenshot thumbnail still communicates who or what the focal identity is
 
 If the game does not have a literal character, create a focal visual identity anchor that plays the same role.
+
+If the game is puzzle-, card-, or item-based:
+- make the primary pieces, symbols, tokens, or item families feel branded and recognizable
+- use distinct shapes, colors, icon logic, labels, or suit/faction-like groupings
+- avoid generic undifferentiated pieces that could belong to any random template
 
 ### 2. Derive Everything From The Focal Identity
 
@@ -162,8 +173,55 @@ Everything should feel like it belongs to the same world inspired by `#PROMPT#`:
 - unified tone
 - reusable visual primitives
 - design-system consistency rather than one-off decoration
+- backgrounds/scenes that feel characteristic rather than generic filler
+- props, items, hazards, and collectibles that clearly belong to the same narrative world
+
+If `remix_theme.json` exists, propagate it clearly across:
+- UI colors
+- CTA states
+- HUD accents
+- panel/card surfaces
+- borders and corner logic
+- focal actor treatment
+- environmental styling
+- hazard vs collectible differentiation
+- decorative patterns and repeated primitives
+
+Do not ignore `remix_theme.json` and then improvise an unrelated palette or shape system.
+
+Background guidance:
+- even a simple background should feel intentionally themed
+- prefer recognizable scene identity over random decorative noise
+- support the focal identity with a coherent setting, horizon, framing, texture language, or environment motif
+- a cool animated background is encouraged when it strengthens the authored world of `#PROMPT#`
+- keep background motion, contrast, and detail density secondary to the focal actor, HUD, interactives, and control zones
+- use ambient animation, restrained parallax, subtle palette shifts, or low-priority particle atmospherics rather than dominant spectacle
+- background reactivity to play should remain decorative, non-mechanical, and visually subordinate
 
 ---
+
+## Authored Background Preservation Rule
+
+If earlier work already established a strong themed background or scene animation for `#PROMPT#`, treat that authored scene work as protected unless it is clearly weak, broken, generic, or harmful to readability/mobile safety.
+
+Prefer refining hierarchy, restraint, and cohesion over replacing or flattening prior scene work.
+
+## Dominant Stock Background Replacement Rule
+
+A cheap stock/static background image may not remain the dominant scene foundation while the supposed "animated background" exists only as decorative garnish.
+
+Hard rules:
+- if the current playfield still relies on a stock/static background image as the primary world layer, the visual stage is incomplete
+- decorative body gradients, overlays, atmospheric particles, or wrapper styling do NOT count as replacing that scene
+- when the game uses canvas or scripted rendering, inspect the real render path, including `drawImage(...)`, image-backed scene layers, and other background draw calls
+- the authored animated world must become the true scene foundation, or the stock background must be removed, heavily demoted, or transformed so thoroughly it no longer reads as the cheap original backdrop
+- do not leave generic image backgrounds in control of the playfield while merely tinting, framing, or ornamenting around them
+
+If a stock background image survives, it should only do so as:
+- a heavily subordinated layer
+- a transformed texture source
+- a small local scenic component
+- or a clearly non-dominant support element inside a stronger authored world system
 
 ## Conservative Execution Rule
 
@@ -209,6 +267,12 @@ Encouraged techniques:
 - procedural ornaments
 
 The goal is to build a visual grammar for `#PROMPT#`, not just recolor the game.
+
+The best outcomes make:
+- the main character or focal anchor wonderful, distinctive, and memorable
+- the background characteristic and supportive of the narrative
+- items and interactive elements aligned with the same world logic
+- the overall screenshot feel authored rather than patched together
 
 Think in terms of:
 - primitives
@@ -578,3 +642,674 @@ Think like:
 - a craft-respecting operator who enhances rather than bulldozes
 
 Enhance the experience visually without breaking what already works, preserve stable layout composition whenever it is already safe, and build a visual language that feels uniquely authored for `#PROMPT#`.
+
+
+Yes — your current prompt is already strong on constraints, but it needs a much richer **implementation playbook** for procedural graphics, browser-safe libraries, and “how to build the look” in plain HTML/CSS/JS. The existing draft already establishes the right base: simple HTML workspace, no bundlers, CDN allowed when justified, and strong preference for procedural construction over fragile assets.  
+
+Below is a **drop-in extension** you can paste into the prompt, ideally after **“Procedural Graphics and Primitive Reuse”** and before **“HUD Composition Preservation.”** I also added a stronger **CDN-safe library policy**, because CSS gradients, transforms, masks, and SVG filters are broadly supported browser primitives and are exactly the kind of tools that fit your no-build setup. ([MDN Web Docs][1]) GSAP explicitly supports script-tag loading, anime.js documents CDN installation, Rough.js is a lightweight drawing library for both Canvas and SVG, and Paper.js documents simple browser integration. ([GreenSock][2])
+
+````md
+## Extended Procedural Graphics Playbook
+
+The operator should not merely "style" the game. The operator should know how to construct strong visual identity from browser-native primitives in a repeatable, low-fragility way.
+
+### Core Procedural Mindset
+
+When visual quality is weak, generic, or mismatched, prefer building identity from:
+
+- 1 to 3 reusable primitive families
+- 1 strong silhouette logic
+- 1 coherent color system
+- 1 repeated ornament language
+- 1 background treatment system
+- 1 UI chrome treatment system
+
+Do not decorate randomly.
+
+Instead, derive a visual grammar for `#PROMPT#` from a small set of repeatable building blocks.
+
+Good procedural art direction usually comes from repeating a few ideas consistently:
+- shape rhythm
+- corner logic
+- border logic
+- glow logic
+- texture logic
+- emblem logic
+- contrast hierarchy
+- motion personality
+
+### Procedural Construction Priorities
+
+When inventing visuals inspired by `#PROMPT#`, prefer this order:
+
+1. silhouette
+2. palette
+3. repeated motif
+4. surface treatment
+5. motion accent
+6. background atmosphere
+7. ornamental detail
+
+If the silhouette and color logic are weak, extra decoration will not save the result.
+
+### What "Amazing Procedural Graphics" Usually Means In This Workflow
+
+Amazing procedural graphics do NOT mean "complex shaders" or "heavy rendering."
+
+In this workflow, amazing procedural graphics means:
+- distinctive identity from simple primitives
+- screenshot readability
+- strong focal anchor
+- cohesive world language
+- non-generic UI treatment
+- visual richness made from lightweight systems
+- mobile-safe rendering
+- low dependency / low fragility implementation
+
+A small number of well-composed gradients, masks, SVG paths, and repeated shapes is usually better than a chaotic pile of effects.
+
+---
+
+## Procedural Recipe Library
+
+Use these recipes when the game needs identity but must remain HTML/CDN-safe.
+
+### 1. Character / Focal Anchor Recipe
+
+For a hero, enemy, mascot, token, or main object, build using:
+- 1 base silhouette
+- 1 inner contrast shape
+- 1 highlight edge or rim light
+- 1 emblem or facial marker
+- 1 shadow or glow pass
+- 1 idle-state accent
+
+Examples:
+- magical relic -> concentric circles + jewel core + radial glow + engraved rune marks
+- cyber orb -> circular shell + segmented ring + scanning line + neon notch accents
+- jungle idol -> block silhouette + carved eyes + stepped edges + mossy crack lines
+- cute slime -> rounded body + inner shine blob + small face + bounce squash
+- demon card -> sharp frame + horn corners + sigil center + ember-like edge lighting
+
+The focal anchor should be recognizable in silhouette before detail is added.
+
+### 2. Background Recipe
+
+A background should not be random filler.
+
+Construct background from:
+- sky / base field
+- midground layer
+- foreground framing layer
+- repeated motif layer
+- optional atmospheric particles
+- restrained vignette or depth cue
+
+Examples:
+- haunted -> vertical fog bands + dead branch silhouettes + moon glow
+- sci-fi -> panel grid + scanlines + radial data arcs + small blinking nodes
+- candy -> soft blobs + diagonal sugar stripes + sprinkle constellation pattern
+- ancient -> stone gradient + faint cracks + engraved border motifs
+- ocean -> layered wave curves + soft caustic-like highlights + horizon haze
+
+Avoid backgrounds that compete with gameplay elements.
+
+### 3. UI Chrome Recipe
+
+When UI is too generic, derive panels/buttons from the same world logic:
+- same corner style
+- same highlight logic
+- same border family
+- same motif repetition
+- same depth system
+
+Examples:
+- temple UI -> carved inset borders + weathered gold lines + stone fill
+- mech UI -> bevels + segmented corners + warning stripe accents
+- fairy UI -> petal curves + iridescent glow + dotted constellations
+- retro arcade UI -> stacked outlines + neon inset glows + pixel-ish spacing
+- luxury card UI -> dark lacquer panels + thin metallic trim + soft bloom
+
+If the game is already mobile-safe, restyle existing blocks rather than moving them.
+
+### 4. Collectibles / Hazards / Factions Recipe
+
+Derive all gameplay-facing visual categories from one family.
+
+Example derivation:
+- player = rounded heroic shape
+- collectible = smaller brighter shape from same geometry
+- hazard = sharper darker variant
+- enemy = hostile contrast variant
+- boss = larger multi-ring or more segmented version
+- rare pickup = same base shape with additional aura / orbit / sparkle
+
+This creates cohesion without changing mechanics.
+
+---
+
+## Browser-Native Procedural Techniques
+
+The following techniques are strongly encouraged because they are lightweight, expressive, and compatible with a no-build HTML workflow.
+
+### CSS-First Techniques
+
+Use vanilla CSS aggressively for:
+- layered gradients
+- radial glow fields
+- inset and outer shadows
+- pseudo-elements for extra shapes
+- masks for cutout silhouettes
+- transforms for tilt / skew / scale rhythm
+- mix-blend-style accents only when safe
+- repeating linear/radial patterns for texture
+
+Examples of strong CSS procedural use:
+- gem buttons from layered radial gradients
+- metallic cards from angled highlights and inset borders
+- fantasy badges from pseudo-elements + mask cutouts
+- energy beams from blurred gradient strips
+- liquid blobs from border-radius variation + inner highlight overlays
+
+### Inline SVG Techniques
+
+Use inline SVG when:
+- the motif needs precise shape control
+- the emblem must scale cleanly
+- the style needs line art, sigils, crests, or symbolic geometry
+- the design needs reusable filters or masks
+
+Strong SVG use cases:
+- insignias
+- faction crests
+- card ornament frames
+- magical circles
+- abstract enemy icons
+- repeated border dividers
+- procedural stars, leaves, shards, flames, circuit traces
+
+Prefer SVG for crisp symbolic identity.
+Prefer CSS for fast layout-bound decoration.
+
+### Canvas Techniques
+
+Use simple canvas drawing only when it clearly improves atmosphere or repeated ornament:
+- star fields
+- dust particles
+- trailing motes
+- heat shimmer dots
+- ambient snowfall / rain
+- lightweight repeating geometry
+- animated decorative backdrops
+
+Do NOT turn canvas into a full rendering rewrite unless the existing project already depends on it.
+
+---
+
+## Procedural Motif Systems
+
+Every remix should aim to define 1 primary motif family and 1 secondary support motif.
+
+Examples:
+
+### Mystic / Arcane
+Primary motifs:
+- circles
+- crescents
+- runes
+- starbursts
+- orbiting dots
+
+Secondary motifs:
+- smoke wisps
+- filament lines
+- prism glows
+
+### Cyber / Tech
+Primary motifs:
+- hexes
+- angular cuts
+- segmented bars
+- concentric scanners
+- data ticks
+
+Secondary motifs:
+- scanlines
+- tiny indicators
+- pulse trails
+
+### Nature / Jungle
+Primary motifs:
+- leaves
+- vines
+- seed pods
+- bark fractures
+- layered hills
+
+Secondary motifs:
+- pollen dots
+- fog bands
+- sun shafts
+
+### Cute / Toy / Kawaii
+Primary motifs:
+- rounded blobs
+- hearts
+- stars
+- puff clouds
+- sticker outlines
+
+Secondary motifs:
+- sparkle clusters
+- soft drop shadows
+- glossy highlights
+
+### Horror / Corruption
+Primary motifs:
+- thorns
+- tears
+- jagged slashes
+- stains
+- asymmetry
+
+Secondary motifs:
+- subtle flicker
+- vein lines
+- low-saturation haze
+
+Use repeated motif logic across:
+- title screen
+- HUD
+- buttons
+- collectibles
+- result states
+- backgrounds
+
+This is how the result becomes authored rather than patched.
+
+---
+
+## CDN-Safe Library Selection Guide
+
+CDNs are allowed only when they make the implementation cleaner, lighter, or more expressive without introducing a build pipeline.
+
+### Default Rule
+
+Prefer browser-native tools first:
+- CSS
+- HTML
+- SVG
+- canvas
+- vanilla JS
+
+Only add a CDN library when it saves substantial time or clearly improves quality.
+
+### Good CDN Use Cases
+
+#### GSAP
+Use for:
+- polished UI transitions
+- non-gameplay microinteractions
+- idle personality loops
+- reward punctuation
+- modal reveals
+- sequence timing
+
+Do not use it to alter gameplay logic, hit detection, or core movement timing.
+
+Example:
+```html
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+````
+
+#### anime.js
+
+Use for:
+
+* lightweight decorative sequences
+* text or emblem reveals
+* ambient looping accents
+* simple staggered ornament motion
+
+Example:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/animejs/lib/anime.min.js"></script>
+```
+
+#### Rough.js
+
+Use for:
+
+* sketchy
+* handmade
+* doodle
+* notebook
+* chaotic comic
+* imperfect line-art styles
+
+Best for:
+
+* hand-drawn borders
+* rough icons
+* playful hazard outlines
+* poster-like title treatments
+
+Example:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.min.js"></script>
+```
+
+#### Paper.js
+
+Use for:
+
+* vector ornament systems
+* cleaner procedural line art
+* emblematic decorative curves
+* elegant symbolic geometry
+* shape composition
+
+Example:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/paper@0.12.18/dist/paper-full.min.js"></script>
+```
+
+### Fonts (Recommended)
+
+Use hosted fonts for clear identity contrast.
+
+Example:
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+```
+
+Use one expressive title font and one readable body/HUD font.
+
+### Avoid Adding Libraries For
+
+* things CSS can already do cleanly
+* large visual rewrites
+* fragile dependency chains
+* features that require a module pipeline
+* anything that pressures mobile performance
+* anything that tempts gameplay rewiring
+
+If uncertain, do not import the library.
+
+---
+
+## Vanilla CSS / SVG / Canvas Examples
+
+### Example A: Magical Button In Pure CSS
+
+```css
+.magic-btn {
+  --bg1: #231942;
+  --bg2: #5e548e;
+  --accent: #c77dff;
+  --shine: rgba(255,255,255,.55);
+  position: relative;
+  padding: 12px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.14);
+  color: white;
+  font-weight: 700;
+  background:
+    radial-gradient(circle at 30% 25%, var(--shine), transparent 24%),
+    radial-gradient(circle at 70% 120%, rgba(199,125,255,.28), transparent 35%),
+    linear-gradient(180deg, var(--bg2), var(--bg1));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    0 10px 24px rgba(53,18,92,.35);
+  overflow: hidden;
+}
+
+.magic-btn::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 15px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.12), transparent 35%);
+  pointer-events: none;
+}
+
+.magic-btn::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background:
+    conic-gradient(from 0deg, transparent, rgba(255,255,255,.14), transparent 35%);
+  animation: spinAura 5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spinAura {
+  to { transform: rotate(1turn); }
+}
+```
+
+### Example B: Sigil / Badge In Inline SVG
+
+```html
+<svg viewBox="0 0 120 120" class="sigil" aria-hidden="true">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="60" cy="60" r="42" fill="none" stroke="#c77dff" stroke-width="2" filter="url(#glow)"/>
+  <circle cx="60" cy="60" r="28" fill="none" stroke="#80ffdb" stroke-width="1.5"/>
+  <path d="M60 24 L68 52 L96 60 L68 68 L60 96 L52 68 L24 60 L52 52 Z"
+        fill="none" stroke="#fff" stroke-width="2"/>
+</svg>
+```
+
+### Example C: Atmospheric Canvas Particles
+
+```html
+<canvas id="fx"></canvas>
+<script>
+const canvas = document.getElementById('fx');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let w = 0, h = 0, particles = [];
+
+function resize() {
+  w = canvas.width = innerWidth * DPR;
+  h = canvas.height = innerHeight * DPR;
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  particles = Array.from({ length: 36 }, () => ({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    r: (1 + Math.random() * 3) * DPR,
+    vy: (0.15 + Math.random() * 0.5) * DPR,
+    a: 0.15 + Math.random() * 0.35
+  }));
+}
+
+function tick() {
+  ctx.clearRect(0, 0, w, h);
+  for (const p of particles) {
+    p.y -= p.vy;
+    if (p.y < -20) { p.y = h + 20; p.x = Math.random() * w; }
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255,255,255,${p.a})`;
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', resize);
+resize();
+tick();
+</script>
+```
+
+---
+
+## Genre-to-Technique Mapping
+
+When the prompt suggests a genre or tone, bias toward the following construction styles.
+
+### Fantasy / Magic
+
+Use:
+
+* radial gradients
+* glows
+* sigils
+* concentric circles
+* particle motes
+* ornate borders
+* serif display font + clean sans body font
+
+### Sci-Fi / Cyber
+
+Use:
+
+* dark fields
+* segmented panels
+* thin line accents
+* grid overlays
+* scanning bars
+* clipped corners
+* restrained neon
+
+### Cute / Casual / Toy
+
+Use:
+
+* soft rounded shapes
+* layered sticker shadows
+* glossy highlights
+* cheerful color blocking
+* floating confetti particles
+* pill buttons
+
+### Horror / Dark
+
+Use:
+
+* asymmetry
+* desaturated fields
+* torn edges
+* low-contrast haze
+* ember or dust particles
+* sharp hazard silhouettes
+
+### Ancient / Myth / Temple
+
+Use:
+
+* stepped geometry
+* carved border lines
+* aged gradients
+* engraved symbols
+* stone texture imitation via repeated lines / cracks
+
+### Hand-Drawn / Meme / Lo-Fi
+
+Use:
+
+* Rough.js-like line work
+* scribble underlines
+* imperfect circles
+* offset shadows
+* sticker collage logic
+* funny emblem repetition
+
+---
+
+## Practical Implementation Guardrails
+
+### Use CSS-first when:
+
+* a panel, button, badge, token, or card can be built with gradients, borders, shadows, and pseudo-elements
+* the shape does not require exact custom vector control
+* the effect is mostly decorative
+
+### Use SVG when:
+
+* the symbol must be exact
+* the emblem should scale cleanly
+* the design language depends on precise line geometry
+* the graphic is reused many times
+
+### Use canvas when:
+
+* many repeated particles or atmospheric elements are needed
+* the effect is decorative and global
+* a repeated field is easier to draw than to compose in DOM
+
+### Use a CDN library only when:
+
+* it clearly shortens implementation
+* it reduces fragile custom code
+* it does not pressure the no-build constraint
+* it does not create gameplay risk
+
+---
+
+## Anti-Patterns
+
+Do NOT mistake procedural graphics for:
+
+* random gradients everywhere
+* excessive glow
+* noisy overlays
+* huge backdrops that bury gameplay
+* generic glassmorphism applied without thematic reason
+* imported libraries for trivial effects
+* decorative DOM wrappers that endanger controls
+* full-scene rewrites when a focused identity system would suffice
+
+Avoid "style spam."
+
+Prefer coherent repeated design logic.
+
+---
+
+## Micro-Checklist For Strong Procedural Results
+
+Before finalizing visual work, check:
+
+* Is the focal identity recognizable in silhouette?
+* Do collectibles, enemies, hazards, and HUD feel like the same world?
+* Is there a repeated motif family?
+* Are panels and buttons authored rather than default?
+* Is the background characteristic but subordinate?
+* Is there visual richness without gameplay obstruction?
+* Could this screenshot belong only to this prompt?
+* Did the operator avoid importing more libraries than necessary?
+
+If not, improve the primitive system rather than adding random decoration.
+
+```
+
+A few important refinements I’d also add to your original prompt:
+
+The prompt should explicitly say that **browser-native primitives are the default stack**. CSS gradients are widely available, CSS transforms are standard, CSS masking can selectively reveal shapes, and SVG filters are a solid way to get glows, blurs, and emblem effects without a build step. :contentReference[oaicite:4]{index=4}
+
+For library guidance, I would frame it like this:
+- **GSAP** for polished UI motion and sequencing, because it supports script-tag loading. :contentReference[oaicite:5]{index=5}
+- **anime.js** for lightweight decorative animation, because it documents CDN installation. :contentReference[oaicite:6]{index=6}
+- **Rough.js** for sketchy/hand-drawn procedural visuals, because it is lightweight and works with Canvas and SVG. :contentReference[oaicite:7]{index=7}
+- **Paper.js** for vector ornament systems and symbolic geometry, because it supports simple browser integration. :contentReference[oaicite:8]{index=8}
+
+I would **not** make Three.js a default recommendation inside this prompt, because your current operator forbids fragile module-heavy setups and import-map style configuration, while Three’s modern docs lean heavily into module usage. :contentReference[oaicite:9]{index=9}
+
+If you want, I can also produce a **fully merged final version of the whole prompt** with these sections inserted in the right place and lightly polished end to end.
+::contentReference[oaicite:10]{index=10}
+```

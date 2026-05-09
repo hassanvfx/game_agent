@@ -37,6 +37,30 @@ def mirror_directory(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
+def purge_prepared_directory(prepared_dir: Path) -> dict[str, list[str]]:
+    kept: list[str] = []
+    removed: list[str] = []
+
+    for child in sorted(prepared_dir.iterdir(), key=lambda path: path.name):
+        if child.name == "index.html" and child.is_file():
+            kept.append(child.name)
+            continue
+        if child.name == "assets" and child.is_dir():
+            kept.append(child.name + "/")
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+            removed.append(child.name + "/")
+        else:
+            child.unlink()
+            removed.append(child.name)
+
+    return {
+        "kept": kept,
+        "removed": removed,
+    }
+
+
 def validate_source_directory(source: Path, game_id: str) -> None:
     if not source.exists():
         raise SystemExit(f"Cannot start flow for game '{game_id}': source_path does not exist: {source}")
@@ -76,8 +100,10 @@ def main() -> None:
         game_state = load_json(game_state_path)
         prepared_dir = Path(game_state["input_mirror_path"])
 
+        purge_report = None
         if args.source_mode == "copy":
             mirror_directory(source_path, prepared_dir)
+            purge_report = purge_prepared_directory(prepared_dir)
             mirrored += 1
         else:
             prepared_dir = source_path
@@ -107,6 +133,7 @@ def main() -> None:
                 "input_mirror_path": str(prepared_dir),
                 "integrity_status": integrity_status,
                 "issues": issues,
+                "pre_prepare_purge": purge_report,
             }
         )
 
@@ -118,6 +145,14 @@ def main() -> None:
     run_state["current_phase"] = "inputs_prepared"
     run_state["updated_at"] = utc_now()
     run_state.setdefault("notes", []).append("Local input mirroring and integrity verification completed.")
+    if args.source_mode == "copy":
+        run_state.setdefault("notes", []).append(
+            "Prepared copied inputs were purged before pipeline execution to keep only index.html and assets/."
+        )
+    else:
+        run_state.setdefault("notes", []).append(
+            "Prepared input purge was skipped because source_mode=inplace and the external source remains untouched."
+        )
     write_json(run_dir / "run_state.json", run_state)
     write_json(run_dir / "integrity_report.json", integrity_report)
 

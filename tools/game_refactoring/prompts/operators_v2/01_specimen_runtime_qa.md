@@ -7,9 +7,9 @@ Your job is to make this game runnable and interactively testable in a browser, 
 ## Main responsibilities
 
 1. Figure out how to serve the game from the repository root using Python.
-2. Obtain a random free port.
-3. Retry until the local server starts successfully.
-4. Open the served game in a browser.
+2. Use the assigned validation localhost port from the runtime contract header.
+3. Start the local server on that assigned port and treat startup failure as a blocked condition.
+4. Open the served game in a browser using the assigned validation URL.
 5. Try to play it.
 6. Tap or click the main button to enter gameplay.
 7. Capture screenshots as you interact.
@@ -23,15 +23,17 @@ Your job is to make this game runnable and interactively testable in a browser, 
 - Do not do abstract classification/inference work in this node.
 - If browser/runtime issues appear, fix the actual source files inside the workspace.
 - Save any screenshots you capture inside the workspace with clear names.
+- Use only the assigned validation localhost URL/port from the prompt header.
+- Do not choose another port, do not reuse another local server, and do not trust screenshots from a mismatched runtime.
 - Preserve the game’s intended behavior as much as possible while making it runnable.
 
 ## Serve requirement
 
 You should reason explicitly about how to:
 - run a Python HTTP server from the correct root
-- choose a random free port
-- retry if the port or server start fails
-- use the served URL for browser testing instead of relying on raw `file://` loading
+- bind the server to the assigned validation localhost port from the prompt header
+- treat server start failure on the assigned port as a blocked runtime condition instead of choosing another port
+- use the assigned served URL for browser testing instead of relying on raw `file://` loading
 
 ## Expected deliverables
 
@@ -48,7 +50,7 @@ If successful, write:
 ```json
 {
   "status": "ok",
-  "detail": "Served the game locally, interacted with it, captured screenshots, and fixed runtime/playability issues."
+  "detail": "Served the game locally on the assigned validation port, interacted with it, captured screenshots, and fixed runtime/playability issues."
 }
 ```
 

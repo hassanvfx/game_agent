@@ -8,6 +8,11 @@ This stage is responsible for creative media inference, catalog-guided mapping, 
 
 This stage owns audio, GIF, and font mapping purpose and plumbing. If the workspace contains disallowed external audio/GIF/font URLs, weak placeholder audio/GIF/font choices, missing mapped imports, incomplete asset wiring, or Python-flagged audio/GIF/font candidates that should be improved through catalog-guided replacement inference, this is the step that should fix them.
 
+Highest-level authority rule:
+- prefer safe mapping over ambitious code invention
+- do not add new sound code unless it is clearly necessary and you can implement it with a tiny plain-JavaScript pattern
+- if safe wiring is unclear, leave audio or GIF integration partial rather than destabilize the game
+
 Focus on:
 
 - replacing unapproved or weak audio, GIF, and font usage by inferring the best matching replacements from workspace-local catalogs
@@ -43,26 +48,30 @@ Recommended format:
 
 ## Minimum Media Requirements (MANDATORY)
 
-Ensure the final result includes at least:
+Ensure the final result includes the strongest safe subset the workspace can support without destabilizing gameplay.
 
 ### Audio
-- ≥ 3 distinct SFX (e.g. hit, collect, UI, fail)
-- ≥ 1 looped audio (BGM or ambient)
+Preferred target:
+- up to 3 distinct SFX (e.g. hit, collect, UI, fail)
+- optionally 1 looped audio (BGM or ambient) only when the lifecycle is already easy to wire safely
 
 Expanded expectations:
-- SFX should map to meaningful gameplay moments (not random triggers)
-- avoid stacking duplicate audio instances on rapid events (debounce or reuse where needed)
-- ensure volume levels are balanced (no clipping or overpowering sounds)
-- looped audio must have a clear lifecycle (start on interaction, pause/stop when needed)
+- audio should map to meaningful gameplay moments (not random triggers)
+- avoid stacking duplicate audio instances on rapid events
+- ensure volume levels are balanced
+- looped audio must have a clear lifecycle if added
+- audio is optional if safe integration points are unclear
 
 ### GIFs
-- 1–2 mapped GIFs for reactions, impacts, or feedback moments
+Preferred target:
+- 0–2 mapped GIFs for reactions, impacts, or feedback moments
 
 Expanded expectations:
 - GIFs must be tied to clear feedback states (e.g. success, fail, hit, combo, pause)
 - must not obstruct core gameplay or controls
-- should be lightweight overlays or positioned elements (not full-screen blockers unless intentional and safe)
+- should be lightweight overlays or positioned elements
 - should degrade gracefully if not loaded
+- overlay GIFs should be ephemeral, illustrative, or commentary-oriented rather than persistent blockers
 
 ### Fonts
 - ≥ 2 fonts from `catalogs/fonts.json`
@@ -75,7 +84,7 @@ Expanded expectations:
 - fallback fonts must be defined for safety
 - avoid overusing decorative fonts in small UI text (maintain readability)
 
-If any of these minimums are not met, the stage is incomplete.
+The stage is incomplete only if safe media mapping opportunities were obvious and the resulting implementation still leaves unresolved flagged media or broken wiring.
 
 ## Approved workspace-local catalogs:
 
@@ -112,6 +121,8 @@ catalogs/fonts.json
 ### GIFs
 - must enhance feedback, not replace logic
 - avoid constant looping distractions in core play area
+- do not replace complex authored backgrounds, scene construction, or richer visual-stage animation systems with simpler GIFs, sprites, or static mapped images
+- treat prior visual-stage background and scene work as protected unless there is a specific broken, disallowed, or clearly weak asset inside the same media lane
 
 ### Fonts
 - primary → expressive, stylized, thematic
@@ -129,18 +140,94 @@ catalogs/fonts.json
 - if a media choice creates clutter, overlap, or blocked actions, choose the safer lighter option
 - do not satisfy media richness by degrading usability
 
+## Non-Destructive Asset Boundary
+
+This stage should enrich approved media usage without flattening stronger authored work from earlier stages.
+
+Rules:
+- do not replace complex background art, procedural scenery, authored scene animation, or richer visual-stage graphics with simpler mapped assets
+- prefer like-for-like replacement within the same asset lane:
+  - image -> image
+  - sprite -> sprite
+  - empty placeholder slot -> approved mapped asset
+- do not invade or overwrite prior visual-stage background systems merely because a catalog asset exists
+- if earlier stages already added strong background or scene animation work, preserve it and only map media into clearly appropriate local slots or feedback moments
+- only replace prior work when the exact current asset usage is broken, disallowed, missing, or clearly weaker than a safe approved counterpart in the same role
+- do not preserve or reintroduce a cheap stock/static image background as the dominant world layer just because it is easy to map or already wired
+- if the workspace still contains a generic stock scene image owning the playfield, do not treat it as a protected authored background; the authored world should survive, not the cheap placeholder foundation
+
 ## Audio Rules
 
 - audio must never block gameplay or delay input
 - must initialize safely via explicit user gesture (click/tap/keypress)
 - loops must be controllable:
-  - start only when safe
-  - pause/stop when game pauses or ends
+- start only when safe
+- pause/stop when game pauses or ends
 - repeated SFX must:
-  - reuse instances or use lightweight creation
-  - avoid memory leaks or stacking artifacts
+- reuse instances or use lightweight creation
+- avoid memory leaks or stacking artifacts
 - audio failures must not break the game (fail silently)
 - gameplay timing must NEVER depend on audio playback
+- prefer binding to existing hooks over inventing new systems
+- do not build a custom audio framework, manager, scheduler, or event bus in this stage
+
+## Plain JavaScript Safe Integration Patterns
+
+If audio or GIF code must be added, use tiny plain-JavaScript patterns like these and adapt them conservatively.
+
+### Safe one-shot audio helper
+
+```js
+const clickSound = new Audio("SOUND_URL");
+clickSound.preload = "auto";
+
+function playSfx(audio) {
+  try {
+    audio.currentTime = 0;
+    void audio.play().catch(() => {});
+  } catch (_) {}
+}
+```
+
+### Safe event-bound audio usage
+
+```js
+button.addEventListener("click", () => {
+  playSfx(clickSound);
+});
+```
+
+### Optional background loop
+
+```js
+const bgm = new Audio("MUSIC_URL");
+bgm.loop = true;
+bgm.volume = 0.4;
+
+function startBgm() {
+  void bgm.play().catch(() => {});
+}
+```
+
+### Safe GIF overlay
+
+```js
+const img = document.createElement("img");
+img.src = "GIF_URL";
+img.alt = "themed accent";
+img.className = "ui-accent-gif";
+img.setAttribute("aria-hidden", "true");
+container.appendChild(img);
+
+setTimeout(() => img.remove(), 1200);
+```
+
+Pattern rules:
+- prefer existing hooks first
+- keep added code tiny and readable
+- no gameplay logic may depend on audio or GIF success
+- no new code should touch core update/render/input loops unless already supported by a tiny local hook
+- ephemeral overlays must not block controls or persistent UI
 
 ## Deterministic Python Candidate Handling
 
@@ -159,6 +246,9 @@ catalogs/fonts.json
 - leaving disallowed or external audio/GIF/font URLs unresolved
 - stopping at recommendations instead of implementing actual wiring
 - adding clutter just to increase ornamental density
+- inventing broad new sound systems when a tiny local helper or no-audio fallback is safer
+- adding persistent GIF overlays that compete with controls, HUD, or gameplay visibility
+- downgrading richer earlier visual-stage work into simpler mapped assets just to satisfy media mapping
 
 ## Media Mapper Checklist
 

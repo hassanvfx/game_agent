@@ -43,10 +43,10 @@ Follow this sequence:
 
 1. read the analytical artifacts already present in the workspace
 2. inspect the relevant local files statically
-3. choose a fresh free localhost port for this run
-4. start a dedicated local HTTP server rooted at the current workspace
-5. verify the server is reachable on the chosen port
-6. build the exact served entry URL from that host/port
+3. use the assigned validation localhost port from the runtime contract header
+4. start a dedicated local HTTP server rooted at the current workspace on that assigned port
+5. verify the server is reachable on the assigned port
+6. build the exact served entry URL from the assigned host/port
 7. launch the local game in a browser-controlled Playwright mobile flow
 8. verify that the loaded runtime identity matches the workspace under review
 9. run a short bounded mental-script-driven interaction pass
@@ -73,10 +73,11 @@ Mobile context requirements:
 - keep this mobile context consistent for the whole bounded pass
 
 Server lifecycle requirements:
-- do not assume `http://127.0.0.1:8000/` or any other fixed port is safe
-- always choose a fresh free localhost port for the current run
-- always start a dedicated server for the current workspace on that port
-- always record the chosen host, port, and served entry URL
+- do not assume `http://127.0.0.1:8000/` or any other fixed port is safe unless it is the assigned validation port in the runtime contract header
+- always use the assigned validation localhost port for the current run
+- do not choose another port or attach to another local server
+- always start a dedicated server for the current workspace on the assigned port
+- always record the assigned host, port, and served entry URL
 - always tear the server down after the pass, including on failure paths when possible
 
 Runtime identity verification requirements:
@@ -87,7 +88,7 @@ Runtime identity verification requirements:
 - if a runtime-environment mismatch is detected, do not use that browser pass to justify gameplay/application code edits
 
 Recommended flow:
-- launch the local game in Playwright using the required mobile context and the fresh served entry URL
+- launch the local game in Playwright using the required mobile context and the assigned served entry URL
 - open the initial game state
 - capture the initial screenshot
 - perform the first key user action
@@ -219,7 +220,8 @@ Rules:
 - Do not rely on MCP if Playwright/browser grounding is available.
 - Keep the browser pass bounded and evidence-oriented.
 - Use a proper mobile browser context with viewport and screen size `400 x 700`, touch enabled, and a mobile / Android-style user agent.
-- Always use a fresh free localhost port and tear the dedicated server down after the pass.
+- Always use the assigned validation localhost port and tear the dedicated server down after the pass.
+- Never choose another port or reuse another local server when the runtime contract assigns a validation URL/port.
 - Always verify runtime identity before trusting browser evidence.
 - Preserve the evidence-first confirmed/likely/uncertain policy.
 - If unsure, leave the code alone and document the uncertainty.
@@ -245,7 +247,7 @@ If successful, write:
 ```json
 {
   "status": "ok",
-  "detail": "Ran a bounded Playwright-grounded conservative fix pass, captured browser evidence, documented an issue ledger, and applied only minimal fixes for clearly confirmed problems."
+  "detail": "Ran a bounded Playwright-grounded conservative fix pass on the assigned validation port, captured browser evidence, documented an issue ledger, and applied only minimal fixes for clearly confirmed problems."
 }
 ```
 

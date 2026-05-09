@@ -14,6 +14,19 @@ Do not fail just because some are missing unless your current stage is explicitl
 - `Identity.json`
 - `RecreationPrompt.md`
 - `RemixDelta.md`
+- mechanics-ranking / mechanics-classification outputs if present
+
+Read order when these artifacts exist:
+1. `Blueprint.md`
+2. mechanics outputs
+3. `Identity.json`
+4. `RecreationPrompt.md`
+5. `RemixDelta.md`
+
+Interpretation rule:
+- use `Blueprint.md` as the main downstream brief
+- use mechanics outputs to preserve gameplay truth
+- if there is tension between theme ambition and mechanical reality, mechanics truth wins
 
 ### From `gameplay_refine`
 - `gameplay_refine_simulation.md`
@@ -92,10 +105,14 @@ Focus only on:
 - removing blocking overlays if they interfere with gameplay
 - repairing issues introduced or exposed by earlier visual/gameplay/config passes
 
-The highest-priority repair class is:
+The highest-priority repair classes are:
 - mobile navigation and actionability regressions introduced by earlier stages
+- console/runtime errors introduced by earlier stages
+- final-objective completion blockers that prevent a real full-loop playthrough
 
 If the game boots but start / continue / confirm / restart / pause-resume actions are broken, hidden, clipped, below fold, overlapped, or untappable on mobile, treat that as urgent and fix it first.
+
+If the actual playfield is still owned by a cheap stock/static image background while the intended authored animated world exists only as decorative garnish, treat that as an urgent visual repair problem too.
 
 ## Shared Handoff Comment Rule
 
@@ -138,6 +155,16 @@ Before making any change:
 - mobile navigation regressions from earlier stages
 
 4. Apply the smallest possible fix.
+
+5. Test through the real end condition:
+- boot
+- start
+- active play
+- progress toward the final objective
+- win/loss
+- restart/continue
+
+6. Fix console/runtime errors that appear during that path when they are caused by current code and can be repaired surgically.
 
 If unsure → DO NOTHING.
 
@@ -215,6 +242,8 @@ Suggested commit/PR lesson:
 - no creative reinterpretation
 - no restructuring unless required to fix a bug
 - no visual recomposition when simple compaction or repair is enough
+- no speculative media URL replacement outside approved catalog intent
+- no broad audio-system rewrites when a tiny stabilizing fix is enough
 
 ## UI & Typography Policy (Fix Only)
 
@@ -234,6 +263,27 @@ Suggested commit/PR lesson:
 - preserve existing HUD composition and geometry when they already work
 - prefer compaction, unclipping, and actionability repair over redesign
 
+## Dominant Stock Scene Recovery Rule
+
+If earlier stages left a cheap stock/static image background as the true scene foundation, do not accept that as finished visual work.
+
+Rules:
+- decorative overlays, gradients, particles, wrapper styling, or tinting do not count as replacing a dominant stock scene
+- inspect the true rendered scene path, including canvas/image draw calls and other image-backed world layers
+- if the cheap stock scene still owns the playfield, remove it, demote it strongly, replace it, or transform it until the authored world becomes the real scene foundation
+- do not preserve a dominant stock background image merely because the rest of the UI now looks more thematic
+- prefer minimal surgical scene recovery over broader redesign, but do not leave the cheap original background in control
+
+## Media Mapper Caveat Rule
+
+Respect the intent of the media-mapper stage:
+- do not rip out catalog-mapped media just because it is imperfect
+- do not replace approved catalog-backed media URLs with unrelated alternatives as a casual repair move
+- do not “solve” media issues by inventing a different media identity in this stage
+- if a mapped audio/GIF/font integration is fragile, prefer the smallest stabilizing repair
+- if a piece of media code is unsafe, reduce it to a smaller safer version rather than inventing a larger system
+- preserve the stage-03 principle that audio/GIF behavior must remain optional, non-blocking, and non-gameplay-critical
+
 ## Media 404 Tolerance Rule
 
 If external or catalog-backed media returns `404`, do not automatically replace it with different media just to silence the missing asset.
@@ -249,6 +299,7 @@ Rules:
 - do not rewrite the game’s media identity just because a referenced asset is currently unavailable
 - only intervene if the missing media directly breaks gameplay actionability or causes a severe runtime/layout problem
 - when possible, preserve references and leave the structure stable for later media availability
+- if a catalog-mapped media URL is present, do not swap it for a different unrelated URL merely to avoid a warning or missing file state
 
 ## Icons & Fonts
 
@@ -274,6 +325,12 @@ Then:
 ## Screenshot Capture Requirement
 
 You must capture mobile screenshots for the repaired canonical surface and leave them in the workspace as part of this stage's evidence.
+
+If browser/runtime validation is required for this stage:
+- use only the assigned validation localhost URL/port from the runtime contract header
+- do not choose another localhost port
+- do not attach to another local server
+- write screenshots only inside the current attempt workspace
 
 Required screenshots:
 - `screens_01_title_or_entry.png` — first visible title / entry / CTA-safe state

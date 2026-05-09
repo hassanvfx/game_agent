@@ -50,6 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--remix-prompt")
     parser.add_argument("--through", default="final_code_ui_mobile_repair")
     parser.add_argument("--registry-config", default=str(ROOT / "configs" / "operator_pipeline_v2.json"))
+    parser.add_argument("--playwright-port", type=int)
     parser.add_argument("--skip-run-state-update", action="store_true")
     parser.add_argument(
         "--dry-run-operators",
@@ -170,6 +171,7 @@ def build_operator_prompt_text(
     attempt_workspace: Path,
     previous_contract_status: str | None,
     previous_contract_detail: str | None,
+    playwright_port: int | None,
 ) -> str:
     operator_prompt = operator.prompt.read_text(encoding="utf-8")
     retry_context = build_retry_context_text(attempt_number)
@@ -199,6 +201,36 @@ def build_operator_prompt_text(
             "",
         ]
 
+    runtime_validation_section = [
+        "## Validation Runtime Contract",
+        "",
+    ]
+    if playwright_port is None:
+        runtime_validation_section.extend(
+            [
+                "- validation_host: NONE_ASSIGNED",
+                "- validation_port: NONE_ASSIGNED",
+                "- validation_root_url: NONE_ASSIGNED",
+                "- validation_assignment_status: no_assigned_port",
+            ]
+        )
+    else:
+        runtime_validation_section.extend(
+            [
+                "- validation_host: 127.0.0.1",
+                f"- validation_port: {playwright_port}",
+                f"- validation_root_url: http://127.0.0.1:{playwright_port}/",
+                "- validation_assignment_status: assigned_exclusive_port",
+                "",
+                "Required rules for any browser/runtime verification in this node:",
+                "- Use only the assigned validation_host / validation_port / validation_root_url.",
+                "- Do not choose another localhost port, even if you think it is free.",
+                "- Do not attach to another existing local server.",
+                "- If the assigned server cannot be started or validated reliably, treat that as a blocked runtime condition.",
+                "- Write screenshots and browser-grounded evidence only inside the current attempt workspace.",
+            ]
+        )
+
     prompt_sections = [
         "## Workspace",
         "",
@@ -209,6 +241,19 @@ def build_operator_prompt_text(
         "```",
         "",
         "Do not modify files outside the working clone path.",
+        "",
+        *runtime_validation_section,
+        "",
+        "## Stage Safety Harness",
+        "",
+        "These constraints are mandatory unless the current stage explicitly states otherwise:",
+        "- Preserve the core mechanics exactly as implemented.",
+        "- Do not change gameplay rules, scoring semantics, win/loss semantics, progression semantics, or input semantics.",
+        "- Do not rewrite the main loop, collision model, physics model, or rendering architecture just to achieve theme or polish goals.",
+        "- Do not make risky broad JS refactors, rendering rewrites, or logic migrations when a visual / perceptual / procedural change can achieve the goal.",
+        "- Prefer cosmetic, perceptual, graphical, procedural, copy-level, and asset-mapping-level changes over logic changes.",
+        "- If a change could compromise playability, control reliability, rendering stability, or mobile actionability, do not make that change in this stage.",
+        "- When in doubt, leave mechanics and structural code alone and strengthen theme through character design, background identity, props, UI styling, wording, and lightweight procedural graphics.",
         "",
         "## Runtime Context",
         "",
@@ -309,7 +354,13 @@ def build_worker_command(prompt: str, workspace: Path, model: str, timeout_secon
     ]
 
 
-def write_stage_state(path: Path, operator: OperatorDefinition, attempt_number: int, paths: dict[str, Path]) -> None:
+def write_stage_state(
+    path: Path,
+    operator: OperatorDefinition,
+    attempt_number: int,
+    paths: dict[str, Path],
+    playwright_port: int | None,
+) -> None:
     now = utc_now()
     write_json(
         path,
@@ -330,6 +381,8 @@ def write_stage_state(path: Path, operator: OperatorDefinition, attempt_number: 
             "operator_invocation_path": str(paths["operator_invocation"]),
             "media_policy_report_path": str(paths["media_policy_report"]),
             "worker_invoked": False,
+            "playwright_port": playwright_port,
+            "validation_root_url": f"http://127.0.0.1:{playwright_port}/" if playwright_port is not None else None,
         },
     )
 
@@ -583,6 +636,10 @@ def main() -> None:
     run_state["operator_pipeline_v2"]["enabled"] = True
     run_state["operator_pipeline_v2"]["max_retries_per_stage"] = max_retries_per_stage
     run_state["operator_pipeline_v2"]["pipeline_mode"] = pipeline_mode
+    run_state["operator_pipeline_v2"]["assigned_playwright_port"] = args.playwright_port
+    run_state["operator_pipeline_v2"]["validation_root_url"] = (
+        f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
+    )
     run_state["operator_pipeline_v2"]["updated_at"] = utc_now()
     write_json(run_state_path, run_state)
 
@@ -595,6 +652,8 @@ def main() -> None:
     game_state["remix_prompt"] = args.remix_prompt
     game_state["operator_pipeline_path"] = str(pipeline_dir)
     game_state["creative_output_path"] = str(output_dir)
+    game_state["assigned_playwright_port"] = args.playwright_port
+    game_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
     game_state["updated_at"] = utc_now()
     write_json(game_state_path, game_state)
 
@@ -645,10 +704,17 @@ def main() -> None:
                     attempt_workspace=paths["workspace"].resolve(),
                     previous_contract_status=previous_contract_status,
                     previous_contract_detail=None,
+                    playwright_port=args.playwright_port,
                 )
                 paths["operator_prompt"].parent.mkdir(parents=True, exist_ok=True)
                 paths["operator_prompt"].write_text(prompt, encoding="utf-8")
-                write_stage_state(paths["operator_stage_state"], operator, attempt_number, paths)
+                write_stage_state(
+                    paths["operator_stage_state"],
+                    operator,
+                    attempt_number,
+                    paths,
+                    args.playwright_port,
+                )
 
                 command = build_worker_command(prompt, paths["workspace"].resolve(), args.model, args.agent_timeout)
                 write_json(
@@ -661,6 +727,10 @@ def main() -> None:
                         "operator_id": operator.id,
                         "stage_slug": operator.stage_slug,
                         "attempt_number": attempt_number,
+                        "playwright_port": args.playwright_port,
+                        "validation_root_url": (
+                            f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
+                        ),
                     },
                 )
 
@@ -671,6 +741,10 @@ def main() -> None:
                     payload["updated_at"] = payload["started_at"]
                     payload["model"] = args.model
                     payload["timeout_seconds"] = args.agent_timeout
+                    payload["playwright_port"] = args.playwright_port
+                    payload["validation_root_url"] = (
+                        f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
+                    )
 
                 update_json_file(paths["operator_stage_state"], mark_running)
 
@@ -763,6 +837,10 @@ def main() -> None:
                     "stdout_path": str(paths["operator_stdout"]),
                     "stderr_path": str(paths["operator_stderr"]),
                     "workspace_path": str(paths["workspace"]),
+                    "playwright_port": args.playwright_port,
+                    "validation_root_url": (
+                        f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
+                    ),
                     "started_at": execution_started_at,
                     "finished_at": execution_finished_at,
                     "duration_seconds": execution_duration_seconds,
@@ -829,6 +907,8 @@ def main() -> None:
         game_state["last_error"] = None
         game_state["updated_at"] = utc_now()
         game_state["operator_pipeline_artifacts"] = artifacts
+        game_state["assigned_playwright_port"] = args.playwright_port
+        game_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
         write_json(game_state_path, game_state)
     except Exception as exc:
         mark_game_failed(game_state_path, str(exc))

@@ -877,4 +877,74 @@ head -n 20 CHANGELOG.md
 
 ---
 
-**Last Updated:** November 17, 2025
+### SOP-010: Long Command Safety and Disposable Script Policy
+
+**Purpose:** Prevent shell hangs and quoting failures when running ad hoc operational commands through the assistant.
+
+**Critical Rule:**
+- **Do not use long inline shell commands** for non-trivial operational work.
+- Instead, write:
+  - a **disposable script** under `tmp/` for one-off work, or
+  - a **permanent script/fixture** under `scripts/`, `tools/.../scripts/`, or `fixtures/` when the command pattern is reusable.
+
+**Why:**
+Long inline commands are fragile and can fail because of:
+- shell quoting issues
+- heredoc parsing mistakes
+- terminal output truncation
+- stuck subshells / hanging execution
+- copy/paste errors during future reuse
+
+**Required Practice:**
+1. **For one-off inspection or generation tasks**
+   - create a short script in `tmp/`
+   - examples:
+     - `tmp/count_vatsal_games.py`
+     - `tmp/build_large_manifest.py`
+
+2. **For repeatable operator workflows**
+   - create a permanent script in:
+     - `scripts/`
+     - `tools/<tool>/scripts/`
+     - or save stable input data in `fixtures/`
+
+3. **Prefer file-based execution**
+   ```bash
+   # ✅ Good
+   python3 tmp/build_large_manifest.py
+
+   # ✅ Good
+   python3 scripts/kill_all_tool_runtimes.py --dry-run --run-id run_game_remixer_...
+
+   # ❌ Avoid
+   python3 - <<'PY'
+   # long embedded script here
+   PY
+   ```
+
+4. **If a command is longer than a small single-line invocation**
+   - stop and convert it into a script file first
+
+**Examples:**
+```bash
+# Good: disposable one-off script
+python3 tmp/count_top100_vatsal.py
+
+# Good: reusable permanent script
+python3 scripts/kill_all_tool_runtimes.py --run-id run_game_remixer_20260508T222946Z
+
+# Good: reusable fixture input
+python3 tools/game_refactoring/scripts/game_workflow.py \
+  --games-manifest-source tmp/game_refactoring_experiments/fixtures/top100_vatsal_first_game_manifest.json
+```
+
+**Benefits:**
+- ✅ commands are inspectable and rerunnable
+- ✅ easier debugging
+- ✅ less shell quoting risk
+- ✅ better documentation of operator workflows
+- ✅ better fit for AI-assisted execution
+
+---
+
+**Last Updated:** May 8, 2026

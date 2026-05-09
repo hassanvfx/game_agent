@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--style", default=DEFAULT_STYLE_ID)
     parser.add_argument("--remix-prompt")
     parser.add_argument("--remix-prompt-file")
+    parser.add_argument("--playwright-port", type=int)
     return parser.parse_args()
 
 
@@ -65,7 +66,7 @@ def base_job_state(game_id: str, attempt_dir: Path, attempt_number: int, job_typ
     }
 
 
-def build_refactor_prompt(packet: dict) -> str:
+def build_refactor_prompt(packet: dict, playwright_port: int | None = None) -> str:
     prompt_template = Path(packet["prompt_template_path"]).read_text(encoding="utf-8").strip()
     primary_contract_path = packet["spec_paths"][0]
     supporting_policy_paths = packet.get("policy_paths", [])
@@ -74,6 +75,14 @@ def build_refactor_prompt(packet: dict) -> str:
         prompt_template,
         "",
         "You are operating on a seeded working clone that already contains a mirrored copy of the original source.",
+        "Validation Runtime Contract:",
+        f"- validation_host: {'127.0.0.1' if playwright_port is not None else 'NONE_ASSIGNED'}",
+        f"- validation_port: {playwright_port if playwright_port is not None else 'NONE_ASSIGNED'}",
+        f"- validation_root_url: {f'http://127.0.0.1:{playwright_port}/' if playwright_port is not None else 'NONE_ASSIGNED'}",
+        "- If runtime/browser verification is required, use only the assigned validation localhost URL/port.",
+        "- Do not choose another localhost port or attach to another local server.",
+        "- Write screenshots or browser-grounded evidence only inside the current working clone.",
+        "",
         f"Run ID: {packet['run_id']}",
         f"Game ID: {packet['game_id']}",
         f"Attempt Number: {packet['attempt_number']}",
@@ -229,6 +238,8 @@ def main() -> None:
     game_state["creative_output_path"] = str(output_dir)
     game_state["selected_style_id"] = args.style
     game_state["remix_prompt"] = remix_prompt
+    game_state["assigned_playwright_port"] = args.playwright_port
+    game_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
     game_state["updated_at"] = utc_now()
     write_json(game_state_path, game_state)
 
@@ -263,9 +274,11 @@ def main() -> None:
     job_state["heartbeat_at"] = job_state["started_at"]
     job_state["style_id"] = args.style
     job_state["remix_prompt"] = remix_prompt
+    job_state["playwright_port"] = args.playwright_port
+    job_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
     write_json(attempt_dir / "job_state.json", job_state)
 
-    prompt = build_refactor_prompt(packet)
+    prompt = build_refactor_prompt(packet, playwright_port=args.playwright_port)
     prompt_path = attempt_dir / "creative_refactor_prompt.txt"
     prompt_path.write_text(prompt, encoding="utf-8")
 
@@ -290,6 +303,8 @@ def main() -> None:
             "generated_at": utc_now(),
             "style_id": args.style,
             "remix_prompt": remix_prompt,
+            "playwright_port": args.playwright_port,
+            "validation_root_url": f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None,
         },
     )
 
@@ -334,6 +349,8 @@ def main() -> None:
         "job_type": "creative_refactor",
         "style_id": args.style,
         "remix_prompt": remix_prompt,
+        "playwright_port": args.playwright_port,
+        "validation_root_url": f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None,
         "target_path": str(output_dir),
         "summary": extract_summary(
             result_text,
@@ -372,6 +389,8 @@ def main() -> None:
             "generated_at": utc_now(),
             "style_id": args.style,
             "remix_prompt": remix_prompt,
+            "playwright_port": args.playwright_port,
+            "validation_root_url": f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None,
             "artifacts": [
                 str(packet_path),
                 str(prompt_path),
@@ -405,6 +424,8 @@ def main() -> None:
     )
     game_state["selected_style_id"] = args.style
     game_state["remix_prompt"] = remix_prompt
+    game_state["assigned_playwright_port"] = args.playwright_port
+    game_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
     game_state["updated_at"] = utc_now()
     write_json(game_state_path, game_state)
 
@@ -418,6 +439,8 @@ def main() -> None:
         run_state["current_phase"] = "single_game_transform_finished"
         run_state["selected_style_id"] = args.style
         run_state["remix_prompt"] = remix_prompt
+        run_state["assigned_playwright_port"] = args.playwright_port
+        run_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
         run_state["updated_at"] = utc_now()
         run_state.setdefault("notes", []).append(
             f"{args.game_id} creative transform {'completed' if execution.returncode == 0 else ('timed out' if execution.timed_out else 'failed')} in extracted remixer using style {args.style}."

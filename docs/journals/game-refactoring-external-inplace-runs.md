@@ -44,6 +44,26 @@
 
 **Status:** ✅ Complete
 
+### ✅ Phase 5: Shared Playwright Port Lease Isolation Fix - **COMPLETE**
+
+- [x] Investigate screenshot contamination between sibling external runs
+- [x] Confirm the cited Harry Potter and Rick and Morty runs leased the same port concurrently
+- [x] Fix shared lease-state resolution so sibling runs use one common `_shared/port_leases.json`
+- [x] Fix lease release ownership so ports are released by the acquiring batch process
+- [x] Propagate the fix to both operator-pipeline and extracted parallel batch runners
+
+**Status:** ✅ Complete
+
+### ✅ Phase 6: Copy-Mode Input Purge Before Pipeline Start - **COMPLETE**
+
+- [x] Add a one-time prepare-step purge for copied inputs
+- [x] Keep only `index.html` and `assets/` in the first controlled prepared workspace
+- [x] Skip purge for `inplace` mode so external sources remain untouched
+- [x] Record purge details in integrity/reporting outputs
+- [x] Adopt `copy` mode as the preferred testing strategy for this cleanup behavior
+
+**Status:** ✅ Complete
+
 ---
 
 ## 📝 Journal Entries
@@ -253,6 +273,203 @@ The process matcher in `tools/game_refactoring/scripts/process_kill_utils.py` li
 
 ---
 
+### 2026-05-08 21:13 - Fixed screenshot contamination caused by per-run port lease isolation
+
+**Problem Encountered:**
+Two sibling external runs showed screenshot contamination:
+- `run_two_game_raw_20260509T025454Z_job_01_harry-potter`
+- `run_two_game_raw_20260509T025454Z_job_02_rick-and-morty`
+
+The Rick and Morty run picked up Harry Potter screenshots even though an exclusive Playwright port lease mechanism had already been added.
+
+**Investigation:**
+- Checked both run-local traces and lease files under `/Volumes/HDD2026/output/...`.
+- Confirmed each run created its own lease file at:
+  - `<run_dir>/runs/_shared/port_leases.json`
+- Confirmed both runs independently leased the exact same port:
+  - `43104`
+- Confirmed the release step was also failing because the lease was acquired by the batch supervisor PID but released using the worker PID.
+
+**Root Cause:**
+There were two coupled bugs:
+1. Lease state scope was wrong for external sibling runs.
+   - `default_port_state_path(run_dir)` resolved to `<run_dir>/runs/_shared/port_leases.json`
+   - That made each run believe it had its own isolated global pool, so sibling runs could lease the same port concurrently.
+2. Lease release owner PID was wrong.
+   - The batch process acquired the lease with `owner_pid=os.getpid()`
+   - But release used `worker.process.pid`
+   - That caused release attempts to return `released=False`
+
+**Solution:**
+- Added `shared_port_state_path_for_run_dir(run_dir)` in `tools/game_refactoring/scripts/port_lease_service.py`
+  - prefers `run_state["runs_root"] / "_shared" / "port_leases.json"`
+  - falls back to `run_dir.parent / "_shared" / "port_leases.json"`
+- Updated both batch runners to use the shared path helper instead of a run-local path.
+- Stored the batch lease owner PID on `ActiveWorker`.
+- Released leases using the acquiring batch PID, with a defensive fallback release if needed.
+
+**Files Modified:**
+- `tools/game_refactoring/scripts/port_lease_service.py`
+- `tools/game_refactoring/scripts/run_operator_pipeline_batch.py`
+- `tools/game_refactoring/scripts/run_parallel_batch.py`
+
+**Evidence Captured:**
+- Harry Potter trace showed:
+  - `lease_state_path=/Volumes/HDD2026/output/run_two_game_raw_20260509T025454Z_job_01_harry-potter/runs/_shared/port_leases.json`
+  - leased port `43104`
+- Rick and Morty trace showed:
+  - `lease_state_path=/Volumes/HDD2026/output/run_two_game_raw_20260509T025454Z_job_02_rick-and-morty/runs/_shared/port_leases.json`
+  - leased port `43104`
+- Both traces showed release failures with `released=False`
+
+**Code Snippet:**
+```python
+def shared_port_state_path_for_run_dir(run_dir: Path) -> Path:
+    run_dir = run_dir.resolve()
+    run_state_path = run_dir / "run_state.json"
+    if run_state_path.exists():
+        try:
+            run_state = load_json(run_state_path)
+        except json.JSONDecodeError:
+            run_state = {}
+        runs_root_value = run_state.get("runs_root")
+        if isinstance(runs_root_value, str) and runs_root_value.strip():
+            return Path(runs_root_value).resolve() / "_shared" / "port_leases.json"
+    return run_dir.parent.resolve() / "_shared" / "port_leases.json"
+```
+
+**Technical Decisions:**
+- Anchored port lease sharing at the external `runs_root` rather than each `run_dir`.
+- Preserved backward compatibility by falling back to `run_dir.parent / "_shared"` when `run_state.json` is unavailable.
+- Applied the release fix to both batch entrypoints so older extracted-remixer and newer operator-pipeline paths behave consistently.
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 21:26 - Added first-controlled-workspace purge for copied inputs
+
+**Achievement:**
+Added a one-time input purge during `prepare_inputs.py` so copied game workspaces are cleaned before the pipeline starts carrying them forward.
+
+**Behavior:**
+- applies only to `source_mode=copy`
+- runs immediately after the source game is mirrored into the first controlled workspace
+- keeps only:
+  - `index.html`
+  - `assets/`
+- removes every other file or directory in that prepared copy
+- never touches the external source directory
+- explicitly skips purge in `source_mode=inplace`
+
+**Implementation Details:**
+- Updated `tools/game_refactoring/scripts/prepare_inputs.py`
+  - added `purge_prepared_directory(prepared_dir)`
+  - whitelists `index.html` and `assets/`
+  - deletes all other top-level files/directories from the prepared copied input
+  - writes purge results into `integrity_report.json` as `pre_prepare_purge`
+  - appends run-state notes describing whether purge ran or was skipped
+
+**Technical Decisions:**
+- The purge is tied to the first controlled workspace:
+  - `run_dir/input/<game_id>` in copy mode
+- `inplace` mode was intentionally left non-destructive because it points at the external source tree
+- Preferred testing strategy is now `copy` mode for this behavior because it guarantees a safe, disposable workspace under run control
+
+**Validation Intent:**
+The next validation step should be a copy-mode run where the prepared input contains extra junk files, then confirm:
+- only `index.html` and `assets/` survive
+- purge details appear in `integrity_report.json`
+- downstream stages inherit the cleaned prepared workspace
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 21:29 - Two-prompt single-game rerun switched to copy mode
+
+**Achievement:**
+Reconfigured the disposable two-job test scaffold to default to `copy` mode, then killed active runtimes and relaunched the Harry Potter / Rick and Morty single-game runs using copied prepared inputs.
+
+**Implementation Details:**
+- Updated `tmp/game_refactoring_experiments/scripts/setup_two_game_raw_prompt_experiment.py`
+  - changed `DEFAULT_SOURCE_MODE` from `inplace` to `copy`
+  - updated the script description to state that copy mode is the default
+- Ran the repo-level kill helper before relaunch:
+  - `python3 scripts/kill_all_tool_runtimes.py --include-default-run-patterns --force`
+- Relaunched the two-job disposable experiment scaffold with:
+  - `python3 tmp/game_refactoring_experiments/scripts/setup_two_game_raw_prompt_experiment.py --runs-root /Volumes/HDD2026/output --launch --force`
+
+**Relaunched Runs:**
+- `run_two_game_raw_20260509T032856Z_job_01_harry-potter`
+- `run_two_game_raw_20260509T032856Z_job_02_rick-and-morty`
+
+**Verification:**
+Launch metadata for both jobs now explicitly shows:
+- `--source-mode copy`
+
+This confirms the current preferred validation path is now using copied prepared inputs, which is the correct setup for the new first-controlled-workspace purge behavior.
+
+**Technical Decisions:**
+Copy mode is now the preferred testing strategy because it gives us:
+- a disposable controlled input workspace
+- safe one-time purge behavior
+- no risk to external source directories
+- a clearer validation path for inheritance of the cleaned prepared input
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 21:16 - Disposable rerun verified shared lease paths and distinct active ports
+
+**Achievement:**
+Re-ran the two single-game prompt jobs using disposable one-shot checks and confirmed the new port isolation behavior is active in live runs.
+
+**Rerun Scope:**
+- `run_two_game_raw_20260509T031519Z_job_01_harry-potter`
+- `run_two_game_raw_20260509T031519Z_job_02_rick-and-morty`
+
+**What Changed Before Rerun:**
+- Added richer debug trace output to both batch runners so each run now prints:
+  - resolved `lease_state_path`
+  - acquired `port`
+  - `lease_id`
+  - `lease_owner_pid`
+  - `localhost_url`
+  - release owner context on cleanup
+
+**Disposable Verification Results:**
+- Shared lease file exists at:
+  - `/Volumes/HDD2026/output/_shared/port_leases.json`
+- Active leases observed during the rerun:
+  - Harry Potter → `43109`
+  - Rick and Morty → `43110`
+- Both runs now point at the same shared lease file rather than run-local lease files.
+
+**Captured Trace Evidence:**
+- Harry Potter:
+  - `lease_state_path=/Volumes/HDD2026/output/_shared/port_leases.json`
+  - `port=43109`
+  - `localhost_url=http://127.0.0.1:43109/`
+- Rick and Morty:
+  - `lease_state_path=/Volumes/HDD2026/output/_shared/port_leases.json`
+  - `port=43110`
+  - `localhost_url=http://127.0.0.1:43110/`
+
+**Why This Matters:**
+This confirms the scheduler is no longer handing sibling runs the same validation lane at launch time, which was the direct cause of the earlier screenshot contamination.
+
+**Operational Note:**
+The user requested disposable, non-blocking inspection commands rather than long polling/wait loops. Follow-up runtime checks should continue using short single-shot reads of:
+- shared lease state
+- per-run debug traces
+- later screenshot/artifact paths once generated
+
+**Status:** Complete
+
+---
+
 ### 2026-05-08 16:39 - Added cross-tool kill helper for future external runs
 
 **Achievement:**
@@ -446,6 +663,53 @@ The earlier concurrency bug analysis strongly suggested that browser-grounded wo
 
 **Follow-Up Intent:**
 - Fix Playwright behavior in the next pass after this checkpoint commit, using the restored workflow launch path as the new baseline for observation and debugging.
+
+**Prompt-Hardening Follow-Up:**
+- Added a shared stage safety harness to the operator prompt header in:
+  - `tools/game_refactoring/scripts/run_operator_pipeline_game.py`
+- The new harness explicitly tells stages to:
+  - preserve core mechanics exactly
+  - avoid gameplay-rule / scoring / input / win-loss changes
+  - avoid broad JS refactors and rendering rewrites
+  - prefer cosmetic, perceptual, graphical, procedural, copy-level, and asset-mapping-level changes
+  - skip any move that risks playability, mobile actionability, or rendering stability
+- Strengthened narrative identity planning in:
+  - `tools/game_refactoring/prompts/operators_v2/01_creative_remix_v1_narrative.md`
+  - added clearer requirements for defining:
+    - the recognizable focal character / actor / token
+    - the supporting background / world / scene
+    - the item / prop / hazard / reward language
+    - repeated motifs that later stages should reinforce
+  - added a more active `agent-blueprint-note` convention so the narrative stage can leave compact blueprint-oriented comments at important gameplay/UI callsites
+  - emphasized a paranoid-but-disciplined code-outline role for future repair stages
+- Strengthened visual memorability in:
+  - `tools/game_refactoring/prompts/operators_v2/03_creative_remix_v1_visuals.md`
+  - `tools/game_refactoring/prompts/operators_v2/06_creative_remix_v3_visual_ui_redesign.md`
+  - added stronger emphasis on:
+    - memorable silhouette / palette / motif
+    - characteristic backgrounds and scene identity
+    - branded / recognizable item families for puzzle-, card-, or item-based games
+    - authored screenshots rather than generic recolors
+- Hardened the media mapper in:
+  - `tools/game_refactoring/prompts/operators_v2/03_media_mapper.md`
+  - changed the stage from “rich media by default” toward “safe media mapping first”
+  - made audio optional when safe hooks are unclear
+  - relaxed GIF expectations so overlays can be ephemeral, illustrative, or commentary-oriented rather than persistent blockers
+  - added tiny plain-JavaScript safe integration examples for:
+    - one-shot audio
+    - event-bound audio
+    - optional background loops
+    - ephemeral GIF overlays
+  - explicitly discouraged inventing broad new sound systems or risky code paths
+- Updated the final repair stage in:
+  - `tools/game_refactoring/prompts/operators_v2/09_creative_remix_v3_final_mobile_repair.md`
+  - made the stage explicitly read `Blueprint.md` first and mechanics outputs immediately after when present
+  - told the stage to test through the real final objective, win/loss, and restart/continue path
+  - added direct instructions to fix console/runtime errors when they are surgically repairable
+  - preserved media-mapper caveats so final repair does not casually swap catalog-backed media URLs or replace the media identity
+  - reinforced that audio/GIF behavior should stay optional, non-blocking, and non-gameplay-critical
+- Verified syntax compilation for:
+  - `tools/game_refactoring/scripts/run_operator_pipeline_game.py`
 
 **Status:** In Progress
 

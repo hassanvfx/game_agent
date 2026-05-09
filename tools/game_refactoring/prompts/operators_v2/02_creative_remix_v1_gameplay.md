@@ -33,6 +33,7 @@ You may also:
 - lightly restructure explanatory copy when needed for clarity
 - simplify or compress weak copy so the gameplay fantasy of `#PROMPT#` feels cleaner
 - leave lightweight contextual annotations for later visual or media stages when structurally useful
+- frame the background or environment as secondary reactive dressing when that helps align the gameplay fantasy to `#PROMPT#`
 
 You must preserve:
 - actual input behavior
@@ -127,6 +128,29 @@ If `#PROMPT#` suggests a different genre, fantasy, or system:
 - make the existing loop feel newly framed through `#PROMPT#`
 
 The player should feel the new fantasy without the underlying gameplay reality changing.
+
+## Secondary Reactive Background Rule
+
+If you describe a themed animated background or environment layer, treat it as secondary atmospheric dressing only.
+
+You may describe the background as reacting to play through:
+- palette or lighting shifts
+- ambient motion
+- particle emissions
+- non-blocking scene responses
+- world-state signals that make the authored scene feel more alive
+
+You must NOT describe the background as:
+- a mechanic-bearing system
+- an obstacle source
+- an objective source
+- a required interaction surface
+- the primary source of visual attention during play
+- a justification for leaving a cheap stock image scene as the true world layer
+
+Any background-facing language must remain truthful to implemented behavior and clearly secondary to the real playable loop.
+
+Gameplay framing should help later stages plan a real authored world response, not merely decorate an unchanged stock scene.
 
 ---
 

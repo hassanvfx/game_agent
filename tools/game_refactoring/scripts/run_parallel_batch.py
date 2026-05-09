@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -10,6 +11,18 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.port_lease_service import (
+    DEFAULT_LEASE_TTL_SECONDS,
+    DEFAULT_POOL_SIZE,
+    DEFAULT_PORT_BASE,
+    acquire_port_lease,
+    release_port_lease,
+    shared_port_state_path_for_run_dir,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +36,9 @@ class ActiveWorker:
     game_id: str
     process: subprocess.Popen[str]
     launched_at: str
+    leased_port: int
+    lease_state_path: Path
+    lease_owner_pid: int
 
 
 def utc_now() -> str:
@@ -64,6 +80,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--style", default=DEFAULT_STYLE_ID)
     parser.add_argument("--remix-prompt")
     parser.add_argument("--remix-prompt-file")
+    parser.add_argument("--playwright-port-base", type=int, default=DEFAULT_PORT_BASE)
+    parser.add_argument("--playwright-port-pool-size", type=int, default=DEFAULT_POOL_SIZE)
+    parser.add_argument("--playwright-port-lease-ttl-seconds", type=int, default=DEFAULT_LEASE_TTL_SECONDS)
     return parser.parse_args()
 
 
@@ -119,6 +138,21 @@ def run_spec_adaptor(run_dir: Path, style: str, remix_prompt: str, trace_path: P
         raise
 
 
+def release_worker_lease(worker: ActiveWorker, trace_path: Path | None = None) -> None:
+    released = release_port_lease(worker.lease_state_path, port=worker.leased_port, owner_pid=worker.lease_owner_pid)
+    if not released:
+        released = release_port_lease(worker.lease_state_path, port=worker.leased_port)
+    if trace_path is not None:
+        append_debug_trace(
+            trace_path,
+            f"Lease release owner context for game_id={worker.game_id}: lease_owner_pid={worker.lease_owner_pid} worker_pid={worker.process.pid} lease_state_path={worker.lease_state_path}",
+        )
+        append_debug_trace(
+            trace_path,
+            f"Released leased playwright port for game_id={worker.game_id} pid={worker.process.pid} port={worker.leased_port} released={released}",
+        )
+
+
 def launch_worker(
     run_dir: Path,
     game_id: str,
@@ -126,6 +160,9 @@ def launch_worker(
     timeout: int,
     style: str,
     remix_prompt: str | None,
+    lease_state_path: Path,
+    playwright_port: int,
+    lease_owner_pid: int,
     trace_path: Path | None = None,
 ) -> ActiveWorker:
     process = subprocess.Popen(
@@ -142,6 +179,8 @@ def launch_worker(
             str(timeout),
             "--style",
             style,
+            "--playwright-port",
+            str(playwright_port),
             *(
                 ["--remix-prompt", remix_prompt]
                 if remix_prompt
@@ -154,11 +193,18 @@ def launch_worker(
         text=True,
         start_new_session=True,
     )
-    worker = ActiveWorker(game_id=game_id, process=process, launched_at=utc_now())
+    worker = ActiveWorker(
+        game_id=game_id,
+        process=process,
+        launched_at=utc_now(),
+        leased_port=playwright_port,
+        lease_state_path=lease_state_path,
+        lease_owner_pid=lease_owner_pid,
+    )
     if trace_path is not None:
         append_debug_trace(
             trace_path,
-            f"Launched worker for game_id={game_id} pid={process.pid} timeout={timeout} style={style} remix_prompt_present={bool(remix_prompt)}",
+            f"Launched worker for game_id={game_id} pid={process.pid} timeout={timeout} style={style} remix_prompt_present={bool(remix_prompt)} playwright_port={playwright_port}",
         )
     return worker
 
@@ -298,9 +344,10 @@ def main() -> None:
         trace_path = run_dir / DEBUG_TRACE_FILENAME
         append_debug_trace(trace_path, f"Created run_dir={run_dir} via create_run.py")
     append_debug_trace(trace_path, f"run_parallel_batch.py starting for run_dir={run_dir}")
+    lease_state_path = shared_port_state_path_for_run_dir(run_dir)
     append_debug_trace(
         trace_path,
-        f"Arguments: manifest={args.manifest}, run_id={args.run_id}, run_dir={args.run_dir}, runs_root={args.runs_root}, model={args.model}, agent_timeout={args.agent_timeout}, max_concurrency={args.max_concurrency}, poll_seconds={args.poll_seconds}, stale_heartbeat_seconds={args.stale_heartbeat_seconds}, style={args.style}, remix_prompt_present={bool(remix_prompt)}",
+        f"Arguments: manifest={args.manifest}, run_id={args.run_id}, run_dir={args.run_dir}, runs_root={args.runs_root}, model={args.model}, agent_timeout={args.agent_timeout}, max_concurrency={args.max_concurrency}, poll_seconds={args.poll_seconds}, stale_heartbeat_seconds={args.stale_heartbeat_seconds}, style={args.style}, remix_prompt_present={bool(remix_prompt)} playwright_port_base={args.playwright_port_base} playwright_port_pool_size={args.playwright_port_pool_size} playwright_port_lease_ttl_seconds={args.playwright_port_lease_ttl_seconds} lease_state_path={lease_state_path}",
     )
 
     append_debug_trace(trace_path, "Starting prepare_inputs.py")
@@ -329,6 +376,18 @@ def main() -> None:
         while pending and len(active) < args.max_concurrency:
             game_id = pending.pop(0)
             append_debug_trace(trace_path, f"Scheduling next worker for game_id={game_id}; active={list(active)} pending_remaining={len(pending)}")
+            port_lease = acquire_port_lease(
+                lease_state_path,
+                owner_pid=os.getpid(),
+                owner_label=f"run_parallel_batch:{run_dir.name}:{game_id}",
+                port_base=args.playwright_port_base,
+                pool_size=args.playwright_port_pool_size,
+                lease_ttl_seconds=args.playwright_port_lease_ttl_seconds,
+            )
+            append_debug_trace(
+                trace_path,
+                f"Acquired leased playwright port for game_id={game_id} port={port_lease.port} lease_id={port_lease.lease_id} lease_owner_pid={port_lease.owner_pid} lease_state_path={port_lease.state_path} localhost_url={port_lease.localhost_url}",
+            )
             active[game_id] = launch_worker(
                 run_dir,
                 game_id,
@@ -336,6 +395,9 @@ def main() -> None:
                 args.agent_timeout,
                 args.style,
                 remix_prompt,
+                lease_state_path,
+                port_lease.port,
+                lease_owner_pid=port_lease.owner_pid,
                 trace_path=trace_path,
             )
 
@@ -368,7 +430,9 @@ def main() -> None:
             run_state_path = run_dir / "run_state.json"
             run_state = load_json(run_state_path)
             for game_id in finished:
-                active.pop(game_id, None)
+                worker = active.pop(game_id, None)
+                if worker is not None:
+                    release_worker_lease(worker, trace_path=trace_path)
                 game_state = load_json(current_game_state_path(run_dir, game_id))
                 if game_state["status"] == "completed":
                     run_state["games_transform_completed"] += 1
