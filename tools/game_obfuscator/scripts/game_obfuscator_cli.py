@@ -124,6 +124,17 @@ def build_result_payload(run_dir: Path, *, include_games: bool = False) -> dict[
 def handle_start(args: argparse.Namespace) -> None:
     python_executable = select_python_executable()
 
+    if args.pipeline == "legacy":
+        print(
+            json.dumps(
+                {
+                    "warning": "The legacy pipeline is deprecated and scheduled for removal. Use the default simple pipeline unless you are explicitly validating historical behavior."
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+
     create_result = run_python_script(
         "create_run.py",
         "--manifest",
@@ -232,7 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pipeline",
         choices=["simple", "legacy"],
         default="simple",
-        help="Pipeline mode to launch. 'simple' is the new deterministic default; 'legacy' preserves the older multi-stage flow.",
+        help="Pipeline mode to launch. 'simple' is the recommended deterministic default; 'legacy' is deprecated and scheduled for removal.",
     )
     start_parser.add_argument("--timeout-ms", type=int, default=8000, help="Playwright verification timeout in milliseconds.")
     start_parser.add_argument(

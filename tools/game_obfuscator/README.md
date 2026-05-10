@@ -86,7 +86,7 @@ The default `simple` pipeline:
 - minifies inline JavaScript in HTML
 - obfuscates external `.js` files deterministically with conservative settings
 
-The older multi-stage path is still available through `--pipeline legacy`.
+The older multi-stage path is still available through `--pipeline legacy`, but it is **deprecated and scheduled for removal**.
 
 ```bash
 python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json
@@ -100,7 +100,7 @@ Commands:
   - creates a run from a manifest
   - launches the selected pipeline in the background
   - defaults to `--pipeline simple`
-  - supports `--pipeline legacy` for the older multi-stage flow
+  - supports `--pipeline legacy` for the older multi-stage flow, but that path is deprecated
   - returns immediately with JSON containing:
     - `run_id`
     - `run_dir`
@@ -160,7 +160,7 @@ python3 scripts/game_obfuscator_cli.py start \
 Arguments:
 - `--manifest` *(required)*: path to the input manifest JSON file
 - `--run-id` *(optional)*: explicit run id to use instead of auto-generated timestamped id
-- `--pipeline` *(optional, default `simple`)*: choose `simple` for the new deterministic minify/obfuscate flow or `legacy` for the older multi-stage flow
+- `--pipeline` *(optional, default `simple`)*: choose `simple` for the new deterministic minify/obfuscate flow or `legacy` for the older multi-stage flow (**deprecated; scheduled for removal**)
 - `--timeout-ms` *(optional, default `8000`)*: Playwright verification timeout for the legacy pipeline
 - `--max-game-seconds` *(optional, default `300`)*: per-game obfuscation wall-clock timeout for the legacy pipeline
 
