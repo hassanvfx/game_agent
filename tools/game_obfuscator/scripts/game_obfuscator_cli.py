@@ -150,16 +150,25 @@ def handle_start(args: argparse.Namespace) -> None:
     env["PYTHONPATH"] = str(SCRIPTS_DIR) if not existing_pythonpath else f"{SCRIPTS_DIR}:{existing_pythonpath}"
     env["GAME_OBFUSCATOR_PYTHON"] = python_executable
 
+    pipeline_script_name = (
+        "run_game_obfuscator_simple_pipeline.py" if args.pipeline == "simple" else "run_game_obfuscator_pipeline.py"
+    )
+
     command = [
         python_executable,
-        str(SCRIPTS_DIR / "run_game_obfuscator_pipeline.py"),
+        str(SCRIPTS_DIR / pipeline_script_name),
         "--run-dir",
         str(run_dir),
-        "--timeout-ms",
-        str(args.timeout_ms),
-        "--max-game-seconds",
-        str(args.max_game_seconds),
     ]
+    if args.pipeline == "legacy":
+        command.extend(
+            [
+                "--timeout-ms",
+                str(args.timeout_ms),
+                "--max-game-seconds",
+                str(args.max_game_seconds),
+            ]
+        )
 
     with stdout_log.open("w", encoding="utf-8") as stdout_handle, stderr_log.open("w", encoding="utf-8") as stderr_handle:
         process = subprocess.Popen(
@@ -180,6 +189,7 @@ def handle_start(args: argparse.Namespace) -> None:
         "command": command,
         "stdout_path": str(stdout_log.resolve()),
         "stderr_path": str(stderr_log.resolve()),
+        "pipeline_mode": args.pipeline,
     }
     write_json(run_state_path, run_state)
 
@@ -193,6 +203,7 @@ def handle_start(args: argparse.Namespace) -> None:
             "status": run_state.get("status"),
             "current_phase": run_state.get("current_phase"),
             "accepted_at": run_state.get("accepted_at"),
+            "pipeline_mode": args.pipeline,
             "launcher_pid": process.pid,
             "launcher_stdout_path": str(stdout_log.resolve()),
             "launcher_stderr_path": str(stderr_log.resolve()),
@@ -217,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser = subparsers.add_parser("start", help="Create a run, launch the pipeline in the background, and return immediately.")
     start_parser.add_argument("--manifest", required=True, help="Path to the input manifest JSON file.")
     start_parser.add_argument("--run-id", help="Optional explicit run id.")
+    start_parser.add_argument(
+        "--pipeline",
+        choices=["simple", "legacy"],
+        default="simple",
+        help="Pipeline mode to launch. 'simple' is the new deterministic default; 'legacy' preserves the older multi-stage flow.",
+    )
     start_parser.add_argument("--timeout-ms", type=int, default=8000, help="Playwright verification timeout in milliseconds.")
     start_parser.add_argument(
         "--max-game-seconds",

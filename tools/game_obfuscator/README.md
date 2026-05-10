@@ -73,14 +73,24 @@ curl -fsSL https://raw.githubusercontent.com/hassanvfx/clineflow/main/install.sh
 Your AI assistant reads your project's workflow and becomes context-aware. Through journals, every conversation builds on the last - **it remembers what you built, why you built it, and what's next.**
 
 ### 🛠️ Game Obfuscator CLI
-If you're using this repository as the Game Obfuscator tool, the CLI now behaves like a machine-facing orchestration surface:
+If you're using this repository as the Game Obfuscator tool, the CLI now behaves like a machine-facing orchestration surface with a **simple deterministic pipeline as the default**:
 
 1. `start` accepts a manifest, creates a run, launches the pipeline in the background, and returns immediately
 2. `status` is the canonical poll surface during execution
 3. `output-path` is the destination/result surface for locating outputs
 
+The default `simple` pipeline:
+- mirrors each game locally
+- copies the mirrored site structure directly to `output/`
+- minifies HTML/CSS
+- minifies inline JavaScript in HTML
+- obfuscates external `.js` files deterministically with conservative settings
+
+The older multi-stage path is still available through `--pipeline legacy`.
+
 ```bash
 python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json
+python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json --pipeline legacy
 python3 scripts/game_obfuscator_cli.py status --run-id run_game_obfuscator_20260426T225801Z
 python3 scripts/game_obfuscator_cli.py output-path --run-id run_game_obfuscator_20260426T225801Z --include-games
 ```
@@ -88,7 +98,9 @@ python3 scripts/game_obfuscator_cli.py output-path --run-id run_game_obfuscator_
 Commands:
 - `start`
   - creates a run from a manifest
-  - launches `scripts/run_game_obfuscator_pipeline.py` in the background
+  - launches the selected pipeline in the background
+  - defaults to `--pipeline simple`
+  - supports `--pipeline legacy` for the older multi-stage flow
   - returns immediately with JSON containing:
     - `run_id`
     - `run_dir`
@@ -148,12 +160,13 @@ python3 scripts/game_obfuscator_cli.py start \
 Arguments:
 - `--manifest` *(required)*: path to the input manifest JSON file
 - `--run-id` *(optional)*: explicit run id to use instead of auto-generated timestamped id
-- `--timeout-ms` *(optional, default `8000`)*: Playwright verification timeout
-- `--max-game-seconds` *(optional, default `300`)*: per-game obfuscation wall-clock timeout
+- `--pipeline` *(optional, default `simple`)*: choose `simple` for the new deterministic minify/obfuscate flow or `legacy` for the older multi-stage flow
+- `--timeout-ms` *(optional, default `8000`)*: Playwright verification timeout for the legacy pipeline
+- `--max-game-seconds` *(optional, default `300`)*: per-game obfuscation wall-clock timeout for the legacy pipeline
 
 Behavior:
 - creates the run scaffold synchronously
-- launches the remaining pipeline in the background
+- launches the selected pipeline in the background
 - returns immediately
 - writes launcher logs under:
   - `<run_dir>/logs/launcher.stdout.log`
@@ -170,6 +183,7 @@ Response schema:
   "status": "created",
   "current_phase": "batch_launched",
   "accepted_at": "2026-04-27T02:58:01Z",
+  "pipeline_mode": "simple",
   "launcher_pid": 36521,
   "launcher_stdout_path": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z/logs/launcher.stdout.log",
   "launcher_stderr_path": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z/logs/launcher.stderr.log"
@@ -185,6 +199,7 @@ Field meanings:
 - `status`: immediate launch status, currently `created`
 - `current_phase`: immediate launch phase, currently `batch_launched`
 - `accepted_at`: launch acceptance timestamp
+- `pipeline_mode`: selected pipeline mode, currently `simple` by default or `legacy` when requested
 - `launcher_pid`: detached launcher process id
 - `launcher_stdout_path` / `launcher_stderr_path`: log files for background pipeline execution
 

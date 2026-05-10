@@ -1,6 +1,6 @@
 # Game Obfuscator - Implementation Journal
 
-**Last Updated:** 2026-04-26  
+**Last Updated:** 2026-05-10  
 **Feature Spec:** _TBD_  
 **Backend Reference:** N/A
 
@@ -138,6 +138,63 @@ Refactored the Game Obfuscator CLI so `start` acts as a fast background launcher
 
 ---
 
+### 2026-05-10 22:46 - Added simpler deterministic replacement pipeline as the new default launch mode
+
+**Achievement:**
+Built a new sibling pipeline focused only on safe deterministic HTML/CSS/JS minification and JS obfuscation, and switched the CLI default launch surface to use it while preserving the older multi-stage path behind an explicit legacy flag.
+
+**Implementation Details:**
+- Added `scripts/transform_web_assets.js` as a deterministic asset transformer that:
+  - recursively walks a published site directory
+  - minifies `.html` files with `html-minifier-terser`
+  - minifies inline HTML JavaScript with `terser`
+  - minifies `.css` files with `clean-css`
+  - obfuscates external `.js` files with conservative `javascript-obfuscator` settings
+- Added `scripts/obfuscate_simple_outputs.py` as a focused Python stage that:
+  - copies each prepared mirrored game from `input/` to `output/`
+  - applies the deterministic transformer to the copied site
+  - writes `artifacts/simple_obfuscation_report.json`
+  - marks each game as succeeded/failed with transform summary counts
+- Added `scripts/run_game_obfuscator_simple_pipeline.py` as a sibling background pipeline wrapper that runs:
+  - `prepare_inputs.py`
+  - `obfuscate_simple_outputs.py`
+- Updated `scripts/game_obfuscator_cli.py` so `start` now supports:
+  - `--pipeline simple`
+  - `--pipeline legacy`
+- Switched the CLI default to:
+  - `--pipeline simple`
+- Preserved the old flow through:
+  - `python3 scripts/game_obfuscator_cli.py start --manifest <manifest> --pipeline legacy`
+- Updated `README.md` to document the new default and the legacy fallback.
+
+**Technical Decisions:**
+- Keep the simpler deterministic path as a sibling pipeline first, rather than deleting the legacy pipeline immediately.
+- Make the new path the default CLI launch mode now, because the user wants this to become the replacement surface.
+- Avoid the `game_obfuscator_cline`/black-box orchestration path for the active product direction; leave it as a documented experiment rather than the main tool.
+- Keep transforms intentionally conservative:
+  - no cross-file symbol map stage
+  - no runtime observation dependency
+  - no LLM/Cline rewrite dependency
+  - no aggressive control-flow flattening or global renaming
+
+**Testing:**
+- Implementation completed.
+- Runtime validation still required on a real manifest to confirm:
+  - the new `simple` pipeline launches successfully
+  - it completes with expected run-state transitions
+  - transformed output is published under `output/<game_id>/`
+  - reports are emitted under `artifacts/simple_obfuscation_report.json`
+
+**Next Steps:**
+- [ ] Run the new default `simple` pipeline against a real manifest
+- [ ] Inspect generated outputs and artifact reports
+- [ ] Decide whether status/README examples should be further simplified around the new path only
+- [ ] Document `game_obfuscator_cline` as deactivated/experimental if more visible demotion is needed
+
+**Status:** In Progress
+
+---
+
 ### 2026-04-26 23:49 - Simplified separate-file obfuscation path validated
 
 **Achievement:**
@@ -237,6 +294,52 @@ Captured the project’s new milestone boundary in dedicated orchestration hando
 - [ ] Add immediate `game_state.json` / `run_state.json` flushes and progress timestamps
 - [ ] Build a sequential resumable launcher before attempting any parallel execution
 - [ ] Reuse sibling dashboard/open-latest ideas only after authoritative state is trustworthy
+
+**Status:** In Progress
+
+---
+
+### 2026-05-10 21:16 - Runtime verification improved and emoji staging bug isolated
+
+**Achievement:**
+Improved runtime verification observability to expose exact failing URLs, then traced the latest publish-pipeline failure to missing staged emoji assets rather than JS obfuscation corruption.
+
+**Implementation Details:**
+- Updated `scripts/verify_outputs.py` to capture Playwright `response` events for HTTP status codes `>= 400`.
+- Added `response_failures` to the browser artifact payload so verification artifacts now preserve exact broken URLs and status codes instead of only generic console 404 text.
+- Re-ran verification for:
+  - `runs/run_game_obfuscator_20260510T145545Z`
+- Confirmed the actual failing runtime asset is:
+  - `assets/emoji/2753.png`
+- Verified the failing game's `assets/emoji/` directory exists but is empty, which explains why verification previously passed the directory-exists check while runtime still failed.
+- Inspected rewrite artifacts and confirmed:
+  - `copied_emoji_assets.json` recorded an empty copied asset list
+  - `game_state.json` referenced rewrite-planning artifacts that were expected but no longer present in the run output tree
+- Traced the planning bug to `scripts/plan_rewrites.py`:
+  - fallback image planning used `and not runtime_image_refs`
+  - this incorrectly checked the global list for the whole run instead of whether the current file already had runtime image refs
+  - as a result, later files containing image API usage could miss fallback emoji planning entirely once any earlier file had already contributed an image ref
+- Patched the fallback logic to use a per-file check:
+  - `file_has_runtime_image_ref = any(item["source_file"] == relative_path for item in runtime_image_refs)`
+
+**Technical Decisions:**
+- Keep the improved verifier permanently because generic browser console 404s were not actionable enough for pipeline debugging.
+- Fix the planning-stage bug before trying to harden separate-obfuscation script extraction further, because the immediate broken runtime was caused by a missing asset staging plan, not by JS rewrite path rebasing.
+
+**Testing:**
+- Re-ran:
+  - `python3 scripts/verify_outputs.py --run-dir ../game_obfuscator/runs/run_game_obfuscator_20260510T145545Z --timeout-ms 8000`
+- Verified `artifacts/verification.json` now includes:
+  - `404 File not found :: .../assets/emoji/2753.png`
+- Confirmed the target runtime output contains:
+  - empty `assets/emoji/`
+- Confirmed the pre-bundle HTML references:
+  - `assets/emoji/2753.png` twice
+
+**Next Steps:**
+- [ ] Re-run verification against a game whose source package includes `run_playwright_observation.js`
+- [ ] Validate that screenshot artifacts are emitted from the obfuscated output workspace
+- [ ] Treat only functional runtime errors and missing screenshot evidence as verification failures for this path
 
 **Status:** In Progress
 
