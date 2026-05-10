@@ -421,6 +421,225 @@ Copy mode is now the preferred testing strategy because it gives us:
 
 ---
 
+### 2026-05-08 21:55 - Full 107-game raw-backed Vatsal manifest clarified and generated
+
+**Achievement:**
+Corrected the experiment interpretation: the full raw-backed Vatsal set must be materialized as one 107-game manifest, and we should not continue any large-batch setup unless all 107 raw folders are present.
+
+**Clarification Applied:**
+- the 107 game ids come from the Vatsal top list
+- those ids must resolve against `games/raw`
+- the required prerequisite is a single manifest containing all 107 resolved raw-backed game folders
+- the earlier six-prompt launcher should not be treated as sufficient proof of readiness for the full batch by itself
+
+**Implementation Details:**
+- Confirmed the raw-backed resolver count is exactly:
+  - `top100_count = 107`
+  - `resolved_raw_count = 107`
+- Generated the full manifest with:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_full_manifest.json --run-label top107-vatsal-raw-backed-full`
+- Output manifest:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_full_manifest.json`
+
+**Technical Decisions:**
+- We should not proceed with the larger orchestration unless the full 107 raw-backed set resolves cleanly.
+- This manifest is now the correct source-of-truth input artifact for any full-batch workflow built on the Vatsal raw-backed pool.
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 22:01 - Full 107-game Harry Potter manifest generated
+
+**Achievement:**
+Generated the dedicated full-batch Harry Potter manifest for the entire resolved raw-backed Vatsal set.
+
+**Implementation Details:**
+- Reused the 107-game raw-backed resolver/generator with:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_harry_potter_manifest.json --run-label top107-vatsal-raw-backed-harry-potter`
+- Output manifest:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_harry_potter_manifest.json`
+
+**Verification:**
+- `top100_count = 107`
+- `resolved_raw_count = 107`
+- manifest points at raw source folders for the full resolved set
+
+**Technical Decisions:**
+This gives us the clean full-batch source artifact for the single-prompt case:
+- prompt identity: `Harry Potter`
+- source mode expectation for launch: `copy`
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 22:03 - Full 107-game Harry Potter batch launched
+
+**Achievement:**
+Launched the full 107-game Harry Potter batch from the generated raw-backed manifest.
+
+**Launch Command:**
+- `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_harry_potter_manifest.json --run-id run_top107_vatsal_harry_potter_20260509T040220Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "Harry Potter"`
+
+**Run Metadata:**
+- `run_id`: `run_top107_vatsal_harry_potter_20260509T040220Z`
+- `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_harry_potter_20260509T040220Z`
+- `workflow_games_count`: `107`
+- `status`: `created`
+- `current_phase`: `run_created`
+- `pid`: `72551`
+
+**Technical Decisions:**
+- kept the launch on:
+  - `source_mode=copy`
+  - `pipeline=v2`
+  - `max_concurrency=1`
+- used the full raw-backed Harry Potter manifest as the source of truth for the batch
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 22:05 - Full 107-game Rick and Morty manifest and batch launched
+
+**Achievement:**
+Created the full-batch Rick and Morty manifest for the same 107 raw-backed Vatsal set and launched it in copy mode.
+
+**Manifest Command:**
+- `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_rick_and_morty_manifest.json --run-label top107-vatsal-raw-backed-rick-and-morty`
+
+**Manifest Output:**
+- `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_rick_and_morty_manifest.json`
+
+**Verification:**
+- `top100_count = 107`
+- `resolved_raw_count = 107`
+
+**Launch Command:**
+- `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_rick_and_morty_manifest.json --run-id run_top107_vatsal_rick_and_morty_20260509T040455Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "Rick and Morty"`
+
+**Run Metadata:**
+- `run_id`: `run_top107_vatsal_rick_and_morty_20260509T040455Z`
+- `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_rick_and_morty_20260509T040455Z`
+- `workflow_games_count`: `107`
+- `status`: `created`
+- `current_phase`: `run_created`
+- `pid`: `73991`
+
+**Technical Decisions:**
+- kept the launch on:
+  - `source_mode=copy`
+  - `pipeline=v2`
+  - `max_concurrency=1`
+- reused the same resolved 107-game raw-backed pool as the Harry Potter batch
+- changed only the prompt identity and manifest label
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 22:10 - Flappy Bird, Rick and Morty Flappy Bird gameplay, and 3d brain rot mom's day full batches launched
+
+**Achievement:**
+Created and launched three more full 107-game prompt batches sequentially, each using the same raw-backed Vatsal set in copy mode.
+
+**Flappy Bird Manifest + Launch**
+- Manifest command:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_flappy_bird_manifest.json --run-label top107-vatsal-raw-backed-flappy-bird`
+- Manifest output:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_flappy_bird_manifest.json`
+- Launch command:
+  - `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_flappy_bird_manifest.json --run-id run_top107_vatsal_flappy_bird_20260509T040810Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "Flappy Bird"`
+- Run metadata:
+  - `run_id`: `run_top107_vatsal_flappy_bird_20260509T040810Z`
+  - `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_flappy_bird_20260509T040810Z`
+  - `workflow_games_count`: `107`
+  - `pid`: `76907`
+
+**Rick and Morty Flappy Bird gameplay Manifest + Launch**
+- Manifest command:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_rick_and_morty_flappy_bird_gameplay_manifest.json --run-label top107-vatsal-raw-backed-rick-and-morty-flappy-bird-gameplay`
+- Manifest output:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_rick_and_morty_flappy_bird_gameplay_manifest.json`
+- Launch command:
+  - `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_rick_and_morty_flappy_bird_gameplay_manifest.json --run-id run_top107_vatsal_rick_and_morty_flappy_bird_gameplay_20260509T040857Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "Rick and Morty Flappy Bird gameplay"`
+- Run metadata:
+  - `run_id`: `run_top107_vatsal_rick_and_morty_flappy_bird_gameplay_20260509T040857Z`
+  - `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_rick_and_morty_flappy_bird_gameplay_20260509T040857Z`
+  - `workflow_games_count`: `107`
+  - `pid`: `78037`
+
+**3d brain rot mom's day Manifest + Launch**
+- Manifest command:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_3d_brain_rot_moms_day_manifest.json --run-label top107-vatsal-raw-backed-3d-brain-rot-moms-day`
+- Manifest output:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_3d_brain_rot_moms_day_manifest.json`
+- Launch command:
+  - `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_3d_brain_rot_moms_day_manifest.json --run-id run_top107_vatsal_3d_brain_rot_moms_day_20260509T040950Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "3d brain rot mom's day"`
+- Run metadata:
+  - `run_id`: `run_top107_vatsal_3d_brain_rot_moms_day_20260509T040950Z`
+  - `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_3d_brain_rot_moms_day_20260509T040950Z`
+  - `workflow_games_count`: `107`
+  - `pid`: `79511`
+
+**Shared Decisions Across All Three**
+- all manifests resolve:
+  - `top100_count = 107`
+  - `resolved_raw_count = 107`
+- all launches keep:
+  - `source_mode=copy`
+  - `pipeline=v2`
+  - `max_concurrency=1`
+
+**Status:** Complete
+
+---
+
+### 2026-05-08 22:34 - Trump vs Elon and super mario world clone full batches launched
+
+**Achievement:**
+Created and launched two more full 107-game prompt batches sequentially, continuing to reuse the same raw-backed Vatsal set in copy mode.
+
+**Trump vs Elon Manifest + Launch**
+- Manifest command:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_trump_vs_elon_manifest.json --run-label top107-vatsal-raw-backed-trump-vs-elon`
+- Manifest output:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_trump_vs_elon_manifest.json`
+- Launch command:
+  - `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_trump_vs_elon_manifest.json --run-id run_top107_vatsal_trump_vs_elon_20260509T043358Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "King president trump as a cartoon orange vs elon musk terminator"`
+- Run metadata:
+  - `run_id`: `run_top107_vatsal_trump_vs_elon_20260509T043358Z`
+  - `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_trump_vs_elon_20260509T043358Z`
+  - `workflow_games_count`: `107`
+  - `pid`: `22222`
+
+**super mario world clone Manifest + Launch**
+- Manifest command:
+  - `python3 tmp/game_refactoring_experiments/scripts/build_vatsal100_raw_backed_manifest.py --sample-size 107 --manifest-name top107_vatsal_raw_backed_super_mario_world_clone_manifest.json --run-label top107-vatsal-raw-backed-super-mario-world-clone`
+- Manifest output:
+  - `tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_super_mario_world_clone_manifest.json`
+- Launch command:
+  - `python3 tools/game_refactoring/scripts/game_workflow.py --json --id creative_remix_v3 --games-manifest-source tmp/game_refactoring_experiments/fixtures/top107_vatsal_raw_backed_super_mario_world_clone_manifest.json --run-id run_top107_vatsal_super_mario_world_clone_20260509T043432Z --runs-root /Volumes/HDD2026/output --pipeline v2 --source-mode copy --model gpt-5.4 --max-concurrency 1 --agent-timeout 3600 --remix-prompt "super mario world clone"`
+- Run metadata:
+  - `run_id`: `run_top107_vatsal_super_mario_world_clone_20260509T043432Z`
+  - `run_dir`: `/Volumes/HDD2026/output/run_top107_vatsal_super_mario_world_clone_20260509T043432Z`
+  - `workflow_games_count`: `107`
+  - `pid`: `25756`
+
+**Shared Decisions Across Both**
+- manifests resolve:
+  - `top100_count = 107`
+  - `resolved_raw_count = 107`
+- launches keep:
+  - `source_mode=copy`
+  - `pipeline=v2`
+  - `max_concurrency=1`
+
+**Status:** Complete
+
+---
+
 ### 2026-05-08 21:16 - Disposable rerun verified shared lease paths and distinct active ports
 
 **Achievement:**

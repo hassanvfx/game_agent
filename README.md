@@ -113,6 +113,67 @@ And for LiteLLM/Cline as needed:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 
+## R2 game upload utility
+
+This repository now includes a root-level uploader utility for copying a local game directory or file into a staging area and pushing it to a specific Cloudflare R2 destination.
+
+### Required environment variables
+
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+
+And one of:
+- `R2_ENDPOINT_URL`
+- `R2_ACCOUNT_ID`
+
+Optional defaults:
+- `R2_BUCKET`
+
+### Install dependency
+
+```bash
+pip install -r requirements.txt
+```
+
+### Example usage
+
+Dry-run a game upload without copying or uploading files:
+
+```bash
+python scripts/upload_game_to_r2.py \
+  --source games/published/my-game \
+  --bucket my-r2-bucket \
+  --prefix published/2026 \
+  --dry-run
+```
+
+Upload a game directory to a specific destination folder in R2:
+
+```bash
+python scripts/upload_game_to_r2.py \
+  --source games/published/my-game \
+  --bucket my-r2-bucket \
+  --prefix published/2026 \
+  --destination-name harry-potter-flappy
+```
+
+If the destination already exists, require explicit overwrite permission:
+
+```bash
+python scripts/upload_game_to_r2.py \
+  --source games/published/my-game \
+  --bucket my-r2-bucket \
+  --prefix published/2026 \
+  --destination-name harry-potter-flappy \
+  --force
+```
+
+Notes:
+- Relative `--source` paths resolve from the repository root and then from `games/`.
+- Directories are copied into a temporary staging area before upload.
+- The destination object root is formed as `{prefix}/{destination-name}`.
+- Content types are inferred automatically when possible.
+
 ## Notes
 
 - This repository is designed to prove runtime readiness, not full product behavior.
