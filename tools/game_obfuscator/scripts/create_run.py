@@ -25,6 +25,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create a timestamped Game Obfuscator run scaffold.")
     parser.add_argument("--manifest", required=True, help="Path to the input manifest JSON file.")
     parser.add_argument("--run-id", help="Optional explicit run id. Defaults to a UTC timestamped id.")
+    parser.add_argument(
+        "--output-root",
+        help="Optional explicit output root directory. Defaults to <run_dir>/output.",
+    )
     return parser.parse_args()
 
 
@@ -39,8 +43,10 @@ def main() -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     selected_games = manifest.get("games", [])
 
+    output_root = Path(args.output_root).resolve() if args.output_root else (run_dir / "output").resolve()
+
     (run_dir / "input").mkdir(parents=True, exist_ok=True)
-    (run_dir / "output").mkdir(parents=True, exist_ok=True)
+    output_root.mkdir(parents=True, exist_ok=True)
     (run_dir / "games").mkdir(parents=True, exist_ok=True)
     (run_dir / "dashboard").mkdir(parents=True, exist_ok=True)
 
@@ -58,6 +64,7 @@ def main() -> None:
             "created_at": utc_now(),
             "updated_at": utc_now(),
             "games_total": len(selected_games),
+            "output_root": str(output_root),
             "games_prepared": 0,
             "games_integrity_passed": 0,
             "games_integrity_failed": 0,
@@ -87,8 +94,8 @@ def main() -> None:
                 "source_path": game.get("source_path"),
                 "input_mirror_path": str(run_dir / "input" / game_id),
                 "working_path": str(game_dir / "working"),
-                "output_path": str(run_dir / "output" / game_id),
-                "artifacts_path": str(run_dir / "output" / game_id / "artifacts"),
+                "output_path": str(output_root / game_id),
+                "artifacts_path": str(output_root / game_id / "artifacts"),
                 "status": "pending",
                 "current_phase": "pending_input_prepare",
                 "integrity_status": None,

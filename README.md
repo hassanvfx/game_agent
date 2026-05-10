@@ -87,19 +87,30 @@ Recommended setup:
 - create a GitHub repo for this project
 - create a Railway project
 - add a Redis service
+- add an API service from this repo
 - add a worker service from this repo
-- use the `Dockerfile` for builds
-- start command:
+- use the root `Dockerfile` for both services
+
+### API service start command
+
+```bash
+uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+### Worker service start command
 
 ```bash
 celery -A app.tasks worker --loglevel=INFO
 ```
 
-Set Railway environment variables:
+### Railway environment variables for both API and worker
 - `CELERY_BROKER_URL`
 - `CELERY_RESULT_BACKEND`
-- `CELERY_TASK_DELAY_SECONDS`
 - `LOG_LEVEL`
+- `PYTHONUNBUFFERED`
+
+### Optional runtime settings
+- `CELERY_TASK_DELAY_SECONDS`
 - `PLAYWRIGHT_HEADLESS`
 - `PLAYWRIGHT_BROWSER`
 - `CLINE_CHECK_COMMAND`
@@ -112,6 +123,28 @@ And for LiteLLM/Cline as needed:
 - `LITELLM_API_KEY`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
+
+### API test flow
+
+Once the API service is deployed, Railway should assign it a public URL. Use that URL for:
+
+```bash
+curl https://<api-service>.up.railway.app/health
+```
+
+Submit a mock async run:
+
+```bash
+curl -X POST https://<api-service>.up.railway.app/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"spider man","games":["game_a","game_b"]}'
+```
+
+Poll by run id:
+
+```bash
+curl https://<api-service>.up.railway.app/jobs/<run_id>
+```
 
 ## R2 game upload utility
 

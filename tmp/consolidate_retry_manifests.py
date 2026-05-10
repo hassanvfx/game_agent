@@ -21,8 +21,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def parse_json_text(text: str):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        obj, _ = decoder.raw_decode(text.lstrip())
+        return obj
+
+
 def load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return parse_json_text(path.read_text(encoding="utf-8"))
+
+
+def load_json_if_exists(path: Path, default):
+    if not path.exists():
+        return default
+    return parse_json_text(path.read_text(encoding="utf-8"))
 
 
 def normalize_game_id(entry):
@@ -34,9 +49,13 @@ def normalize_game_id(entry):
 
 
 def classify_run(run_dir: Path) -> dict:
-    input_manifest = load_json(run_dir / "input_manifest.json")
-    dashboard = load_json(run_dir / "dashboard" / "dashboard_data.json")
-    run_state = load_json(run_dir / "run_state.json")
+    input_manifest_path = run_dir / "input_manifest.json"
+    dashboard_path = run_dir / "dashboard" / "dashboard_data.json"
+    run_state_path = run_dir / "run_state.json"
+
+    input_manifest = load_json_if_exists(input_manifest_path, {"games": []})
+    dashboard = load_json_if_exists(dashboard_path, {"games": []})
+    run_state = load_json_if_exists(run_state_path, {})
 
     manifest_games = input_manifest.get("games", [])
     manifest_by_id = {}
@@ -75,6 +94,10 @@ def classify_run(run_dir: Path) -> dict:
 
     return {
         "run_dir": str(run_dir),
+        "exists": run_dir.exists(),
+        "has_input_manifest": input_manifest_path.exists(),
+        "has_dashboard": dashboard_path.exists(),
+        "has_run_state": run_state_path.exists(),
         "manifest_by_id": manifest_by_id,
         "manifest_ids": manifest_ids,
         "completed_ids": completed_ids,
@@ -109,6 +132,10 @@ def consolidate_family(family: dict) -> dict:
         run_summaries.append(
             {
                 "run_name": run_name,
+                "exists": classified["exists"],
+                "has_input_manifest": classified["has_input_manifest"],
+                "has_dashboard": classified["has_dashboard"],
+                "has_run_state": classified["has_run_state"],
                 "completed": len(classified["completed_ids"]),
                 "failed": len(classified["failed_ids"]),
                 "pending": len(classified["pending_ids"]),

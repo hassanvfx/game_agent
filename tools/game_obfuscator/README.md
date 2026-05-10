@@ -73,11 +73,17 @@ curl -fsSL https://raw.githubusercontent.com/hassanvfx/clineflow/main/install.sh
 Your AI assistant reads your project's workflow and becomes context-aware. Through journals, every conversation builds on the last - **it remembers what you built, why you built it, and what's next.**
 
 ### 🛠️ Game Obfuscator CLI
-If you're using this repository as the Game Obfuscator tool, the CLI now behaves like a machine-facing orchestration surface with a **simple deterministic pipeline as the default**:
+If you're using this repository as the Game Obfuscator tool, the CLI now behaves like a **simple deterministic synchronous tool**.
 
-1. `start` accepts a manifest, creates a run, launches the pipeline in the background, and returns immediately
-2. `status` is the canonical poll surface during execution
-3. `output-path` is the destination/result surface for locating outputs
+For a focused external-automation / agent integration spec, see:
+- `docs/game-obfuscator-external-agent-contract.md`
+
+For normal use, the main command is:
+1. `start`
+2. wait for it to finish
+3. use the returned output paths
+
+`status` and `output-path` still exist, but they are now secondary read/diagnostic surfaces rather than the main external workflow.
 
 The default `simple` pipeline:
 - mirrors each game locally
@@ -96,9 +102,9 @@ python3 scripts/game_obfuscator_cli.py output-path --run-id run_game_obfuscator_
 
 Commands:
 - `start`
-  - creates a run from a manifest
-  - launches the simple deterministic pipeline in the background
-  - returns immediately with JSON containing:
+- creates a run from a manifest
+- runs the simple deterministic pipeline
+- returns machine-readable JSON when finished:
     - `run_id`
     - `run_dir`
     - `status_path`

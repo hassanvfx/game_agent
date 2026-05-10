@@ -80,7 +80,7 @@ def build_status_payload(run_dir: Path) -> dict[str, Any]:
         "games_failed": run_state.get("games_failed"),
         "games_stalled": run_state.get("games_stalled"),
         "dashboard_path": str((run_dir / "dashboard" / "index.html").resolve()),
-        "output_root": str((run_dir / "output").resolve()),
+        "output_root": run_state.get("output_root") or str((run_dir / "output").resolve()),
         "completed": run_state.get("status") in {"completed", "completed_with_failures", "failed", "stalled"},
     }
 
@@ -101,7 +101,7 @@ def build_result_payload(run_dir: Path, *, include_games: bool = False) -> dict[
         "run_dir": str(run_dir),
         "status": run_state.get("status"),
         "current_phase": run_state.get("current_phase"),
-        "output_path": str((run_dir / "output").resolve()),
+        "output_path": run_state.get("output_root") or str((run_dir / "output").resolve()),
         "completed": run_state.get("status") in {"completed", "completed_with_failures", "failed", "stalled"},
     }
 
@@ -110,7 +110,7 @@ def build_result_payload(run_dir: Path, *, include_games: bool = False) -> dict[
         payload["game_outputs"] = [
             {
                 "game_id": game["game_id"],
-                "output_path": str((run_dir / "output" / game["game_id"]).resolve()),
+                "output_path": str((Path(run_state.get("output_root") or (run_dir / "output")) / game["game_id"]).resolve()),
             }
             for game in manifest.get("games", [])
         ]
@@ -129,6 +129,7 @@ def handle_start(args: argparse.Namespace) -> None:
         "--manifest",
         args.manifest,
         *(["--run-id", args.run_id] if args.run_id else []),
+        *(["--output-root", args.output_root] if args.output_root else []),
         python_executable=python_executable,
     )
     if create_result.returncode != 0:
@@ -142,6 +143,7 @@ def handle_start(args: argparse.Namespace) -> None:
     if not run_dir.exists():
         raise SystemExit(f"Created run directory does not exist: {run_dir}")
 
+    run_state_path = run_dir / "run_state.json"
     stdout_log, stderr_log = launcher_log_paths(run_dir)
     stdout_log.parent.mkdir(parents=True, exist_ok=True)
 
@@ -158,44 +160,41 @@ def handle_start(args: argparse.Namespace) -> None:
     ]
 
     with stdout_log.open("w", encoding="utf-8") as stdout_handle, stderr_log.open("w", encoding="utf-8") as stderr_handle:
-        process = subprocess.Popen(
+        result = subprocess.run(
             command,
             stdout=stdout_handle,
             stderr=stderr_handle,
             env=env,
-            start_new_session=True,
+            text=True,
         )
 
-    run_state_path = run_dir / "run_state.json"
     run_state = load_json(run_state_path)
-    run_state["status"] = "created"
-    run_state["current_phase"] = "batch_launched"
     run_state["accepted_at"] = run_state.get("accepted_at") or run_state.get("created_at")
     run_state["launcher"] = {
-        "pid": process.pid,
         "command": command,
         "stdout_path": str(stdout_log.resolve()),
         "stderr_path": str(stderr_log.resolve()),
         "pipeline_mode": "simple",
+        "completed_by_cli_start": True,
+        "returncode": result.returncode,
     }
+    if result.returncode != 0 and not run_state.get("last_error"):
+        run_state["last_error"] = "Simple pipeline failed."
     write_json(run_state_path, run_state)
 
-    print_json(
-        {
-            "run_id": run_state["run_id"],
-            "run_dir": str(run_dir),
-            "status_path": str(run_state_path.resolve()),
-            "dashboard_path": str((run_dir / "dashboard" / "index.html").resolve()),
-            "output_root": str((run_dir / "output").resolve()),
-            "status": run_state.get("status"),
-            "current_phase": run_state.get("current_phase"),
-            "accepted_at": run_state.get("accepted_at"),
-            "pipeline_mode": "simple",
-            "launcher_pid": process.pid,
-            "launcher_stdout_path": str(stdout_log.resolve()),
-            "launcher_stderr_path": str(stderr_log.resolve()),
-        }
-    )
+    payload = build_result_payload(run_dir, include_games=True)
+    payload["status_path"] = str(run_state_path.resolve())
+    payload["dashboard_path"] = str((run_dir / "dashboard" / "index.html").resolve())
+    payload["accepted_at"] = run_state.get("accepted_at")
+    payload["pipeline_mode"] = "simple"
+    payload["launcher_stdout_path"] = str(stdout_log.resolve())
+    payload["launcher_stderr_path"] = str(stderr_log.resolve())
+    payload["output_root"] = run_state.get("output_root") or str((run_dir / "output").resolve())
+
+    print_json(payload)
+
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
 
 
 def handle_status(args: argparse.Namespace) -> None:
@@ -212,9 +211,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Game Obfuscator CLI wrapper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    start_parser = subparsers.add_parser("start", help="Create a run, launch the pipeline in the background, and return immediately.")
+    start_parser = subparsers.add_parser("start", help="Run the simple deterministic pipeline synchronously and return terminal result JSON.")
     start_parser.add_argument("--manifest", required=True, help="Path to the input manifest JSON file.")
     start_parser.add_argument("--run-id", help="Optional explicit run id.")
+    start_parser.add_argument("--output-root", help="Optional explicit output root directory for published per-game outputs.")
     start_parser.set_defaults(func=handle_start)
 
     status_parser = subparsers.add_parser("status", help="Get canonical run status from run_state.json.")

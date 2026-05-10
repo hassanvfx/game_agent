@@ -226,6 +226,18 @@ WORKFLOWS: dict[str, WorkflowDefinition] = {
             },
         ],
     ),
+    "game_obfuscator_cline_study": WorkflowDefinition(
+        workflow_id="game_obfuscator_cline_study",
+        run_label="game-obfuscator-cline-study",
+        nodes=[
+            {
+                "id": "human_readable_obfuscation",
+                "prompt_file": "prompts/operators_v2/08_game_obfuscator_cline_symbol_map_spanish.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            }
+        ],
+    ),
 }
 
 
