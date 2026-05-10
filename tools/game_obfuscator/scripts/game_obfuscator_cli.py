@@ -107,13 +107,22 @@ def build_result_payload(run_dir: Path, *, include_games: bool = False) -> dict[
 
     if include_games:
         manifest = load_json(run_dir / "input_manifest.json")
-        payload["game_outputs"] = [
-            {
-                "game_id": game["game_id"],
-                "output_path": str((Path(run_state.get("output_root") or (run_dir / "output")) / game["game_id"]).resolve()),
-            }
-            for game in manifest.get("games", [])
-        ]
+        game_outputs = []
+        for game in manifest.get("games", []):
+            game_id = game["game_id"]
+            game_state_path = run_dir / "games" / game_id / "game_state.json"
+            if game_state_path.exists():
+                game_state = load_json(game_state_path)
+                output_path = str(Path(game_state.get("output_path") or (Path(run_state.get("output_root") or (run_dir / "output")) / game_id)).resolve())
+            else:
+                output_path = str((Path(run_state.get("output_root") or (run_dir / "output")) / game_id).resolve())
+            game_outputs.append(
+                {
+                    "game_id": game_id,
+                    "output_path": output_path,
+                }
+            )
+        payload["game_outputs"] = game_outputs
 
     if run_state.get("last_error"):
         payload["last_error"] = run_state.get("last_error")

@@ -5,9 +5,10 @@ import hashlib
 import json
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from .metadata_extractor import extract_game_metadata, load_json
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOL_ROOT.parents[1]
@@ -27,14 +28,6 @@ class DeployResult:
     remix_uuid: str
     deploy_dir: Path
     metadata_path: Path
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -95,48 +88,6 @@ def resolve_input_paths(args: argparse.Namespace) -> list[DeployInput]:
     return [DeployInput(source=Path(value).resolve()) for value in raw_inputs]
 
 
-def read_reference_public_json(source_dir: Path) -> dict[str, Any] | None:
-    for path in sorted(source_dir.glob("*.json")):
-        try:
-            payload = load_json(path)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict) and payload.get("game_id"):
-            return payload
-    return None
-
-
-def infer_game_id(source_dir: Path, reference_json: dict[str, Any] | None) -> str:
-    if reference_json and isinstance(reference_json.get("game_id"), str):
-        return reference_json["game_id"]
-
-    if source_dir.name.startswith("gamezone-"):
-        return source_dir.name
-
-    for candidate in [source_dir, *source_dir.parents[:3]]:
-        if candidate.name.startswith("gamezone-"):
-            return candidate.name
-
-    raise ValueError(f"Unable to infer game_id from {source_dir}")
-
-
-def find_index_html(source_dir: Path) -> Path:
-    direct = source_dir / "index.html"
-    if direct.exists():
-        return direct
-    matches = sorted(source_dir.rglob("index.html"))
-    if not matches:
-        raise FileNotFoundError(f"No index.html found under {source_dir}")
-    return matches[0]
-
-
-def find_assets_dir(index_path: Path) -> Path | None:
-    direct = index_path.parent / "assets"
-    if direct.exists() and direct.is_dir():
-        return direct
-    return None
-
-
 def iter_files(root: Path) -> list[Path]:
     return [path for path in sorted(root.rglob("*")) if path.is_file()]
 
@@ -160,110 +111,6 @@ def compute_folder_content_hash(source_dir: Path) -> str:
     return digest.hexdigest()
 
 
-def find_screenshot_files(source_dir: Path) -> list[Path]:
-    screenshots: list[Path] = []
-    for folder_name in ["screenshots", "screenshot", "shots"]:
-        folder = source_dir / folder_name
-        if folder.exists() and folder.is_dir():
-            for path in sorted(folder.rglob("*")):
-                if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-                    screenshots.append(path)
-    if screenshots:
-        return screenshots
-
-    for path in sorted(source_dir.rglob("*")):
-        if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"} and "screenshot" in path.name.lower():
-            screenshots.append(path)
-    return screenshots
-
-
-def collect_markdown_text(source_dir: Path, preferred_name_prefixes: list[str]) -> str | None:
-    preferred: list[Path] = []
-    fallback: list[Path] = []
-    for path in sorted(source_dir.rglob("*.md")):
-        name = path.name.lower()
-        if any(name.startswith(prefix) for prefix in preferred_name_prefixes):
-            preferred.append(path)
-        else:
-            fallback.append(path)
-    selected = preferred[0] if preferred else (fallback[0] if fallback else None)
-    if not selected:
-        return None
-    return selected.read_text(encoding="utf-8")
-
-
-def collect_semantic_tags(reference_json: dict[str, Any] | None) -> tuple[dict[str, Any], str]:
-    if reference_json and isinstance(reference_json.get("semantic_tags"), dict):
-        return reference_json["semantic_tags"], str(reference_json.get("semantic_tags_source_mode") or "json")
-    return {}, "unknown"
-
-
-def collect_identity(reference_json: dict[str, Any] | None) -> tuple[dict[str, Any], str]:
-    if reference_json and isinstance(reference_json.get("identity"), dict):
-        return reference_json["identity"], str(reference_json.get("identity_source_mode") or "json")
-    return {}, "unknown"
-
-
-def collect_mechanics_classification(reference_json: dict[str, Any] | None) -> tuple[dict[str, Any], str]:
-    if reference_json and isinstance(reference_json.get("mechanics_classification"), dict):
-        return reference_json["mechanics_classification"], str(
-            reference_json.get("mechanics_classification_source_mode") or "json"
-        )
-    return {}, "unknown"
-
-
-def build_obfuscated_metadata(
-    *,
-    source_dir: Path,
-    game_id: str,
-    remix_uuid: str,
-    reference_json: dict[str, Any] | None,
-    screenshot_relpaths_png: list[str],
-    screenshot_relpaths_jpg: list[str],
-) -> dict[str, Any]:
-    recreation_prompt_markdown = None
-    blueprint_markdown = None
-
-    if reference_json:
-        recreation_prompt_markdown = reference_json.get("recreation_prompt_markdown")
-        blueprint_markdown = reference_json.get("blueprint_markdown")
-
-    if not recreation_prompt_markdown:
-        recreation_prompt_markdown = collect_markdown_text(source_dir, ["recreation", "prompt"])
-    if not blueprint_markdown:
-        blueprint_markdown = collect_markdown_text(source_dir, ["blueprint"])
-
-    semantic_tags, semantic_tags_source_mode = collect_semantic_tags(reference_json)
-    identity, identity_source_mode = collect_identity(reference_json)
-    mechanics_classification, mechanics_classification_source_mode = collect_mechanics_classification(reference_json)
-
-    try:
-        source_output_dir = source_dir.relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        source_output_dir = source_dir.name
-
-    payload = {
-        "game_id": game_id,
-        "aggregated_at": utc_now(),
-        "recreation_prompt_markdown": recreation_prompt_markdown or "",
-        "blueprint_markdown": blueprint_markdown or "",
-        "semantic_tags": semantic_tags,
-        "semantic_tags_source_mode": semantic_tags_source_mode,
-        "identity": identity,
-        "identity_source_mode": identity_source_mode,
-        "mechanics_classification": mechanics_classification,
-        "mechanics_classification_source_mode": mechanics_classification_source_mode,
-        "screenshots_png": screenshot_relpaths_png,
-        "screenshots_jpg": screenshot_relpaths_jpg,
-        "deploy": {
-            "remix_uuid": remix_uuid,
-            "source_output_dir": source_output_dir,
-            "format_version": "1.0.0",
-        },
-    }
-    return payload
-
-
 def copy_assets_filtered(source_assets_dir: Path, target_assets_dir: Path) -> None:
     keep_suffixes = {".js", ".css", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".wav", ".ogg", ".m4a"}
     for path in sorted(source_assets_dir.rglob("*")):
@@ -281,34 +128,16 @@ def deploy_one(source: Path, published_root: Path, overwrite: bool, dry_run: boo
     if not source.exists() or not source.is_dir():
         raise FileNotFoundError(f"Deploy source directory not found: {source}")
 
-    reference_json = read_reference_public_json(source)
-    game_id = infer_game_id(source, reference_json)
     remix_uuid = compute_folder_content_hash(source)[:32]
+    extracted = extract_game_metadata(source_dir=source, remix_uuid=remix_uuid, repo_root=REPO_ROOT)
+    game_id = extracted.game_id
     deploy_dir = published_root / game_id / f"remix-{remix_uuid}"
     metadata_path = deploy_dir / f"game-obfuscated-{remix_uuid}.json"
 
-    index_path = find_index_html(source)
-    assets_dir = find_assets_dir(index_path)
-    screenshot_files = find_screenshot_files(source)
-
-    screenshot_relpaths_png: list[str] = []
-    screenshot_relpaths_jpg: list[str] = []
-    for idx, path in enumerate(screenshot_files, start=1):
-        ext = path.suffix.lower()
-        rel = f"screenshots/{idx:02d}{ext}"
-        if ext == ".png":
-            screenshot_relpaths_png.append(rel)
-        elif ext in {".jpg", ".jpeg"}:
-            screenshot_relpaths_jpg.append(rel)
-
-    metadata_payload = build_obfuscated_metadata(
-        source_dir=source,
-        game_id=game_id,
-        remix_uuid=remix_uuid,
-        reference_json=reference_json,
-        screenshot_relpaths_png=screenshot_relpaths_png,
-        screenshot_relpaths_jpg=screenshot_relpaths_jpg,
-    )
+    index_path = extracted.index_path
+    assets_dir = extracted.assets_dir
+    screenshot_files = extracted.screenshot_files
+    metadata_payload = extracted.metadata_payload
 
     if dry_run:
         return DeployResult(

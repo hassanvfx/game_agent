@@ -164,7 +164,9 @@ def build_deploy_manifest(staged_items: list[dict[str, Any]]) -> list[dict[str, 
     return [{"source": item["raw_remix_dir"]} for item in staged_items]
 
 
-def build_obfuscator_manifest_from_public_deploys(deploy_results: list[dict[str, Any]]) -> dict[str, Any]:
+def build_obfuscator_manifest_from_public_deploys(
+    deploy_results: list[dict[str, Any]], published_obfuscated_root: Path
+) -> dict[str, Any]:
     games = []
     for item in deploy_results:
         deploy_dir = Path(item["deploy_dir"])
@@ -172,6 +174,7 @@ def build_obfuscator_manifest_from_public_deploys(deploy_results: list[dict[str,
             {
                 "game_id": item["game_id"],
                 "source_path": str(deploy_dir),
+                "output_path": str((published_obfuscated_root / item["game_id"] / f"remix-{item['remix_uuid']}").resolve()),
             }
         )
     return {"games": games}
@@ -222,7 +225,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
     if not isinstance(deploy_results, list):
         raise RuntimeError("game_deploy did not return a results array")
 
-    obfuscator_manifest = build_obfuscator_manifest_from_public_deploys(deploy_results)
+    obfuscator_manifest = build_obfuscator_manifest_from_public_deploys(deploy_results, published_obfuscated_root)
     obfuscator_manifest_path = write_temp_manifest("game-publish-pipeline-obfuscator-", obfuscator_manifest)
 
     start_result = run_command(

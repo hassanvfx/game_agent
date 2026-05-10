@@ -87,6 +87,7 @@ def main() -> None:
         game_id = game["game_id"]
         game_dir = run_dir / "games" / game_id
         game_dir.mkdir(parents=True, exist_ok=True)
+        resolved_output_path = str(Path(game.get("output_path")).resolve()) if game.get("output_path") else str(output_root / game_id)
         game_state = ensure_game_timestamps(
             {
                 "game_id": game_id,
@@ -94,8 +95,8 @@ def main() -> None:
                 "source_path": game.get("source_path"),
                 "input_mirror_path": str(run_dir / "input" / game_id),
                 "working_path": str(game_dir / "working"),
-                "output_path": str(output_root / game_id),
-                "artifacts_path": str(output_root / game_id / "artifacts"),
+                "output_path": resolved_output_path,
+                "artifacts_path": str(Path(resolved_output_path) / "artifacts"),
                 "status": "pending",
                 "current_phase": "pending_input_prepare",
                 "integrity_status": None,

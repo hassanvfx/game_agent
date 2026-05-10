@@ -154,6 +154,52 @@ This keeps `game_publish_pipeline` aligned with the simplified external contract
   - direct `--output-root`
   - no polling in the main flow
 
+**Maintenance Script Addition:**
+- added `tools/game_publish_pipeline/scripts/rebuild_all_raw_games.py`
+- purpose:
+  - walk all top-level raw game directories under `games/raw`
+  - build a manifest automatically
+  - rerun `game_publish_pipeline` over the full raw set
+  - rebuild both public and obfuscated outputs in one reusable operation
+- operator-facing behavior:
+  - prints discovered raw games with indexed progress lines
+  - shows the exact publish command before execution
+  - supports `--dry-run`
+  - supports `--limit` for smaller smoke passes
+  - writes a consolidated report under `tmp/rebuild_all_raw_games_reports/`
+
+**Maintenance Script Verification:**
+- ran:
+  - `python3 tools/game_publish_pipeline/scripts/rebuild_all_raw_games.py --help`
+- fixed an initial repo-root path bug in the script defaults
+- reran:
+  - `python3 tools/game_publish_pipeline/scripts/rebuild_all_raw_games.py --dry-run --limit 3`
+- confirmed the script now:
+  - discovers raw games under `/Users/hassan/repos/game_agent/games/raw`
+  - prints indexed progress lines
+  - emits the exact downstream publish command
+  - writes the expected manifest/report paths
+
+**Historical Remix Manifest Prep:**
+- added `tmp/build_deploy_manifest_from_historical_runs.py`
+- purpose:
+  - inspect a fixed list of historical v4 runs on `/Volumes/HDD2026/output`
+  - find usable remix outputs under each run’s `output/<game_id>/`
+  - select the most recent available remix per original `game_id`
+  - write a deploy-ready manifest without running publish/deploy
+- output manifest:
+  - `tmp/retry_manifests/latest_selected_remix_deploy_manifest.json`
+
+**Historical Manifest Verification:**
+- ran:
+  - `python3 tmp/build_deploy_manifest_from_historical_runs.py --dry-run`
+  - `python3 tmp/build_deploy_manifest_from_historical_runs.py`
+- confirmed:
+  - 17 historical runs were inspected
+  - 50 unique game ids were selected from the most recent available remix outputs
+  - the written manifest shape matches `game_deploy` expectations:
+    - array of objects with `source` paths only
+
 **Status:** Complete
 
 ---
