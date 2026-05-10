@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<title>Vector Jet: Night Ops</title>
+<style>
+    :root {
+        --bg: #050505;
+        --panel: #141416;
+        --hud: #00ff55;
+        --warn: #ffaa00;
+        --alert: #ff0033;
+        --glass: rgba(0, 255, 85, 0.05);
+        --sky-top: #07111f;
+        --sky-bottom: #0d2238;
+        --glow: rgba(0, 255, 136, 0.24);
+        --hud-soft: rgba(120, 255, 193, 0.85);
+        --panel-hi: #1c2b34;
+        --accent-blue: #5fd6ff;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body { 
+        width: 100%; height: 100%; margin: 0; overflow: hidden; 
+        background: var(--bg); color: var(--hud);
+        font-family: 'Rajdhani', sans-serif; 
+        user-select: none; -webkit-user-select: none;
+    }
+
+    /* LAYOUT */
+    #game-container {
+        display: flex; flex-direction: column; width: 100%; height: 100%;
+        background:
+            radial-gradient(circle at 50% 0%, rgba(95, 214, 255, 0.12), transparent 38%),
+            linear-gradient(180deg, #02070b 0%, #000 100%);
+    }
+
+    /* TOP VIEW */
+    #window-view {
+        flex: 4; position: relative; overflow: hidden;
+        background:
+            radial-gradient(circle at 50% 18%, rgba(95, 214, 255, 0.15), transparent 35%),
+            linear-gradient(180deg, #030812 0%, #000 82%);
+        border-bottom: 4px solid #000;
+        z-index: 10;
+    }
+    #window-view::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(circle at 20% 12%, rgba(255,255,255,0.12), transparent 0 18%),
+            radial-gradient(circle at 78% 16%, rgba(95,214,255,0.12), transparent 0 20%),
+            repeating-linear-gradient(90deg, transparent 0 48px, rgba(255,255,255,0.02) 48px 49px);
+        opacity: 0.7;
+        mix-blend-mode: screen;
+    }
+    
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* COCKPIT OVERLAY */
+    #window-frame {
+        position: absolute; inset: 0; pointer-events: none; z-index: 20;
+        box-shadow: inset 0 0 120px rgba(0,0,0,0.92), inset 0 0 28px rgba(95,214,255,0.08);
+        border: 20px solid #091015;
+        border-top-width: 10px; border-bottom-width: 0;
+        border-radius: 20px 20px 0 0;
+        background: linear-gradient(180deg, rgba(95,214,255,0.05), transparent 26%);
+    }
+    .pillar {
+        position: absolute; top: 0; bottom: 0; width: 30px; background: linear-gradient(180deg, #111a21, #07090c 60%);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.8);
+    }
+    .pillar.left { left: -15px; transform: skewX(8deg); }
+    .pillar.right { right: -15px; transform: skewX(-8deg); }
+    
+    /* HUD */
+    #hud-layer {
+        position: absolute; inset: 15px; pointer-events: none; z-index: 15;
+        display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .hud-row { display: flex; justify-content: space-between; text-shadow: 0 0 8px rgba(95,214,255,0.5); gap: 12px; }
+    .hud-group { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; min-width: 64px; background: linear-gradient(180deg, rgba(6,18,29,0.8), rgba(3,8,13,0.4)); border: 1px solid rgba(95,214,255,0.22); border-radius: 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px rgba(0,0,0,0.24); backdrop-filter: blur(4px); }
+    .hud-label { font-size: 10px; opacity: 0.72; letter-spacing: 1.6px; color: var(--hud-soft); font-family: 'Orbitron', sans-serif; }
+    .hud-val { font-size: 22px; font-weight: 600; letter-spacing: 1px; color: #d9fff0; font-family: 'Orbitron', sans-serif; }
+
+    #center-alert {
+        position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+        text-align: center; width: 100%; pointer-events: none;
+        padding: 0 16px;
+    }
+    .alert-text {
+        font-family: 'Orbitron', sans-serif; font-size: clamp(34px, 10vw, 56px); line-height: 0.95;
+        text-shadow: 0 0 15px currentColor;
+        animation: flash 0.2s infinite;
+        display: none;
+    }
+
+    /* INSTRUMENT PANEL */
+    #instrument-panel {
+        flex: 5; background:
+            radial-gradient(circle at 50% 0%, rgba(95,214,255,0.08), transparent 28%),
+            linear-gradient(180deg, #151e25 0%, #0d1218 70%, #0a0d11 100%);
+        display: flex; flex-direction: column;
+        padding: 8px; gap: 8px;
+        position: relative;
+        border-top: 1px solid rgba(95,214,255,0.18);
+        box-shadow: inset 0 10px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    #instrument-panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: repeating-linear-gradient(90deg, transparent 0 34px, rgba(255,255,255,0.015) 34px 35px);
+        opacity: 0.45;
+    }
+
+    /* SYSTEMS */
+    #sys-row {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+        height: 44px;
+    }
+    .sys-btn {
+        background: linear-gradient(180deg, #16212a, #0f151b); border: 1px solid rgba(95,214,255,0.16); color: #6e8d98;
+        border-radius: 8px; font-size: 11px; font-weight: 600;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: all 0.05s;
+        box-shadow: 0 3px 0 #000, inset 0 1px 0 rgba(255,255,255,0.05);
+        letter-spacing: 0.6px;
+        font-family: 'Rajdhani', sans-serif;
+    }
+    .sys-btn:active { transform: translateY(2px); box-shadow: none; }
+    .sys-btn.active { border-color: var(--accent-blue); color: #d6fff0; background: linear-gradient(180deg, rgba(0,255,136,0.12), rgba(95,214,255,0.1)); text-shadow: 0 0 8px var(--accent-blue); box-shadow: 0 0 18px rgba(95,214,255,0.15), 0 3px 0 #000, inset 0 1px 0 rgba(255,255,255,0.08); }
+    .sys-btn.warn.active { border-color: var(--warn); color: #ffe5a8; background: linear-gradient(180deg, rgba(255,170,0,0.16), rgba(255,110,0,0.08)); text-shadow: 0 0 8px var(--warn); }
+    
+    /* CONTROLS */
+    #throttle-row {
+        display: flex; gap: 8px; height: 100px;
+    }
+    .slider-container {
+        flex: 1; background: linear-gradient(180deg, #081018, #050607); border: 1px solid rgba(95,214,255,0.16); border-radius: 10px;
+        position: relative; overflow: hidden; box-shadow: inset 0 0 22px rgba(0,0,0,0.45);
+    }
+    .slider-fill {
+        position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(180deg, rgba(95,214,255,0.15), rgba(0,255,136,0.22));
+        transition: height 0.05s;
+    }
+    .slider-handle {
+        position: absolute; left: 0; right: 0; height: 36px;
+        background: linear-gradient(to bottom, #2a3946, #10161b);
+        border: 1px solid rgba(95,214,255,0.28); border-radius: 6px;
+        display: flex; align-items: center; justify-content: center;
+        color: #666; font-size: 10px; font-weight: bold;
+        transform: translateY(50%); bottom: 0; pointer-events: none;
+        box-shadow: 0 4px 10px #000; z-index: 2;
+    }
+    .active .slider-handle { border-color: var(--hud); color: var(--hud); box-shadow: 0 0 10px rgba(0,255,85,0.2); }
+
+    /* RUDDER */
+    #rudder-row {
+        height: 40px; background: linear-gradient(180deg, #081018, #050607); border: 1px solid rgba(95,214,255,0.16); border-radius: 10px;
+        position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    }
+    #rudder-track {
+        width: 100%; height: 100%; position: relative;
+    }
+    #rudder-handle {
+        position: absolute; top: 2px; bottom: 2px; width: 60px;
+        background: repeating-linear-gradient(90deg, #24333d, #24333d 5px, #10161b 5px, #10161b 10px);
+        border: 1px solid rgba(95,214,255,0.22); border-radius: 6px;
+        left: 50%; transform: translateX(-50%);
+        pointer-events: none;
+        box-shadow: 0 0 10px #000;
+        display: flex; align-items: center; justify-content: center;
+        color: #8eb9c8; font-size: 10px; letter-spacing: 2px;
+    }
+    .rudder-label { pointer-events: none; position: absolute; font-size: 10px; color: #88afbc; z-index: 0; letter-spacing: 1.2px; }
+
+    /* YOKE */
+    #yoke-container {
+        flex: 1; background: radial-gradient(circle at center, #19242d 0%, #07090c 80%);
+        border: 1px solid rgba(95,214,255,0.16); border-radius: 12px;
+        position: relative; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+        touch-action: none;
+    }
+    #yoke-visual {
+        width: 120px; height: 60px; pointer-events: none;
+        position: relative; transform-origin: center;
+        transition: transform 0.1s cubic-bezier(0.1, 0.5, 0.5, 1);
+    }
+    .yoke-bar { position: absolute; top: 50%; left: -20px; right: -20px; height: 10px; background: linear-gradient(180deg, #2c3b47, #162028); transform: translateY(-50%); box-shadow: 0 0 12px rgba(95,214,255,0.12); }
+    .yoke-handle-l, .yoke-handle-r {
+        position: absolute; top: 0; bottom: 0; width: 40px;
+        border: 10px solid #2b3944; background: transparent;
+    }
+    .yoke-handle-l { left: -10px; border-right: none; border-radius: 20px 0 0 20px; }
+    .yoke-handle-r { right: -10px; border-left: none; border-radius: 0 20px 20px 0; }
+    .yoke-center {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 30px; height: 30px; background: #0d1318; border: 2px solid rgba(95,214,255,0.2); border-radius: 50%; box-shadow: 0 0 12px rgba(95,214,255,0.12);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .yoke-center::after { content: ''; width: 10px; height: 10px; background: var(--hud); opacity: 0.2; clip-path: polygon(50% 0, 0 100%, 100% 100%); }
+
+    /* GAME OVER */
+    #game-over {
+        position: absolute; inset: 0; background: linear-gradient(180deg, rgba(2,6,8,0.96), rgba(0,0,0,0.97)); z-index: 100;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        backdrop-filter: blur(10px); padding: 20px; text-align: center;
+    }
+    .feedback-gif {
+        position: absolute;
+        right: 12px;
+        width: min(28vw, 128px);
+        border-radius: 14px;
+        border: 1px solid rgba(95,214,255,0.24);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+        background: rgba(5, 12, 18, 0.78);
+        object-fit: cover;
+        opacity: 0;
+        transform: translateY(8px) scale(0.96);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+        z-index: 18;
+    }
+    .feedback-gif.visible {
+        opacity: 0.92;
+        transform: translateY(0) scale(1);
+    }
+    #alert-gif { top: 18px; aspect-ratio: 1 / 1; }
+    #crash-gif { bottom: 110px; width: min(42vw, 180px); aspect-ratio: 1 / 1; }
+    .hidden { display: none !important; }
+    
+    @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+    @media (max-width: 600px) {
+        #window-frame { border-width: 14px; border-top-width: 8px; }
+        #hud-layer { inset: 10px; }
+        .hud-group { min-width: 58px; padding: 5px 6px; }
+        .hud-val { font-size: 18px; }
+        #sys-row { height: 42px; }
+        .sys-btn { font-size: 10px; }
+        #throttle-row { height: 92px; }
+        #yoke-visual { width: 110px; height: 56px; }
+        .feedback-gif { width: min(30vw, 98px); right: 8px; }
+        #crash-gif { width: min(44vw, 150px); bottom: 126px; }
+    }
+</style>
+
+<script id="game-config" type="application/x-game-config">
+{
+    "sensitivity": { "type": "number", "label": "Yoke Sensitivity", "value": 1.2, "min": 0.5, "max": 2.5 },
+    "rudderSens": { "type": "number", "label": "Rudder Sensitivity", "value": 1.0, "min": 0.5, "max": 2.0 },
+    "volume": { "type": "number", "label": "Master Volume", "value": 0.7, "min": 0, "max": 1 }
+}
+</script>
+</head>
+<body>
+<!-- [agent-note][stage2] visual-intent: night-ops cockpit polish | scope: viewport,hud,controls -->
+
+<div id="game-container">
+    <!-- VIEWPORT -->
+    <div id="window-view">
+        <div id="window-frame">
+            <div class="pillar left"></div>
+            <div class="pillar right"></div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <!-- [agent-note][stage3] resolved-gif: alert/crash feedback -> catalogs/gifs.json -->
+        <img id="alert-gif" class="feedback-gif" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" alt="Alert feedback" hidden>
+        
+        <div id="hud-layer">
+            <div class="hud-row">
+                <div class="hud-group" style="align-items: flex-start">
+                    <span class="hud-label">SPD</span>
+                    <span class="hud-val" id="hud-spd">000</span>
+                </div>
+                <div class="hud-group" style="align-items: center">
+                    <span class="hud-label">HDG</span>
+                    <span class="hud-val" id="hud-hdg">360</span>
+                </div>
+                <div class="hud-group" style="align-items: flex-end">
+                    <span class="hud-label">ALT</span>
+                    <span class="hud-val" id="hud-alt">0000</span>
+                </div>
+            </div>
+            
+            <div id="center-alert">
+                <div id="alert-msg" class="alert-text" style="color:var(--alert)">PULL UP</div>
+            </div>
+
+            <div class="hud-row" style="margin-top: auto">
+                <div class="hud-group">
+                    <span class="hud-label">G-LOAD</span>
+                    <span class="hud-val" id="hud-g">1.0</span>
+                </div>
+                <div class="hud-group" style="align-items: flex-end">
+                    <span class="hud-label">V.SPD</span>
+                    <span class="hud-val" id="hud-vs">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div id="instrument-panel">
+        <div id="sys-row">
+            <div class="sys-btn active" id="btn-eng">ENGINE<br><span id="val-n1">0%</span></div>
+            <div class="sys-btn active warn" id="btn-gear">GEAR<br>DOWN</div>
+            <div class="sys-btn" id="btn-flaps">FLAPS<br>UP</div>
+            <div class="sys-btn" id="btn-brake">BRAKE<br>ON</div>
+        </div>
+
+        <div id="throttle-row">
+            <div class="slider-container" id="track-thr">
+                <div class="slider-fill" style="height: 0%; background: #003322"></div>
+                <div class="slider-handle">THR</div>
+            </div>
+            <div class="slider-container" id="track-brk">
+                <div class="slider-fill" style="height: 0%; background: #331111"></div>
+                <div class="slider-handle">SPDBRK</div>
+            </div>
+        </div>
+
+        <div id="rudder-row">
+            <span class="rudder-label">RUDDER</span>
+            <div id="rudder-track">
+                <div id="rudder-handle">|||</div>
+            </div>
+        </div>
+
+        <div id="yoke-container">
+            <div id="yoke-visual">
+                <div class="yoke-bar"></div>
+                <div class="yoke-handle-l"></div>
+                <div class="yoke-handle-r"></div>
+                <div class="yoke-center"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="game-over" class="hidden">
+    <img id="crash-gif" class="feedback-gif visible" src="https://i.giphy.com/wY1So1mO4gaNbntT0r.webp" alt="Crash feedback" hidden>
+    <h1 style="color:var(--alert); font-family:'Orbitron', sans-serif; font-size:clamp(40px, 12vw, 64px); margin:0; line-height:0.8; text-shadow: 0 0 20px red; letter-spacing:1px;">MISSION<br>LOST</h1>
+    <div id="crash-reason" style="color:#fff; font-size:16px; margin:20px 0 24px; font-family:'Rajdhani', sans-serif; opacity: 0.85; letter-spacing:1px; text-align:center; padding:0 16px;">JET LOST TO TERRAIN</div>
+    <button id="restart-btn" style="background:linear-gradient(180deg, #8fffc1, var(--hud)); border:1px solid rgba(255,255,255,0.2); padding:15px 40px; font-size:20px; font-family:'Orbitron', sans-serif; font-weight:bold; cursor:pointer; clip-path: polygon(10% 0, 100% 0, 100% 100%, 0% 100%, 0% 20%); color:#04120c; box-shadow:0 8px 24px rgba(0,255,136,0.25); max-width:min(88vw, 320px);">RESTART SORTIE</button>
+</div>
+
+<!-- ASSETS DECLARATION -->
+<img id="asset_placeholder" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" hidden>
+
+<script>
+/**
+ * §0 CONSTANTS & STATE
+ */
+const CONSTANTS = {
+    GRAVITY: 9.81,
+    MAX_THRUST: 2500,
+    LIFT_COEFF: 0.00045,
+    DRAG_COEFF: 0.00008,
+    ROLL_RATE: 140,
+    PITCH_RATE: 70,
+    YAW_RATE: 40
+};
+
+let canvas, ctx, cw, ch;
+let gameState = 'BOOT';
+let lastTime = 0;
+let audioCtx, masterGain;
+let mediaAudio = {};
+let sfx = { eng: null, alarm: null };
+
+function getMediaVolume(key) {
+    return key === 'bgm'
+        ? Math.min(0.2, config.volume * 0.32)
+        : Math.min(1, config.volume * 0.6);
+}
+
+const MEDIA = {
+    audio: {
+        bgm: 'https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3',
+        uiClick: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3',
+        warning: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3',
+        takeoff: 'https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3',
+        landing: 'https://gamezone-virid.vercel.app/assets/audios/sfx/land_02.mp3',
+        crash: 'https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3',
+        gameOver: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3'
+    },
+    gifs: {
+        alert: 'https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp',
+        crash: 'https://i.giphy.com/wY1So1mO4gaNbntT0r.webp'
+    }
+};
+let alertCooldown = 0;
+let flightPhase = { airborne: false, warned: false, gameOverCuePlayed: false };
+
+// Configuration
+let config = { sensitivity: 1.2, rudderSens: 1.0, volume: 0.7 };
+
+// Game State
+let plane = {
+    x: 0, y: 0, z: 0,
+    alt: 0, speed: 0,
+    heading: 0, pitch: 0, bank: 0,
+    vy: 0, g: 1,
+    throttle: 0, airbrake: 0, rudder: 0,
+    gear: true, flaps: 0, brakes: true,
+    n1: 0, engState: 'OFF',
+    onGround: true
+};
+
+let input = {
+    x: 0, y: 0, // Yoke
+    rudder: 0,
+    active: false,
+    originX: 0, originY: 0,
+    dragging: null
+};
+
+// Terrain
+const terrain = [];
+for(let i=0; i<30; i++) terrain.push({
+    x: (Math.random()-0.5)*60000, 
+    z: Math.random()*60000, 
+    h: 500 + Math.random()*2500
+});
+
+/**
+ * §1 LIFECYCLE
+ */
+window.addEventListener('DOMContentLoaded', () => {
+    parseConfig();
+    resize();
+    initGame();
+    setupInput();
+    setState('PLAYING');
+    requestAnimationFrame(loop);
+});
+
+window.addEventListener('resize', resize);
+
+function parseConfig() {
+    const el = document.getElementById('game-config');
+    if(el) {
+        try {
+            const defs = JSON.parse(el.textContent);
+            if(defs.sensitivity) config.sensitivity = defs.sensitivity.value;
+            if(defs.rudderSens) config.rudderSens = defs.rudderSens.value;
+            if(defs.volume) config.volume = defs.volume.value;
+        } catch(e) {}
+    }
+}
+
+function resize() {
+    canvas = document.getElementById('gameCanvas');
+    const container = document.getElementById('window-view');
+    cw = container.clientWidth;
+    ch = container.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    ctx = canvas.getContext('2d', { alpha: false });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function initGame() {
+    plane = {
+        x: 0, y: 1000, z: -5000,
+        alt: 0, speed: 0,
+        heading: 0, pitch: 0, bank: 0,
+        vy: 0, g: 1,
+        throttle: 0, airbrake: 0, rudder: 0,
+        gear: true, flaps: 0, brakes: true,
+        n1: 20, engState: 'IDLE',
+        onGround: true
+    };
+    
+    // Reset UI
+    updateSlider('track-thr', 0);
+    updateSlider('track-brk', 0);
+    updateRudderUI(0);
+    document.getElementById('btn-eng').classList.add('active');
+    document.getElementById('btn-gear').classList.add('active');
+    document.getElementById('btn-brake').classList.add('active');
+    document.getElementById('alert-msg').style.display = 'none';
+    
+    updateYokeVisual(0, 0);
+    if(sfx.alarm) { sfx.alarm.stop(); sfx.alarm = null; }
+    flightPhase = { airborne: false, warned: false, gameOverCuePlayed: false };
+    setGifVisible('alert-gif', false);
+    setGifVisible('crash-gif', false);
+    stopMediaLoop('gameOver');
+    syncBgm();
+}
+
+function setState(st) {
+    gameState = st;
+    const go = document.getElementById('game-over');
+    if(st === 'PLAYING') {
+        go.classList.add('hidden');
+        setGifVisible('crash-gif', false);
+        syncBgm();
+        lastTime = performance.now();
+    } else if (st === 'GAMEOVER') {
+        go.classList.remove('hidden');
+        setGifVisible('crash-gif', true);
+        syncBgm();
+    }
+}
+
+function restartGame() {
+    initGame();
+    setState('PLAYING');
+}
+
+/**
+ * §2 INPUT
+ */
+function setupInput() {
+    const handleGlobal = (e) => {
+        unlockAudio();
+        if(gameState === 'GAMEOVER') restartGame();
+    };
+    window.addEventListener('pointerdown', handleGlobal, { passive: false });
+
+    // Buttons
+    const bindBtn = (id, cb) => {
+        const el = document.getElementById(id);
+        el.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            playMediaCue('uiClick');
+            cb(el);
+            haptic('light');
+        });
+    };
+
+    bindBtn('btn-eng', (el) => {
+        if(plane.engState === 'OFF') plane.engState = 'STARTING';
+        else plane.engState = 'OFF';
+        el.classList.toggle('active', plane.engState !== 'OFF');
+    });
+    bindBtn('btn-gear', (el) => {
+        plane.gear = !plane.gear;
+        el.classList.toggle('active', plane.gear);
+        el.innerHTML = plane.gear ? "GEAR<br>DOWN" : "GEAR<br>UP";
+    });
+    bindBtn('btn-flaps', (el) => {
+        plane.flaps = plane.flaps === 0 ? 1 : 0;
+        el.classList.toggle('active', plane.flaps > 0);
+        el.innerHTML = plane.flaps ? "FLAPS<br>20" : "FLAPS<br>UP";
+    });
+    bindBtn('btn-brake', (el) => {
+        plane.brakes = !plane.brakes;
+        el.classList.toggle('active', plane.brakes);
+    });
+    bindBtn('restart-btn', () => restartGame());
+
+    // Sliders
+    setupSlider('track-thr', val => plane.throttle = val);
+    setupSlider('track-brk', val => plane.airbrake = val);
+    setupRudder();
+
+    // Yoke
+    const yoke = document.getElementById('yoke-container');
+    yoke.addEventListener('pointerdown', e => {
+        if(gameState !== 'PLAYING') return;
+        input.active = true;
+        input.originX = e.clientX;
+        input.originY = e.clientY;
+        yoke.setPointerCapture(e.pointerId);
+    });
+    
+    const moveYoke = (e) => {
+        if(!input.active) return;
+        const dx = e.clientX - input.originX;
+        const dy = e.clientY - input.originY;
+        const max = 60; 
+        input.x = Math.max(-1, Math.min(1, dx / max));
+        input.y = Math.max(-1, Math.min(1, dy / max));
+        updateYokeVisual(input.x, input.y);
+    };
+    
+    const endYoke = (e) => {
+        input.active = false;
+        input.x = 0; input.y = 0;
+        updateYokeVisual(0, 0);
+        yoke.releasePointerCapture(e.pointerId);
+    };
+    
+    yoke.addEventListener('pointermove', moveYoke);
+    yoke.addEventListener('pointerup', endYoke);
+    yoke.addEventListener('pointercancel', endYoke);
+}
+
+function setupSlider(id, cb) {
+    const el = document.getElementById(id);
+    const update = (e) => {
+        const rect = el.getBoundingClientRect();
+        let val = 1 - (e.clientY - rect.top) / rect.height;
+        val = Math.max(0, Math.min(1, val));
+        cb(val);
+        const fill = el.querySelector('.slider-fill');
+        const handle = el.querySelector('.slider-handle');
+        fill.style.height = (val * 100) + '%';
+        handle.style.bottom = (val * 100) + '%';
+        if(val > 0) el.classList.add('active');
+        else el.classList.remove('active');
+    };
+    el.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        input.dragging = id;
+        el.setPointerCapture(e.pointerId);
+        update(e);
+    });
+    el.addEventListener('pointermove', e => {
+        if(input.dragging === id) update(e);
+    });
+    el.addEventListener('pointerup', e => {
+        input.dragging = null;
+        el.releasePointerCapture(e.pointerId);
+    });
+}
+
+function updateSlider(id, val) {
+    const el = document.getElementById(id);
+    const fill = el.querySelector('.slider-fill');
+    const handle = el.querySelector('.slider-handle');
+    fill.style.height = (val * 100) + '%';
+    handle.style.bottom = (val * 100) + '%';
+}
+
+function setupRudder() {
+    const el = document.getElementById('rudder-row');
+    const update = (e) => {
+        const rect = el.getBoundingClientRect();
+        let val = (e.clientX - rect.left) / rect.width; // 0 to 1
+        val = (val - 0.5) * 2; // -1 to 1
+        val = Math.max(-1, Math.min(1, val));
+        input.rudder = val;
+        updateRudderUI(val);
+    };
+    
+    const reset = (e) => {
+        input.dragging = null;
+        input.rudder = 0;
+        updateRudderUI(0);
+        el.releasePointerCapture(e.pointerId);
+    };
+
+    el.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        input.dragging = 'rudder';
+        el.setPointerCapture(e.pointerId);
+        update(e);
+    });
+    el.addEventListener('pointermove', e => {
+        if(input.dragging === 'rudder') update(e);
+    });
+    el.addEventListener('pointerup', reset);
+    el.addEventListener('pointercancel', reset);
+}
+
+function updateRudderUI(val) {
+    const handle = document.getElementById('rudder-handle');
+    // val is -1 to 1. map to percent left 0 to 100. center is 50.
+    // 0 -> 50%, -1 -> 0%, 1 -> 100%
+    const pct = (val + 1) * 50;
+    handle.style.left = pct + '%';
+}
+
+function updateYokeVisual(x, y) {
+    const el = document.getElementById('yoke-visual');
+    const rot = x * 90;
+    const scale = 1 + (y * 0.2);
+    const ty = y * 15;
+    el.style.transform = `rotate(${rot}deg) scale(${scale}) translateY(${ty}px)`;
+}
+
+/**
+ * §3 PHYSICS
+ */
+function loop(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    if(gameState === 'PLAYING') {
+        updatePhysics(dt);
+        updateSystems(dt);
+        checkAlerts();
+    }
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function updatePhysics(dt) {
+    // Engine
+    let targetN1 = 0;
+    if(plane.engState === 'STARTING') {
+        targetN1 = 20;
+        if(plane.n1 > 18) plane.engState = 'IDLE';
+    } else if (plane.engState === 'IDLE' || plane.engState === 'RUNNING') {
+        targetN1 = 20 + plane.throttle * 80;
+    }
+    plane.n1 += (targetN1 - plane.n1) * dt * 0.8;
+    
+    const thrust = (plane.n1 / 100) * CONSTANTS.MAX_THRUST;
+    
+    // Aero
+    const density = Math.max(0.2, 1 - (plane.alt / 40000));
+    const speedSq = plane.speed * plane.speed;
+    
+    let drag = speedSq * CONSTANTS.DRAG_COEFF * density;
+    drag += plane.airbrake * speedSq * 0.002 * density;
+    if(plane.gear) drag += speedSq * 0.0003;
+    if(plane.flaps) drag += speedSq * 0.0005;
+    if(plane.onGround && plane.brakes) drag += 2000;
+
+    const acc = (thrust - drag) / 150;
+    plane.speed += acc * dt;
+    if(plane.speed < 0) plane.speed = 0;
+
+    // Control Surfaces
+    const q = speedSq * density; // Dynamic pressure proxy
+    const authority = Math.min(1, q / 50000); 
+
+    if(plane.onGround) {
+        plane.pitch = input.y * 5;
+        plane.bank = 0;
+        // Nose wheel steering
+        plane.heading += input.rudder * dt * 40 * (1 - plane.speed/200);
+        
+        // Takeoff
+        const lift = speedSq * CONSTANTS.LIFT_COEFF * (1 + plane.flaps);
+        if(lift > CONSTANTS.GRAVITY * 150 && plane.pitch > 5 && plane.speed > 140) {
+            plane.onGround = false;
+            plane.alt = 2;
+            haptic('medium');
+        }
+    } else {
+        // Flight
+        const rollRate = CONSTANTS.ROLL_RATE * config.sensitivity * authority;
+        const pitchRate = CONSTANTS.PITCH_RATE * config.sensitivity * authority;
+        const yawRate = CONSTANTS.YAW_RATE * config.rudderSens * authority;
+        
+        plane.bank += (input.x * rollRate - plane.bank) * dt * 3;
+        plane.pitch += (input.y * pitchRate - plane.pitch) * dt * 2;
+        
+        // Coordinated turn + yaw
+        const turnRate = (CONSTANTS.GRAVITY / Math.max(50, plane.speed)) * Math.tan(plane.bank * Math.PI/180);
+        plane.heading += (turnRate * (180/Math.PI) + input.rudder * yawRate) * dt;
+        
+        // Lift
+        const lift = speedSq * CONSTANTS.LIFT_COEFF * density * Math.cos(plane.bank*Math.PI/180);
+        plane.g = lift / (CONSTANTS.GRAVITY * 150);
+        
+        plane.vy = (lift - CONSTANTS.GRAVITY * 150) / 15 + (plane.pitch * plane.speed * 0.015);
+        plane.alt += plane.vy * dt;
+        
+        // Ground collision
+        if(plane.alt <= 0) {
+            if(plane.vy < -15 || !plane.gear || Math.abs(plane.bank) > 15 || !plane.onGround && plane.speed > 250) {
+                crash("JET LOST TO TERRAIN");
+            } else {
+                plane.alt = 0;
+                plane.onGround = true;
+                plane.vy = 0;
+                plane.pitch = 0;
+                plane.bank = 0;
+                haptic('heavy');
+            }
+        }
+    }
+    
+    // Integration
+    plane.x += Math.sin(plane.heading * Math.PI/180) * plane.speed * dt;
+    plane.z += Math.cos(plane.heading * Math.PI/180) * plane.speed * dt;
+}
+
+function updateSystems(dt) {
+    if(alertCooldown > 0) alertCooldown = Math.max(0, alertCooldown - dt);
+    document.getElementById('val-n1').innerText = Math.floor(plane.n1) + '%';
+    document.getElementById('hud-spd').innerText = Math.floor(plane.speed);
+    document.getElementById('hud-alt').innerText = Math.floor(plane.alt);
+    document.getElementById('hud-hdg').innerText = Math.floor((plane.heading % 360 + 360) % 360).toString().padStart(3, '0');
+    document.getElementById('hud-vs').innerText = Math.floor(plane.vy * 60);
+    document.getElementById('hud-g').innerText = plane.g.toFixed(1);
+
+    handleFlightAudioCues();
+    updateAudio();
+}
+
+function checkAlerts() {
+    const msg = document.getElementById('alert-msg');
+    let txt = "";
+    let alertType = null;
+    
+    if(!plane.onGround) {
+            if(plane.speed < 130) { txt = "STALL"; alertType = "stall"; }
+            else if(plane.vy < -30 && plane.alt < 2000) { txt = "CLIMB NOW"; alertType = "pullup"; }
+            else if(Math.abs(plane.bank) > 60) { txt = "BANK ANGLE"; alertType = "bank"; }
+            else if(plane.speed > 600 && plane.alt < 5000) { txt = "OVERSPEED"; alertType = "stall"; }
+    }
+    
+    msg.innerText = txt;
+    if(alertType) {
+        playAlarm(alertType);
+        if(alertCooldown === 0) {
+            playMediaCue('warning');
+            alertCooldown = 1.6;
+        }
+        setGifVisible('alert-gif', true);
+        msg.style.display = 'block';
+    } else {
+        if(sfx.alarm) { sfx.alarm.stop(); sfx.alarm = null; }
+        setGifVisible('alert-gif', false);
+        msg.style.display = 'none';
+    }
+}
+
+function crash(reason) {
+    if(gameState === 'GAMEOVER') return;
+    setState('GAMEOVER');
+    document.getElementById('crash-reason').innerText = reason;
+    haptic('heavy');
+    if(sfx.eng) {
+        const t = audioCtx.currentTime;
+        sfx.eng.gain.gain.setValueAtTime(sfx.eng.gain.gain.value, t);
+        sfx.eng.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    }
+    if(sfx.alarm) { sfx.alarm.stop(); sfx.alarm = null; }
+    playMediaCue('crash');
+    playMediaCue('gameOver');
+    flightPhase.gameOverCuePlayed = true;
+    setGifVisible('alert-gif', false);
+    setGifVisible('crash-gif', true);
+    syncBgm();
+}
+
+/**
+ * §4 RENDER
+ */
+function draw() {
+    // Sky
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, ch);
+    skyGrad.addColorStop(0, '#061326');
+    skyGrad.addColorStop(0.55, '#0b1d31');
+    skyGrad.addColorStop(1, '#02070c');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, cw, ch);
+    
+    ctx.save();
+    const cx = cw/2;
+    const cy = ch/2;
+    
+    // Shake
+    let shake = (plane.speed / 1200) + (plane.airbrake * 2);
+    if(plane.speed < 130 && !plane.onGround) shake += 5; 
+    const sx = (Math.random()-0.5) * shake * 2;
+    const sy = (Math.random()-0.5) * shake * 2;
+    ctx.translate(cx + sx, cy + sy);
+    
+    // Camera
+    ctx.rotate(-plane.bank * Math.PI / 180);
+    ctx.translate(0, plane.pitch * 8); 
+    
+    // Yaw effect (rudder)
+    ctx.translate(-input.rudder * 50, 0);
+
+    drawWorld();
+    
+    ctx.restore();
+    
+    drawHUD(cx, cy);
+}
+
+function drawWorld() {
+    // Horizon
+    ctx.fillStyle = '#0a1017';
+    ctx.fillRect(-cw*3, 0, cw*6, ch*3); 
+    ctx.strokeStyle = '#79ffd0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-cw*3, 0); ctx.lineTo(cw*3, 0);
+    ctx.stroke();
+    
+    // Grid
+    const gridSize = 4000;
+    const offX = plane.x % gridSize;
+    const offZ = plane.z % gridSize;
+    
+    ctx.strokeStyle = 'rgba(95, 214, 255, 0.16)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    
+    const project = (x, z) => {
+        const dx = x - plane.x;
+        const dz = z - plane.z;
+        const cos = Math.cos(-plane.heading * Math.PI/180);
+        const sin = Math.sin(-plane.heading * Math.PI/180);
+        const rx = dx * cos - dz * sin;
+        const rz = dx * sin + dz * cos;
+        if(rz <= 10) return null;
+        const f = 800;
+        const scale = f / (rz + plane.alt);
+        return { x: rx * scale, y: (plane.alt * 1.5) * scale };
+    };
+
+    for(let i=-6; i<=6; i++) {
+        let p1 = project(plane.x - offX + i*gridSize, plane.z + 500);
+        let p2 = project(plane.x - offX + i*gridSize, plane.z + 40000);
+        if(p1 && p2) { ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); }
+        
+        let z = plane.z - offZ + (i+5)*gridSize;
+        if(z > plane.z) {
+            let l1 = project(plane.x - 30000, z);
+            let l2 = project(plane.x + 30000, z);
+            if(l1 && l2) { ctx.moveTo(l1.x, l1.y); ctx.lineTo(l2.x, l2.y); }
+        }
+    }
+    ctx.stroke();
+    
+    // Terrain
+    ctx.fillStyle = '#071018';
+    ctx.strokeStyle = '#11445d';
+    terrain.forEach(t => {
+        const p = project(t.x, t.z);
+        if(p) {
+            const scale = 800 / (t.z - plane.z + plane.alt);
+            const size = t.h * scale * 2;
+            if(size > 0) {
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x - size, p.y);
+                ctx.lineTo(p.x, p.y - size*1.5);
+                ctx.lineTo(p.x + size, p.y);
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+    });
+}
+
+function drawHUD(cx, cy) {
+    ctx.strokeStyle = '#79ffd0';
+    ctx.lineWidth = 2;
+    
+    // FPM
+    const vx = cx + input.x * 20 - input.rudder * 10;
+    const vy = cy + input.y * 20;
+    
+    ctx.save();
+    ctx.strokeStyle = 'rgba(95,214,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(vx, vy, 16, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+    
+    ctx.beginPath();
+    ctx.arc(vx, vy, 8, 0, Math.PI*2);
+    ctx.moveTo(vx-8, vy); ctx.lineTo(vx-20, vy);
+    ctx.moveTo(vx+8, vy); ctx.lineTo(vx+20, vy);
+    ctx.moveTo(vx, vy-8); ctx.lineTo(vx, vy-15);
+    ctx.stroke();
+    
+    // Ladder
+    ctx.fillStyle = 'rgba(217,255,240,0.92)';
+    ctx.font = "12px 'Rajdhani'";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    for(let p=-30; p<=30; p+=10) {
+        if(p===0) continue;
+        let y = cy - (p - plane.pitch) * 8;
+        
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-plane.bank * Math.PI/180);
+        ctx.translate(-cx, -cy);
+        
+        if(y > 50 && y < ch-50) {
+            ctx.fillRect(cx-40, y, 20, 1);
+            ctx.fillRect(cx+20, y, 20, 1);
+            ctx.fillText(p, cx-55, y);
+            ctx.fillText(p, cx+55, y);
+        }
+        ctx.restore();
+    }
+    
+    // Bank Arc
+    ctx.save();
+    ctx.translate(cx, 40);
+    ctx.rotate(-plane.bank * Math.PI/180);
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(-8, -12); ctx.lineTo(8, -12); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, 50, Math.PI, 2*Math.PI);
+    ctx.stroke();
+    ctx.restore();
+}
+
+/**
+ * §5 AUDIO & HAPTIC
+ */
+function unlockAudio() {
+    if(!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = config.volume;
+        masterGain.connect(audioCtx.destination);
+        primeMediaAudio();
+        audioCtx.resume();
+    } else if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    syncBgm();
+}
+
+function updateAudio() {
+    if(!audioCtx || !masterGain) return;
+    masterGain.gain.setTargetAtTime(config.volume, audioCtx.currentTime, 0.1);
+    
+    if(plane.n1 > 1) {
+        if(!sfx.eng) {
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sawtooth';
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            sfx.eng = { osc, gain, filter };
+        }
+        
+        const now = audioCtx.currentTime;
+        sfx.eng.osc.frequency.setTargetAtTime(50 + plane.n1 * 2.5, now, 0.1);
+        sfx.eng.filter.frequency.setTargetAtTime(100 + plane.n1 * 12, now, 0.1);
+        sfx.eng.gain.gain.setTargetAtTime((plane.n1/100) * 0.25 * config.volume, now, 0.1);
+    }
+}
+
+function playAlarm(type) {
+    if(!audioCtx) return;
+    if(sfx.alarm && sfx.alarm.type === type) return;
+    if(sfx.alarm) sfx.alarm.stop();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const lfo = audioCtx.createOscillator();
+    
+    gain.connect(masterGain);
+    
+    if(type === 'stall') {
+        osc.type = 'square';
+        osc.frequency.value = 700;
+        lfo.type = 'square';
+        lfo.frequency.value = 12;
+        lfo.connect(gain.gain);
+        osc.connect(gain);
+    } else if (type === 'pullup') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueCurveAtTime(new Float32Array([300, 600, 300]), audioCtx.currentTime, 0.6);
+        const loop = setInterval(() => {
+             try { osc.frequency.setValueCurveAtTime(new Float32Array([300, 600, 300]), audioCtx.currentTime, 0.6); } catch(e){}
+        }, 600);
+        osc.connect(gain);
+        sfx.alarm = { type, stop: () => { clearInterval(loop); osc.stop(); sfx.alarm=null; } };
+        osc.start();
+        return;
+    } else {
+        osc.type = 'sine';
+        osc.frequency.value = 500;
+        lfo.type = 'square';
+        lfo.frequency.value = 4;
+        lfo.connect(gain.gain);
+        osc.connect(gain);
+    }
+    
+    osc.start();
+    lfo.start();
+    sfx.alarm = { type, stop: () => { osc.stop(); lfo.stop(); sfx.alarm = null; } };
+}
+
+function primeMediaAudio() {
+    if(Object.keys(mediaAudio).length) return;
+    Object.entries(MEDIA.audio).forEach(([key, src]) => {
+        const audio = new Audio(src);
+        audio.preload = 'auto';
+        audio.crossOrigin = 'anonymous';
+        audio.volume = getMediaVolume(key);
+        if(key === 'bgm') audio.loop = true;
+        mediaAudio[key] = audio;
+    });
+}
+
+function playMediaCue(key) {
+    const source = mediaAudio[key];
+    if(!source) return;
+    try {
+        source.pause();
+        source.currentTime = 0;
+        source.volume = getMediaVolume(key);
+        source.play().catch(() => {});
+    } catch(e) {}
+}
+
+function stopMediaLoop(key) {
+    const source = mediaAudio[key];
+    if(!source) return;
+    try {
+        source.pause();
+        source.currentTime = 0;
+    } catch(e) {}
+}
+
+function syncBgm() {
+    const bgm = mediaAudio.bgm;
+    if(!bgm) return;
+    if(gameState === 'PLAYING' && audioCtx && plane.engState !== 'OFF') {
+        bgm.volume = getMediaVolume('bgm');
+        bgm.play().catch(() => {});
+    } else {
+        bgm.pause();
+    }
+}
+
+function setGifVisible(id, visible) {
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(visible) {
+        el.hidden = false;
+        el.classList.add('visible');
+    } else {
+        el.classList.remove('visible');
+        window.setTimeout(() => {
+            if(!el.classList.contains('visible')) el.hidden = true;
+        }, 220);
+    }
+}
+
+function handleFlightAudioCues() {
+    const airborneNow = !plane.onGround && plane.alt > 1;
+    if(airborneNow && !flightPhase.airborne) {
+        flightPhase.airborne = true;
+        playMediaCue('takeoff');
+    } else if(!airborneNow && flightPhase.airborne && plane.speed > 10) {
+        flightPhase.airborne = false;
+        playMediaCue('landing');
+    }
+
+    if(gameState !== 'GAMEOVER') {
+        flightPhase.gameOverCuePlayed = false;
+    }
+}
+
+function haptic(style) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate', requestId: 'h5-'+Date.now(), params: { style: style }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(style === 'heavy' ? 200 : 20);
+    }
+}
+</script>
+</body>
+</html>

@@ -5,8 +5,11 @@ import hashlib
 import json
 import shutil
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from .metadata_extractor import extract_game_metadata, load_json
 
@@ -124,6 +127,54 @@ def copy_assets_filtered(source_assets_dir: Path, target_assets_dir: Path) -> No
         shutil.copy2(path, destination)
 
 
+def normalize_screenshot_candidates(source: Path) -> list[Path]:
+    candidates: list[Path] = []
+    image_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+
+    for path in sorted(source.iterdir()):
+        if not path.is_file() or path.name.startswith("._"):
+            continue
+        if path.name.lower() == "index.html":
+            continue
+        if path.suffix.lower() in image_suffixes:
+            candidates.append(path)
+
+    screenshots_dir = source / "screenshots"
+    if screenshots_dir.exists() and screenshots_dir.is_dir():
+        for path in sorted(screenshots_dir.rglob("*")):
+            if path.is_file() and not path.name.startswith("._") and path.suffix.lower() in image_suffixes:
+                candidates.append(path)
+
+    seen: set[str] = set()
+    normalized: list[Path] = []
+    for path in candidates:
+        resolved = str(path.resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        normalized.append(path)
+    return normalized
+
+
+def write_normalized_screenshot_jpgs(source_paths: list[Path], target_dir: Path) -> tuple[list[str], list[str]]:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    written_jpgs: list[str] = []
+    source_listing: list[str] = []
+
+    for idx, source_path in enumerate(source_paths, start=1):
+        source_listing.append(str(source_path))
+        destination = target_dir / f"{idx:02d}.jpg"
+        image = Image.open(source_path)
+        if image.mode not in {"RGB", "L"}:
+            image = image.convert("RGB")
+        elif image.mode == "L":
+            image = image.convert("RGB")
+        image.save(destination, format="JPEG", quality=92)
+        written_jpgs.append(f"screenshots/{destination.name}")
+
+    return written_jpgs, source_listing
+
+
 def deploy_one(source: Path, published_root: Path, overwrite: bool, dry_run: bool) -> DeployResult:
     if not source.exists() or not source.is_dir():
         raise FileNotFoundError(f"Deploy source directory not found: {source}")
@@ -161,11 +212,18 @@ def deploy_one(source: Path, published_root: Path, overwrite: bool, dry_run: boo
         target_assets_dir.mkdir(parents=True, exist_ok=True)
         copy_assets_filtered(assets_dir, target_assets_dir)
 
+    screenshot_candidates = normalize_screenshot_candidates(source)
     screenshots_dir = deploy_dir / "screenshots"
-    screenshots_dir.mkdir(parents=True, exist_ok=True)
-    for idx, path in enumerate(screenshot_files, start=1):
-        destination = screenshots_dir / f"{idx:02d}{path.suffix.lower()}"
-        shutil.copy2(path, destination)
+    normalized_screenshots_jpg, normalized_screenshot_sources = write_normalized_screenshot_jpgs(
+        screenshot_candidates,
+        screenshots_dir,
+    )
+
+    metadata_payload["screenshots_png"] = []
+    metadata_payload["screenshots_jpg"] = normalized_screenshots_jpg
+    deploy_payload = metadata_payload.get("deploy")
+    if isinstance(deploy_payload, dict):
+        deploy_payload["normalized_screenshot_sources"] = normalized_screenshot_sources
 
     metadata_path.write_text(json.dumps(metadata_payload, indent=2) + "\n", encoding="utf-8")
 

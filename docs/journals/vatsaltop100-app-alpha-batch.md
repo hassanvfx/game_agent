@@ -365,6 +365,218 @@ Verified summary:
 **Next Stage Comment:**
 - Build a normalizer for the shape of the Vatsal top100 raw folders so their structure can be mapped deterministically into the same full games-info JSON schema.
 
+### 2026-05-10 16:01 - Legacy-layout extractor branch added and validated
+
+**What Changed:**
+- Extended `tools/game_deploy/game_deploy/metadata_extractor.py` with contract-safe layout detection so the extractor now supports:
+  - the existing run-output layout
+  - the raw Vatsal legacy layout
+- Kept the extractor output contract stable:
+  - same `ExtractedGameMetadata` dataclass
+  - same normalized metadata payload keys
+  - no run-layout branch contract changes
+- Added internal legacy-layout behavior:
+  - lowercase metadata files treated as primary
+  - playwright evidence PNGs treated as screenshot sources
+  - nested `remix-*` folders not treated as the primary root by default
+- Added a reusable validation script:
+  - `tmp/validate_top107_legacy_extraction.py`
+- Generated full legacy-layout normalized output:
+  - `tmp/adapted_game_json_top107_legacy.json`
+- Generated full legacy-layout validation summary:
+  - `tmp/adapted_game_json_top107_legacy_summary.json`
+
+**Why:**
+- The raw top107 Vatsal folders use a structurally different shape than the 124 run-output folders.
+- We needed a second internal extraction strategy without breaking the existing publish/deploy contract.
+- Using one shared extractor preserves consistency across deploy, publish, and QA scripts.
+
+**Validation Outcome:**
+- Backward compatibility spot-checks on representative run-layout folders still succeeded.
+- Legacy-layout 10-sample validation succeeded with stable normalized output.
+- Full top107 legacy extraction completed successfully:
+  - `entry_count = 107`
+  - `with_assets_dir = 102`
+  - `with_screenshot_files = 106`
+  - `with_semantic_tags = 107`
+  - `with_identity = 107`
+  - `with_mechanics_classification = 107`
+  - `with_recreation_prompt = 107`
+  - `with_blueprint = 107`
+- Data gaps observed in the full legacy set:
+  - 5 entries without `assets_dir`
+  - 1 entry without screenshots
+    - `gamezone-9dfd3280-7905-484c-a7cd-714850d499ee`
+
+**Files Added/Changed:**
+- `tools/game_deploy/game_deploy/metadata_extractor.py`
+- `tmp/validate_top107_legacy_extraction.py`
+- `tmp/adapted_game_json_top107_legacy.json`
+- `tmp/adapted_game_json_top107_legacy_summary.json`
+
+### 2026-05-10 16:03 - Legacy deployer smoke test succeeded against raw folder input
+
+**What Changed:**
+- Added a script-based deploy smoke test:
+  - `tmp/smoke_test_legacy_deployer.py`
+- Ran the actual deployer path against a representative raw legacy folder:
+  - `games/raw/gamezone-0f3dc736-8159-48cf-93d0-bd78a54b8cd0`
+- Deployed into a temporary published root:
+  - `tmp/deploy_smoke_legacy_public/`
+- Wrote a deploy verification summary:
+  - `tmp/deploy_smoke_legacy_summary.json`
+
+**Why:**
+- The extractor-only validation was necessary but not sufficient.
+- We also needed to confirm the real deployer path can consume raw legacy folders end-to-end and emit a proper published remix bundle.
+
+**Smoke-Test Outcome:**
+- The deployer accepted the raw legacy folder directly.
+- It produced:
+  - `index.html`
+  - copied assets
+  - `screenshots/` with `4` PNG files
+  - `game-obfuscated-995250285d1bbbd61938f53ee080a8ee.json`
+- The emitted metadata preserved the expected deploy contract keys:
+  - `game_id`
+  - `run_id`
+  - `remix_id`
+  - `remix_parent_id`
+  - `root_game_id`
+  - `lineage_depth`
+  - `semantic_tags`
+  - `identity`
+  - `mechanics_classification`
+  - screenshot fields
+  - `deploy`
+- Verified deploy metadata source path:
+  - `games/raw/gamezone-0f3dc736-8159-48cf-93d0-bd78a54b8cd0`
+
+**Files Added/Changed:**
+- `tmp/smoke_test_legacy_deployer.py`
+- `tmp/deploy_smoke_legacy_public/`
+- `tmp/deploy_smoke_legacy_summary.json`
+
+### 2026-05-10 16:08 - Full 107 legacy deploy batch completed
+
+**What Changed:**
+- Added a manifest builder for real deploy inputs:
+  - `tmp/build_top107_legacy_deploy_manifest.py`
+- Generated:
+  - `tmp/retry_manifests/top107_legacy_deploy_manifest.json`
+- Added a full deploy smoke-batch runner:
+  - `tmp/run_top107_legacy_deploy_smoke.py`
+- Ran the 107-entry deployer batch into a temporary published root:
+  - `tmp/deploy_smoke_top107_legacy_public/`
+- Generated smoke-batch verification:
+  - `tmp/deploy_smoke_top107_legacy_summary.json`
+- Added the real deploy runner:
+  - `tmp/run_top107_legacy_deploy_real.py`
+- Ran the real 107 deploy pass into:
+  - `games/published/public`
+- Generated real deploy summary:
+  - `tmp/deploy_real_top107_legacy_summary.json`
+
+**Why:**
+- After validating extractor-only behavior and a single-folder deploy smoke test, the next required proof was full-batch deployer execution.
+- Running a temporary-root smoke batch first reduced risk before touching the real published tree.
+
+**107-Batch Smoke Summary:**
+- `entry_count = 107`
+- `with_index = 107`
+- `with_assets_dir = 102`
+- `with_screenshots = 106`
+- `with_semantic_tags = 107`
+- `with_identity = 107`
+- `with_mechanics = 107`
+- `with_recreation_prompt = 107`
+- `with_blueprint = 107`
+
+**Observed Gaps:**
+- 5 entries without copied assets
+- 1 entry without screenshots:
+  - `gamezone-9dfd3280-7905-484c-a7cd-714850d499ee`
+
+**Outcome:**
+- The full 107-entry deploy smoke batch succeeded.
+- The real 107-entry deploy pass into `games/published/public` also completed successfully.
+
+**Files Added/Changed:**
+- `tmp/build_top107_legacy_deploy_manifest.py`
+- `tmp/retry_manifests/top107_legacy_deploy_manifest.json`
+- `tmp/run_top107_legacy_deploy_smoke.py`
+- `tmp/deploy_smoke_top107_legacy_public/`
+- `tmp/deploy_smoke_top107_legacy_summary.json`
+- `tmp/run_top107_legacy_deploy_real.py`
+- `tmp/deploy_real_top107_legacy_summary.json`
+- `games/published/public/` (107 new legacy deploy outputs)
+
+### 2026-05-10 16:26 - Merged 231-entry Vatsal App Alpha collection generated and wired into annotator
+
+**What Changed:**
+- Audited the merged `107 + 124` set with a dedicated uniqueness script:
+  - `tmp/audit_merged_107_124_uniqueness.py`
+- Verified the merged set is additive at the remix/composite-key layer:
+  - `231` total entries
+  - `231` unique remix UUIDs
+  - `231` unique composite keys
+  - repeated `game_id` values only, no remix/composite collisions
+- Added a merged manifest builder:
+  - `tmp/build_vatsal_app_alpha_231_manifest.py`
+- Generated:
+  - `tmp/retry_manifests/vatsal_app_alpha_231_manifest.json`
+- Added a real deploy catch-up runner for the 124 run-output set:
+  - `tmp/run_124_real_deploy.py`
+- Ran the 124 deploy pass against `games/published/public`:
+  - `57` newly deployed
+  - `67` already present and skipped
+- Added a merged collection generator:
+  - `tmp/generate_vatsal_app_alpha_collection.py`
+- Generated merged catalog artifacts:
+  - `tmp/generated_collections/vatsal_app_alpha/index.json`
+  - `tmp/generated_collections/vatsal_app_alpha/app_tags.json`
+  - `tmp/generated_collections/vatsal_app_alpha/app.json`
+- Published collection-facing files into the public folder:
+  - `games/published/public/vatsal_app_alpha-index.json`
+  - `games/published/public/vatsal_app_alpha-app_tags.json`
+  - `games/published/public/vatsal_app_alpha-app.json`
+- Updated the public annotator HTML:
+  - `games/published/public/565a0bf4-5160-47b8-a905-2f4362475cdf-annotator.html`
+- Added a dataset switcher so the annotator can toggle between:
+  - `current_release`
+  - `vatsal_app_alpha`
+
+**Validation Outcome:**
+- Merged manifest summary:
+  - `legacy_107_count = 107`
+  - `run_124_count = 124`
+  - `total_entries = 231`
+  - `unique_composite_keys = 231`
+- Generated public collection files all contain `231` entries:
+  - `vatsal_app_alpha-index.json`
+  - `vatsal_app_alpha-app_tags.json`
+  - `vatsal_app_alpha-app.json`
+- Annotator wiring now includes:
+  - dataset selector UI
+  - persisted dataset choice in local storage
+  - dynamic fetch path switching between the original app JSON and the new Vatsal App Alpha dataset
+
+**Files Added/Changed:**
+- `tmp/audit_merged_107_124_uniqueness.py`
+- `tmp/merged_107_124_uniqueness_audit.json`
+- `tmp/build_vatsal_app_alpha_231_manifest.py`
+- `tmp/retry_manifests/vatsal_app_alpha_231_manifest.json`
+- `tmp/run_124_real_deploy.py`
+- `tmp/deploy_real_run124_summary.json`
+- `tmp/generate_vatsal_app_alpha_collection.py`
+- `tmp/generated_collections/vatsal_app_alpha/index.json`
+- `tmp/generated_collections/vatsal_app_alpha/app_tags.json`
+- `tmp/generated_collections/vatsal_app_alpha/app.json`
+- `games/published/public/vatsal_app_alpha-index.json`
+- `games/published/public/vatsal_app_alpha-app_tags.json`
+- `games/published/public/vatsal_app_alpha-app.json`
+- `games/published/public/565a0bf4-5160-47b8-a905-2f4362475cdf-annotator.html`
+
 ## 📚 Quick Reference
 
 ### Key files

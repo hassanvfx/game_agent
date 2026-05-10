@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Crisis Chat Control</title>
+    <!-- [agent-note][stage4] resolved-font-remap: display-ui -> Audiowide + Exo 2 from catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-a: #0a1026;
+            --bg-b: #1d1450;
+            --bg-c: #32186f;
+            --panel-bg: rgba(11, 18, 43, 0.76);
+            --panel-border: rgba(129, 224, 255, 0.28);
+            --panel-highlight: rgba(255, 255, 255, 0.08);
+            --text-main: #f5fbff;
+            --text-muted: rgba(226, 244, 255, 0.76);
+            --text-soft: #9de3ff;
+            --danger: #ff7b96;
+            --danger-soft: #ffbfd0;
+            --success: #69f0d2;
+            --button-a: #2ac6ff;
+            --button-b: #8e64ff;
+            --button-c: #ff66b7;
+            --incoming-a: #22325c;
+            --incoming-b: #30467d;
+            --player-a: #00b8ff;
+            --player-b: #7167ff;
+            --hud-bg: rgba(7, 10, 26, 0.72);
+            --hud-border: rgba(133, 225, 255, 0.26);
+            --phone-frame: rgba(156, 236, 255, 0.11);
+            --phone-line: rgba(255, 255, 255, 0.08);
+            --scanline: rgba(255, 255, 255, 0.04);
+            --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.38);
+            --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.22);
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(93, 201, 255, 0.2), transparent 32%),
+                linear-gradient(180deg, #060913 0%, #0d1533 100%);
+            color: var(--text-main);
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 50% 0%, rgba(130, 238, 255, 0.14), transparent 28%),
+                linear-gradient(135deg, var(--bg-a), var(--bg-b) 48%, var(--bg-c));
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #game-container::before {
+            background:
+                linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.05) 48%, transparent 52%),
+                repeating-linear-gradient(
+                    180deg,
+                    transparent 0,
+                    transparent 18px,
+                    var(--scanline) 19px,
+                    transparent 20px
+                );
+            mix-blend-mode: screen;
+            opacity: 0.5;
+        }
+
+        #game-container::after {
+            background:
+                radial-gradient(circle at 20% 22%, rgba(105, 240, 210, 0.15), transparent 18%),
+                radial-gradient(circle at 82% 18%, rgba(255, 102, 183, 0.12), transparent 16%),
+                radial-gradient(circle at 50% 88%, rgba(42, 198, 255, 0.12), transparent 20%);
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 7;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            width: min(34vw, 150px);
+            max-width: 38vw;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(157, 227, 255, 0.35);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+            background: rgba(7, 10, 26, 0.5);
+            opacity: 0;
+            transform: translateY(12px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            mix-blend-mode: screen;
+        }
+
+        .feedback-gif.active {
+            opacity: 0.9;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif-positive {
+            right: clamp(0.65rem, 3vw, 1.25rem);
+            bottom: clamp(6.2rem, 14vh, 8.8rem);
+        }
+
+        .feedback-gif-negative {
+            left: clamp(0.65rem, 3vw, 1.25rem);
+            top: clamp(6rem, 13vh, 8.2rem);
+        }
+
+        .feedback-caption {
+            position: absolute;
+            left: 50%;
+            bottom: clamp(7.5rem, 17vh, 10rem);
+            transform: translateX(-50%);
+            min-width: min(70vw, 280px);
+            max-width: min(78vw, 320px);
+            padding: 0.55rem 0.85rem;
+            border-radius: 999px;
+            border: 1px solid rgba(157, 227, 255, 0.24);
+            background: rgba(9, 14, 34, 0.78);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+            color: #f5fbff;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-align: center;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+        }
+
+        .feedback-caption.active {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-4px);
+        }
+
+        .hidden { display: none !important; }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+                var(--panel-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-panel::before {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            border: 1px solid var(--panel-highlight);
+            pointer-events: none;
+        }
+
+        .screen-card {
+            padding: 1.75rem;
+            border-radius: 1.6rem;
+            text-align: center;
+            pointer-events: auto;
+            max-width: 24rem;
+            width: calc(100% - 2rem);
+            margin: 1rem;
+        }
+
+        .screen-card.start-screen {
+            transition: transform 0.28s ease, box-shadow 0.28s ease, filter 0.28s ease;
+        }
+
+        .screen-card.start-screen:hover {
+            transform: translateY(-3px) scale(1.01);
+            filter: brightness(1.04);
+        }
+
+        .hero-icon {
+            margin-bottom: 0.95rem;
+            font-size: 4rem;
+            line-height: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.45rem;
+            filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35));
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 3.35rem;
+            min-height: 3.35rem;
+            padding: 0.25rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, rgba(42, 198, 255, 0.26), rgba(255, 102, 183, 0.24));
+            border: 1px solid rgba(157, 227, 255, 0.26);
+            box-shadow: inset 0 0 18px rgba(255,255,255,0.08), 0 10px 20px rgba(0,0,0,0.22);
+        }
+
+        .title {
+            margin: 0 0 0.45rem;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: clamp(2rem, 4vw, 2.55rem);
+            font-weight: 400;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 0 0 18px rgba(74, 211, 255, 0.3), 0 5px 18px rgba(0, 0, 0, 0.42);
+        }
+
+        .subtitle {
+            margin: 0 0 1rem;
+            color: var(--text-soft);
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin-bottom: 0.95rem;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(157, 227, 255, 0.18);
+            color: var(--text-soft);
+            font-size: 0.84rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .instructions {
+            margin: 0 0 1.3rem;
+            color: var(--text-muted);
+            font-size: 0.98rem;
+            line-height: 1.4;
+        }
+
+        .instructions p {
+            margin: 0.35rem 0;
+        }
+
+        .primary-button,
+        .secondary-button {
+            width: 100%;
+            border: 0;
+            border-radius: 0.95rem;
+            padding: 0.95rem 1.2rem;
+            color: #fff;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: 0.96rem;
+            letter-spacing: 0.05em;
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+            cursor: pointer;
+            transition: transform 0.15s ease, filter 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .primary-button {
+            background: linear-gradient(90deg, var(--button-a), var(--button-b));
+        }
+
+        .secondary-button {
+            background: linear-gradient(90deg, rgba(255,255,255,0.96), rgba(201, 227, 255, 0.95));
+            color: #1d1450;
+        }
+
+        .primary-button:hover,
+        .secondary-button:hover {
+            filter: brightness(1.07);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
+        }
+
+        .primary-button:active,
+        .secondary-button:active {
+            transform: scale(0.97);
+        }
+
+        .result-title {
+            color: var(--danger-soft);
+        }
+
+        .score-box {
+            margin: 0 0 1.5rem;
+            padding: 0.85rem 1rem;
+            border-radius: 0.9rem;
+            background: rgba(4, 10, 26, 0.4);
+            color: #fff;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: 1.28rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        .hud-pill {
+            padding: 0.62rem 0.92rem;
+            border-radius: 999px;
+            color: #fff;
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.48rem;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+                var(--hud-bg);
+            border: 1px solid var(--hud-border);
+            box-shadow: var(--shadow-sm);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .hud-score,
+        .hud-meter {
+            font-family: 'Audiowide', system-ui, sans-serif;
+        }
+
+        .hud-label {
+            color: var(--text-soft);
+            opacity: 0.95;
+        }
+
+        @keyframes pulse-text {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.58; }
+        }
+
+        .animate-pulse-text {
+            animation: pulse-text 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @media (max-width: 640px) {
+            .screen-card {
+                padding: 1.35rem;
+                width: calc(100% - 1.25rem);
+                border-radius: 1.35rem;
+            }
+
+            .hero-icon {
+                font-size: 3.4rem;
+            }
+
+            .title {
+                font-size: clamp(1.75rem, 8vw, 2.15rem);
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+
+            .instructions {
+                font-size: 0.93rem;
+            }
+
+            .hud-pill {
+                font-size: 0.85rem;
+                padding: 0.52rem 0.72rem;
+            }
+
+            .score-box {
+                font-size: 1.1rem;
+            }
+
+            .primary-button,
+            .secondary-button {
+                padding: 0.9rem 1rem;
+                font-size: 0.88rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI Layer -->
+        <div id="ui-layer">
+
+            <!-- Start Screen -->
+            <div id="start-screen" class="glass-panel screen-card start-screen">
+                <div class="status-chip">Live Signal // Priority Queue</div>
+                <div class="hero-icon" aria-hidden="true">
+                    <span class="hero-badge">📡</span>
+                    <span class="hero-badge">😎</span>
+                </div>
+                <h1 class="title">CRISIS CHAT</h1>
+                <p class="subtitle">Pilot the hottest inbox on the grid without causing a social blackout.</p>
+                <div class="instructions">
+                    <p>Tap the safer reply before the channel spirals.</p>
+                    <p>Keep the vibe stable and protect your Signal Meter.</p>
+                </div>
+                <button id="start-btn" class="primary-button animate-pulse-text">
+                    OPEN CHANNEL
+                </button>
+                <!-- [agent-note][stage1] role: future-audio | trigger: start-screen-open | intent: reinforce incoming transmission theme -->
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden glass-panel screen-card">
+                <div class="status-chip">Connection Failure</div>
+                <div class="hero-icon" aria-hidden="true">
+                    <span class="hero-badge">📴</span>
+                    <span class="hero-badge">💥</span>
+                </div>
+                <h2 class="title result-title">CHANNEL LOST</h2>
+                <p class="subtitle" style="color: white; font-size: 1rem;">Your replies kicked the convo into total signal collapse.</p>
+                <div class="score-box">Score: <span id="finalScore">0</span></div>
+                <button id="restart-btn" class="secondary-button">
+                    RECONNECT
+                </button>
+                <!-- [agent-note][stage1] role: future-gif | trigger: game-over-state | intent: emphasize abrupt signal collapse -->
+            </div>
+
+            <!-- HUD -->
+            <div id="hud" class="hidden">
+                <div class="hud-pill hud-meter">
+                    <span>📶</span>
+                    <span class="hud-label">Signal</span>
+                    <span id="battery">100%</span>
+                </div>
+                <div class="hud-pill hud-score">
+                    <span class="hud-label">Score</span>
+                    <span id="score">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- [agent-note][stage3] resolved-gif: safe/fail feedback overlays -> catalogs/gifs.json -->
+        <div id="feedback-layer" aria-hidden="true">
+            <img id="positive-gif" class="feedback-gif feedback-gif-positive" src="https://i.giphy.com/MFPZ483I4x41W.webp" alt="">
+            <img id="negative-gif" class="feedback-gif feedback-gif-negative" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="">
+            <div id="feedback-caption" class="feedback-caption">Channel stable</div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ENABLE_ANIMATIONS = true;
+
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3",
+            sfx: {
+                incoming: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3",
+                success: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3",
+                lowSignal: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3",
+                gameOver: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_02.mp3"
+            },
+            gifs: {
+                positive: "https://i.giphy.com/MFPZ483I4x41W.webp",
+                negative: "https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+            }
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.unlocked = false;
+                this.lastPlayedAt = {};
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.preload = 'auto';
+                this.bgm.volume = 0.2;
+                this.sfx = {};
+                for (const [key, src] of Object.entries(ASSETS.sfx)) {
+                    const sound = new Audio(src);
+                    sound.preload = 'auto';
+                    this.sfx[key] = sound;
+                }
+            }
+
+            unlock() {
+                if (this.unlocked) return;
+                this.unlocked = true;
+                this.bgm.load();
+                Object.values(this.sfx).forEach(sound => sound.load());
+            }
+
+            playBGM() {
+                if (!this.unlocked) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            pauseBGM() {
+                this.bgm.pause();
+            }
+
+            playSFX(key, { volume = 0.72, debounceMs = 90 } = {}) {
+                if (!this.unlocked || !this.sfx[key]) return;
+                const now = performance.now();
+                if ((this.lastPlayedAt[key] || 0) + debounceMs > now) return;
+                this.lastPlayedAt[key] = now;
+
+                const clone = this.sfx[key].cloneNode();
+                clone.volume = volume;
+                clone.play().catch(() => {});
+            }
+        }
+
+        const audio = new AudioController();
+        const feedbackLayer = document.getElementById('feedback-layer');
+        const positiveGif = document.getElementById('positive-gif');
+        const negativeGif = document.getElementById('negative-gif');
+        const feedbackCaption = document.getElementById('feedback-caption');
+        let feedbackTimer = null;
+        let lowSignalWarned = false;
+
+        /** 3. GAME DATA & STATE */
+        const SCENARIOS = [
+            { sender: "Mom", text: "Why is your room a mess?", options: [{t: "I'm cleaning it!", s: 10, d: 0}, {t: "It's called art.", s: 0, d: -20}] },
+            { sender: "Crush", text: "Hey, free this weekend?", options: [{t: "Yeah! For sure!", s: 20, d: 0}, {t: "Who is this?", s: 0, d: -30}] },
+            { sender: "Teacher", text: "Where is your homework?", options: [{t: "Emailing it now!", s: 10, d: 0}, {t: "My dog ate it.", s: 0, d: -20}] },
+            { sender: "Bestie", text: "Omg did you see that??", options: [{t: "Spill the tea! ☕", s: 15, d: 0}, {t: "Leave me alone.", s: 0, d: -25}] },
+            { sender: "Coach", text: "Practice in 5 mins!", options: [{t: "On my way!", s: 10, d: 0}, {t: "I'm 'sick' today.", s: 0, d: -15}] },
+            { sender: "Unknown", text: "You won a free iPhone!", options: [{t: "SCAM!", s: 10, d: 0}, {t: "Really?? Click link", s: 0, d: -40}] },
+            { sender: "Ex", text: "I miss you.", options: [{t: "New phone who dis", s: 20, d: 0}, {t: "I miss you too...", s: 0, d: -30}] },
+            { sender: "Dad", text: "Did you touch the thermostat?", options: [{t: "Nope, wasn't me.", s: 10, d: 0}, {t: "Yeah, it was cold.", s: 0, d: -10}] },
+            { sender: "Principal", text: "Come to my office.", options: [{t: "On my way...", s: 5, d: 0}, {t: "Catch me if you can!", s: 0, d: -50}] },
+            { sender: "Pizza Hut", text: "Your order is here.", options: [{t: "Coming!!", s: 15, d: 0}, {t: "I didn't order?", s: 5, d: 0}] }
+        ];
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let socialBattery = 100;
+
+        // Game Entities
+        let messages = [];
+        let currentScenario = null;
+        let buttons = [];
+        let particles = [];
+        let scrollOffset = 0;
+        let targetScrollOffset = 0;
+        let pulseTick = 0;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initBackground();
+            if (currentScenario) layoutButtons();
+        }
+        window.addEventListener('resize', resize);
+
+        /** 4. BACKGROUND SYSTEM */
+        function initBackground() {
+            particles = [];
+            for (let i = 0; i < 34; i++) {
+                const isEmoji = Math.random() > 0.72;
+                particles.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    size: Math.random() * 18 + 6,
+                    speed: Math.random() * 0.5 + 0.14,
+                    type: isEmoji ? 'emoji' : (Math.random() > 0.56 ? 'circle' : 'diamond'),
+                    icon: ['💬', '✨', '📡', '⚡'][Math.floor(Math.random() * 4)],
+                    drift: (Math.random() - 0.5) * 0.22,
+                    alpha: Math.random() * 0.14 + 0.04
+                });
+            }
+        }
+
+        function updateBackground() {
+            pulseTick += 0.025;
+            particles.forEach(p => {
+                p.y -= p.speed;
+                p.x += Math.sin(p.y * 0.02) * p.drift;
+                if (p.y + p.size < -10) {
+                    p.y = height + p.size;
+                    p.x = Math.random() * width;
+                }
+            });
+        }
+
+        function drawBackground() {
+            const grad = ctx.createLinearGradient(0, 0, width, height);
+            grad.addColorStop(0, '#09112a');
+            grad.addColorStop(0.5, '#161b4f');
+            grad.addColorStop(1, '#34176f');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+
+            const glow = ctx.createRadialGradient(width * 0.52, height * 0.18, 10, width * 0.52, height * 0.18, width * 0.65);
+            glow.addColorStop(0, 'rgba(105, 240, 210, 0.16)');
+            glow.addColorStop(0.4, 'rgba(42, 198, 255, 0.08)');
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, 0, width, height);
+
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                if (p.type === 'emoji') {
+                    ctx.font = `${Math.max(16, p.size)}px "Exo 2", system-ui, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(p.icon, p.x, p.y);
+                } else if (p.type === 'diamond') {
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(Math.PI / 4);
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * 0.45, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+        }
+
+        /** 5. GAME LOGIC */
+        function showFeedback(type, label, duration = 1400) {
+            if (feedbackTimer) {
+                clearTimeout(feedbackTimer);
+                feedbackTimer = null;
+            }
+
+            positiveGif.classList.toggle('active', type === 'positive');
+            negativeGif.classList.toggle('active', type === 'negative');
+            feedbackCaption.textContent = label;
+            feedbackCaption.classList.add('active');
+
+            feedbackTimer = setTimeout(() => {
+                positiveGif.classList.remove('active');
+                negativeGif.classList.remove('active');
+                feedbackCaption.classList.remove('active');
+            }, duration);
+        }
+
+        function initGame() {
+            score = 0;
+            socialBattery = 100;
+            messages = [];
+            currentScenario = null;
+            scrollOffset = 0;
+            targetScrollOffset = 0;
+            lowSignalWarned = false;
+            positiveGif.classList.remove('active');
+            negativeGif.classList.remove('active');
+            feedbackCaption.classList.remove('active');
+            updateHUD();
+            nextScenario();
+        }
+
+        function updateHUD() {
+            document.getElementById('score').innerText = score;
+            const batEl = document.getElementById('battery');
+            batEl.innerText = socialBattery + '%';
+            batEl.style.color = socialBattery < 30 ? '#ff9eb6' : '#ffffff';
+
+            if (gameActive && socialBattery < 35 && !lowSignalWarned) {
+                lowSignalWarned = true;
+                audio.playSFX('lowSignal', { volume: 0.52, debounceMs: 900 });
+                showFeedback('negative', 'Signal critical', 1200);
+            } else if (socialBattery >= 35) {
+                lowSignalWarned = false;
+            }
+        }
+
+        function nextScenario() {
+            if (socialBattery <= 0) {
+                gameOver();
+                return;
+            }
+
+            const data = SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
+            currentScenario = data;
+
+            addMessage(data.sender, data.text, false);
+            layoutButtons();
+        }
+
+        function addMessage(sender, text, isPlayer) {
+            const maxWidth = Math.min(width * 0.72, 410);
+             ctx.font = "19px 'Exo 2'";
+            const lines = getLines(ctx, text, maxWidth - 34);
+            const bubbleHeight = (lines.length * 24) + 34;
+
+            const moodMap = {
+                Mom: '🧹',
+                Crush: '💖',
+                Teacher: '📚',
+                Bestie: '✨',
+                Coach: '🏁',
+                Unknown: '⚠️',
+                Ex: '🫠',
+                Dad: '🌡️',
+                Principal: '🚨',
+                "Pizza Hut": '🍕',
+                Operator: '😎'
+            };
+
+            const msg = {
+                sender: sender,
+                text: text,
+                lines: lines,
+                isPlayer: isPlayer,
+                height: bubbleHeight,
+                width: maxWidth,
+                y: 0,
+                anim: 0,
+                emoji: moodMap[sender] || (isPlayer ? '😎' : '💬')
+            };
+
+            messages.push(msg);
+            recalcMessagePositions();
+
+            if (!isPlayer) {
+                audio.playSFX('incoming', { volume: 0.5, debounceMs: 140 });
+                showFeedback('positive', `${sender} pinged in`, 900);
+            }
+        }
+
+        function getLines(ctx, text, maxWidth) {
+            const words = text.split(" ");
+            let lines = [];
+            let currentLine = words[0];
+
+            for (let i = 1; i < words.length; i++) {
+                let word = words[i];
+                let lineWidth = ctx.measureText(currentLine + " " + word).width;
+                if (lineWidth < maxWidth) {
+                    currentLine += " " + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            }
+            lines.push(currentLine);
+            return lines;
+        }
+
+        function recalcMessagePositions() {
+            const bottomLimit = height - 220;
+            let totalH = 0;
+            messages.forEach(m => totalH += m.height + 22);
+            targetScrollOffset = Math.max(0, totalH - (bottomLimit - 100));
+        }
+
+        function layoutButtons() {
+            if (!currentScenario) {
+                buttons = [];
+                return;
+            }
+
+            const isCompact = width < 560;
+            const btnH = isCompact ? 64 : 70;
+            const margin = isCompact ? 14 : 20;
+            const sideInset = isCompact ? 14 : 20;
+            const y = height - (isCompact ? 92 : 100);
+
+            if (isCompact) {
+                const btnW = width - (sideInset * 2);
+                buttons = [
+                    {
+                        x: sideInset,
+                        y,
+                        w: btnW,
+                        h: btnH,
+                        text: currentScenario.options[0].t,
+                        option: currentScenario.options[0],
+                        colorA: '#2ac6ff',
+                        colorB: '#5f8dff'
+                    },
+                    {
+                        x: sideInset,
+                        y: y - (btnH + margin),
+                        w: btnW,
+                        h: btnH,
+                        text: currentScenario.options[1].t,
+                        option: currentScenario.options[1],
+                        colorA: '#ff66b7',
+                        colorB: '#8e64ff'
+                    }
+                ];
+            } else {
+                const btnW = Math.min(width - (margin * 3), 520) / 2;
+                const startX = (width - (btnW * 2 + margin)) / 2;
+                buttons = [
+                    {
+                        x: startX,
+                        y,
+                        w: btnW,
+                        h: btnH,
+                        text: currentScenario.options[0].t,
+                        option: currentScenario.options[0],
+                        colorA: '#2ac6ff',
+                        colorB: '#5f8dff'
+                    },
+                    {
+                        x: startX + btnW + margin,
+                        y,
+                        w: btnW,
+                        h: btnH,
+                        text: currentScenario.options[1].t,
+                        option: currentScenario.options[1],
+                        colorA: '#ff66b7',
+                        colorB: '#8e64ff'
+                    }
+                ];
+            }
+        }
+
+        function handleInput(x, y) {
+            if (!gameActive || !currentScenario) return;
+
+            for (let btn of buttons) {
+                if (x > btn.x && x < btn.x + btn.w && y > btn.y && y < btn.y + btn.h) {
+                    resolveChoice(btn.option);
+                    break;
+                }
+            }
+        }
+
+        function resolveChoice(option) {
+            addMessage("Operator", option.t, true);
+
+            score += option.s;
+            socialBattery += option.d;
+            if (socialBattery > 100) socialBattery = 100;
+
+            if (option.d < 0) {
+                audio.playSFX('fail', { volume: 0.78, debounceMs: 120 });
+                showFeedback('negative', 'Reply backfired', 1300);
+            } else {
+                audio.playSFX('success', { volume: 0.68, debounceMs: 120 });
+                showFeedback('positive', option.s >= 15 ? 'Combo reply landed' : 'Channel stable', 1200);
+            }
+
+            updateHUD();
+            currentScenario = null;
+            buttons = [];
+
+            setTimeout(() => {
+                if (gameActive) nextScenario();
+            }, 1000);
+        }
+
+        /** 6. RENDER LOOP */
+        function drawPhoneUI() {
+            const phoneW = Math.min(width, 600);
+            const phoneX = (width - phoneW) / 2;
+            const compactMode = width < 560;
+            const phoneTop = compactMode ? 72 : 76;
+            const phoneBottomInset = compactMode ? 174 : 180;
+            const headerH = compactMode ? 84 : 92;
+
+            ctx.save();
+            ctx.fillStyle = "rgba(5, 10, 28, 0.22)";
+            ctx.fillRect(phoneX, 0, phoneW, height);
+            ctx.restore();
+
+            const frameGrad = ctx.createLinearGradient(phoneX, 0, phoneX + phoneW, height);
+            frameGrad.addColorStop(0, 'rgba(255,255,255,0.06)');
+            frameGrad.addColorStop(0.5, 'rgba(157,227,255,0.08)');
+            frameGrad.addColorStop(1, 'rgba(255,255,255,0.03)');
+            ctx.fillStyle = frameGrad;
+            ctx.fillRect(phoneX, 0, phoneW, height);
+
+            ctx.strokeStyle = "rgba(157, 227, 255, 0.18)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(phoneX + 1, 1, phoneW - 2, height - 2);
+
+            const notchW = Math.min(140, phoneW * 0.28);
+            ctx.fillStyle = "rgba(255,255,255,0.08)";
+            ctx.beginPath();
+            ctx.roundRect(phoneX + (phoneW - notchW) / 2, 8, notchW, 14, 9);
+            ctx.fill();
+
+            const headerGrad = ctx.createLinearGradient(phoneX, phoneTop, phoneX + phoneW, phoneTop + headerH);
+            headerGrad.addColorStop(0, 'rgba(14, 26, 64, 0.95)');
+            headerGrad.addColorStop(1, 'rgba(44, 22, 96, 0.95)');
+            ctx.fillStyle = headerGrad;
+            ctx.fillRect(phoneX, phoneTop, phoneW, headerH);
+
+            ctx.fillStyle = "rgba(255,255,255,0.08)";
+            ctx.fillRect(phoneX, phoneTop + headerH - 1, phoneW, 1);
+
+            ctx.fillStyle = "#9de3ff";
+            ctx.font = `600 ${compactMode ? 14 : 15}px "Exo 2"`;
+            ctx.textAlign = "left";
+            ctx.fillText("LIVE FEED", phoneX + 18, phoneTop + 26);
+
+            ctx.fillStyle = "#ffffff";
+            ctx.font = `400 ${compactMode ? 21 : 24}px "Audiowide"`;
+            ctx.fillText("Comms Feed", phoneX + 18, phoneTop + 54);
+
+            ctx.textAlign = "right";
+            ctx.font = `600 ${compactMode ? 13 : 14}px "Exo 2"`;
+            ctx.fillStyle = "rgba(255,255,255,0.88)";
+            ctx.fillText("😎 Operator Online", phoneX + phoneW - 18, phoneTop + 40);
+            ctx.fillStyle = "rgba(105, 240, 210, 0.95)";
+            ctx.fillText("STABLE LINK", phoneX + phoneW - 18, phoneTop + 60);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(phoneX, phoneTop + headerH, phoneW, height - phoneBottomInset - (phoneTop + headerH));
+            ctx.clip();
+
+            scrollOffset += (targetScrollOffset - scrollOffset) * 0.1;
+            let yPos = phoneTop + headerH + 18 - scrollOffset;
+
+            messages.forEach(msg => {
+                if (msg.anim < 1 && ENABLE_ANIMATIONS) msg.anim += 0.1;
+                const bubbleX = msg.isPlayer
+                    ? (phoneX + phoneW - msg.width - 18)
+                    : (phoneX + 18);
+
+                const bounce = ENABLE_ANIMATIONS ? (1 - Math.min(msg.anim, 1)) * 8 : 0;
+                const bubbleY = yPos + bounce;
+                const bubbleRadius = 18;
+
+                const bubbleGrad = ctx.createLinearGradient(bubbleX, bubbleY, bubbleX + msg.width, bubbleY + msg.height);
+                if (msg.isPlayer) {
+                    bubbleGrad.addColorStop(0, '#17c8ff');
+                    bubbleGrad.addColorStop(1, '#6d63ff');
+                } else {
+                    bubbleGrad.addColorStop(0, '#243561');
+                    bubbleGrad.addColorStop(1, '#3a4e82');
+                }
+
+                ctx.fillStyle = "rgba(0,0,0,0.18)";
+                ctx.beginPath();
+                ctx.roundRect(bubbleX, bubbleY + 6, msg.width, msg.height, bubbleRadius);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.roundRect(bubbleX, bubbleY, msg.width, msg.height, bubbleRadius);
+                ctx.fillStyle = bubbleGrad;
+                ctx.fill();
+
+                ctx.strokeStyle = "rgba(255,255,255,0.12)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                if (!msg.isPlayer) {
+                    ctx.fillStyle = "rgba(255,255,255,0.78)";
+                    ctx.font = '600 12px "Exo 2"';
+                    ctx.textAlign = "left";
+                    ctx.fillText(`${msg.emoji} ${msg.sender}`, bubbleX + 4, bubbleY - 7);
+                } else {
+                    ctx.fillStyle = "rgba(255,255,255,0.8)";
+                    ctx.font = '600 12px "Exo 2"';
+                    ctx.textAlign = "right";
+                    ctx.fillText(`${msg.sender} ${msg.emoji}`, bubbleX + msg.width - 4, bubbleY - 7);
+                }
+
+                ctx.fillStyle = "white";
+                ctx.font = `600 ${compactMode ? 18 : 19}px "Exo 2"`;
+                ctx.textAlign = "left";
+                let textY = bubbleY + 28;
+                msg.lines.forEach(line => {
+                    ctx.fillText(line, bubbleX + 17, textY);
+                    textY += 24;
+                });
+
+                yPos += msg.height + 30;
+            });
+
+            ctx.restore();
+
+            buttons.forEach((btn, index) => {
+                const buttonGrad = ctx.createLinearGradient(btn.x, btn.y, btn.x + btn.w, btn.y + btn.h);
+                buttonGrad.addColorStop(0, btn.colorA);
+                buttonGrad.addColorStop(1, btn.colorB);
+
+                ctx.fillStyle = "rgba(0,0,0,0.3)";
+                ctx.beginPath();
+                ctx.roundRect(btn.x, btn.y + 6, btn.w, btn.h, 18);
+                ctx.fill();
+
+                ctx.fillStyle = buttonGrad;
+                ctx.beginPath();
+                ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 18);
+                ctx.fill();
+
+                ctx.strokeStyle = "rgba(255,255,255,0.18)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = "rgba(255,255,255,0.22)";
+                ctx.beginPath();
+                ctx.roundRect(btn.x + 1, btn.y + 1, btn.w - 2, Math.max(16, btn.h * 0.36), 16);
+                ctx.fill();
+
+                ctx.fillStyle = "white";
+                ctx.font = `600 ${compactMode ? 17 : 18}px "Exo 2"`;
+                ctx.textAlign = "center";
+                ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 + 6);
+
+                if (!compactMode) {
+                    ctx.fillStyle = "rgba(255,255,255,0.72)";
+                    ctx.font = '400 12px "Audiowide"';
+                    ctx.fillText(index === 0 ? "SAFE" : "RISK", btn.x + btn.w / 2, btn.y + 18);
+                }
+            });
+
+            const footerY = height - (compactMode ? 128 : 130);
+            const footerGrad = ctx.createLinearGradient(phoneX, footerY, phoneX + phoneW, footerY + 40);
+            footerGrad.addColorStop(0, 'rgba(7, 10, 26, 0)');
+            footerGrad.addColorStop(1, 'rgba(7, 10, 26, 0.78)');
+            ctx.fillStyle = footerGrad;
+            ctx.fillRect(phoneX, footerY, phoneW, 46);
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, width, height);
+
+            updateBackground();
+            drawBackground();
+            drawPhoneUI();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('gameOver', { volume: 0.82, debounceMs: 300 });
+            showFeedback('negative', 'Channel lost', 1800);
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        /** 7. INPUT HANDLERS */
+        canvas.addEventListener('mousedown', e => {
+            const rect = canvas.getBoundingClientRect();
+            handleInput(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            handleInput(touch.clientX - rect.left, touch.clientY - rect.top);
+        }, { passive: false });
+
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+
+        function startGame() {
+            audio.unlock();
+            audio.playSFX('start', { volume: 0.74, debounceMs: 250 });
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameActive = true;
+            resize();
+            initGame();
+            showFeedback('positive', 'Channel opened', 1200);
+            gameLoop();
+        }
+
+        function restartGame() {
+            audio.unlock();
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playSFX('start', { volume: 0.68, debounceMs: 250 });
+            audio.playBGM();
+            gameActive = true;
+            initGame();
+            showFeedback('positive', 'Back online', 1200);
+            gameLoop();
+        }
+
+        // [agent-note][stage4] repaired: mobile-action-path | elements: #start-btn, #restart-btn | action: native tap preserved and touch fallback added without changing gameplay input
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+        startBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!gameActive) startGame();
+        }, { passive: false });
+        restartBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!gameActive) restartGame();
+        }, { passive: false });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                audio.pauseBGM();
+            } else if (gameActive) {
+                audio.playBGM();
+            }
+        });
+
+        resize();
+        initBackground();
+        drawBackground();
+    });
+    </script>
+</body>
+</html>

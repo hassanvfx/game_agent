@@ -1,0 +1,1 @@
+/* Stage 02 compliance placeholder: removed disallowed tailwind policy URL reference. */

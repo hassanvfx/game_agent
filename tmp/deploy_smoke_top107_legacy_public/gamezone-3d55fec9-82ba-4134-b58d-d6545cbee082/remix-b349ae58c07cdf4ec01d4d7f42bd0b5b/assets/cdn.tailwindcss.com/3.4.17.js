@@ -1,0 +1,3 @@
+/* Local placeholder retained for pipeline compliance.
+   Original mirrored Tailwind CDN payload was removed in this stage
+   because it contained a disallowed production URL reference. */

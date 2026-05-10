@@ -64,7 +64,19 @@ def reference_json_score(payload: dict[str, Any]) -> int:
     return score
 
 
-def find_screenshot_files(source_dir: Path) -> list[Path]:
+def dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    unique_paths: list[Path] = []
+    for path in paths:
+        resolved = str(path.resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique_paths.append(path)
+    return unique_paths
+
+
+def find_run_layout_screenshot_files(source_dir: Path) -> list[Path]:
     screenshots: list[Path] = []
     image_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -82,18 +94,28 @@ def find_screenshot_files(source_dir: Path) -> list[Path]:
         if lower_name.startswith("screens_") or "screenshot" in lower_name:
             screenshots.append(path)
 
-    if screenshots:
-        seen: set[str] = set()
-        unique_screenshots: list[Path] = []
-        for path in screenshots:
-            resolved = str(path.resolve())
-            if resolved in seen:
-                continue
-            seen.add(resolved)
-            unique_screenshots.append(path)
-        return unique_screenshots
+    return dedupe_paths(screenshots)
 
-    return []
+
+def find_legacy_layout_screenshot_files(source_dir: Path) -> list[Path]:
+    screenshots: list[Path] = []
+    for path in sorted(source_dir.iterdir()):
+        if not path.is_file() or path.name.startswith("._") or path.suffix.lower() != ".png":
+            continue
+        lower_name = path.name.lower()
+        if lower_name == "playwright_initial.png" or lower_name == "playwright_after_start.png":
+            screenshots.append(path)
+            continue
+        if lower_name.startswith("playwright_after_") or lower_name.startswith("playwright_post_fix"):
+            screenshots.append(path)
+    return dedupe_paths(screenshots)
+
+
+def find_screenshot_files(source_dir: Path) -> list[Path]:
+    screenshots = find_run_layout_screenshot_files(source_dir)
+    if screenshots:
+        return screenshots
+    return find_legacy_layout_screenshot_files(source_dir)
 
 
 def collect_markdown_text(source_dir: Path, preferred_name_prefixes: list[str]) -> str | None:
@@ -119,28 +141,15 @@ def load_first_optional_json(source_dir: Path, candidate_names: list[str]) -> di
     return None
 
 
-def build_split_reference_json(source_dir: Path, game_id: str) -> dict[str, Any] | None:
-    identity_payload = load_first_optional_json(source_dir, ["Identity.json", "identity.json"])
-    semantic_payload = load_first_optional_json(source_dir, ["SemanticTags.json", "semantic_tags.json"])
-    mechanics_payload = load_first_optional_json(
-        source_dir,
-        [
-            "MechanicsClassification.json",
-            "mechanics_classification.json",
-            "MechanicsRanking.json",
-            "mechanics_ranking.json",
-            "MechanicsRationale.json",
-            "mechanics_rationale.json",
-            "mechanics_ranking_reasoning.json",
-        ],
-    )
+def classify_source_layout(source_dir: Path) -> str:
+    if (source_dir / "semantic_tags.json").exists() or (source_dir / "mechanics_classification.json").exists():
+        return "legacy"
+    return "run"
 
-    recreation_prompt_markdown = collect_markdown_text(source_dir, ["recreation", "prompt"])
-    blueprint_markdown = collect_markdown_text(source_dir, ["blueprint"])
 
-    screenshots = find_screenshot_files(source_dir)
-    screenshots_png = []
-    screenshots_jpg = []
+def build_screenshot_relpaths(screenshots: list[Path]) -> tuple[list[str], list[str]]:
+    screenshots_png: list[str] = []
+    screenshots_jpg: list[str] = []
     for idx, path in enumerate(screenshots, start=1):
         ext = path.suffix.lower()
         rel = f"screenshots/{idx:02d}{ext}"
@@ -148,6 +157,50 @@ def build_split_reference_json(source_dir: Path, game_id: str) -> dict[str, Any]
             screenshots_png.append(rel)
         elif ext in {".jpg", ".jpeg"}:
             screenshots_jpg.append(rel)
+    return screenshots_png, screenshots_jpg
+
+
+def build_split_reference_json(source_dir: Path, game_id: str, *, layout: str | None = None) -> dict[str, Any] | None:
+    resolved_layout = layout or classify_source_layout(source_dir)
+
+    if resolved_layout == "legacy":
+        identity_payload = load_first_optional_json(source_dir, ["Identity.json", "identity.json"])
+        semantic_payload = load_first_optional_json(source_dir, ["semantic_tags.json", "SemanticTags.json"])
+        mechanics_payload = load_first_optional_json(
+            source_dir,
+            [
+                "mechanics_classification.json",
+                "MechanicsClassification.json",
+                "mechanics_ranking.json",
+                "MechanicsRanking.json",
+                "MechanicsRationale.json",
+                "mechanics_rationale.json",
+                "mechanics_ranking_reasoning.json",
+            ],
+        )
+        screenshots = find_legacy_layout_screenshot_files(source_dir)
+        source_mode = "split-json-legacy"
+    else:
+        identity_payload = load_first_optional_json(source_dir, ["Identity.json", "identity.json"])
+        semantic_payload = load_first_optional_json(source_dir, ["SemanticTags.json", "semantic_tags.json"])
+        mechanics_payload = load_first_optional_json(
+            source_dir,
+            [
+                "MechanicsClassification.json",
+                "mechanics_classification.json",
+                "MechanicsRanking.json",
+                "mechanics_ranking.json",
+                "MechanicsRationale.json",
+                "mechanics_rationale.json",
+                "mechanics_ranking_reasoning.json",
+            ],
+        )
+        screenshots = find_run_layout_screenshot_files(source_dir)
+        source_mode = "split-json"
+
+    recreation_prompt_markdown = collect_markdown_text(source_dir, ["recreation", "prompt"])
+    blueprint_markdown = collect_markdown_text(source_dir, ["blueprint"])
+    screenshots_png, screenshots_jpg = build_screenshot_relpaths(screenshots)
 
     has_any_structured = any(
         isinstance(payload, dict) and payload
@@ -162,11 +215,11 @@ def build_split_reference_json(source_dir: Path, game_id: str) -> dict[str, Any]
         "recreation_prompt_markdown": recreation_prompt_markdown or "",
         "blueprint_markdown": blueprint_markdown or "",
         "semantic_tags": semantic_payload if isinstance(semantic_payload, dict) else {},
-        "semantic_tags_source_mode": "split-json" if isinstance(semantic_payload, dict) else "unknown",
+        "semantic_tags_source_mode": source_mode if isinstance(semantic_payload, dict) else "unknown",
         "identity": identity_payload if isinstance(identity_payload, dict) else {},
-        "identity_source_mode": "split-json" if isinstance(identity_payload, dict) else "unknown",
+        "identity_source_mode": source_mode if isinstance(identity_payload, dict) else "unknown",
         "mechanics_classification": mechanics_payload if isinstance(mechanics_payload, dict) else {},
-        "mechanics_classification_source_mode": "split-json" if isinstance(mechanics_payload, dict) else "unknown",
+        "mechanics_classification_source_mode": source_mode if isinstance(mechanics_payload, dict) else "unknown",
         "screenshots_png": screenshots_png,
         "screenshots_jpg": screenshots_jpg,
     }
@@ -174,7 +227,11 @@ def build_split_reference_json(source_dir: Path, game_id: str) -> dict[str, Any]
 
 def read_reference_public_json(source_dir: Path) -> dict[str, Any] | None:
     inferred_game_id = source_dir.name if source_dir.name.startswith("gamezone-") else None
-    split_reference = build_split_reference_json(source_dir, inferred_game_id or "")
+    split_reference = build_split_reference_json(
+        source_dir,
+        inferred_game_id or "",
+        layout=classify_source_layout(source_dir),
+    )
     if split_reference and split_reference.get("game_id"):
         return split_reference
 
@@ -328,15 +385,7 @@ def extract_game_metadata(
     assets_dir = find_assets_dir(index_path)
     screenshot_files = find_screenshot_files(source_dir)
 
-    screenshot_relpaths_png: list[str] = []
-    screenshot_relpaths_jpg: list[str] = []
-    for idx, path in enumerate(screenshot_files, start=1):
-        ext = path.suffix.lower()
-        rel = f"screenshots/{idx:02d}{ext}"
-        if ext == ".png":
-            screenshot_relpaths_png.append(rel)
-        elif ext in {".jpg", ".jpeg"}:
-            screenshot_relpaths_jpg.append(rel)
+    screenshot_relpaths_png, screenshot_relpaths_jpg = build_screenshot_relpaths(screenshot_files)
 
     if repo_root is not None:
         try:
