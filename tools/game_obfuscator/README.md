@@ -86,11 +86,10 @@ The default `simple` pipeline:
 - minifies inline JavaScript in HTML
 - obfuscates external `.js` files deterministically with conservative settings
 
-The older multi-stage path is still available through `--pipeline legacy`, but it is **deprecated and scheduled for removal**.
+The older multi-stage path has been removed. The simple deterministic pipeline is now the only supported path.
 
 ```bash
 python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json
-python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json --pipeline legacy
 python3 scripts/game_obfuscator_cli.py status --run-id run_game_obfuscator_20260426T225801Z
 python3 scripts/game_obfuscator_cli.py output-path --run-id run_game_obfuscator_20260426T225801Z --include-games
 ```
@@ -98,9 +97,7 @@ python3 scripts/game_obfuscator_cli.py output-path --run-id run_game_obfuscator_
 Commands:
 - `start`
   - creates a run from a manifest
-  - launches the selected pipeline in the background
-  - defaults to `--pipeline simple`
-  - supports `--pipeline legacy` for the older multi-stage flow, but that path is deprecated
+  - launches the simple deterministic pipeline in the background
   - returns immediately with JSON containing:
     - `run_id`
     - `run_dir`
@@ -152,21 +149,16 @@ The CLI should be treated as a machine-facing contract with 3 surfaces:
 Example:
 ```bash
 python3 scripts/game_obfuscator_cli.py start \
-  --manifest manifests/random_batch_036.json \
-  --timeout-ms 8000 \
-  --max-game-seconds 300
+  --manifest manifests/random_batch_036.json
 ```
 
 Arguments:
 - `--manifest` *(required)*: path to the input manifest JSON file
 - `--run-id` *(optional)*: explicit run id to use instead of auto-generated timestamped id
-- `--pipeline` *(optional, default `simple`)*: choose `simple` for the new deterministic minify/obfuscate flow or `legacy` for the older multi-stage flow (**deprecated; scheduled for removal**)
-- `--timeout-ms` *(optional, default `8000`)*: Playwright verification timeout for the legacy pipeline
-- `--max-game-seconds` *(optional, default `300`)*: per-game obfuscation wall-clock timeout for the legacy pipeline
 
 Behavior:
 - creates the run scaffold synchronously
-- launches the selected pipeline in the background
+- launches the simple deterministic pipeline in the background
 - returns immediately
 - writes launcher logs under:
   - `<run_dir>/logs/launcher.stdout.log`
@@ -199,7 +191,7 @@ Field meanings:
 - `status`: immediate launch status, currently `created`
 - `current_phase`: immediate launch phase, currently `batch_launched`
 - `accepted_at`: launch acceptance timestamp
-- `pipeline_mode`: selected pipeline mode, currently `simple` by default or `legacy` when requested
+- `pipeline_mode`: selected pipeline mode, currently always `simple`
 - `launcher_pid`: detached launcher process id
 - `launcher_stdout_path` / `launcher_stderr_path`: log files for background pipeline execution
 
@@ -227,7 +219,7 @@ Response schema:
   "run_id": "run_game_obfuscator_20260427T025801Z",
   "run_dir": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z",
   "status": "running",
-  "current_phase": "separate_obfuscation_running",
+  "current_phase": "simple_obfuscation_started",
   "created_at": "2026-04-27T02:58:01Z",
   "started_at": "2026-04-27T02:58:02Z",
   "completed_at": null,
@@ -247,17 +239,13 @@ Response schema:
     "pid": 36521,
     "command": [
       "/absolute/path/to/python",
-      "/absolute/path/to/scripts/run_game_obfuscator_pipeline.py",
+      "/absolute/path/to/scripts/run_game_obfuscator_simple_pipeline.py",
       "--run-dir",
-      "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z",
-      "--timeout-ms",
-      "8000",
-      "--max-game-seconds",
-      "300"
+      "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z"
     ],
     "stdout_path": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z/logs/launcher.stdout.log",
     "stderr_path": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z/logs/launcher.stderr.log",
-    "pipeline_script": "/absolute/path/to/scripts/run_game_obfuscator_pipeline.py",
+    "pipeline_script": "/absolute/path/to/scripts/run_game_obfuscator_simple_pipeline.py",
     "python_executable": "/absolute/path/to/python"
   }
 }
@@ -326,7 +314,7 @@ Base response schema:
   "run_id": "run_game_obfuscator_20260427T025801Z",
   "run_dir": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z",
   "status": "running",
-  "current_phase": "separate_obfuscation_running",
+  "current_phase": "simple_obfuscation_started",
   "output_path": "/absolute/path/to/runs/run_game_obfuscator_20260427T025801Z/output",
   "completed": false
 }

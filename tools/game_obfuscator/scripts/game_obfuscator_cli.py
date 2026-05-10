@@ -124,17 +124,6 @@ def build_result_payload(run_dir: Path, *, include_games: bool = False) -> dict[
 def handle_start(args: argparse.Namespace) -> None:
     python_executable = select_python_executable()
 
-    if args.pipeline == "legacy":
-        print(
-            json.dumps(
-                {
-                    "warning": "The legacy pipeline is deprecated and scheduled for removal. Use the default simple pipeline unless you are explicitly validating historical behavior."
-                },
-                indent=2,
-            ),
-            file=sys.stderr,
-        )
-
     create_result = run_python_script(
         "create_run.py",
         "--manifest",
@@ -161,25 +150,12 @@ def handle_start(args: argparse.Namespace) -> None:
     env["PYTHONPATH"] = str(SCRIPTS_DIR) if not existing_pythonpath else f"{SCRIPTS_DIR}:{existing_pythonpath}"
     env["GAME_OBFUSCATOR_PYTHON"] = python_executable
 
-    pipeline_script_name = (
-        "run_game_obfuscator_simple_pipeline.py" if args.pipeline == "simple" else "run_game_obfuscator_pipeline.py"
-    )
-
     command = [
         python_executable,
-        str(SCRIPTS_DIR / pipeline_script_name),
+        str(SCRIPTS_DIR / "run_game_obfuscator_simple_pipeline.py"),
         "--run-dir",
         str(run_dir),
     ]
-    if args.pipeline == "legacy":
-        command.extend(
-            [
-                "--timeout-ms",
-                str(args.timeout_ms),
-                "--max-game-seconds",
-                str(args.max_game_seconds),
-            ]
-        )
 
     with stdout_log.open("w", encoding="utf-8") as stdout_handle, stderr_log.open("w", encoding="utf-8") as stderr_handle:
         process = subprocess.Popen(
@@ -200,7 +176,7 @@ def handle_start(args: argparse.Namespace) -> None:
         "command": command,
         "stdout_path": str(stdout_log.resolve()),
         "stderr_path": str(stderr_log.resolve()),
-        "pipeline_mode": args.pipeline,
+        "pipeline_mode": "simple",
     }
     write_json(run_state_path, run_state)
 
@@ -214,7 +190,7 @@ def handle_start(args: argparse.Namespace) -> None:
             "status": run_state.get("status"),
             "current_phase": run_state.get("current_phase"),
             "accepted_at": run_state.get("accepted_at"),
-            "pipeline_mode": args.pipeline,
+            "pipeline_mode": "simple",
             "launcher_pid": process.pid,
             "launcher_stdout_path": str(stdout_log.resolve()),
             "launcher_stderr_path": str(stderr_log.resolve()),
@@ -239,19 +215,6 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser = subparsers.add_parser("start", help="Create a run, launch the pipeline in the background, and return immediately.")
     start_parser.add_argument("--manifest", required=True, help="Path to the input manifest JSON file.")
     start_parser.add_argument("--run-id", help="Optional explicit run id.")
-    start_parser.add_argument(
-        "--pipeline",
-        choices=["simple", "legacy"],
-        default="simple",
-        help="Pipeline mode to launch. 'simple' is the recommended deterministic default; 'legacy' is deprecated and scheduled for removal.",
-    )
-    start_parser.add_argument("--timeout-ms", type=int, default=8000, help="Playwright verification timeout in milliseconds.")
-    start_parser.add_argument(
-        "--max-game-seconds",
-        type=int,
-        default=300,
-        help="Maximum allowed wall-clock time for one game during separate obfuscation.",
-    )
     start_parser.set_defaults(func=handle_start)
 
     status_parser = subparsers.add_parser("status", help="Get canonical run status from run_state.json.")
