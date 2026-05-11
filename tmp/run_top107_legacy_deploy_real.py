@@ -33,7 +33,7 @@ def main() -> None:
 
     results = []
     for source in sources:
-        result = deploy_one(source=source, published_root=PUBLISHED_ROOT, overwrite=False, dry_run=False)
+        result = deploy_one(source=source, published_root=PUBLISHED_ROOT, overwrite=True, dry_run=False)
         results.append(
             {
                 "source": str(source),

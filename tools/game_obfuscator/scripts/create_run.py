@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from orchestration_state import ensure_game_timestamps, ensure_run_timestamps, write_json
+from orchestration_state import entry_key_from_output_path, ensure_game_timestamps, ensure_run_timestamps, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,17 +83,28 @@ def main() -> None:
     )
     write_json(run_dir / "run_state.json", run_state)
 
+    manifest_games: list[dict] = []
     for game in selected_games:
         game_id = game["game_id"]
-        game_dir = run_dir / "games" / game_id
-        game_dir.mkdir(parents=True, exist_ok=True)
         resolved_output_path = str(Path(game.get("output_path")).resolve()) if game.get("output_path") else str(output_root / game_id)
+        entry_key = str(game.get("entry_key") or entry_key_from_output_path(resolved_output_path))
+
+        manifest_game = {
+            **game,
+            "entry_key": entry_key,
+            "output_path": resolved_output_path,
+        }
+        manifest_games.append(manifest_game)
+
+        game_dir = run_dir / "games" / entry_key
+        game_dir.mkdir(parents=True, exist_ok=True)
         game_state = ensure_game_timestamps(
             {
+                "entry_key": entry_key,
                 "game_id": game_id,
                 "display_name": game.get("display_name"),
                 "source_path": game.get("source_path"),
-                "input_mirror_path": str(run_dir / "input" / game_id),
+                "input_mirror_path": str(run_dir / "input" / entry_key),
                 "working_path": str(game_dir / "working"),
                 "output_path": resolved_output_path,
                 "artifacts_path": str(Path(resolved_output_path) / "artifacts"),
@@ -106,6 +117,10 @@ def main() -> None:
             }
         )
         write_json(game_dir / "game_state.json", game_state)
+
+    manifest_copy["games"] = manifest_games
+
+    write_json(run_dir / "input_manifest.json", manifest_copy)
 
     print(run_dir)
 

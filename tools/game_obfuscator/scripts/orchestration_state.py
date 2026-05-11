@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,8 +24,26 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temp_path, path)
 
 
-def game_state_path(run_dir: Path, game_id: str) -> Path:
-    return run_dir / "games" / game_id / "game_state.json"
+def sanitize_entry_key(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "__", value.strip("/"))
+    sanitized = sanitized.strip("._-")
+    if not sanitized:
+        raise ValueError("Could not derive a valid entry key.")
+    return sanitized
+
+
+def entry_key_from_output_path(output_path: str | Path) -> str:
+    path = Path(output_path)
+    parts = [part for part in path.parts if part not in {"/", ""}]
+    if len(parts) >= 2:
+        return sanitize_entry_key("__".join(parts[-2:]))
+    if parts:
+        return sanitize_entry_key(parts[-1])
+    raise ValueError(f"Could not derive entry key from output path: {output_path}")
+
+
+def game_state_path(run_dir: Path, entry_key: str) -> Path:
+    return run_dir / "games" / entry_key / "game_state.json"
 
 
 def run_state_path(run_dir: Path) -> Path:
@@ -63,7 +82,7 @@ def ensure_run_timestamps(run_state: dict[str, Any]) -> dict[str, Any]:
 
 def update_game_state(
     run_dir: Path,
-    game_id: str,
+    entry_key: str,
     *,
     status: str | None = None,
     phase: str | None = None,
@@ -76,7 +95,7 @@ def update_game_state(
     artifacts: dict[str, Any] | None = None,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    path = game_state_path(run_dir, game_id)
+    path = game_state_path(run_dir, entry_key)
     game_state = ensure_game_timestamps(load_json(path))
     now = utc_now()
 
@@ -121,7 +140,7 @@ def recompute_run_state(run_dir: Path, *, current_phase: str | None = None, note
     run_state = ensure_run_timestamps(load_json(run_state_path(run_dir)))
     manifest = load_json(run_dir / "input_manifest.json")
     game_states = [
-        ensure_game_timestamps(load_json(game_state_path(run_dir, game["game_id"])))
+        ensure_game_timestamps(load_json(game_state_path(run_dir, game["entry_key"])))
         for game in manifest.get("games", [])
     ]
 
@@ -188,11 +207,11 @@ def recompute_run_state(run_dir: Path, *, current_phase: str | None = None, note
 
 def detect_stale_game(
     run_dir: Path,
-    game_id: str,
+    entry_key: str,
     *,
     stale_after_seconds: int,
 ) -> dict[str, Any]:
-    path = game_state_path(run_dir, game_id)
+    path = game_state_path(run_dir, entry_key)
     game_state = ensure_game_timestamps(load_json(path))
     heartbeat_at = game_state.get("heartbeat_at") or game_state.get("updated_at")
     if not heartbeat_at:
@@ -203,7 +222,7 @@ def detect_stale_game(
     if game_state.get("status") == "running" and age_seconds > stale_after_seconds:
         return update_game_state(
             run_dir,
-            game_id,
+            entry_key,
             status="stalled",
             phase=game_state.get("current_phase", "stalled"),
             last_error=f"No heartbeat detected for {age_seconds} seconds.",

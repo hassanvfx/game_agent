@@ -13,6 +13,7 @@ from orchestration_state import load_json, recompute_run_state, update_game_stat
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
+DEFAULT_PRESERVED_SURFACE_FOLDERS = ("assets", "screenshots")
 
 
 def utc_now() -> str:
@@ -44,16 +45,29 @@ def run_transformer(target_dir: Path) -> dict:
         raise RuntimeError(f"Transformer did not return valid JSON: {exc}") from exc
 
 
-def prune_retained_surface(target_dir: Path) -> dict:
+def normalize_preserved_surface_folders(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return DEFAULT_PRESERVED_SURFACE_FOLDERS
+    normalized = []
+    for item in value:
+        text = str(item).strip()
+        if not text or text == "." or "/" in text:
+            continue
+        normalized.append(text)
+    return tuple(dict.fromkeys(normalized)) or DEFAULT_PRESERVED_SURFACE_FOLDERS
+
+
+def prune_retained_surface(target_dir: Path, preserved_folders: tuple[str, ...]) -> dict:
     kept_files: list[str] = []
     removed_files: list[str] = []
     removed_dirs: list[str] = []
+    preserved_folder_set = set(preserved_folders)
 
     for child in sorted(target_dir.iterdir(), key=lambda item: item.name):
         if child.name == "index.html":
             kept_files.append(child.name)
             continue
-        if child.name == "assets" and child.is_dir():
+        if child.name in preserved_folder_set and child.is_dir():
             continue
         if child.is_dir():
             shutil.rmtree(child)
@@ -80,15 +94,24 @@ def prune_retained_surface(target_dir: Path) -> dict:
             dir_path.rmdir()
             removed_dirs.append(dir_path.relative_to(target_dir).as_posix())
 
+    for folder_name in preserved_folders:
+        preserved_dir = target_dir / folder_name
+        if not preserved_dir.exists() or folder_name == "assets":
+            continue
+        for file_path in sorted(preserved_dir.rglob("*")):
+            if file_path.is_file():
+                kept_files.append(file_path.relative_to(target_dir).as_posix())
+
     return {
+        "preserved_folders": list(preserved_folders),
         "kept_files": kept_files,
         "removed_files": removed_files,
         "removed_dirs": removed_dirs,
     }
 
 
-def obfuscate_game_output(run_dir: Path, game_id: str) -> dict:
-    game_state_path = run_dir / "games" / game_id / "game_state.json"
+def obfuscate_game_output(run_dir: Path, entry_key: str) -> dict:
+    game_state_path = run_dir / "games" / entry_key / "game_state.json"
     game_state = load_json(game_state_path)
 
     mirror_dir = Path(game_state["input_mirror_path"])
@@ -101,15 +124,18 @@ def obfuscate_game_output(run_dir: Path, game_id: str) -> dict:
     if not (mirror_dir / "index.html").exists():
         raise FileNotFoundError(f"Missing mirrored index.html: {mirror_dir / 'index.html'}")
 
+    preserved_folders = normalize_preserved_surface_folders(game_state.get("preserved_surface_folders"))
     mirror_directory(mirror_dir, output_dir)
-    prune_report = prune_retained_surface(output_dir)
+    prune_report = prune_retained_surface(output_dir, preserved_folders)
     transform_report = run_transformer(output_dir)
 
     report = {
         "generated_at": utc_now(),
-        "game_id": game_id,
+        "entry_key": entry_key,
+        "game_id": game_state["game_id"],
         "source_mirror_path": str(mirror_dir),
         "output_path": str(output_dir),
+        "preserved_surface_folders": list(preserved_folders),
         "prune_report": prune_report,
         "transformer_report": transform_report,
     }
@@ -134,9 +160,10 @@ def main() -> None:
 
     for game in manifest.get("games", []):
         game_id = game["game_id"]
+        entry_key = game["entry_key"]
         update_game_state(
             run_dir,
-            game_id,
+            entry_key,
             status="running",
             phase="simple_obfuscation_started",
             last_error=None,
@@ -147,12 +174,12 @@ def main() -> None:
         )
 
         try:
-            report = obfuscate_game_output(run_dir, game_id)
+            report = obfuscate_game_output(run_dir, entry_key)
         except Exception as exc:
-            artifacts_dir = Path(load_json(run_dir / "games" / game_id / "game_state.json")["artifacts_path"])
+            artifacts_dir = Path(load_json(run_dir / "games" / entry_key / "game_state.json")["artifacts_path"])
             update_game_state(
                 run_dir,
-                game_id,
+                entry_key,
                 status="failed",
                 phase="simple_obfuscation_failed",
                 last_error=str(exc),
@@ -167,10 +194,10 @@ def main() -> None:
             continue
 
         obfuscated_games += 1
-        artifacts_dir = Path(load_json(run_dir / "games" / game_id / "game_state.json")["artifacts_path"])
+        artifacts_dir = Path(load_json(run_dir / "games" / entry_key / "game_state.json")["artifacts_path"])
         update_game_state(
             run_dir,
-            game_id,
+            entry_key,
             status="succeeded",
             phase="simple_obfuscation_complete",
             last_error=None,

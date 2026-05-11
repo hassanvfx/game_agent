@@ -19,6 +19,7 @@ PUBLISHED_PUBLIC_ROOT = GAMES_ROOT / "published" / "public"
 PUBLISHED_OBFUSCATED_ROOT = GAMES_ROOT / "published" / "obfuscated"
 OBFUSCATOR_ROOT = REPO_ROOT / "tools" / "game_obfuscator"
 DEPLOY_SCRIPT = REPO_ROOT / "tools" / "game_deploy" / "scripts" / "deploy_games.py"
+REFRESH_APP_ARTIFACTS_SCRIPT = REPO_ROOT / "tools" / "game_publish_pipeline" / "scripts" / "refresh_app_artifacts.py"
 
 
 def load_json(path: Path) -> Any:
@@ -74,6 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report-path", help="Optional explicit final pipeline report path.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing raw remix staging folders.")
     parser.add_argument("--dry-run", action="store_true", help="Prepare and print the plan without running subprocesses.")
+    parser.add_argument("--refresh-app-artifacts-manifest", help="Optional manifest used to refresh annotator-facing app artifacts after publish.")
+    parser.add_argument("--refresh-app-artifacts-collection-slug", default="vatsal_app_alpha", help="Collection slug for refreshed app artifacts.")
     return parser
 
 
@@ -272,6 +275,29 @@ def run_pipeline(args: argparse.Namespace) -> int:
             "game_outputs": obfuscation_game_outputs,
         },
     }
+
+    if args.refresh_app_artifacts_manifest:
+        refresh_manifest_path = Path(args.refresh_app_artifacts_manifest).resolve()
+        refresh_result = run_command(
+            [
+                sys.executable,
+                str(REFRESH_APP_ARTIFACTS_SCRIPT),
+                "--manifest",
+                str(refresh_manifest_path),
+                "--collection-slug",
+                str(args.refresh_app_artifacts_collection_slug),
+                "--public-root",
+                str(published_public_root),
+                "--obfuscated-root",
+                str(published_obfuscated_root),
+            ]
+        )
+        final_report["app_artifacts_refresh"] = {
+            "manifest_path": str(refresh_manifest_path),
+            "collection_slug": str(args.refresh_app_artifacts_collection_slug),
+            "result": refresh_result.get("payload"),
+        }
+
     write_json(report_path, final_report)
     print(json.dumps(final_report, indent=2))
     return 0

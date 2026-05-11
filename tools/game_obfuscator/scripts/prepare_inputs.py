@@ -57,14 +57,15 @@ def main() -> None:
 
     for game in manifest.get("games", []):
         game_id = game["game_id"]
+        entry_key = game["entry_key"]
         source_path = Path(game["source_path"]).resolve()
-        game_state_path = run_dir / "games" / game_id / "game_state.json"
+        game_state_path = run_dir / "games" / entry_key / "game_state.json"
         game_state = load_json(game_state_path)
         mirror_dir = Path(game_state["input_mirror_path"])
 
         update_game_state(
             run_dir,
-            game_id,
+            entry_key,
             status="running",
             phase="input_prepare_started",
             last_error=None,
@@ -100,7 +101,7 @@ def main() -> None:
 
         update_game_state(
             run_dir,
-            game_id,
+            entry_key,
             status=status,
             phase=next_phase,
             last_error=last_error,
@@ -116,6 +117,7 @@ def main() -> None:
 
         integrity_report["games"].append(
             {
+                "entry_key": entry_key,
                 "game_id": game_id,
                 "display_name": game.get("display_name"),
                 "source_path": str(source_path),
