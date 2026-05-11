@@ -613,3 +613,47 @@ Verified summary:
 ---
 
 *This journal is the master planning source for the Vatsaltop100 app alpha published catalog and annotator collection work.*
+
+### 2026-05-10 18:35 - Obfuscation contract mapped into dataset generation
+
+**What Changed:**
+- Updated `scripts/generate_published_app_metadata.py` so obfuscation detection follows the publisher contract instead of relying only on a naive remix-relative mirror path.
+- Added per-item `obfuscation_status` metadata to generated records in:
+  - `index.json`
+  - `app_tags.json`
+  - `app.json`
+- Added contract loading from:
+  - `tmp/retry_manifests/latest_selected_remix_obfuscator_manifest.json`
+- Added fallback resolution for the actual published obfuscated layout now observed in the repository:
+  - `games/published/obfuscated/<game_id>/index.html`
+- Regenerated the `vatsal_app_alpha` dataset with the new contract-aware fields.
+- Updated `tmp/verify_obfuscated_path_shape.py` to validate the saved per-item obfuscation status instead of only checking a guessed path shape.
+
+**Why:**
+- The annotator needs verified per-item play targets, not guessed path rewrites.
+- The obfuscator manifest still reflects the publisher contract inputs, but the current obfuscated output layout is game-level in practice for most published outputs.
+- Saving explicit status in generated metadata makes the dataset the source of truth for downstream UI behavior.
+
+**Validation Summary:**
+- Regenerated entries: `231`
+- Verification output:
+  - `checked_count = 231`
+  - `with_variant_count = 229`
+  - `missing_contract_index_count = 0`
+  - `missing_contract_match_count = 182`
+- Interpretation:
+  - `229/231` items now resolve to a verified obfuscated playable target.
+  - The manifest-based contract only directly matched the historical 49-item selected-remix subset.
+  - The broader `229` coverage comes from validating the actual published obfuscated game-level layout.
+
+**Files Changed:**
+- `scripts/generate_published_app_metadata.py`
+- `tmp/regenerate_vatsal_app_alpha_with_obfuscation_fields.py`
+- `tmp/verify_obfuscated_path_shape.py`
+- `games/published/public/vatsal_app_alpha-index.json`
+- `games/published/public/vatsal_app_alpha-app_tags.json`
+- `games/published/public/vatsal_app_alpha-app.json`
+
+**Notes for Follow-up:**
+- The generator contract is now good enough for annotator consumption.
+- Remaining UI work is to move the obfuscation toggle into the iframe toolbar and validate reload behavior against `vatsal_app_alpha`.

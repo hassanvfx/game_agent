@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -186,6 +187,109 @@ def infer_lineage_fields(entry: dict[str, Any], metadata: dict[str, Any], game_i
     return None, str(root_game_id), lineage_depth
 
 
+@lru_cache(maxsize=1)
+def load_obfuscation_contract(published_root: Path) -> dict[str, dict[str, Any]]:
+    if published_root.name != "public":
+        return {}
+
+    manifest_candidates = [
+        ROOT / "tmp/retry_manifests/latest_selected_remix_obfuscator_manifest.json",
+    ]
+    contract: dict[str, dict[str, Any]] = {}
+
+    for manifest_path in manifest_candidates:
+        if not manifest_path.exists():
+            continue
+        payload = load_json(manifest_path)
+        games = payload.get("games") if isinstance(payload, dict) else None
+        if not isinstance(games, list):
+            continue
+        for item in games:
+            if not isinstance(item, dict):
+                continue
+            source_path = item.get("source_path")
+            if not isinstance(source_path, str) or not source_path.strip():
+                continue
+            source_dir = Path(source_path).resolve()
+            try:
+                relative_path = source_dir.relative_to(published_root).as_posix()
+            except ValueError:
+                continue
+            contract[relative_path] = dict(item)
+
+    return contract
+
+
+def resolve_obfuscated_variant(
+    published_root: Path, relative_path: str
+) -> tuple[str | None, dict[str, Any]]:
+    public_index_html = f"{relative_path}/index.html"
+    game_id = Path(relative_path).parts[0]
+    obfuscated_root = published_root.parent / "obfuscated"
+    status = {
+        "contract_source": "none",
+        "contract_matched": False,
+        "contract_has_output_path": False,
+        "contract_expected_output_path": None,
+        "contract_output_exists": False,
+        "contract_index_exists": False,
+        "resolved_index_html": None,
+    }
+
+    if published_root.name != "public":
+        return None, status
+
+    def evaluate_candidate(output_dir: Path, source: str, index_html: str) -> tuple[str | None, dict[str, Any]]:
+        candidate_status = dict(status)
+        candidate_status["contract_source"] = source
+        candidate_status["contract_expected_output_path"] = str(output_dir.resolve())
+        candidate_status["contract_output_exists"] = output_dir.exists()
+        index_path = output_dir / "index.html"
+        candidate_status["contract_index_exists"] = index_path.exists()
+        if index_path.exists():
+            candidate_status["resolved_index_html"] = index_html
+            return index_html, candidate_status
+        return None, candidate_status
+
+    obfuscation_contract = load_obfuscation_contract(published_root)
+    contract_entry = obfuscation_contract.get(relative_path)
+    if contract_entry:
+        status["contract_matched"] = True
+        output_path = contract_entry.get("output_path")
+        if isinstance(output_path, str) and output_path.strip():
+            status["contract_has_output_path"] = True
+            contract_variant, contract_status = evaluate_candidate(
+                Path(output_path), "latest_selected_remix_obfuscator_manifest", public_index_html
+            )
+            contract_status["contract_matched"] = True
+            contract_status["contract_has_output_path"] = True
+            if contract_variant is not None:
+                return contract_variant, contract_status
+            status = contract_status
+
+    game_level_variant, game_level_status = evaluate_candidate(
+        obfuscated_root / game_id,
+        "game_level_fallback",
+        f"{game_id}/index.html",
+    )
+    game_level_status["contract_matched"] = status["contract_matched"]
+    game_level_status["contract_has_output_path"] = status["contract_has_output_path"]
+    if game_level_variant is not None:
+        return game_level_variant, game_level_status
+
+    remix_level_variant, remix_level_status = evaluate_candidate(
+        obfuscated_root / relative_path,
+        "relative_path_fallback",
+        public_index_html,
+    )
+    remix_level_status["contract_matched"] = status["contract_matched"]
+    remix_level_status["contract_has_output_path"] = status["contract_has_output_path"]
+    if remix_level_variant is not None:
+        return remix_level_variant, remix_level_status
+
+    return None, status
+
+
 def build_entry_from_remix(
     published_root: Path,
     relative_path: str,
@@ -232,6 +336,9 @@ def build_entry_from_remix(
 
     composite = composite_key(game_id, remix_id)
     rel_prefix = Path(relative_path).as_posix()
+    public_index_html = f"{rel_prefix}/index.html"
+    obfuscated_index_html, obfuscation_status = resolve_obfuscated_variant(published_root, rel_prefix)
+    has_obfuscated_variant = obfuscated_index_html is not None
 
     app_tags_record = {
         "game_id": game_id,
@@ -240,7 +347,11 @@ def build_entry_from_remix(
         "remix_parent_id": remix_parent_id,
         "root_game_id": root_game_id,
         "lineage_depth": lineage_depth,
-        "index_html": f"{rel_prefix}/index.html",
+        "index_html": public_index_html,
+        "public_index_html": public_index_html,
+        "obfuscated_index_html": obfuscated_index_html,
+        "has_obfuscated_variant": has_obfuscated_variant,
+        "obfuscation_status": obfuscation_status,
         "screenshots": [f"{rel_prefix}/{path}" for path in screenshots],
         "mechanic_tags": derive_mechanic_tags(metadata),
         "semantic_tags": semantic_tag_bucket(metadata, "theme") or semantic_tag_bucket(metadata, "semantic_tags"),
@@ -267,7 +378,11 @@ def build_entry_from_remix(
         "root_game_id": root_game_id,
         "lineage_depth": lineage_depth,
         "game_root": rel_prefix,
-        "index_html": f"{rel_prefix}/index.html",
+        "index_html": public_index_html,
+        "public_index_html": public_index_html,
+        "obfuscated_index_html": obfuscated_index_html,
+        "has_obfuscated_variant": has_obfuscated_variant,
+        "obfuscation_status": obfuscation_status,
         "game_json": f"{rel_prefix}/{metadata_path.relative_to(remix_dir).as_posix()}",
         "screenshots_png": [f"{rel_prefix}/{path}" for path in screenshots_png],
         "screenshots_jpg": [f"{rel_prefix}/{path}" for path in screenshots_jpg],
