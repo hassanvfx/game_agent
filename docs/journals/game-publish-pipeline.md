@@ -460,6 +460,126 @@ The collision is fixed for the validated pilot. The obfuscator now honors the un
 
 **Status:** Complete
 
+### 2026-05-10 21:35 - Add generic post-publish integrity harness
+
+**What Changed:**
+Added a publisher-owned validation layer that audits the published contract across:
+- per-entry public outputs
+- per-entry obfuscated outputs
+- screenshot carry-through
+- generated app artifacts
+- annotator/dashboard artifacts
+
+**Files Updated:**
+- `tools/game_publish_pipeline/scripts/validate_published_outputs.py`
+- `tools/game_publish_pipeline/game_publish_pipeline/pipeline.py`
+- `tools/game_publish_pipeline/scripts/publish_vatsal_app_alpha_231.py`
+
+**Validation Harness Contract:**
+The new validator now supports two manifest shapes:
+1. canonical collection manifests with an `entries` array
+2. lightweight pilot manifests that are just a list of source paths
+
+It emits one machine-readable JSON report with:
+- `entry_results`
+- `app_artifacts`
+- `dashboard_artifacts`
+- `summary`
+
+**Entry-Level Checks:**
+For each manifest entry the validator checks:
+- public output directory exists
+- public `index.html` exists
+- obfuscated output directory exists
+- obfuscated `index.html` exists
+- screenshot directories exist when expected
+- public and obfuscated screenshot counts match
+- public and obfuscated screenshot filenames match
+- metadata path fields match expected published shapes when present
+
+**Artifact-Level Checks:**
+For collection artifacts the validator checks:
+- public:
+  - `<collection>-index.json`
+  - `<collection>-app_tags.json`
+  - `<collection>-app.json`
+- obfuscated:
+  - `<collection>-index.json`
+  - `<collection>-app_tags.json`
+  - `<collection>-app.json`
+- annotator/dashboard HTML exists in both public and obfuscated roots
+- artifact records align with manifest identity and point at real index/screenshot files
+
+**Pipeline Integration:**
+Extended `game_publish_pipeline` with optional post-step flags:
+- `--validate-published-manifest`
+- `--validate-published-collection-slug`
+- `--validate-published-annotator-html-name`
+- `--validate-published-strict`
+
+When provided, the pipeline now embeds validator output under:
+- `validation`
+
+**Wrapper Integration:**
+Updated `tools/game_publish_pipeline/scripts/publish_vatsal_app_alpha_231.py` so the canonical 231 wrapper now runs:
+1. top107 deploy
+2. 124 deploy
+3. app artifact refresh
+4. post-publish validation
+
+and prints the validation payload in its final JSON output.
+
+**Pilot Validation Outcome:**
+Ran the new validator against the fixed 10-item mixed-source pilot:
+- manifest:
+  - `tmp/retry_manifests/vatsal_app_alpha_10_pilot_manifest.json`
+- public root:
+  - `tmp/publisher_probe_10_v2/public`
+- obfuscated root:
+  - `tmp/publisher_probe_10_v2/obfuscated`
+- report:
+  - `tmp/publisher_probe_10_v2/validation_report.json`
+
+**Observed Result:**
+- entry integrity:
+  - `10 / 10` entries passed
+- screenshot parity:
+  - preserved for all 10 entries
+- collection/app artifacts:
+  - missing in the pilot root
+- annotator/dashboard artifacts:
+  - missing in the pilot root
+
+**Interpretation:**
+This is the expected split for the pilot root because it validated only publish + obfuscation outputs, not the downstream app-artifact refresh/dashboard generation stages. The harness is therefore behaving correctly: it passes the game-level publishing contract and explicitly reports the missing downstream collection artifacts instead of silently treating the pilot as fully healthy.
+
+**Failure Taxonomy Introduced:**
+- `missing_public_output`
+- `missing_public_index`
+- `missing_obfuscated_output`
+- `missing_obfuscated_index`
+- `missing_public_screenshots_dir`
+- `missing_obfuscated_screenshots_dir`
+- `public_screenshot_count_mismatch`
+- `public_screenshot_name_mismatch`
+- `screenshot_count_mismatch`
+- `screenshot_name_mismatch`
+- `metadata_public_index_mismatch`
+- `metadata_obfuscated_index_mismatch`
+- `missing_app_artifact`
+- `invalid_app_artifact_format`
+- `missing_app_entries`
+- `unexpected_app_entries`
+- `catalog_game_id_mismatch`
+- `catalog_remix_id_mismatch`
+- `catalog_published_path_mismatch`
+- `broken_app_public_reference`
+- `broken_app_obfuscated_reference`
+- `broken_app_screenshot_reference`
+- `missing_dashboard_artifact`
+
+**Status:** Complete
+
 ---
 
 ## 📚 Quick Reference
@@ -488,6 +608,110 @@ python3 tools/game_publish_pipeline/scripts/publish_games.py --inputs /path/to/r
 - [x] Feeds obfuscator outputs into `game_deploy`
 - [x] Emits one final machine-readable pipeline report
 - [x] Stays aligned with the simplified external-agent contract documented for `game_obfuscator`
+
+### 2026-05-10 23:49 - Persistent unprefixed app artifact contract
+**What Changed:**
+Refactored the downstream app-artifact refresh/validation contract away from the deleted annotator dependency and away from prefixed collection filenames.
+
+**Refresh Contract Update:**
+Updated `tools/game_publish_pipeline/scripts/refresh_app_artifacts.py` to:
+- stop expecting or copying any annotator HTML artifact
+- write public collection artifacts to:
+  - `games/published/public/app.json`
+  - `games/published/public/app_tags.json`
+  - `games/published/public/index.json`
+- write obfuscated collection artifacts to:
+  - `games/published/obfuscated/app.json`
+  - `games/published/obfuscated/app_tags.json`
+  - `games/published/obfuscated/index.json`
+
+**Persistence Model:**
+Changed refresh from scratch-regeneration of prefixed files into lazy initialization / merge-on-disk behavior:
+- load existing JSON object if present
+- load newly generated artifact payload
+- merge records by `composite_key`
+- write the merged object back to disk
+
+This applies to both:
+- public artifact stores
+- obfuscated artifact stores
+
+**Obfuscated Catalog Behavior:**
+Kept the existing path-shaping transform for obfuscated records, including:
+- `index_html` remapped to `obfuscated_index_html`
+- `published_path` preserved from the public record
+- `assets_css` / `assets_js` / `all_files` rewritten relative to the obfuscated game root where needed
+
+**Validation Contract Update:**
+Updated `tools/game_publish_pipeline/scripts/validate_published_outputs.py` to:
+- stop requiring annotator/dashboard artifacts
+- validate the unprefixed filenames:
+  - `index.json`
+  - `app_tags.json`
+  - `app.json`
+- keep the per-entry public/obfuscated output checks
+- keep screenshot parity checks
+- keep app-record integrity checks against manifest-derived `composite_key`, `game_id`, `remix_id`, and `published_path`
+
+**Why:**
+This matches the newer publishing contract:
+- no annotator requirement for now
+- public acts as the persistent stage
+- obfuscated acts as the persistent final derivative
+- app artifact files should behave like continuously enriched stores instead of ephemeral prefixed collection snapshots
+
+**Manifest Documentation Promotion:**
+Promoted the canonical publish batch specs out of `tmp/retry_manifests/` into a first-class documentation location:
+- `docs/publish_manifests/vatsal_app_alpha_231_manifest.json`
+- `docs/publish_manifests/vatsal_app_alpha_20_pilot_manifest.json`
+
+Updated `tools/game_publish_pipeline/scripts/publish_vatsal_app_alpha_231.py` so its default `--collection-manifest` now points at:
+- `docs/publish_manifests/vatsal_app_alpha_231_manifest.json`
+
+**Why:**
+These files are no longer just throwaway retry artifacts. They now act as stable publish input contracts:
+- they define the source batch
+- they preserve per-entry metadata
+- they document which collection is intended for the canonical wrapper
+
+**Isolated Cloud Sync Step:**
+Added `tools/game_publish_pipeline/scripts/sync_to_gcs.py` as a separate final-mile deploy helper for Google Cloud Storage.
+
+**Behavior:**
+- supports:
+  - `--target public`
+  - `--target obfuscated`
+  - `--target both`
+- defaults:
+  - local public root:
+    - `games/published/public`
+  - local obfuscated root:
+    - `games/published/obfuscated`
+  - public destination:
+    - `gs://friendjam-ios/games/public`
+  - obfuscated destination:
+    - `gs://friendjam-ios/games/play`
+  - project:
+    - `jabali-prod`
+
+**Purpose:**
+This intentionally keeps cloud sync outside the canonical local publish pipeline so the last step can be run in isolation:
+- publish only
+- sync only
+- public-only sync
+- obfuscated-only sync
+
+**Verification:**
+Ran:
+- `python tools/game_publish_pipeline/scripts/sync_to_gcs.py --target both --dry-run`
+
+Confirmed the script emits the expected two `gcloud storage rsync -r ...` commands with the correct local roots and destination buckets.
+
+**Documentation Follow-up:**
+Updated `tools/game_publish_pipeline/README.md` with a dedicated “Separate GCS sync step” section and example commands.
+
+**Follow-up:**
+Next operator step after a successful full publish is to run the sync helper against the desired target(s).
 
 ---
 

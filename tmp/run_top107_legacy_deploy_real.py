@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+"""
+DEPRECATED LEGACY SCRIPT.
+
+This script only rebuilds public deploy outputs for the legacy top107 batch and
+does NOT run the canonical publish pipeline, obfuscation stage, app-artifact
+refresh, or post-publish validation.
+
+Do not use this script for the canonical Vatsal App Alpha workflow.
+Use instead:
+  python tools/game_publish_pipeline/scripts/publish_vatsal_app_alpha_231.py
+
+Kept only as historical reference while the canonical pilot-scaled path is
+rolled out.
+"""
 from __future__ import annotations
 
 import json

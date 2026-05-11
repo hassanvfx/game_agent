@@ -20,6 +20,7 @@ PUBLISHED_OBFUSCATED_ROOT = GAMES_ROOT / "published" / "obfuscated"
 OBFUSCATOR_ROOT = REPO_ROOT / "tools" / "game_obfuscator"
 DEPLOY_SCRIPT = REPO_ROOT / "tools" / "game_deploy" / "scripts" / "deploy_games.py"
 REFRESH_APP_ARTIFACTS_SCRIPT = REPO_ROOT / "tools" / "game_publish_pipeline" / "scripts" / "refresh_app_artifacts.py"
+VALIDATE_PUBLISHED_OUTPUTS_SCRIPT = REPO_ROOT / "tools" / "game_publish_pipeline" / "scripts" / "validate_published_outputs.py"
 
 
 def load_json(path: Path) -> Any:
@@ -77,6 +78,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="Prepare and print the plan without running subprocesses.")
     parser.add_argument("--refresh-app-artifacts-manifest", help="Optional manifest used to refresh annotator-facing app artifacts after publish.")
     parser.add_argument("--refresh-app-artifacts-collection-slug", default="vatsal_app_alpha", help="Collection slug for refreshed app artifacts.")
+    parser.add_argument("--validate-published-manifest", help="Optional manifest used by the post-publish integrity validator.")
+    parser.add_argument(
+        "--validate-published-collection-slug",
+        default="vatsal_app_alpha",
+        help="Collection slug for post-publish integrity validation artifacts.",
+    )
+    parser.add_argument(
+        "--validate-published-annotator-html-name",
+        default="565a0bf4-5160-47b8-a905-2f4362475cdf-annotator.html",
+        help="Annotator/dashboard file expected by the post-publish integrity validator.",
+    )
+    parser.add_argument(
+        "--validate-published-strict",
+        action="store_true",
+        help="Fail the pipeline if the post-publish integrity validator reports any required failures.",
+    )
     return parser
 
 
@@ -134,24 +151,14 @@ def compute_folder_content_hash(source_dir: Path) -> str:
     return digest.hexdigest()[:32]
 
 
-def stage_raw_remix(source_dir: Path, raw_root: Path, overwrite: bool, dry_run: bool) -> dict[str, Any]:
+def build_publish_input(source_dir: Path) -> dict[str, Any]:
     game_id = infer_game_id(source_dir)
     remix_hash = compute_folder_content_hash(source_dir)
-    staged_dir = raw_root / game_id / f"remix-{remix_hash}"
-
-    if not dry_run:
-        if staged_dir.exists():
-            if not overwrite:
-                raise FileExistsError(f"Raw remix staging directory already exists: {staged_dir}")
-            shutil.rmtree(staged_dir)
-        staged_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_dir, staged_dir)
-
     return {
         "source_input": str(source_dir),
         "game_id": game_id,
         "remix_hash": remix_hash,
-        "raw_remix_dir": str(staged_dir),
+        "publish_source_dir": str(source_dir),
     }
 
 
@@ -164,7 +171,7 @@ def write_temp_manifest(prefix: str, payload: Any) -> Path:
 
 
 def build_deploy_manifest(staged_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [{"source": item["raw_remix_dir"]} for item in staged_items]
+    return [{"source": item["publish_source_dir"]} for item in staged_items]
 
 
 def build_obfuscator_manifest_from_public_deploys(
@@ -197,14 +204,30 @@ def run_pipeline(args: argparse.Namespace) -> int:
     source_inputs = resolve_source_inputs(args)
     report_path = build_report_path(args)
 
-    staged_items = [stage_raw_remix(source, raw_root, args.overwrite, args.dry_run) for source in source_inputs]
+    total_inputs = len(source_inputs)
+    print(f"[pipeline] source inputs: {total_inputs}", flush=True)
+    print(f"[pipeline] public root (stage): {published_public_root}", flush=True)
+    print(f"[pipeline] obfuscated root: {published_obfuscated_root}", flush=True)
+    print(f"[pipeline] report path: {report_path}", flush=True)
+
+    print(f"[1/4] Public stage deploy ({total_inputs} items)", flush=True)
+    staged_items = []
+    for index, source in enumerate(source_inputs, start=1):
+        staged_item = build_publish_input(source)
+        staged_items.append(staged_item)
+        print(
+            f"[public-stage {index}/{total_inputs}] {staged_item['game_id']} -> remix-{staged_item['remix_hash']}",
+            flush=True,
+        )
+
     deploy_manifest = build_deploy_manifest(staged_items)
     deploy_manifest_path = write_temp_manifest("game-publish-pipeline-deploy-", deploy_manifest)
+    print(f"[pipeline] deploy manifest: {deploy_manifest_path}", flush=True)
 
     if args.dry_run:
         payload = {
             "source_inputs": [str(path) for path in source_inputs],
-            "staged_raw_remixes": staged_items,
+            "publish_inputs": staged_items,
             "deploy_manifest_path": str(deploy_manifest_path),
             "published_public_root": str(published_public_root),
             "published_obfuscated_root": str(published_obfuscated_root),
@@ -213,26 +236,36 @@ def run_pipeline(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
-    deploy_result = run_command(
-        [
-            sys.executable,
-            str(DEPLOY_SCRIPT),
-            "--manifest",
-            str(deploy_manifest_path),
-            "--published-root",
-            str(published_public_root),
-        ]
-    )
+    print(f"[1/4] Public stage deploy ({total_inputs} items)", flush=True)
+    deploy_command = [
+        sys.executable,
+        str(DEPLOY_SCRIPT),
+        "--manifest",
+        str(deploy_manifest_path),
+        "--published-root",
+        str(published_public_root),
+    ]
+    if args.overwrite:
+        deploy_command.append("--overwrite")
+    print(f"[pipeline] deploy command: {' '.join(deploy_command)}", flush=True)
+    deploy_result = run_command(deploy_command)
     deploy_payload = deploy_result["payload"] or {}
     deploy_results = deploy_payload.get("results", [])
     if not isinstance(deploy_results, list):
         raise RuntimeError("game_deploy did not return a results array")
 
+    for index, item in enumerate(deploy_results, start=1):
+        print(
+            f"[deploy {index}/{len(deploy_results)}] {item['game_id']} -> {item['deploy_dir']}",
+            flush=True,
+        )
+
+    print(f"[2/4] Obfuscation ({len(deploy_results)} items)", flush=True)
     obfuscator_manifest = build_obfuscator_manifest_from_public_deploys(deploy_results, published_obfuscated_root)
     obfuscator_manifest_path = write_temp_manifest("game-publish-pipeline-obfuscator-", obfuscator_manifest)
+    print(f"[pipeline] obfuscator manifest: {obfuscator_manifest_path}", flush=True)
 
-    start_result = run_command(
-        [
+    start_command = [
             sys.executable,
             str(OBFUSCATOR_ROOT / "scripts" / "game_obfuscator_cli.py"),
             "start",
@@ -241,12 +274,18 @@ def run_pipeline(args: argparse.Namespace) -> int:
             "--output-root",
             str(published_obfuscated_root),
         ]
+    print(f"[pipeline] obfuscator command: {' '.join(start_command)}", flush=True)
+    start_result = run_command(
+        start_command
     )
     start_payload = start_result["payload"] or {}
     run_id = start_payload.get("run_id")
     if not run_id:
         raise RuntimeError("Obfuscator start did not return run_id")
 
+    print(f"[pipeline] obfuscator run id: {run_id}", flush=True)
+    print(f"[pipeline] obfuscator run dir: {start_payload.get('run_dir')}", flush=True)
+    print(f"[pipeline] obfuscator dashboard: {start_payload.get('dashboard_path')}", flush=True)
     output_payload = {
         "run_id": start_payload.get("run_id"),
         "run_dir": start_payload.get("run_dir"),
@@ -260,7 +299,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
 
     final_report = {
         "source_inputs": [str(path) for path in source_inputs],
-        "raw_remix_staging": staged_items,
+        "public_stage_inputs": staged_items,
         "deployment": {
             "manifest_path": str(deploy_manifest_path),
             "published_public_root": str(published_public_root),
@@ -277,9 +316,9 @@ def run_pipeline(args: argparse.Namespace) -> int:
     }
 
     if args.refresh_app_artifacts_manifest:
+        print("[3/4] Refresh app artifacts", flush=True)
         refresh_manifest_path = Path(args.refresh_app_artifacts_manifest).resolve()
-        refresh_result = run_command(
-            [
+        refresh_command = [
                 sys.executable,
                 str(REFRESH_APP_ARTIFACTS_SCRIPT),
                 "--manifest",
@@ -291,6 +330,9 @@ def run_pipeline(args: argparse.Namespace) -> int:
                 "--obfuscated-root",
                 str(published_obfuscated_root),
             ]
+        print(f"[pipeline] refresh command: {' '.join(refresh_command)}", flush=True)
+        refresh_result = run_command(
+            refresh_command
         )
         final_report["app_artifacts_refresh"] = {
             "manifest_path": str(refresh_manifest_path),
@@ -298,6 +340,47 @@ def run_pipeline(args: argparse.Namespace) -> int:
             "result": refresh_result.get("payload"),
         }
 
+    if args.validate_published_manifest:
+        print("[4/4] Validate published outputs", flush=True)
+        validate_manifest_path = Path(args.validate_published_manifest).resolve()
+        validate_command = [
+            sys.executable,
+            str(VALIDATE_PUBLISHED_OUTPUTS_SCRIPT),
+            "--manifest",
+            str(validate_manifest_path),
+            "--public-root",
+            str(published_public_root),
+            "--obfuscated-root",
+            str(published_obfuscated_root),
+            "--collection-slug",
+            str(args.validate_published_collection_slug),
+            "--annotator-html-name",
+            str(args.validate_published_annotator_html_name),
+        ]
+        if args.validate_published_strict:
+            validate_command.append("--strict")
+        print(f"[pipeline] validation command: {' '.join(validate_command)}", flush=True)
+        validate_result = run_command(validate_command)
+        final_report["validation"] = {
+            "manifest_path": str(validate_manifest_path),
+            "collection_slug": str(args.validate_published_collection_slug),
+            "annotator_html_name": str(args.validate_published_annotator_html_name),
+            "strict": bool(args.validate_published_strict),
+            "result": validate_result.get("payload"),
+        }
+
     write_json(report_path, final_report)
+    print(f"[pipeline] wrote final report: {report_path}", flush=True)
+    if "validation" in final_report:
+        summary = ((final_report.get("validation") or {}).get("result") or {}).get("summary") or {}
+        if summary:
+            print(
+                "[pipeline] validation summary: "
+                f"status={summary.get('status')} "
+                f"entries_passed={summary.get('entries_passed')} "
+                f"entries_failed={summary.get('entries_failed')} "
+                f"failure_count={summary.get('failure_count')}",
+                flush=True,
+            )
     print(json.dumps(final_report, indent=2))
     return 0
