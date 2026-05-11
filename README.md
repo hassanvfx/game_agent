@@ -207,6 +207,33 @@ Notes:
 - The destination object root is formed as `{prefix}/{destination-name}`.
 - Content types are inferred automatically when possible.
 
+## Published dashboard launch commands
+
+When referring to dashboards in this repository:
+
+- **public dashboard** = `games/published/public`
+- **play-obfuscated dashboard** or **obfuscated dashboard** = `games/published/obfuscated`
+
+Use the dedicated launcher so the repo manages the exclusive local port, replaces the previous dashboard server for that target, and opens the browser automatically.
+
+### Open the public dashboard
+
+```bash
+python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target public --open-browser
+```
+
+### Open the play-obfuscated dashboard
+
+```bash
+python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target obfuscated --open-browser
+```
+
+### Operational notes
+
+- Default local dashboard port: `43177`
+- Public dashboard log: `games/published/public/.annotator_server.log`
+- Obfuscated dashboard log: `games/published/obfuscated/.annotator_server.log`
+
 ## Notes
 
 - This repository is designed to prove runtime readiness, not full product behavior.

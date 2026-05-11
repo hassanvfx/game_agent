@@ -947,4 +947,46 @@ python3 tools/game_refactoring/scripts/game_workflow.py \
 
 ---
 
-**Last Updated:** May 8, 2026
+### SOP-011: Published Dashboard Launch Terminology
+
+**Purpose:** Standardize how to launch the local published annotator/dashboard views for public and play-obfuscated outputs in this repository.
+
+**Trigger Phrases:**
+- "open the dashboard"
+- "launch the dashboard"
+- "open public dashboard"
+- "open play-obfuscated dashboard"
+- "open obfuscated dashboard"
+
+**Repository Meaning:**
+- **public dashboard** = serve `games/published/public`
+- **play-obfuscated dashboard** / **obfuscated dashboard** = serve `games/published/obfuscated`
+
+**Required Command:**
+Use the dedicated launcher instead of telling the user to manually run `python -m http.server`:
+```bash
+# Public dashboard
+python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target public --open-browser
+
+# Play-obfuscated dashboard
+python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target obfuscated --open-browser
+```
+
+**Behavior Expectations:**
+- The launcher must stop the previous dashboard server for that target.
+- The launcher must reuse the exclusive local port.
+- The launcher must start the server itself.
+- The launcher must print the final dashboard URL.
+- The launcher may open the browser automatically with `--open-browser`.
+
+**Operational Notes:**
+- Default exclusive port: `43177`
+- Public log path: `games/published/public/.annotator_server.log`
+- Obfuscated log path: `games/published/obfuscated/.annotator_server.log`
+
+**Assistant Rule:**
+When the user asks to open or launch the repo dashboard, interpret that as using the launcher above for either `public` or `obfuscated`, not as a request for a raw manual server command.
+
+---
+
+**Last Updated:** May 11, 2026
