@@ -44,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fail if a referenced remix folder or metadata file is missing.",
     )
+    parser.add_argument(
+        "--approved",
+        choices=("true", "false"),
+        help="Optionally set approved on every generated app.json record.",
+    )
     return parser
 
 
@@ -295,6 +300,7 @@ def build_entry_from_remix(
     relative_path: str,
     manifest_entry: dict[str, Any] | None,
     strict: bool,
+    approved: bool | None,
 ) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]] | None:
     remix_dir = published_root / relative_path
     if not remix_dir.exists():
@@ -369,6 +375,8 @@ def build_entry_from_remix(
         "prompt": derive_prompt(metadata),
         "blueprint": derive_blueprint(metadata),
     }
+    if approved is not None:
+        app_record["approved"] = approved
 
     index_record = {
         "game_id": game_id,
@@ -432,6 +440,7 @@ def main() -> None:
     args = build_parser().parse_args()
     published_root = Path(args.published_root).resolve()
     output_root = Path(args.output_root).resolve()
+    approved = None if args.approved is None else args.approved == "true"
 
     entries = manifest_entries(Path(args.manifest).resolve()) if args.manifest else full_scan_entries(published_root)
 
@@ -445,6 +454,7 @@ def main() -> None:
             relative_path=entry["published_path"],
             manifest_entry=entry,
             strict=args.strict,
+            approved=approved,
         )
         if built is None:
             continue

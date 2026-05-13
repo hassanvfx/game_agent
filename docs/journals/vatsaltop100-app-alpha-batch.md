@@ -657,3 +657,39 @@ Verified summary:
 **Notes for Follow-up:**
 - The generator contract is now good enough for annotator consumption.
 - Remaining UI work is to move the obfuscation toggle into the iframe toolbar and validate reload behavior against `vatsal_app_alpha`.
+
+### 2026-05-13 12:36 - Last known working point checkpoint for app-alpha publish flow
+
+**What Changed:**
+- Prepared the current Vatsal app-alpha publish-pipeline work for a repository checkpoint commit and tag.
+- Threaded an optional `approved` flag through the metadata/artifact refresh path so generated `app.json` records can be bulk-marked during refresh runs.
+- Stopped the `publish_vatsal_app_alpha_231.py` wrapper from always forcing `--overwrite` on the canonical publish step.
+- Added temporary helper inputs for assessing the remaining raw portion of the 231-set publish work.
+
+**Implementation Details:**
+- Updated `scripts/generate_published_app_metadata.py`
+  - added `--approved {true,false}`
+  - mapped the CLI value to a boolean and wrote `approved` into generated `app.json` records when supplied
+- Updated `tools/game_publish_pipeline/scripts/refresh_app_artifacts.py`
+  - added `--approved {true,false}`
+  - forwarded the value into the shared metadata generator
+  - recorded the chosen setting in the refresh summary payload
+- Updated `tools/game_publish_pipeline/scripts/publish_vatsal_app_alpha_231.py`
+  - added `--approved {true,false}` passthrough for artifact refresh
+  - removed the hard-coded `--overwrite` from the canonical publish command
+- Added/updated temporary checkpoint helpers:
+  - `tmp/compute_remaining_raw_from_231.py`
+  - `tmp/build_remaining_raw_publish_manifest.py`
+  - `tmp/remaining_raw_from_231_summary.json`
+  - `tmp/remaining_raw_publish_manifest.json`
+
+**Why:**
+- This checkpoint preserves a working state where approval metadata can be stamped at catalog-generation time without changing the core generator contract for callers that omit the flag.
+- Removing forced overwrite makes the wrapper safer for incremental reruns and aligns it with a more deliberate publish workflow.
+- Capturing the remaining-raw helper artifacts keeps the next stage reproducible.
+
+**Next Steps:**
+- [ ] Commit and tag this checkpoint as the last known working point
+- [ ] Use the remaining-raw manifest helpers to drive the next publish/deploy pass when ready
+
+**Status:** Complete

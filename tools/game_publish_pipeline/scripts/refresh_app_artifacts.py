@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(REPO_ROOT / "tmp" / "generated_collections" / "vatsal_app_alpha"),
         help="Temporary generated output root for public catalog generation.",
     )
+    parser.add_argument(
+        "--approved",
+        choices=("true", "false"),
+        help="Optionally set approved on every generated app.json record.",
+    )
     return parser
 
 
@@ -88,6 +93,7 @@ def build_public_catalog(
     public_index_path: Path,
     public_app_tags_path: Path,
     public_app_path: Path,
+    approved: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     if generated_output_root.exists():
         shutil.rmtree(generated_output_root)
@@ -104,6 +110,8 @@ def build_public_catalog(
         str(generated_output_root),
         "--strict",
     ]
+    if approved is not None:
+        command.extend(["--approved", approved])
     run_command(command)
 
     public_index = merge_artifact(public_index_path, generated_output_root / INDEX_NAME)
@@ -186,6 +194,7 @@ def main() -> None:
         public_index_path,
         public_app_tags_path,
         public_app_path,
+        args.approved,
     )
     obfuscated_index_path, obfuscated_app_tags_path, obfuscated_app_path = build_obfuscated_catalog(
         obfuscated_root,
@@ -202,6 +211,7 @@ def main() -> None:
                 "public_index": str(public_index_path),
                 "public_app_tags": str(public_app_tags_path),
                 "public_app": str(public_app_path),
+                "approved": args.approved,
                 "obfuscated_index": str(obfuscated_index_path),
                 "obfuscated_app_tags": str(obfuscated_app_tags_path),
                 "obfuscated_app": str(obfuscated_app_path),

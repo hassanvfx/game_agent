@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional explicit report path for the underlying canonical publish pipeline run.",
     )
     parser.add_argument(
+        "--approved",
+        choices=("true", "false"),
+        help="Optionally set approved on generated app.json records during artifact refresh.",
+    )
+    parser.add_argument(
         "--sync-to-gcs",
         action="store_true",
         help="After publish + refresh + validation, sync public and obfuscated outputs to GCS one item at a time.",
@@ -199,7 +204,6 @@ def main() -> None:
         str(PUBLISH_GAMES_SCRIPT),
         "--manifest",
         str(publish_manifest),
-        "--overwrite",
         "--report-path",
         str(report_path),
     ]
@@ -225,6 +229,8 @@ def main() -> None:
         "--collection-slug",
         str(args.collection_slug),
     ]
+    if args.approved is not None:
+        refresh_command.extend(["--approved", args.approved])
     print("[wrapper] refreshing app artifacts from runtime manifest...", flush=True)
     print(f"[wrapper] command: {' '.join(refresh_command)}", flush=True)
     refresh_result = run_command(refresh_command)
