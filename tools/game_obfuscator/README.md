@@ -90,9 +90,22 @@ The default `simple` pipeline:
 - copies the mirrored site structure directly to `output/`
 - minifies HTML/CSS
 - minifies inline JavaScript in HTML
+- applies configurable JavaScript obfuscation levels with `low` as the default
 - obfuscates external `.js` files deterministically with conservative settings
 
 The older multi-stage path has been removed. The simple deterministic pipeline is now the only supported path.
+
+JavaScript transformation level can be selected with `GAME_OBFUSCATION_LEVEL`:
+- `none` — minify JS only, no obfuscation
+- `low` — minimal obfuscation, best compatibility, default
+- `moderate` — stronger obfuscation, higher breakage risk
+- `aggressive` — strongest available profile, highest breakage risk
+
+Example:
+```bash
+GAME_OBFUSCATION_LEVEL=none python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json
+GAME_OBFUSCATION_LEVEL=low python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json
+```
 
 ```bash
 python3 scripts/game_obfuscator_cli.py start --manifest manifests/random_batch_036.json

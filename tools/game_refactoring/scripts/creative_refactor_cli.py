@@ -79,7 +79,7 @@ def add_batch_args(parser: argparse.ArgumentParser) -> None:
         default="v2",
         help="Batch pipeline to use. Default: v2 operator pipeline. Use legacy for the previous run_parallel_batch.py path.",
     )
-    parser.add_argument("--model", default="gpt-5.4", help="Model to use for downstream workers.")
+    parser.add_argument("--model", default="gpt-5.5", help="Model to use for downstream workers.")
     parser.add_argument("--agent-timeout", type=int, default=3600, help="Per-game worker timeout in seconds.")
     parser.add_argument("--max-concurrency", type=int, default=2, help="Maximum number of active workers.")
     parser.add_argument("--poll-seconds", type=float, default=5.0, help="Scheduler poll interval in seconds.")

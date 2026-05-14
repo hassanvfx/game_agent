@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a single extracted creative transform in Game Remixer.")
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--game-id", required=True)
-    parser.add_argument("--model", default="gpt-5.4")
+    parser.add_argument("--model", default="gpt-5.5")
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--skip-run-state-update", action="store_true")
     parser.add_argument("--style", default=DEFAULT_STYLE_ID)

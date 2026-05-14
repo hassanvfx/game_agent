@@ -6,6 +6,80 @@ const CleanCSS = require("clean-css");
 const terser = require("terser");
 const JavaScriptObfuscator = require("javascript-obfuscator");
 
+const OBFUSCATION_LEVELS = {
+  none: null,
+  low: {
+    compact: true,
+    controlFlowFlattening: false,
+    deadCodeInjection: false,
+    debugProtection: false,
+    disableConsoleOutput: false,
+    identifierNamesGenerator: "mangled",
+    numbersToExpressions: false,
+    renameGlobals: false,
+    selfDefending: false,
+    simplify: false,
+    splitStrings: false,
+    stringArray: false,
+    stringArrayRotate: false,
+    stringArrayShuffle: false,
+    stringArrayWrappersCount: 0,
+    stringArrayThreshold: 0,
+    transformObjectKeys: false,
+    unicodeEscapeSequence: false,
+  },
+  moderate: {
+    compact: true,
+    controlFlowFlattening: false,
+    deadCodeInjection: false,
+    debugProtection: false,
+    disableConsoleOutput: false,
+    identifierNamesGenerator: "hexadecimal",
+    numbersToExpressions: false,
+    renameGlobals: false,
+    selfDefending: false,
+    simplify: true,
+    splitStrings: false,
+    stringArray: true,
+    stringArrayRotate: true,
+    stringArrayShuffle: true,
+    stringArrayWrappersCount: 1,
+    stringArrayThreshold: 0.75,
+    transformObjectKeys: false,
+    unicodeEscapeSequence: false,
+  },
+  aggressive: {
+    compact: true,
+    controlFlowFlattening: true,
+    controlFlowFlatteningThreshold: 0.2,
+    deadCodeInjection: false,
+    debugProtection: false,
+    disableConsoleOutput: false,
+    identifierNamesGenerator: "hexadecimal",
+    numbersToExpressions: true,
+    renameGlobals: false,
+    selfDefending: false,
+    simplify: true,
+    splitStrings: true,
+    splitStringsChunkLength: 8,
+    stringArray: true,
+    stringArrayRotate: true,
+    stringArrayShuffle: true,
+    stringArrayWrappersCount: 2,
+    stringArrayThreshold: 1,
+    transformObjectKeys: false,
+    unicodeEscapeSequence: false,
+  },
+};
+
+function getObfuscationLevel() {
+  const rawLevel = (process.env.GAME_OBFUSCATION_LEVEL || "low").trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(OBFUSCATION_LEVELS, rawLevel)) {
+    return rawLevel;
+  }
+  return "low";
+}
+
 function collectFiles(rootDir) {
   const files = [];
   const stack = [rootDir];
@@ -66,28 +140,23 @@ async function minifyInlineJs(code, moduleMode = false) {
   return result.code || code;
 }
 
-function obfuscateJs(code) {
-  const obfuscated = JavaScriptObfuscator.obfuscate(code, {
-    compact: true,
-    controlFlowFlattening: false,
-    deadCodeInjection: false,
-    debugProtection: false,
-    disableConsoleOutput: false,
-    identifierNamesGenerator: "hexadecimal",
-    numbersToExpressions: false,
-    renameGlobals: false,
-    selfDefending: false,
-    simplify: true,
-    splitStrings: false,
-    stringArray: true,
-    stringArrayRotate: true,
-    stringArrayShuffle: true,
-    stringArrayWrappersCount: 1,
-    stringArrayThreshold: 0.75,
-    transformObjectKeys: false,
-    unicodeEscapeSequence: false,
-  });
+async function transformStandaloneJs(code, obfuscationLevel) {
+  const minifiedCode = await minifyInlineJs(code, false);
+  if (obfuscationLevel === "none") {
+    return minifiedCode;
+  }
 
+  const obfuscated = JavaScriptObfuscator.obfuscate(minifiedCode, OBFUSCATION_LEVELS[obfuscationLevel]);
+  return obfuscated.getObfuscatedCode();
+}
+
+async function transformClassicInlineJs(code, obfuscationLevel) {
+  const minifiedCode = await minifyInlineJs(code, false);
+  if (obfuscationLevel === "none") {
+    return minifiedCode;
+  }
+
+  const obfuscated = JavaScriptObfuscator.obfuscate(minifiedCode, OBFUSCATION_LEVELS[obfuscationLevel]);
   return obfuscated.getObfuscatedCode();
 }
 
@@ -121,7 +190,7 @@ function inlineScriptMode(attributes) {
   return typeValue === "module" ? "module" : "classic";
 }
 
-async function transformHtml(source) {
+async function transformHtml(source, obfuscationLevel) {
   const inlineScriptReports = [];
   let inlineScriptIndex = 0;
 
@@ -159,9 +228,8 @@ async function transformHtml(source) {
         transformedBody = await minifyInlineJs(scriptBody, true);
         transformType = "minified_module";
       } else {
-        const minifiedBody = await minifyInlineJs(scriptBody, false);
-        transformedBody = obfuscateJs(minifiedBody);
-        transformType = "obfuscated_classic";
+        transformedBody = await transformClassicInlineJs(scriptBody, obfuscationLevel);
+        transformType = obfuscationLevel === "none" ? "minified_classic" : `obfuscated_classic_${obfuscationLevel}`;
       }
 
       inlineScriptReports.push({
@@ -202,8 +270,8 @@ function transformCss(source) {
   return minifyCss(source);
 }
 
-function transformJs(source) {
-  return obfuscateJs(source);
+async function transformJs(source, obfuscationLevel) {
+  return transformStandaloneJs(source, obfuscationLevel);
 }
 
 async function main() {
@@ -220,10 +288,12 @@ async function main() {
     process.exit(1);
   }
 
+  const obfuscationLevel = getObfuscationLevel();
   const files = collectFiles(resolvedTarget);
   const report = {
     target_dir: resolvedTarget,
     transformed_at: new Date().toISOString(),
+    obfuscation_level: obfuscationLevel,
     html_files: [],
     css_files: [],
     js_files: [],
@@ -239,7 +309,7 @@ async function main() {
     let extraReport = {};
 
     if (extension === ".html") {
-      const htmlResult = await transformHtml(source);
+      const htmlResult = await transformHtml(source, obfuscationLevel);
       transformed = htmlResult.code;
       bucket = "html_files";
       extraReport = {
@@ -249,7 +319,7 @@ async function main() {
       transformed = transformCss(source);
       bucket = "css_files";
     } else if (extension === ".js") {
-      transformed = transformJs(source);
+      transformed = await transformJs(source, obfuscationLevel);
       bucket = "js_files";
     } else {
       report.skipped_files.push(relativePath);

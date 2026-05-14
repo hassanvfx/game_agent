@@ -130,7 +130,7 @@ def parse_args() -> argparse.Namespace:
             "Supported values: creative_remix_contract, visual_identity_contract, theme_policy, creative_refactor_agent_template."
         ),
     )
-    parser.add_argument("--model", default="gpt-5.4")
+    parser.add_argument("--model", default="gpt-5.5")
     parser.add_argument("--agent-timeout", type=int, default=900)
     parser.add_argument(
         "--dry-run-spec-adaptor",

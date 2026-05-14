@@ -143,7 +143,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id")
     parser.add_argument("--run-dir")
     parser.add_argument("--runs-root")
-    parser.add_argument("--model", default="gpt-5.4")
+    parser.add_argument("--model", default="gpt-5.5")
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--max-concurrency", type=int, default=2)
     parser.add_argument("--poll-seconds", type=float, default=DEFAULT_POLL_SECONDS)

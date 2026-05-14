@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run operator pipeline v2 for one production game.")
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--game-id", required=True)
-    parser.add_argument("--model", default="gpt-5.4")
+    parser.add_argument("--model", default="gpt-5.5")
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--remix-prompt")
     parser.add_argument("--through", default="final_code_ui_mobile_repair")
