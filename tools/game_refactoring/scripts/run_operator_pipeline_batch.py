@@ -65,6 +65,78 @@ def append_debug_trace(trace_path: Path, message: str) -> None:
         handle.write(f"[{utc_now()}] {message}\n")
 
 
+def build_run_cost_report(run_dir: Path) -> dict:
+    manifest = load_json(run_dir / "input_manifest.json")
+    totals = {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "totalCost": 0,
+    }
+    token_totals = {
+        "totalTokens": 0,
+        "totalTokensIncludingCache": 0,
+    }
+    projected_cost_total = 0.0
+    games: list[dict] = []
+    completed_games = 0
+    missing_cost_reports = 0
+
+    for game in manifest.get("games", []):
+        game_id = game.get("game_id")
+        if not isinstance(game_id, str) or not game_id:
+            continue
+        game_state_path = run_dir / "games" / game_id / "game_state.json"
+        game_state = load_json(game_state_path) if game_state_path.exists() else {}
+        cost_report_path = game_state.get("operator_pipeline_cost_report_path")
+        game_entry = {
+            "game_id": game_id,
+            "status": game_state.get("status"),
+            "cost_report_path": cost_report_path,
+            "summary": None,
+        }
+
+        if isinstance(cost_report_path, str) and cost_report_path:
+            report_path = Path(cost_report_path)
+            if report_path.exists():
+                payload = load_json(report_path)
+                summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+                game_entry["summary"] = summary
+                completed_games += 1
+                for key in totals:
+                    value = summary.get(key, 0)
+                    if isinstance(value, (int, float)):
+                        totals[key] += value
+                for key in token_totals:
+                    value = summary.get(key, 0)
+                    if isinstance(value, (int, float)):
+                        token_totals[key] += value
+                projected_total = summary.get("projectedCostUsd", 0)
+                if isinstance(projected_total, (int, float)):
+                    projected_cost_total += projected_total
+            else:
+                missing_cost_reports += 1
+        else:
+            missing_cost_reports += 1
+
+        games.append(game_entry)
+
+    return {
+        "generated_at": utc_now(),
+        "run_id": run_dir.name,
+        "summary": {
+            "games_total": len(games),
+            "games_with_cost_reports": completed_games,
+            "games_missing_cost_reports": missing_cost_reports,
+            **totals,
+            **token_totals,
+            "projectedCostUsd": round(projected_cost_total, 6),
+        },
+        "games": games,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a bounded parallel Game Remixer batch.")
     parser.add_argument("--manifest", required=True)
@@ -335,6 +407,9 @@ def finalize_run_status(run_dir: Path, remix_prompt: str | None) -> None:
     final_note = "Operator pipeline v2 batch finished."
     if final_note not in notes:
         notes.append(final_note)
+    run_cost_report_path = run_dir / "cost_report.json"
+    write_json(run_cost_report_path, build_run_cost_report(run_dir))
+    run_state["cost_report_path"] = str(run_cost_report_path)
     run_state["updated_at"] = utc_now()
     write_json(run_state_path, run_state)
 

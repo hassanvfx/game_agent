@@ -12,6 +12,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+PROJECTED_PRICING_USD_PER_MILLION = {
+    "inputTokens": 5.00,
+    "cacheReadTokens": 0.50,
+    "outputTokens": 30.00,
+    "cacheWriteTokens": 0.00,
+}
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -49,6 +57,8 @@ class WorkerExecutionResult:
     started_at: str
     finished_at: str
     duration_seconds: float
+    run_result_event: dict[str, Any] | None
+    usage_summary: dict[str, Any] | None
 
     @property
     def status(self) -> str:
@@ -63,6 +73,66 @@ class WorkerExecutionResult:
     @property
     def stderr_bytes(self) -> int:
         return len(self.stderr_text.encode("utf-8"))
+
+
+def parse_cline_run_result_event(stdout_text: str) -> dict[str, Any] | None:
+    last_run_result: dict[str, Any] | None = None
+    for raw_line in stdout_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and payload.get("type") == "run_result":
+            last_run_result = payload
+    return last_run_result
+
+
+def normalize_cline_usage_summary(run_result_event: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not run_result_event:
+        return None
+
+    aggregate_usage = run_result_event.get("aggregateUsage")
+    usage = run_result_event.get("usage")
+    usage_payload = aggregate_usage if isinstance(aggregate_usage, dict) else usage if isinstance(usage, dict) else {}
+    model_payload = run_result_event.get("model") if isinstance(run_result_event.get("model"), dict) else {}
+    normalized_usage = {
+        "inputTokens": usage_payload.get("inputTokens", 0),
+        "outputTokens": usage_payload.get("outputTokens", 0),
+        "cacheReadTokens": usage_payload.get("cacheReadTokens", 0),
+        "cacheWriteTokens": usage_payload.get("cacheWriteTokens", 0),
+        "totalCost": usage_payload.get("totalCost", 0),
+    }
+    projected_cost_breakdown = {
+        key: round((normalized_usage.get(key, 0) / 1_000_000) * rate, 6)
+        for key, rate in PROJECTED_PRICING_USD_PER_MILLION.items()
+    }
+    projected_cost_total = round(sum(projected_cost_breakdown.values()), 6)
+    total_tokens = normalized_usage["inputTokens"] + normalized_usage["outputTokens"]
+    total_tokens_including_cache = total_tokens + normalized_usage["cacheReadTokens"] + normalized_usage["cacheWriteTokens"]
+
+    return {
+        "source_event_type": "run_result",
+        "finishReason": run_result_event.get("finishReason"),
+        "iterations": run_result_event.get("iterations"),
+        "durationMs": run_result_event.get("durationMs"),
+        "provider": model_payload.get("provider"),
+        "model": model_payload.get("id"),
+        "usage": normalized_usage,
+        "tokenTotals": {
+            "totalTokens": total_tokens,
+            "totalTokensIncludingCache": total_tokens_including_cache,
+        },
+        "projectedCost": {
+            "currency": "USD",
+            "pricingBasis": "GPT-5.5 standard API pricing",
+            "ratesPerMillionTokens": PROJECTED_PRICING_USD_PER_MILLION,
+            "breakdown": projected_cost_breakdown,
+            "total": projected_cost_total,
+        },
+    }
 
 
 def execute_worker_command(
@@ -136,16 +206,22 @@ def execute_worker_command(
     stderr_thread.join(timeout=5.0)
 
     finished_at = utc_now()
+    stdout_text = "".join(stdout_chunks)
+    stderr_text = "".join(stderr_chunks)
+    run_result_event = parse_cline_run_result_event(stdout_text)
+    usage_summary = normalize_cline_usage_summary(run_result_event)
     return WorkerExecutionResult(
         command=command,
         pid=process.pid,
         returncode=returncode,
-        stdout_text="".join(stdout_chunks),
-        stderr_text="".join(stderr_chunks),
+        stdout_text=stdout_text,
+        stderr_text=stderr_text,
         timed_out=timed_out,
         started_at=started_at,
         finished_at=finished_at,
         duration_seconds=round(iso_to_timestamp(finished_at) - iso_to_timestamp(started_at), 3),
+        run_result_event=run_result_event,
+        usage_summary=usage_summary,
     )
 
 

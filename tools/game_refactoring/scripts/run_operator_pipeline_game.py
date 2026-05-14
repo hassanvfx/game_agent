@@ -93,6 +93,7 @@ def attempt_paths(game_dir: Path, operator: OperatorDefinition, attempt_number: 
         "operator_result": attempt_root / "operator_result.json",
         "operator_result_contract": attempt_root / "workspace" / "operator_result_contract.json",
         "operator_invocation": attempt_root / "operator_invocation.json",
+        "operator_usage": attempt_root / "operator_usage.json",
         "media_policy_report": attempt_root / "media_policy_report.json",
     }
 
@@ -342,6 +343,8 @@ def build_worker_command(prompt: str, workspace: Path, model: str, timeout_secon
         "cline",
         "-a",
         "-y",
+        "--json",
+        "-v",
         "-t",
         str(timeout_seconds),
         "--reasoning-effort",
@@ -352,6 +355,117 @@ def build_worker_command(prompt: str, workspace: Path, model: str, timeout_secon
         model,
         prompt,
     ]
+
+
+def write_operator_usage_artifact(
+    path: Path,
+    execution: Any,
+    *,
+    simulated: bool,
+    operator: OperatorDefinition,
+    game_id: str,
+) -> None:
+    payload: dict[str, Any] = {
+        "generated_at": utc_now(),
+        "game_id": game_id,
+        "operator_id": operator.id,
+        "stage_slug": operator.stage_slug,
+        "simulated": simulated,
+    }
+
+    if simulated:
+        payload.update(
+            {
+                "status": "usage_unavailable",
+                "reason": "dry_run_no_cline_invocation",
+                "usage_summary": None,
+            }
+        )
+    elif getattr(execution, "usage_summary", None) is None:
+        payload.update(
+            {
+                "status": "usage_unavailable",
+                "reason": "no_run_result_event_found",
+                "usage_summary": None,
+            }
+        )
+    else:
+        payload.update(
+            {
+                "status": "captured",
+                "reason": None,
+                "usage_summary": execution.usage_summary,
+            }
+        )
+
+    write_json(path, payload)
+
+
+def build_game_cost_report(run_id: str, game_id: str, usage_paths: list[Path]) -> dict[str, Any]:
+    steps: list[dict[str, Any]] = []
+    totals = {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "totalCost": 0,
+    }
+    token_totals = {
+        "totalTokens": 0,
+        "totalTokensIncludingCache": 0,
+    }
+    projected_cost_total = 0.0
+    completed_count = 0
+    missing_usage_count = 0
+
+    for usage_path in usage_paths:
+        payload = load_json(usage_path)
+        usage_summary = payload.get("usage_summary")
+        if isinstance(usage_summary, dict) and isinstance(usage_summary.get("usage"), dict):
+            usage = usage_summary["usage"]
+            completed_count += 1
+            for key in totals:
+                value = usage.get(key, 0)
+                if isinstance(value, (int, float)):
+                    totals[key] += value
+            token_totals_payload = usage_summary.get("tokenTotals") if isinstance(usage_summary.get("tokenTotals"), dict) else {}
+            for key in token_totals:
+                value = token_totals_payload.get(key, 0)
+                if isinstance(value, (int, float)):
+                    token_totals[key] += value
+            projected_cost_payload = usage_summary.get("projectedCost") if isinstance(usage_summary.get("projectedCost"), dict) else {}
+            projected_total = projected_cost_payload.get("total", 0)
+            if isinstance(projected_total, (int, float)):
+                projected_cost_total += projected_total
+        else:
+            missing_usage_count += 1
+
+        steps.append(
+            {
+                "artifact_path": str(usage_path),
+                "operator_id": payload.get("operator_id"),
+                "stage_slug": payload.get("stage_slug"),
+                "status": payload.get("status"),
+                "reason": payload.get("reason"),
+                "simulated": payload.get("simulated", False),
+                "usage_summary": usage_summary,
+            }
+        )
+
+    return {
+        "generated_at": utc_now(),
+        "run_id": run_id,
+        "game_id": game_id,
+        "summary": {
+            "invocation_count": len(usage_paths),
+            "completed_count": completed_count,
+            "missing_usage_count": missing_usage_count,
+            **totals,
+            **token_totals,
+            "projectedCostUsd": round(projected_cost_total, 6),
+        },
+        "steps": steps,
+    }
 
 
 def write_stage_state(
@@ -379,6 +493,7 @@ def write_stage_state(
             "operator_result_path": str(paths["operator_result"]),
             "operator_result_contract_path": str(paths["operator_result_contract"]),
             "operator_invocation_path": str(paths["operator_invocation"]),
+            "operator_usage_path": str(paths["operator_usage"]),
             "media_policy_report_path": str(paths["media_policy_report"]),
             "worker_invoked": False,
             "playwright_port": playwright_port,
@@ -659,6 +774,7 @@ def main() -> None:
 
     completed_stage_slugs: list[str] = []
     artifacts: list[str] = []
+    usage_artifacts: list[Path] = []
     previous_contract_status: str | None = None
 
     try:
@@ -750,10 +866,24 @@ def main() -> None:
 
                 if args.dry_run_operators:
                     execution = run_stage_attempt_dry_run(operator, paths["workspace"].resolve(), paths)
+                    write_operator_usage_artifact(
+                        paths["operator_usage"],
+                        execution,
+                        simulated=True,
+                        operator=operator,
+                        game_id=args.game_id,
+                    )
                     result_text = execution["stdout_text"] if execution["stdout_text"].strip() else execution["stderr_text"]
                     parsed = parse_operator_stdout(result_text, execution["status"])
                 else:
                     execution = run_stage_attempt(command, paths["workspace"].resolve(), paths, args.agent_timeout)
+                    write_operator_usage_artifact(
+                        paths["operator_usage"],
+                        execution,
+                        simulated=False,
+                        operator=operator,
+                        game_id=args.game_id,
+                    )
                     result_text = execution.stdout_text if execution.stdout_text.strip() else execution.stderr_text
                     parsed = parse_operator_stdout(result_text, execution.status)
                 post_media_policy_report = write_media_policy_report(paths["workspace"].resolve(), paths["media_policy_report"])
@@ -854,6 +984,8 @@ def main() -> None:
                     "media_policy_warning": media_policy_warning,
                     "simulated": args.dry_run_operators,
                     "mode": "dry_run" if args.dry_run_operators else "live",
+                    "operator_usage_path": str(paths["operator_usage"]),
+                    "usage_summary": None if args.dry_run_operators else execution.usage_summary,
                 }
                 write_json(paths["operator_result"], result)
 
@@ -876,9 +1008,11 @@ def main() -> None:
                         str(paths["operator_stderr"]),
                         str(paths["operator_result"]),
                         str(paths["operator_result_contract"]),
+                        str(paths["operator_usage"]),
                         str(paths["media_policy_report"]),
                     ]
                 )
+                usage_artifacts.append(paths["operator_usage"])
 
                 last_status = operator_status
                 if operator_status == "completed":
@@ -907,6 +1041,9 @@ def main() -> None:
         game_state["last_error"] = None
         game_state["updated_at"] = utc_now()
         game_state["operator_pipeline_artifacts"] = artifacts
+        cost_report_path = pipeline_dir / "cost_report.json"
+        write_json(cost_report_path, build_game_cost_report(run_state["run_id"], args.game_id, usage_artifacts))
+        game_state["operator_pipeline_cost_report_path"] = str(cost_report_path)
         game_state["assigned_playwright_port"] = args.playwright_port
         game_state["validation_root_url"] = f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
         write_json(game_state_path, game_state)

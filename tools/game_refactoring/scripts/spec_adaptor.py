@@ -70,6 +70,46 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def write_usage_artifact(path: Path, execution: Any | None, *, simulated: bool = False, note: str | None = None) -> None:
+    payload: dict[str, Any] = {
+        "generated_at": utc_now(),
+        "simulated": simulated,
+    }
+    if simulated:
+        payload.update(
+            {
+                "status": "usage_unavailable",
+                "reason": note or "dry_run_no_cline_invocation",
+                "usage_summary": None,
+            }
+        )
+    elif execution is None:
+        payload.update(
+            {
+                "status": "usage_unavailable",
+                "reason": note or "missing_execution",
+                "usage_summary": None,
+            }
+        )
+    elif execution.usage_summary is None:
+        payload.update(
+            {
+                "status": "usage_unavailable",
+                "reason": note or "no_run_result_event_found",
+                "usage_summary": None,
+            }
+        )
+    else:
+        payload.update(
+            {
+                "status": "captured",
+                "reason": None,
+                "usage_summary": execution.usage_summary,
+            }
+        )
+    write_json(path, payload)
+
+
 def append_debug_trace(trace_path: Path, message: str) -> None:
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     with trace_path.open("a", encoding="utf-8") as handle:
@@ -473,6 +513,8 @@ def run_recomposition_agent(
         "cline",
         "-a",
         "-y",
+        "--json",
+        "-v",
         "-t",
         str(timeout_seconds),
         "--reasoning-effort",
@@ -587,6 +629,7 @@ def main() -> None:
 
     report_path = adaptor_dir / "adaptation_report.json"
     summary_path = adaptor_dir / "recomposition_summary.json"
+    usage_path = adaptor_dir / "recomposition_usage.json"
 
     if args.dry_run_spec_adaptor:
         write_json(
@@ -616,6 +659,7 @@ def main() -> None:
             "finished_at": utc_now(),
             "duration_seconds": 0.0,
         }
+        write_usage_artifact(usage_path, None, simulated=True)
         append_debug_trace(trace_path, "Dry-run spec adaptor completed without invoking recomposition agent")
     else:
         previous_failure: dict[str, Any] | None = None
@@ -701,6 +745,7 @@ def main() -> None:
 
         assert final_execution is not None
         assert final_contract_evaluation is not None
+        write_usage_artifact(usage_path, final_execution)
 
     adaptation_report = {
         "generated_at": utc_now(),
@@ -724,7 +769,9 @@ def main() -> None:
             "started_at": final_execution["started_at"] if args.dry_run_spec_adaptor else final_execution.started_at,
             "finished_at": final_execution["finished_at"] if args.dry_run_spec_adaptor else final_execution.finished_at,
             "duration_seconds": final_execution["duration_seconds"] if args.dry_run_spec_adaptor else final_execution.duration_seconds,
+            "usage_summary": None if args.dry_run_spec_adaptor else final_execution.usage_summary,
         },
+        "recomposition_usage_path": str(usage_path),
         "recomposition_summary_path": str(summary_path) if final_summary_exists else None,
         "recomposition_summary_present": final_summary_exists,
         "recomposition_contract_validation": final_contract_evaluation,
