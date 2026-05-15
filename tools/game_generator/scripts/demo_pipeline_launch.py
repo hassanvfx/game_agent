@@ -39,9 +39,9 @@ def parse_args() -> argparse.Namespace:
         help="Forward the upload flag to scripts/run_pipeline.py.",
     )
     parser.add_argument(
-        "--obfuscate",
+        "--publish",
         action="store_true",
-        help="Forward the obfuscation flag to scripts/run_pipeline.py.",
+        help="Forward the publish flag to scripts/run_pipeline.py.",
     )
     parser.add_argument(
         "--no-open",
@@ -99,8 +99,8 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--remix-prompt", args.remix_prompt])
     if args.upload:
         command.append("--upload")
-    if args.obfuscate:
-        command.append("--obfuscate")
+    if args.publish:
+        command.append("--publish")
     return command
 
 

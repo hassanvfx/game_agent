@@ -85,6 +85,42 @@
 
 **Status:** In Progress
 
+### 2026-05-14 22:54 - Publish flag rename and publish-stage gating
+
+**What Changed:**
+- Renamed the generator-facing publish trigger from `--obfuscate` to `--publish`.
+- Removed the old `--obfuscate` flag entirely instead of keeping a compatibility alias.
+- Changed `tools/game_generator/scripts/run_pipeline.py` so the publish stage is now optional and only runs when `--publish` is supplied.
+- Updated launcher forwarding so `tools/game_generator/scripts/demo_pipeline_launch.py` now passes `--publish` downstream.
+- Updated run state / final response / dashboard summary fields from obfuscation-oriented wording to publish-oriented wording:
+  - `publish_enabled`
+  - `Publish Enabled`
+
+**Why:**
+The old `--obfuscate` name no longer matched the real control point. The actual decision was whether to run the downstream `game_publish_pipeline` stage at all, not whether to toggle a separate obfuscator branch inside `run_pipeline.py`.
+
+**Behavior After Change:**
+- without `--publish`:
+  - matcher → refactoring → finalize
+  - publish step is marked skipped
+- with `--publish`:
+  - matcher → refactoring → publish → finalize
+- with `--publish --upload`:
+  - publish runs and then the existing post-publish GCS sync path can execute
+
+**Files Changed:**
+- `tools/game_generator/scripts/demo_pipeline_launch.py`
+- `tools/game_generator/scripts/run_pipeline.py`
+
+**Verification:**
+- ran:
+  - `python3 tools/game_generator/scripts/demo_pipeline_launch.py --help`
+  - `python3 tools/game_generator/scripts/run_pipeline.py --help`
+- confirmed both now expose `--publish`
+- confirmed `--obfuscate` is absent from both CLI surfaces
+
+**Status:** Complete
+
 ### 2026-05-14 12:35 - Generator migrated and validated with upload-aware CLI contract
 
 **What Changed:**

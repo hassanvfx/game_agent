@@ -103,7 +103,7 @@ class PipelineRun:
         run_id: str,
         prompt: str,
         remix_prompt: str,
-        obfuscate: bool,
+        publish_enabled: bool,
         poll_seconds: float,
         matcher_mode: str,
         upload_enabled: bool,
@@ -112,7 +112,7 @@ class PipelineRun:
         self.run_dir = PIPELINE_RUNS_DIR / run_id
         self.prompt = prompt
         self.remix_prompt = remix_prompt
-        self.obfuscate = obfuscate
+        self.publish_enabled = publish_enabled
         self.poll_seconds = poll_seconds
         self.matcher_mode = matcher_mode
         self.upload_enabled = upload_enabled
@@ -148,7 +148,7 @@ class PipelineRun:
             "current_step": "initializing",
             "started_at": now,
             "updated_at": now,
-            "obfuscation_enabled": obfuscate,
+            "publish_enabled": publish_enabled,
             "poll_seconds": poll_seconds,
             "matcher_mode": matcher_mode,
             "remix_prompt": remix_prompt,
@@ -179,7 +179,7 @@ class PipelineRun:
         self.append_event(
             "system",
             "run_initialized",
-            {"prompt": prompt, "remix_prompt": remix_prompt, "obfuscate": obfuscate, "upload_enabled": upload_enabled},
+            {"prompt": prompt, "remix_prompt": remix_prompt, "publish_enabled": publish_enabled, "upload_enabled": upload_enabled},
         )
         self.save_state()
 
@@ -533,7 +533,7 @@ class PipelineRun:
             "current_step": self.state["current_step"],
             "updated_at": self.state["updated_at"],
             "started_at": self.state["started_at"],
-            "obfuscation_enabled": self.obfuscate,
+            "publish_enabled": self.publish_enabled,
             "remix_prompt": self.remix_prompt,
             "upload_enabled": self.upload_enabled,
             "upload": self.state.get("upload"),
@@ -1947,6 +1947,10 @@ def ensure_dashboard_html(path: Path) -> None:
                 <div>${esc(data.remix_prompt || data.prompt || "")}</div>
               </div>
               <div class="meta-item">
+                <span class="meta-label">Publish Enabled</span>
+                <strong>${esc(data.publish_enabled ? "true" : "false")}</strong>
+              </div>
+              <div class="meta-item">
                 <span class="meta-label">Upload Enabled</span>
                 <strong>${esc(data.upload_enabled ? "true" : "false")}</strong>
               </div>
@@ -2085,6 +2089,7 @@ def build_final_response(
         "status": run.state["status"],
         "prompt": run.prompt,
         "remix_prompt": run.remix_prompt,
+        "publish_enabled": run.publish_enabled,
         "upload_enabled": run.upload_enabled,
         "upload": upload_payload,
         "final_output_dir": run.state["final_output_dir"],
@@ -2102,7 +2107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--remix-prompt", help="Optional creative remix prompt override. Defaults to the matcher prompt.")
     parser.add_argument("--upload", action="store_true", help="Sync published public/obfuscated roots to GCS after local publish.")
     parser.add_argument("--resume-from-run", help="Resume from an existing pipeline run id under pipeline_runs/ and continue from publish/finalize.")
-    parser.add_argument("--obfuscate", action="store_true", help="Run obfuscator on the remix output.")
+    parser.add_argument("--publish", action="store_true", help="Run the publish pipeline after refactoring.")
     parser.add_argument("--poll-seconds", type=float, default=DEFAULT_POLL_SECONDS, help="Polling interval for async stages.")
     parser.add_argument(
         "--matcher-mode",
@@ -2156,7 +2161,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.obfuscate, args.poll_seconds, args.matcher_mode, args.upload)
+        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.publish, args.poll_seconds, args.matcher_mode, args.upload)
         run.append_event(
             "system",
             "resume_initialized",
@@ -2188,7 +2193,7 @@ def main() -> int:
     else:
         prompt = args.prompt
         remix_prompt = args.remix_prompt or args.prompt
-        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.obfuscate, args.poll_seconds, args.matcher_mode, args.upload)
+        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.publish, args.poll_seconds, args.matcher_mode, args.upload)
 
     try:
         if not resumed:
@@ -2209,13 +2214,20 @@ def main() -> int:
             refactored_game_dirs = run.run_refactoring(selected_matches, matcher_context, remix_prompt)
             run.complete_step("refactoring", {"refactored_game_dirs": refactored_game_dirs})
 
-        # 4. Run publish pipeline
-        run.start_step("publish", {"refactored_game_dirs": refactored_game_dirs, "resumed": resumed})
-        publish_output = run.run_publish_pipeline(refactored_game_dirs)
-        projected_cdn_urls = publish_output.get("projected_cdn_urls", [])
-        run.state["projected_cdn_urls"] = projected_cdn_urls
-        run.state["upload"] = publish_output.get("upload")
-        run.complete_step("publish", {"publish_output": publish_output})
+        # 4. Run publish pipeline (optional)
+        if args.publish:
+            run.start_step("publish", {"refactored_game_dirs": refactored_game_dirs, "resumed": resumed})
+            publish_output = run.run_publish_pipeline(refactored_game_dirs)
+            projected_cdn_urls = publish_output.get("projected_cdn_urls", [])
+            run.state["projected_cdn_urls"] = projected_cdn_urls
+            run.state["upload"] = publish_output.get("upload")
+            run.complete_step("publish", {"publish_output": publish_output})
+        else:
+            publish_output = {"upload": {"enabled": False, "status": "disabled"}, "projected_cdn_urls": []}
+            projected_cdn_urls = []
+            run.state["projected_cdn_urls"] = projected_cdn_urls
+            run.state["upload"] = publish_output.get("upload")
+            run.skip_step("publish", "publish flag not provided")
 
         # 5. Finalize output (optional, could copy or link published outputs)
         final_output_dir = finalize_output(run, [Path(d) for d in refactored_game_dirs])
