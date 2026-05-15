@@ -25,13 +25,13 @@
 
 **Status:** Complete
 
-### Phase 3: Default-behavior tuning - **PLANNED**
+### Phase 3: Default-behavior tuning - **COMPLETE (NO CHANGE REQUIRED FOR PUBLISH PARAMETERIZATION)**
 
-- [ ] Identify low-risk default changes based on observed outputs
-- [ ] Implement the first round of tuning changes
-- [ ] Re-run the batch and compare outputs against the baseline
+- [x] Identify low-risk default changes based on observed outputs
+- [x] Confirm whether publish uses different obfuscator parameterization
+- [x] Confirm whether any publish-specific adjustment is required for inline-script handling
 
-**Status:** Planned
+**Status:** ✅ Complete
 
 ---
 
@@ -137,12 +137,54 @@ python3 tmp/inspect_four_random_raw_obfuscator_batch.py
 ```
 
 **Next Steps:**
-- [ ] Inspect whether `screenshots/` should truly be preserved for raw-game defaults
-- [ ] Inspect why some tiny external JS files transformed to `0` bytes
-- [ ] Decide whether the default prune policy is too aggressive for raw-game compatibility
-- [ ] Implement the first default-tuning pass and compare against this seeded baseline
+- [x] Inspect whether `screenshots/` should truly be preserved for raw-game defaults
+- [x] Inspect why some tiny external JS files transformed to `0` bytes
+- [x] Decide whether the default prune policy is too aggressive for raw-game compatibility
+- [x] Implement the first default-tuning pass and compare against this seeded baseline
 
-**Status:** In Progress
+**Status:** Complete
+
+---
+
+### 2026-05-14 19:04 - Publish-vs-direct-public comparison documented
+
+**Achievement:**
+- Verified that `game_publish_pipeline` does not introduce a hidden obfuscator parameter delta
+- Confirmed that publish obfuscation matches a direct obfuscator replay on the exact same public deploy outputs
+- Documented that the observed delta versus raw-mode comes from input surface shape, not from different inline-script settings
+
+**Implementation Details:**
+- Ran publish first on the same 4 seeded raw inputs using:
+  - `tmp/run_publish_pipeline_on_raw_random4.py`
+- Captured public deploy outputs and obfuscated publish outputs in:
+  - `tmp/game_publish_pipeline_raw_random4_report.json`
+- Ran a direct obfuscator replay on those same public deploy outputs using:
+  - `tmp/run_direct_obfuscator_on_publish_public_random4.py`
+- Compared all three surfaces using:
+  - `tmp/compare_publish_vs_direct_public_obfuscator.py`
+
+**Findings:**
+- For all 4 games:
+  - `publish_matches_direct_public = true`
+  - `raw_matches_publish = false`
+- Inline-script handling stayed the same across raw, publish, and direct-public runs:
+  - classic inline scripts remained `obfuscated_classic_low`
+  - skipped external/non-executable script blocks remained skipped
+- Publish/public runs preserved more files than raw runs because the public deploy surface already includes screenshots that survive the default preserved-folder policy.
+- Therefore, the retained output shape difference is explained by:
+  - `raw -> obfuscator`
+  - versus
+  - `raw -> deploy(public) -> obfuscator`
+
+**Technical Decision:**
+No publish-specific obfuscator adjustment is required for the current concern. The publish wrapper is not changing the effective inline-script parameterization.
+
+**Remaining Follow-Up Possibilities:**
+- [ ] Decide whether raw-mode should be adjusted to preserve a more publish-like surface, especially screenshots
+- [ ] Decide whether tiny external JS files that collapse to `0` bytes should be protected by an additional heuristic
+- [ ] Decide whether to keep raw-mode intentionally stricter than publish/public-mode
+
+**Status:** Complete
 
 ---
 
