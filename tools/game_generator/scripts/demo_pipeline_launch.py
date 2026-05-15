@@ -30,6 +30,15 @@ def parse_args() -> argparse.Namespace:
         help="Polling interval forwarded to scripts/run_pipeline.py.",
     )
     parser.add_argument(
+        "--remix-prompt",
+        help="Optional creative remix prompt override forwarded to scripts/run_pipeline.py.",
+    )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="Forward the upload flag to scripts/run_pipeline.py.",
+    )
+    parser.add_argument(
         "--obfuscate",
         action="store_true",
         help="Forward the obfuscation flag to scripts/run_pipeline.py.",
@@ -86,6 +95,10 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
         "--poll-seconds",
         str(args.poll_seconds),
     ]
+    if args.remix_prompt:
+        command.extend(["--remix-prompt", args.remix_prompt])
+    if args.upload:
+        command.append("--upload")
     if args.obfuscate:
         command.append("--obfuscate")
     return command

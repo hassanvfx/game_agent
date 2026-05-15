@@ -21,11 +21,17 @@ PIPELINE_RUNS_DIR = ROOT / "pipeline_runs"
 PIPELINE_OUTPUTS_DIR = ROOT / "output"
 
 GAME_MATCHER_ROOT = ROOT.parent / "game_matcher"
-GAME_REMIXER_ROOT = ROOT.parent / "game_remixer"
+GAME_MATCHER_V2_ROOT = ROOT.parent / "game_matcher_v2"
+GAME_REFACTORING_ROOT = ROOT.parent / "game_refactoring"
+GAME_PUBLISH_PIPELINE_ROOT = ROOT.parent / "game_publish_pipeline"
 GAME_REMIX_EDITOR_ROOT = ROOT.parent / "game_remix_editor"
 GAME_OBFUSCATOR_ROOT = ROOT.parent / "game_obfuscator"
 
+PUBLIC_CDN_ROOT = "https://friendjam-game-assets.jabali.ai/games-prod/public"
+PLAY_CDN_ROOT = "https://friendjam-game-assets.jabali.ai/games-prod/play"
+
 DEFAULT_MATCHER_LIMIT = 2
+DEFAULT_MATCHER_MODE = "v2"
 DEFAULT_POLL_SECONDS = 60.0
 LAUNCH_TIMEOUT_SECONDS = 120
 REMIX_EDITOR_LAUNCH_TIMEOUT_SECONDS = 900
@@ -48,13 +54,24 @@ OBFUSCATOR_TERMINAL_STATUSES = {
 
 @dataclass
 class StepError(RuntimeError):
-    step: str
-    message: str
-    details: dict[str, Any] | None = None
+    def __init__(self, step: str, message: str, details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.step = step
+        self.message = message
+        self.details = details or {}
 
-    def __post_init__(self) -> None:
-        super().__init__(self.message)
 
+def is_gcloud_auth_error(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return (
+        "gcloud.storage.rsync" in lowered
+        and "auth" in lowered
+        and (
+            "reauthentication failed" in lowered
+            or "cannot prompt during non-interactive execution" in lowered
+            or "gcloud auth login" in lowered
+        )
+    )
 
 @dataclass
 class CompletedCommand:
@@ -81,18 +98,29 @@ class CompletedCommand:
 class PipelineRun:
     """Persists run state, events, and artifact files for observability."""
 
-    def __init__(self, run_id: str, prompt: str, obfuscate: bool, poll_seconds: float) -> None:
+    def __init__(
+        self,
+        run_id: str,
+        prompt: str,
+        remix_prompt: str,
+        obfuscate: bool,
+        poll_seconds: float,
+        matcher_mode: str,
+        upload_enabled: bool,
+    ) -> None:
         self.run_id = run_id
         self.run_dir = PIPELINE_RUNS_DIR / run_id
         self.prompt = prompt
+        self.remix_prompt = remix_prompt
         self.obfuscate = obfuscate
         self.poll_seconds = poll_seconds
+        self.matcher_mode = matcher_mode
+        self.upload_enabled = upload_enabled
         self.input_dir = self.run_dir / "input"
         self.matcher_dir = self.run_dir / "matcher"
         self.remixer_dir = self.run_dir / "remixer"
-        self.remix_editor_dir = self.run_dir / "remix_editor"
-        self.obfuscator_dir = self.run_dir / "obfuscator"
-        self.final_dir = self.run_dir / "final"
+        self.refactoring_dir = self.run_dir / "refactoring"
+        self.publish_dir = self.run_dir / "publish"
         self.logs_dir = self.run_dir / "logs"
         self.dashboard_dir = self.run_dir / "dashboard"
         self.events_path = self.run_dir / "events.jsonl"
@@ -105,9 +133,8 @@ class PipelineRun:
             self.input_dir,
             self.matcher_dir,
             self.remixer_dir,
-            self.remix_editor_dir,
-            self.obfuscator_dir,
-            self.final_dir,
+            self.refactoring_dir,
+            self.publish_dir,
             self.logs_dir,
             self.dashboard_dir,
         ):
@@ -123,19 +150,23 @@ class PipelineRun:
             "updated_at": now,
             "obfuscation_enabled": obfuscate,
             "poll_seconds": poll_seconds,
+            "matcher_mode": matcher_mode,
+            "remix_prompt": remix_prompt,
+            "upload_enabled": upload_enabled,
             "global_watchdog_seconds": INITIAL_GLOBAL_WATCHDOG_SECONDS,
             "global_watchdog_deadline": iso_after_seconds(INITIAL_GLOBAL_WATCHDOG_SECONDS),
             "steps": {
                 "matcher": {"status": "pending"},
-                "remixer_lookup": {"status": "pending"},
-                "remix_editor": {"status": "pending"},
-                "obfuscator": {"status": "pending" if obfuscate else "skipped"},
+                "refactoring": {"status": "pending"},
+                "publish": {"status": "pending"},
                 "finalize": {"status": "pending"},
             },
             "artifacts": {
                 "run_dir": str(self.run_dir),
+                "run_state_path": str(self.run_state_path),
                 "events_path": str(self.events_path),
                 "dashboard_path": str(self.dashboard_dir / "index.html"),
+                "dashboard_data_path": str(self.dashboard_data_path),
             },
             "final_output_dir": None,
             "final_output_dirs": [],
@@ -143,9 +174,242 @@ class PipelineRun:
         }
 
         self.write_text(self.input_dir / "prompt.txt", prompt)
+        self.write_text(self.input_dir / "remix_prompt.txt", remix_prompt)
         self._write_log(f"[{now}] run initialized: {run_id}")
-        self.append_event("system", "run_initialized", {"prompt": prompt, "obfuscate": obfuscate})
+        self.append_event(
+            "system",
+            "run_initialized",
+            {"prompt": prompt, "remix_prompt": remix_prompt, "obfuscate": obfuscate, "upload_enabled": upload_enabled},
+        )
         self.save_state()
+
+    # --- NEW: Game Refactoring and Publish Integration ---
+    def run_refactoring(self, selected_matches, matcher_context, remix_prompt):
+        """
+        Launch creative_remix_v4 via the workflow CLI, then poll until the final
+        output directories are available.
+        """
+        games_manifest = {
+            "run_label": self.run_id,
+            "games": [],
+        }
+        for index, match in enumerate(selected_matches, start=1):
+            source_path = resolve_refactoring_source_path(match)
+            game_entry = {
+                "game_id": match["game_id"],
+                "display_name": match.get("name") or match["game_id"],
+                "source_path": str(source_path),
+                "source_url": match["url"],
+                "match_rank": match.get("match_rank", index),
+                "matcher_context": match.get("matcher_context", {}),
+            }
+            games_manifest["games"].append(game_entry)
+
+        games_manifest_path = self.refactoring_dir / "games_manifest.json"
+        write_json(games_manifest_path, games_manifest)
+
+        launch_args = [
+            "python3",
+            "scripts/game_workflow.py",
+            "--json",
+            "--id",
+            "creative_remix_v4",
+            "--games-manifest-source",
+            str(games_manifest_path),
+            "--remix-prompt",
+            remix_prompt,
+        ]
+        launch_command = execute_command(launch_args, GAME_REFACTORING_ROOT)
+        self.write_command_artifacts(self.refactoring_dir, "launch", launch_command)
+        if launch_command.exit_code != 0:
+            raise StepError(
+                "refactoring",
+                "game_refactoring workflow launch failed",
+                {"exit_code": launch_command.exit_code},
+            )
+
+        launch_payload = parse_json_command_output(launch_command, "refactoring")
+        write_json(self.refactoring_dir / "launch_response.json", launch_payload)
+
+        run_id = launch_payload.get("run_id")
+        run_dir_value = launch_payload.get("run_dir")
+        if not isinstance(run_id, str) or not isinstance(run_dir_value, str):
+            raise StepError(
+                "refactoring",
+                "game_refactoring workflow response missing run_id/run_dir",
+                launch_payload,
+            )
+
+        run_dir = Path(run_dir_value)
+        self.state["steps"]["refactoring"] = {
+            **self.state["steps"].get("refactoring", {}),
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "workflow_id": launch_payload.get("workflow_id"),
+            "workflow_manifest_path": launch_payload.get("workflow_manifest_path"),
+            "status_path": launch_payload.get("status_path"),
+            "dashboard_path": launch_payload.get("dashboard_path"),
+            "output_root": launch_payload.get("output_root"),
+            "launcher_pid": launch_payload.get("pid"),
+            "launcher_stdout_path": launch_payload.get("launcher_stdout_path"),
+            "launcher_stderr_path": launch_payload.get("launcher_stderr_path"),
+            "games_manifest_path": str(games_manifest_path),
+            "status": "running",
+            "last_known_status": launch_payload.get("status"),
+            "current_phase": launch_payload.get("current_phase"),
+            "completed": False,
+        }
+        self.save_state()
+
+        deadline = time.time() + FINAL_GLOBAL_WATCHDOG_SECONDS
+        status_payload: dict[str, Any] | None = None
+        while time.time() < deadline:
+            status_args = ["python3", "scripts/creative_refactor_cli.py", "--json", "status", "--run-dir", str(run_dir)]
+            status_command = execute_command(status_args, GAME_REFACTORING_ROOT)
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            self.write_command_artifacts(self.refactoring_dir, f"status_{timestamp}", status_command)
+            if status_command.exit_code != 0:
+                raise StepError(
+                    "refactoring",
+                    "game_refactoring status polling failed",
+                    {"exit_code": status_command.exit_code},
+                )
+
+            status_payload = parse_json_command_output(status_command, "refactoring")
+            append_jsonl(
+                self.refactoring_dir / "status_polls.jsonl",
+                {
+                    "polled_at": utc_now(),
+                    "payload": status_payload,
+                },
+            )
+            self.state["steps"]["refactoring"] = {
+                **self.state["steps"].get("refactoring", {}),
+                "last_known_status": status_payload.get("status"),
+                "current_phase": status_payload.get("current_phase"),
+                "updated_at": status_payload.get("updated_at"),
+                "completed": status_payload.get("completed", False),
+                "failed": status_payload.get("failed", False),
+                "games_total": status_payload.get("games_total"),
+                "games_transform_completed": status_payload.get("games_transform_completed"),
+                "games_transform_failed": status_payload.get("games_transform_failed"),
+            }
+            self.save_state()
+
+            if status_payload.get("completed") is True:
+                break
+
+            time.sleep(self.poll_seconds)
+        else:
+            raise StepError(
+                "refactoring",
+                "game_refactoring workflow did not complete before watchdog deadline",
+                {"run_id": run_id, "run_dir": str(run_dir)},
+            )
+
+        result_args = ["python3", "scripts/creative_refactor_cli.py", "--json", "result", "--run-dir", str(run_dir)]
+        result_command = execute_command(result_args, GAME_REFACTORING_ROOT)
+        self.write_command_artifacts(self.refactoring_dir, "result", result_command)
+        if result_command.exit_code != 0:
+            raise StepError(
+                "refactoring",
+                "game_refactoring result lookup failed",
+                {"exit_code": result_command.exit_code},
+            )
+
+        result_payload = parse_json_command_output(result_command, "refactoring")
+        write_json(self.refactoring_dir / "result_response.json", result_payload)
+
+        final_output_dirs = result_payload.get("final_output_dirs")
+        if not isinstance(final_output_dirs, list) or not final_output_dirs:
+            raise StepError(
+                "refactoring",
+                "game_refactoring result missing final_output_dirs",
+                result_payload,
+            )
+
+        resolved_output_dirs = [str(Path(path).resolve()) for path in final_output_dirs]
+        self.state["steps"]["refactoring"] = {
+            **self.state["steps"].get("refactoring", {}),
+            "status": "completed",
+            "completed": True,
+            "failed": result_payload.get("status") in {"transform_failed", "transform_incomplete"},
+            "final_output_dirs": resolved_output_dirs,
+        }
+        self.save_state()
+        return resolved_output_dirs
+
+    def run_publish_pipeline(self, refactored_game_dirs):
+        """
+        Run the publish pipeline CLI against the refactoring outputs and optionally
+        sync the published results to GCS.
+        """
+        report_path = self.publish_dir / "publish_report.json"
+        args = [
+            "python3",
+            "scripts/publish_games.py",
+            "--report-path",
+            str(report_path),
+            "--inputs",
+            *refactored_game_dirs,
+        ]
+        command = execute_command(args, GAME_PUBLISH_PIPELINE_ROOT)
+        self.write_command_artifacts(self.publish_dir, "publish", command)
+        if command.exit_code != 0:
+            raise StepError(
+                "publish",
+                "publish pipeline failed",
+                {"exit_code": command.exit_code},
+            )
+
+        if not report_path.exists():
+            raise StepError(
+                "publish",
+                "publish pipeline did not produce report_path",
+                {"report_path": str(report_path)},
+            )
+
+        report_payload = read_json(report_path)
+        report_payload["projected_cdn_urls"] = build_projected_cdn_urls(report_payload)
+
+        if self.upload_enabled:
+            sync_args = ["python3", "scripts/sync_to_gcs.py", "--target", "both"]
+            sync_command = execute_command(sync_args, GAME_PUBLISH_PIPELINE_ROOT)
+            self.write_command_artifacts(self.publish_dir, "sync_to_gcs", sync_command)
+            if sync_command.exit_code != 0:
+                stderr_text = sync_command.stderr.strip()
+                stdout_text = sync_command.stdout.strip()
+                upload_payload: dict[str, Any] = {
+                    "enabled": True,
+                    "status": "failed",
+                    "exit_code": sync_command.exit_code,
+                    "stdout_path": str(self.publish_dir / "sync_to_gcs.stdout.txt"),
+                    "stderr_path": str(self.publish_dir / "sync_to_gcs.stderr.txt"),
+                    "command_path": str(self.publish_dir / "sync_to_gcs.command.json"),
+                }
+                if stdout_text:
+                    upload_payload["stdout_excerpt"] = stdout_text[-2000:]
+                if stderr_text:
+                    upload_payload["stderr_excerpt"] = stderr_text[-2000:]
+                if is_gcloud_auth_error(sync_command.stderr):
+                    upload_payload["status"] = "auth_required"
+                    upload_payload["next_action"] = (
+                        "Run `gcloud auth login` in an interactive terminal, then rerun the short "
+                        "publish resume command once available, or rerun this same command."
+                    )
+                report_payload["upload"] = upload_payload
+            else:
+                sync_payload = parse_jsonish_output(sync_command.stdout)
+                report_payload["upload"] = {
+                    "enabled": True,
+                    "status": "completed",
+                    "sync_result": sync_payload,
+                }
+        else:
+            report_payload["upload"] = {"enabled": False, "status": "disabled"}
+
+        write_json(self.publish_dir / "publish_response.json", report_payload)
+        return report_payload
 
     def set_current_step(self, step: str) -> None:
         self.state["current_step"] = step
@@ -252,6 +516,8 @@ class PipelineRun:
         recent_events = read_recent_events(self.events_path, limit=25)
         steps = []
         for step_id, step_state in self.state["steps"].items():
+            if step_id == "remixer_lookup":
+                continue
             steps.append(
                 {
                     "id": step_id,
@@ -268,6 +534,11 @@ class PipelineRun:
             "updated_at": self.state["updated_at"],
             "started_at": self.state["started_at"],
             "obfuscation_enabled": self.obfuscate,
+            "remix_prompt": self.remix_prompt,
+            "upload_enabled": self.upload_enabled,
+            "upload": self.state.get("upload"),
+            "projected_cdn_urls": self.state.get("projected_cdn_urls", []),
+            "artifacts": build_artifacts_map(self),
             "steps": steps,
             "recent_events": recent_events,
             "links": self.state["artifacts"]
@@ -309,11 +580,95 @@ def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def append_jsonl(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
 def read_recent_events(path: Path, limit: int = 25) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     return [json.loads(line) for line in lines[-limit:]][::-1]
+
+
+def parse_jsonish_output(stdout: str) -> dict[str, Any]:
+    text = stdout.strip()
+    if not text:
+        return {}
+    decoder = json.JSONDecoder()
+    last_error: Exception | None = None
+    for start in range(len(text)):
+        if text[start] not in "[{":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(text[start:])
+            if isinstance(candidate, dict):
+                return candidate
+            return {"value": candidate}
+        except json.JSONDecodeError as exc:
+            last_error = exc
+    raise ValueError(f"unable to decode JSON payload from stdout: {last_error}")
+
+
+def build_cdn_url(base_url: str, local_root: str, local_path: str) -> str | None:
+    try:
+        relative = Path(local_path).resolve().relative_to(Path(local_root).resolve())
+    except ValueError:
+        return None
+    return f"{base_url.rstrip('/')}/{relative.as_posix().lstrip('/')}/index.html"
+
+
+def build_projected_cdn_urls(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    deployment = report_payload.get("deployment", {})
+    obfuscation = report_payload.get("obfuscation", {})
+
+    public_root = deployment.get("published_public_root")
+    obfuscated_root = obfuscation.get("published_obfuscated_root")
+    deployment_results = deployment.get("results", [])
+    obfuscated_outputs = obfuscation.get("game_outputs", [])
+
+    obfuscated_by_game_id: dict[str, str] = {}
+    if isinstance(obfuscated_outputs, list):
+        for item in obfuscated_outputs:
+            if isinstance(item, dict):
+                game_id = item.get("game_id")
+                output_path = item.get("output_path")
+                if isinstance(game_id, str) and isinstance(output_path, str):
+                    obfuscated_by_game_id[game_id] = output_path
+
+    projected: list[dict[str, Any]] = []
+    if not isinstance(deployment_results, list):
+        return projected
+
+    for item in deployment_results:
+        if not isinstance(item, dict):
+            continue
+        game_id = item.get("game_id")
+        deploy_dir = item.get("deploy_dir")
+        if not isinstance(game_id, str) or not isinstance(deploy_dir, str):
+            continue
+
+        public_url = None
+        if isinstance(public_root, str):
+            public_url = build_cdn_url(PUBLIC_CDN_ROOT, public_root, deploy_dir)
+
+        obfuscated_path = obfuscated_by_game_id.get(game_id)
+        play_url = None
+        if isinstance(obfuscated_root, str) and isinstance(obfuscated_path, str):
+            play_url = build_cdn_url(PLAY_CDN_ROOT, obfuscated_root, obfuscated_path)
+
+        projected.append(
+            {
+                "game_id": game_id,
+                "public_local_dir": deploy_dir,
+                "public_cdn_url": public_url,
+                "play_local_dir": obfuscated_path,
+                "play_cdn_url": play_url,
+            }
+        )
+    return projected
 
 
 def generate_run_id() -> str:
@@ -425,20 +780,110 @@ def extract_game_url(item: dict[str, Any]) -> str:
     raise ValueError(f"match item missing usable url: {item}")
 
 
-def normalize_selected_match(item: dict[str, Any]) -> dict[str, str]:
+def build_matcher_context(
+    *,
+    prompt: str,
+    matcher_mode: str,
+    match_item: dict[str, Any],
+    match_rank: int,
+    match_count: int,
+    validated_selected_tags: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "prompt": prompt,
+        "matcher_mode": matcher_mode,
+        "match_rank": match_rank,
+        "match_count": match_count,
+        "matched_queries": match_item.get("matched_queries"),
+        "coverage": match_item.get("coverage"),
+        "distance": match_item.get("distance"),
+        "best_feed_position": match_item.get("best_feed_position"),
+        "played_count": match_item.get("played_count"),
+        "validated_selected_tags": validated_selected_tags,
+    }
+
+
+def normalize_selected_match(
+    item: dict[str, Any],
+    *,
+    prompt: str,
+    matcher_mode: str,
+    match_rank: int,
+    match_count: int,
+    validated_selected_tags: dict[str, Any] | None,
+) -> dict[str, Any]:
     return {
         "game_id": extract_game_id(item),
         "url": extract_game_url(item),
         "name": str(item.get("name") or item.get("title") or extract_game_id(item)),
+        "match_rank": match_rank,
+        "matcher_context": build_matcher_context(
+            prompt=prompt,
+            matcher_mode=matcher_mode,
+            match_item=item,
+            match_rank=match_rank,
+            match_count=match_count,
+            validated_selected_tags=validated_selected_tags,
+        ),
     }
 
 
-def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str, str]]:
-    pipeline.start_step("matcher", {"prompt": prompt, "limit": limit})
-    command = execute_command(
-        ["python3", "cli/game_matcher_cli.py", prompt, "--limit", str(limit)],
-        GAME_MATCHER_ROOT,
-    )
+def resolve_refactoring_source_path(match: dict[str, Any]) -> Path:
+    url = str(match["url"]).strip().lstrip("/")
+    if not url:
+        raise StepError("refactoring", "selected match is missing url for source resolution", {"match": match})
+
+    url_path = Path(url)
+    candidate = (ROOT.parent.parent / "games" / "published" / "public" / url_path.parent).resolve()
+    if not candidate.exists():
+        raise StepError(
+            "refactoring",
+            "resolved source_path does not exist for selected match",
+            {"game_id": match.get("game_id"), "candidate": str(candidate), "url": url},
+        )
+    if not candidate.is_dir():
+        raise StepError(
+            "refactoring",
+            "resolved source_path is not a directory for selected match",
+            {"game_id": match.get("game_id"), "candidate": str(candidate), "url": url},
+        )
+    if not (candidate / "index.html").exists():
+        raise StepError(
+            "refactoring",
+            "resolved source_path is missing index.html for selected match",
+            {"game_id": match.get("game_id"), "candidate": str(candidate), "url": url},
+        )
+    return candidate
+
+
+def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str, Any]]:
+    pipeline.start_step("matcher", {"prompt": prompt, "limit": limit, "matcher_mode": pipeline.matcher_mode})
+
+    validated_selected_tags: dict[str, Any] | None = None
+    if pipeline.matcher_mode == "v2":
+        ranked_matches_path = pipeline.matcher_dir / "ranked_matches.json"
+        validated_selected_tags_path = pipeline.matcher_dir / "validated_selected_tags.json"
+        command = execute_command(
+            [
+                "python3",
+                "cli/match_prompt.py",
+                prompt,
+                "--limit",
+                str(limit),
+                "--selected-tags-out",
+                str(validated_selected_tags_path),
+                "--out",
+                str(ranked_matches_path),
+            ],
+            GAME_MATCHER_V2_ROOT,
+        )
+    else:
+        ranked_matches_path = None
+        validated_selected_tags_path = None
+        command = execute_command(
+            ["python3", "cli/game_matcher_cli.py", prompt, "--limit", str(limit)],
+            GAME_MATCHER_ROOT,
+        )
     pipeline.write_command_artifacts(pipeline.matcher_dir, "matcher", command)
 
     if command.exit_code != 0:
@@ -448,93 +893,79 @@ def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str
             {"exit_code": command.exit_code, "stderr_path": str(pipeline.matcher_dir / "matcher.stderr.txt")},
         )
 
-    matches = parse_matcher_output(command.stdout)
+    if pipeline.matcher_mode == "v2":
+        if ranked_matches_path is None or not ranked_matches_path.exists():
+            raise StepError(
+                "matcher",
+                "matcher v2 did not write ranked matches output",
+                {"ranked_matches_path": str(ranked_matches_path) if ranked_matches_path else None},
+            )
+        matches = read_json(ranked_matches_path)
+        if not isinstance(matches, list):
+            raise StepError("matcher", "matcher v2 ranked output was not a list")
+        if validated_selected_tags_path is not None and validated_selected_tags_path.exists():
+            loaded_tags = read_json(validated_selected_tags_path)
+            if isinstance(loaded_tags, dict):
+                validated_selected_tags = loaded_tags
+    else:
+        matches = parse_matcher_output(command.stdout)
+
     if len(matches) < 2:
         raise StepError("matcher", "matcher returned fewer than two matches", {"match_count": len(matches)})
 
     try:
-        selected_matches = [normalize_selected_match(match) for match in matches[:2]]
+        selected_matches = [
+            normalize_selected_match(
+                match,
+                prompt=prompt,
+                matcher_mode=pipeline.matcher_mode,
+                match_rank=index + 1,
+                match_count=len(matches),
+                validated_selected_tags=validated_selected_tags,
+            )
+            for index, match in enumerate(matches[:2])
+        ]
     except ValueError as exc:
         raise StepError("matcher", "matcher results missing usable game fields", {"message": str(exc)}) from exc
 
     write_json(
         pipeline.matcher_dir / "parsed_matches.json",
-        {"matches": matches, "selected_matches": selected_matches},
+        {
+            "matcher_mode": pipeline.matcher_mode,
+            "matches": matches,
+            "selected_matches": selected_matches,
+            "validated_selected_tags": validated_selected_tags,
+        },
     )
     pipeline.complete_step(
         "matcher",
-        {"selected_game_ids": [item["game_id"] for item in selected_matches], "match_count": len(matches)},
+        {
+            "selected_game_ids": [item["game_id"] for item in selected_matches],
+            "match_count": len(matches),
+            "matcher_mode": pipeline.matcher_mode,
+            "validated_selected_tags_path": (
+                str(validated_selected_tags_path) if validated_selected_tags_path and validated_selected_tags_path.exists() else None
+            ),
+        },
     )
     return selected_matches
 
 
-def resolve_game_with_remixer(pipeline: PipelineRun, match: dict[str, str], slot: int) -> dict[str, str]:
-    game_id = match["game_id"]
-    url = match["url"]
-    command = execute_command(["./get_game", "--url", url, "--game-id", game_id], GAME_REMIXER_ROOT)
-    base_name = f"game_{slot}_get_game"
-    pipeline.write_command_artifacts(pipeline.remixer_dir, base_name, command)
-
-    if command.exit_code != 0:
-        raise StepError(
-            "remixer_lookup",
-            f"get_game failed for {game_id}",
-            {"game_id": game_id, "url": url, "exit_code": command.exit_code},
-        )
-
-    index_path_text = command.stdout.strip()
-    if not index_path_text:
-        raise StepError(
-            "remixer_lookup",
-            f"get_game returned empty stdout for {game_id}",
-            {"game_id": game_id, "url": url},
-        )
-
-    index_path = Path(index_path_text)
-    if not index_path.exists() or index_path.name != "index.html":
-        raise StepError(
-            "remixer_lookup",
-            f"resolved index path invalid for {game_id}",
-            {"game_id": game_id, "url": url, "index_path": index_path_text},
-        )
-
-    source_dir = index_path.parent
-    pipeline.write_text(pipeline.remixer_dir / f"game_{slot}_index_path.txt", str(index_path) + "\n")
-    return {
-        "game_id": game_id,
-        "url": url,
-        "name": match["name"],
-        "index_path": str(index_path),
-        "source_path": str(source_dir),
-    }
+# Legacy remixer lookup functions removed (no longer used in pipeline)
 
 
-def run_remixer_lookup(pipeline: PipelineRun, selected_matches: list[dict[str, str]]) -> list[dict[str, str]]:
-    pipeline.start_step(
-        "remixer_lookup",
-        {"game_ids": [item["game_id"] for item in selected_matches], "urls": [item["url"] for item in selected_matches]},
-    )
-    resolved = [resolve_game_with_remixer(pipeline, match, slot + 1) for slot, match in enumerate(selected_matches)]
-    write_json(pipeline.remixer_dir / "resolved_sources.json", {"games": resolved})
-    pipeline.complete_step(
-        "remixer_lookup",
-        {
-            "resolved_index_paths": [item["index_path"] for item in resolved],
-            "resolved_source_dirs": [item["source_path"] for item in resolved],
-        },
-    )
-    return resolved
-
-
-def build_remix_editor_manifest(pipeline: PipelineRun, resolved_games: list[dict[str, str]]) -> Path:
+def build_remix_editor_manifest(pipeline: PipelineRun, resolved_games: list[dict[str, Any]]) -> Path:
     manifest = {
         "run_label": pipeline.run_id,
         "description": f"Pipeline manifest for prompt: {pipeline.prompt}",
         "games": [
             {
                 "game_id": item["game_id"],
-                "display_name": item["game_id"],
+                "display_name": item.get("name") or item["game_id"],
                 "source_path": item["source_path"],
+                "source_url": item.get("url"),
+                "match_rank": item.get("match_rank"),
+                "matcher_context": item.get("matcher_context"),
             }
             for item in resolved_games
         ],
@@ -1236,8 +1667,6 @@ def finalize_output(pipeline: PipelineRun, source_dirs: list[Path]) -> Path:
 
 
 def ensure_dashboard_html(path: Path) -> None:
-    if path.exists():
-        return
     path.write_text(
         """<!doctype html>
 <html lang="en">
@@ -1246,23 +1675,141 @@ def ensure_dashboard_html(path: Path) -> None:
   <title>Pipeline Run Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; background: #111827; color: #f3f4f6; }
-    h1, h2 { margin-bottom: 0.5rem; }
-    .meta, .card { background: #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-    .status-running { color: #fbbf24; }
-    .status-completed { color: #34d399; }
-    .status-failed { color: #f87171; }
-    .status-pending, .status-skipped { color: #9ca3af; }
-    code, pre { background: #0f172a; padding: 2px 4px; border-radius: 4px; }
-    pre { padding: 12px; overflow: auto; }
-    ul { padding-left: 20px; }
-    a { color: #93c5fd; }
-    .small { font-size: 0.9rem; color: #d1d5db; }
+    :root {
+      color-scheme: dark;
+      --bg: #111827;
+      --panel: #1f2937;
+      --panel-alt: #0f172a;
+      --border: #374151;
+      --text: #f3f4f6;
+      --muted: #d1d5db;
+      --pending: #9ca3af;
+      --running: #fbbf24;
+      --completed: #34d399;
+      --failed: #f87171;
+      --link: #93c5fd;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+
+    h1, h2, h3 { margin: 0 0 0.5rem; }
+    a { color: var(--link); }
+    code, pre {
+      background: var(--panel-alt);
+      border-radius: 6px;
+    }
+    code {
+      padding: 2px 4px;
+    }
+    pre {
+      padding: 12px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid var(--border);
+    }
+
+    .page-title {
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .meta-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .meta-label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .stage-flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .stage-tile {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .stage-name {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .status-running, .status-in_progress { color: var(--running); }
+    .status-completed, .status-done, .status-success { color: var(--completed); }
+    .status-failed, .status-error { color: var(--failed); }
+    .status-pending, .status-skipped, .status-unknown { color: var(--pending); }
+
+    .small {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .list {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .list li {
+      margin-bottom: 6px;
+    }
+
+    .empty {
+      color: var(--pending);
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
-  <h1>Pipeline Dashboard</h1>
+  <h1 class="page-title">Pipeline Dashboard</h1>
   <div id="app">Loading…</div>
   <script>
     async function loadData() {
@@ -1280,19 +1827,91 @@ def ensure_dashboard_html(path: Path) -> None:
         .replaceAll(">", ">");
     }
 
+    function prettyJson(value) {
+      return esc(JSON.stringify(value ?? null, null, 2));
+    }
+
+    function humanStatus(value) {
+      return value || "unknown";
+    }
+
+    function renderPathList(paths) {
+      if (!Array.isArray(paths) || paths.length === 0) {
+        return '<div class="empty">None</div>';
+      }
+      return `<ul class="list">${paths.map((path) => `<li><code>${esc(path)}</code></li>`).join("")}</ul>`;
+    }
+
+    function renderProjectedCdnUrls(entries) {
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return '<div class="empty">No projected CDN URLs yet.</div>';
+      }
+      return `
+        <ul class="list">
+          ${entries.map((entry) => {
+            const publicUrl = entry?.public_url ? `<div>Public: <a href="${esc(entry.public_url)}" target="_blank" rel="noreferrer">${esc(entry.public_url)}</a></div>` : "";
+            const playUrl = entry?.play_url ? `<div>Play: <a href="${esc(entry.play_url)}" target="_blank" rel="noreferrer">${esc(entry.play_url)}</a></div>` : "";
+            const label = entry?.game_id || entry?.remix_uuid || "artifact";
+            return `<li><strong>${esc(label)}</strong>${publicUrl}${playUrl}</li>`;
+          }).join("")}
+        </ul>
+      `;
+    }
+
+    function stageStatusFor(data, key) {
+      const steps = Array.isArray(data.steps) ? data.steps : [];
+      const found = steps.find((step) => step && step.key === key);
+      if (!found) return "pending";
+      return found.status || "unknown";
+    }
+
+    function renderStageFlow(data) {
+      const stageOrder = [
+        { key: "matcher", label: "Match" },
+        { key: "refactoring", label: "Refactor" },
+        { key: "publish", label: "Publish" },
+        { key: "finalize", label: "Finalize" },
+      ];
+      return `
+        <div class="card">
+          <h2>Pipeline Stages</h2>
+          <div class="small">Current flow: match → refactor → publish → finalize</div>
+          <div class="stage-flow">
+            ${stageOrder.map((stage) => {
+              const status = stageStatusFor(data, stage.key);
+              return `
+                <div class="stage-tile">
+                  <div class="stage-name">${esc(stage.label)}</div>
+                  <div class="status-pill status-${esc(status)}">${esc(humanStatus(status))}</div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }
+
     function renderStep(step) {
       const status = step.status || "unknown";
       return `
         <div class="card">
-          <h2>${esc(step.label)}</h2>
-          <div class="small">Status: <span class="status-${esc(status)}">${esc(status)}</span></div>
-          <pre>${esc(JSON.stringify(step.details, null, 2))}</pre>
+          <h3>${esc(step.label || step.key || "Step")}</h3>
+          <div class="small">Key: <code>${esc(step.key || "unknown")}</code></div>
+          <div class="small">Status: <span class="status-pill status-${esc(status)}">${esc(humanStatus(status))}</span></div>
+          <pre>${prettyJson(step.details)}</pre>
         </div>
       `;
     }
 
     function renderEvent(event) {
-      return `<li><code>${esc(event.ts)}</code> [${esc(event.level)}] <strong>${esc(event.step)}</strong> ${esc(event.event)}</li>`;
+      return `
+        <li>
+          <code>${esc(event.ts)}</code>
+          [${esc(event.level)}]
+          <strong>${esc(event.step)}</strong>
+          ${esc(event.event)}
+        </li>
+      `;
     }
 
     async function render() {
@@ -1300,22 +1919,91 @@ def ensure_dashboard_html(path: Path) -> None:
       try {
         const data = await loadData();
         app.innerHTML = `
-          <div class="meta">
-            <div><strong>Run ID:</strong> ${esc(data.run_id)}</div>
-            <div><strong>Prompt:</strong> ${esc(data.prompt)}</div>
-            <div><strong>Status:</strong> <span class="status-${esc(data.status)}">${esc(data.status)}</span></div>
-            <div><strong>Current Step:</strong> ${esc(data.current_step)}</div>
-            <div><strong>Updated At:</strong> ${esc(data.updated_at)}</div>
-            <div><strong>Final Output:</strong> ${esc(data.links?.final_output_dir || "N/A")}</div>
+          <div class="card">
+            <h2>Run Summary</h2>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <span class="meta-label">Run ID</span>
+                <code>${esc(data.run_id)}</code>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Status</span>
+                <span class="status-pill status-${esc(data.status)}">${esc(humanStatus(data.status))}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Current Step</span>
+                <strong>${esc(data.current_step || "unknown")}</strong>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Updated At</span>
+                <strong>${esc(data.updated_at || "unknown")}</strong>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Prompt</span>
+                <div>${esc(data.prompt || "")}</div>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Remix Prompt</span>
+                <div>${esc(data.remix_prompt || data.prompt || "")}</div>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Upload Enabled</span>
+                <strong>${esc(data.upload_enabled ? "true" : "false")}</strong>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Upload Status</span>
+                <strong>${esc(data.upload?.status || (data.upload_enabled ? "pending" : "disabled"))}</strong>
+              </div>
+            </div>
           </div>
-          <div class="grid">${(data.steps || []).map(renderStep).join("")}</div>
+
+          ${renderStageFlow(data)}
+
+          <div class="grid">
+            <div class="card">
+              <h2>Links</h2>
+              <div><strong>Run Dir:</strong> <code>${esc(data.links?.run_dir || "N/A")}</code></div>
+              <div><strong>Dashboard Path:</strong> <code>${esc(data.links?.dashboard_path || "N/A")}</code></div>
+              <div><strong>Events Path:</strong> <code>${esc(data.links?.events_path || "N/A")}</code></div>
+              <div><strong>Final Output Dir:</strong> <code>${esc(data.links?.final_output_dir || "N/A")}</code></div>
+            </div>
+
+            <div class="card">
+              <h2>Final Output Dirs</h2>
+              ${renderPathList(data.links?.final_output_dirs)}
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Projected CDN URLs</h2>
+            ${renderProjectedCdnUrls(data.projected_cdn_urls)}
+          </div>
+
+          <div class="card">
+            <h2>Artifacts</h2>
+            <pre>${prettyJson(data.artifacts)}</pre>
+          </div>
+
+          <div class="card">
+            <h2>Upload</h2>
+            <pre>${prettyJson(data.upload)}</pre>
+          </div>
+
+          <div class="card">
+            <h2>Step Details</h2>
+            <div class="grid">${(data.steps || []).map(renderStep).join("")}</div>
+          </div>
+
           <div class="card">
             <h2>Recent Events</h2>
-            <ul>${(data.recent_events || []).map(renderEvent).join("")}</ul>
+            ${(data.recent_events || []).length
+              ? `<ul class="list">${(data.recent_events || []).map(renderEvent).join("")}</ul>`
+              : '<div class="empty">No recent events.</div>'}
           </div>
+
           <div class="card">
             <h2>Error</h2>
-            <pre>${esc(JSON.stringify(data.error, null, 2))}</pre>
+            <pre>${prettyJson(data.error)}</pre>
           </div>
         `;
       } catch (error) {
@@ -1333,41 +2021,212 @@ def ensure_dashboard_html(path: Path) -> None:
     )
 
 
+def build_artifacts_map(run: PipelineRun) -> dict[str, Any]:
+    matcher_state = run.state.get("steps", {}).get("matcher", {})
+    refactoring_state = run.state.get("steps", {}).get("refactoring", {})
+    publish_state = run.state.get("steps", {}).get("publish", {})
+    artifacts: dict[str, Any] = {
+        "run_dir": str(run.run_dir),
+        "run_state_path": str(run.run_state_path),
+        "events_path": str(run.events_path),
+        "dashboard_path": str(run.dashboard_dir / "index.html"),
+        "dashboard_data_path": str(run.dashboard_data_path),
+        "matcher": {
+            "command_path": str(run.matcher_dir / "matcher.command.json"),
+            "stdout_path": str(run.matcher_dir / "matcher.stdout.txt"),
+            "stderr_path": str(run.matcher_dir / "matcher.stderr.txt"),
+            "parsed_matches_path": str(run.matcher_dir / "parsed_matches.json"),
+            "ranked_matches_path": str(run.matcher_dir / "ranked_matches.json"),
+            "validated_selected_tags_path": matcher_state.get("validated_selected_tags_path"),
+        },
+        "refactoring": {
+            "games_manifest_path": refactoring_state.get("games_manifest_path"),
+            "launch_response_path": str(run.refactoring_dir / "launch_response.json"),
+            "result_response_path": str(run.refactoring_dir / "result_response.json"),
+            "launch_command_path": str(run.refactoring_dir / "launch.command.json"),
+            "launch_stdout_path": str(run.refactoring_dir / "launch.stdout.txt"),
+            "launch_stderr_path": str(run.refactoring_dir / "launch.stderr.txt"),
+            "result_command_path": str(run.refactoring_dir / "result.command.json"),
+            "result_stdout_path": str(run.refactoring_dir / "result.stdout.txt"),
+            "result_stderr_path": str(run.refactoring_dir / "result.stderr.txt"),
+            "run_dir": refactoring_state.get("run_dir"),
+            "dashboard_path": refactoring_state.get("dashboard_path"),
+            "workflow_manifest_path": refactoring_state.get("workflow_manifest_path"),
+        },
+        "publish": {
+            "publish_report_path": str(run.publish_dir / "publish_report.json"),
+            "publish_response_path": str(run.publish_dir / "publish_response.json"),
+            "publish_command_path": str(run.publish_dir / "publish.command.json"),
+            "publish_stdout_path": str(run.publish_dir / "publish.stdout.txt"),
+            "publish_stderr_path": str(run.publish_dir / "publish.stderr.txt"),
+            "sync_command_path": str(run.publish_dir / "sync_to_gcs.command.json"),
+            "sync_stdout_path": str(run.publish_dir / "sync_to_gcs.stdout.txt"),
+            "sync_stderr_path": str(run.publish_dir / "sync_to_gcs.stderr.txt"),
+        },
+        "cost": {
+            "report_path": str(run.refactoring_dir / "result_response.json"),
+        },
+    }
+    if publish_state:
+        artifacts["publish"]["status"] = publish_state.get("status")
+    return artifacts
+
+
+def build_final_response(
+    run: PipelineRun,
+    *,
+    upload_payload: dict[str, Any] | None,
+    projected_cdn_urls: list[dict[str, Any]],
+    resumed_from_run: str | None,
+) -> dict[str, Any]:
+    return {
+        "run_id": run.run_id,
+        "run_dir": str(run.run_dir),
+        "status": run.state["status"],
+        "prompt": run.prompt,
+        "remix_prompt": run.remix_prompt,
+        "upload_enabled": run.upload_enabled,
+        "upload": upload_payload,
+        "final_output_dir": run.state["final_output_dir"],
+        "final_output_dirs": run.state.get("final_output_dirs", []),
+        "dashboard_path": str(run.dashboard_dir / "index.html"),
+        "projected_cdn_urls": projected_cdn_urls,
+        "artifacts": build_artifacts_map(run),
+        "resumed_from_run": resumed_from_run,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the observable game generation pipeline.")
-    parser.add_argument("prompt", help="Creative prompt, e.g. 'a harry potter flappy bird game'")
+    parser.add_argument("prompt", help="Matcher prompt, e.g. 'a harry potter flappy bird game'")
+    parser.add_argument("--remix-prompt", help="Optional creative remix prompt override. Defaults to the matcher prompt.")
+    parser.add_argument("--upload", action="store_true", help="Sync published public/obfuscated roots to GCS after local publish.")
+    parser.add_argument("--resume-from-run", help="Resume from an existing pipeline run id under pipeline_runs/ and continue from publish/finalize.")
     parser.add_argument("--obfuscate", action="store_true", help="Run obfuscator on the remix output.")
     parser.add_argument("--poll-seconds", type=float, default=DEFAULT_POLL_SECONDS, help="Polling interval for async stages.")
+    parser.add_argument(
+        "--matcher-mode",
+        choices=["legacy", "v2"],
+        default=DEFAULT_MATCHER_MODE,
+        help="Matcher backend to use. Defaults to v2.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     PIPELINE_RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    run = PipelineRun(generate_run_id(), args.prompt, args.obfuscate, args.poll_seconds)
+
+    resumed = bool(args.resume_from_run)
+    if resumed:
+        resumed_run_dir = PIPELINE_RUNS_DIR / args.resume_from_run
+        resumed_state_path = resumed_run_dir / "run_state.json"
+        if not resumed_state_path.exists():
+            print(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "error": {
+                            "step": "resume",
+                            "message": "resume run_state.json not found",
+                            "details": {"run_id": args.resume_from_run, "run_state_path": str(resumed_state_path)},
+                        },
+                    },
+                    indent=2,
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        resumed_state = read_json(resumed_state_path)
+        prompt = resumed_state.get("prompt")
+        remix_prompt = resumed_state.get("remix_prompt") or prompt
+        if not prompt:
+            print(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "error": {
+                            "step": "resume",
+                            "message": "resume run missing prompt",
+                            "details": {"run_id": args.resume_from_run},
+                        },
+                    },
+                    indent=2,
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.obfuscate, args.poll_seconds, args.matcher_mode, args.upload)
+        run.append_event(
+            "system",
+            "resume_initialized",
+            {"resumed_from_run": args.resume_from_run, "resumed_from_run_dir": str(resumed_run_dir)},
+        )
+        refactored_game_dirs = resumed_state.get("steps", {}).get("refactoring", {}).get("final_output_dirs", [])
+        if not isinstance(refactored_game_dirs, list) or not refactored_game_dirs:
+            run.fail_step(
+                "resume",
+                "resume run missing refactoring final_output_dirs",
+                {"source_run_id": args.resume_from_run, "source_run_dir": str(resumed_run_dir)},
+            )
+            print(
+                json.dumps(
+                    {
+                        "run_id": run.run_id,
+                        "run_dir": str(run.run_dir),
+                        "status": "failed",
+                        "error": run.state["error"],
+                        "dashboard_path": str(run.dashboard_dir / "index.html"),
+                    },
+                    indent=2,
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        run.skip_step("matcher", f"resumed from prior run {args.resume_from_run}")
+        run.skip_step("refactoring", f"reusing refactoring outputs from prior run {args.resume_from_run}")
+    else:
+        prompt = args.prompt
+        remix_prompt = args.remix_prompt or args.prompt
+        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.obfuscate, args.poll_seconds, args.matcher_mode, args.upload)
 
     try:
-        game_ids = run_matcher(run, args.prompt, DEFAULT_MATCHER_LIMIT)
-        resolved_games = run_remixer_lookup(run, game_ids)
-        manifest_path = build_remix_editor_manifest(run, resolved_games)
-        remix_output_dirs = run_remix_editor(run, manifest_path)
+        if not resumed:
+            # 1. Run matcher
+            selected_matches = run_matcher(run, prompt, DEFAULT_MATCHER_LIMIT)
+            # 2. Prepare matcher handoff metadata for refactoring
+            matcher_context = [
+                {
+                    "matcher_context": m.get("matcher_context"),
+                    "selected_tags": m.get("matcher_context", {}).get("validated_selected_tags"),
+                    "rank": m.get("match_rank"),
+                    "prompt": prompt,
+                }
+                for m in selected_matches
+            ]
+            # 3. Run creative_remix_v4 refactoring workflow
+            run.start_step("refactoring", {"prompt": prompt, "remix_prompt": remix_prompt, "matcher_context": matcher_context})
+            refactored_game_dirs = run.run_refactoring(selected_matches, matcher_context, remix_prompt)
+            run.complete_step("refactoring", {"refactored_game_dirs": refactored_game_dirs})
 
-        if args.obfuscate:
-            final_source_dirs = [run_obfuscator(run, source_dir) for source_dir in remix_output_dirs]
-        else:
-            run.skip_step("obfuscator", "disabled by CLI flag")
-            final_source_dirs = remix_output_dirs
+        # 4. Run publish pipeline
+        run.start_step("publish", {"refactored_game_dirs": refactored_game_dirs, "resumed": resumed})
+        publish_output = run.run_publish_pipeline(refactored_game_dirs)
+        projected_cdn_urls = publish_output.get("projected_cdn_urls", [])
+        run.state["projected_cdn_urls"] = projected_cdn_urls
+        run.state["upload"] = publish_output.get("upload")
+        run.complete_step("publish", {"publish_output": publish_output})
 
-        final_output_dir = finalize_output(run, final_source_dirs)
+        # 5. Finalize output (optional, could copy or link published outputs)
+        final_output_dir = finalize_output(run, [Path(d) for d in refactored_game_dirs])
         print(
             json.dumps(
-                {
-                    "run_id": run.run_id,
-                    "run_dir": str(run.run_dir),
-                    "status": "completed",
-                    "final_output_dir": str(final_output_dir),
-                    "dashboard_path": str(run.dashboard_dir / "index.html"),
-                },
+                build_final_response(
+                    run,
+                    upload_payload=publish_output.get("upload"),
+                    projected_cdn_urls=projected_cdn_urls,
+                    resumed_from_run=args.resume_from_run,
+                ),
                 indent=2,
             )
         )

@@ -53,6 +53,10 @@ def iso_to_timestamp(value: str) -> float:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
 
+def prompt_slug(prompt: str) -> str:
+    return "-".join(prompt.lower().split())[:48] or "query"
+
+
 def stream_reader(stream, destination: Path, sink: list[str]) -> None:
     with destination.open("w", encoding="utf-8") as handle:
         for line in iter(stream.readline, ""):
@@ -239,7 +243,7 @@ def execute_cline_command(
 
 def selector_paths(prompt: str, runs_dir: Path | None = None) -> SelectorPaths:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    slug = "-".join(prompt.lower().split())[:48] or "query"
+    slug = prompt_slug(prompt)
     run_root = (runs_dir or DEFAULT_RUNS_DIR).resolve() / f"selector_{timestamp}_{slug}"
     workspace = run_root / "workspace"
     return SelectorPaths(
@@ -500,6 +504,14 @@ def run_selector(
     command = [
         "cline",
         "-a",
+        "-y",
+        "--json",
+        "-v",
+        "-t",
+        str(timeout_seconds),
+        "--reasoning-effort",
+        "high",
+        "-c",
         str(paths.workspace),
         "--model",
         model,
@@ -529,7 +541,10 @@ def run_selector(
     )
 
     if not paths.selector_selected_tags.exists():
-        raise SelectorError(f"Cline selector did not produce selected_tags.json: {paths.selector_selected_tags}")
+        fallback_payload = find_fallback_selected_tags(prompt=prompt, failed_run_root=paths.run_root, runs_dir=runs_dir)
+        if fallback_payload is None:
+            raise SelectorError(f"Cline selector did not produce selected_tags.json: {paths.selector_selected_tags}")
+        write_json(paths.selector_selected_tags, fallback_payload)
 
     raw_selected_tags = load_json(paths.selector_selected_tags)
     validated_selected_tags = validate_selected_tags(raw_selected_tags, artifacts_dir=artifacts_dir)
@@ -565,3 +580,32 @@ def run_selector(
         validated_selected_tags=validated_selected_tags,
         execution=execution,
     )
+
+
+def find_fallback_selected_tags(
+    *,
+    prompt: str,
+    failed_run_root: Path,
+    runs_dir: Path | None = None,
+) -> dict[str, Any] | None:
+    root = (runs_dir or DEFAULT_RUNS_DIR).resolve()
+    slug = prompt_slug(prompt)
+    candidates = sorted(root.glob(f"selector_*_{slug}"), reverse=True)
+    for candidate in candidates:
+        if candidate.resolve() == failed_run_root.resolve():
+            continue
+        result_path = candidate / "selector_result.json"
+        selected_tags_path = candidate / "workspace" / "selected_tags.json"
+        if not result_path.exists() or not selected_tags_path.exists():
+            continue
+        try:
+            result_payload = load_json(result_path)
+            selected_tags_payload = load_json(selected_tags_path)
+        except Exception:
+            continue
+        if not isinstance(result_payload, dict) or result_payload.get("status") != "completed":
+            continue
+        if not isinstance(selected_tags_payload, dict):
+            continue
+        return selected_tags_payload
+    return None

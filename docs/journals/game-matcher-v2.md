@@ -221,6 +221,58 @@ The deterministic architecture did not change. Only the per-tag weight source ch
 
 ---
 
+### 2026-05-14 03:39 - README updated for score contract and generator handoff
+
+**What Changed:**
+- Rewrote `tools/game_matcher_v2/README.md` to reflect the actual shipped v2 architecture instead of the older rank-based draft.
+- Replaced old `rank` examples with normalized `score` examples.
+- Added usage for:
+  - `cli/build_artifacts.py`
+  - `cli/match_prompt.py`
+- Documented selector validation behavior, artifact outputs, and projected cost accounting.
+- Added a handoff section describing how `game_matcher_v2` should plug into `game_generator` without changing the downstream remixer boundary.
+
+**Why:**
+The README was stale after the rank→score migration and did not clearly explain how the v2 matcher should feed the pipeline. We need the docs to match the real contract before wiring it into `game_generator`.
+
+**Generator Handoff Clarified:**
+- `game_matcher_v2` should still return matcher-style ranked game results
+- `game_generator` can keep selecting top games from that list
+- source resolution and remixer/editor launch should remain downstream pipeline responsibilities
+- optional future enhancement: also pass validated selected tags into the remixer path for richer conditioning
+
+**Status:** In Progress
+
+---
+
+### 2026-05-14 03:45 - Wired `game_matcher_v2` context into generator → remixer handoff
+
+**What Changed:**
+- Updated `tools/game_generator/scripts/run_pipeline.py` so the pipeline can invoke `game_matcher_v2` via `cli/match_prompt.py`.
+- Added a `--matcher-mode` CLI flag to the generator pipeline, defaulting to `v2` while preserving an explicit `legacy` fallback.
+- Persisted validated selected tags in the pipeline matcher artifacts when running v2.
+- Enriched selected match records with `matcher_context`, including:
+  - original prompt
+  - matcher mode
+  - selected match rank
+  - matched queries / score-shape metadata when present
+  - validated selected tags from the selector run
+- Updated the remixer manifest emitted by the generator to carry matcher metadata per selected game.
+- Updated `tools/game_refactoring/scripts/create_run.py` to preserve `matcher_context`, `source_url`, and `match_rank` inside each per-game `game_state.json`.
+- Updated `tools/game_refactoring/scripts/run_operator_pipeline_game.py` so operator prompts now include an **Upstream Matcher Context** section when available.
+
+**Why:**
+Previously the generator only used matcher output to choose source games, then discarded the richer query interpretation. The user explicitly wanted the results of the matcher query to reach the remixer, so the pipeline now carries that context through to the operator worker prompt.
+
+**Effect on Handoff:**
+- source resolution still works exactly the same
+- remixer/editor manifest remains backward-compatible because extra game fields are preserved but not required
+- operator workers now receive upstream matcher context as prompt-time JSON, enabling richer conditioning without changing source preparation or run scaffolding semantics
+
+**Status:** In Progress
+
+---
+
 ## 📚 Quick Reference
 
 ### Key Files

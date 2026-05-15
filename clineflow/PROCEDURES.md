@@ -883,6 +883,7 @@ head -n 20 CHANGELOG.md
 
 **Critical Rule:**
 - **Do not use long inline shell commands** for non-trivial operational work.
+- This is especially important because the assistant/terminal bridge may fail to reconnect or stream reliably when commands are too long or too shell-heavy.
 - Instead, write:
   - a **disposable script** under `tmp/` for one-off work, or
   - a **permanent script/fixture** under `scripts/`, `tools/.../scripts/`, or `fixtures/` when the command pattern is reusable.
@@ -894,6 +895,7 @@ Long inline commands are fragile and can fail because of:
 - terminal output truncation
 - stuck subshells / hanging execution
 - copy/paste errors during future reuse
+- assistant connection instability on long command payloads
 
 **Required Practice:**
 1. **For one-off inspection or generation tasks**
@@ -901,6 +903,7 @@ Long inline commands are fragile and can fail because of:
    - examples:
      - `tmp/count_vatsal_games.py`
      - `tmp/build_large_manifest.py`
+     - `tmp/verify_game_generator_dashboard_html.py`
 
 2. **For repeatable operator workflows**
    - create a permanent script in:
@@ -925,6 +928,9 @@ Long inline commands are fragile and can fail because of:
 4. **If a command is longer than a small single-line invocation**
    - stop and convert it into a script file first
 
+5. **If the task needs multiple verification steps**
+   - prefer a single short script in `tmp/` over chaining a long shell command with `&&`, pipes, nested quotes, or inline Python
+
 **Examples:**
 ```bash
 # Good: disposable one-off script
@@ -944,6 +950,7 @@ python3 tools/game_refactoring/scripts/game_workflow.py \
 - ✅ less shell quoting risk
 - ✅ better documentation of operator workflows
 - ✅ better fit for AI-assisted execution
+- ✅ lower risk of assistant/terminal disconnect issues
 
 ---
 

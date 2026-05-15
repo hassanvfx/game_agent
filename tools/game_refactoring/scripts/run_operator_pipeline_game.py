@@ -202,6 +202,20 @@ def build_operator_prompt_text(
             "",
         ]
 
+    matcher_context_section: list[str] = []
+    matcher_context = game_state.get("matcher_context")
+    if isinstance(matcher_context, dict) and matcher_context:
+        matcher_context_section = [
+            "## Upstream Matcher Context",
+            "",
+            "This game was selected by the upstream matcher. Use this as additional steering context when it helps theme selection, mechanic interpretation, and remix framing.",
+            "",
+            "```json",
+            json.dumps(matcher_context, indent=2, ensure_ascii=False),
+            "```",
+            "",
+        ]
+
     runtime_validation_section = [
         "## Validation Runtime Contract",
         "",
@@ -265,6 +279,7 @@ def build_operator_prompt_text(
         f"- attempt_number: {attempt_number}",
         "",
         *user_prompt_section,
+        *matcher_context_section,
         "## Catalog Media Policy",
         "",
         "Use only approved remote media URLs from these catalog files:",
