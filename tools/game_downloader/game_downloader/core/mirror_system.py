@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import posixpath
 import re
 import shutil
 import socket
@@ -366,6 +367,54 @@ def build_url_aliases(*urls: str) -> list[str]:
     return aliases
 
 
+def build_entry_relative_aliases(entry_url: str, asset_url: str) -> list[str]:
+    entry_candidate = (entry_url or "").strip()
+    asset_candidate = canonicalize_asset_url((asset_url or "").strip())
+    if not entry_candidate or not asset_candidate:
+        return []
+    if not entry_candidate.startswith(("http://", "https://")):
+        return []
+    if not asset_candidate.startswith(("http://", "https://")):
+        return []
+
+    entry_parsed = parse.urlparse(entry_candidate)
+    asset_parsed = parse.urlparse(asset_candidate)
+    if (
+        entry_parsed.scheme.lower() != asset_parsed.scheme.lower()
+        or entry_parsed.netloc.lower() != asset_parsed.netloc.lower()
+    ):
+        return []
+
+    aliases: list[str] = []
+    seen: set[str] = set()
+
+    def add(candidate: str) -> None:
+        normalized = (candidate or "").strip()
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        aliases.append(normalized)
+
+    entry_path = entry_parsed.path or "/"
+    entry_dir_path = entry_path if entry_path.endswith("/") else posixpath.dirname(entry_path) + "/"
+
+    asset_path = asset_parsed.path or "/"
+    relpath = posixpath.relpath(asset_path, start=entry_dir_path.rstrip("/") or "/")
+    if relpath in {".", ""}:
+        relpath = posixpath.basename(asset_path) or "asset"
+    if asset_parsed.query:
+        relpath = f"{relpath}?{asset_parsed.query}"
+
+    add(relpath)
+    if not relpath.startswith(("./", "../", "/")):
+        add(f"./{relpath}")
+    add(asset_path)
+    if asset_parsed.query:
+        add(f"{asset_path}?{asset_parsed.query}")
+
+    return aliases
+
+
 def detect_asset_file_extension(asset_url: str, final_url: str, headers: dict[str, str]) -> str:
     header_map = {str(key).lower(): str(value) for key, value in headers.items()}
     content_type = header_map.get("content-type", "").split(";", 1)[0].strip().lower()
@@ -572,6 +621,9 @@ def rewrite_text_with_mapping(
 ) -> tuple[str, list[dict[str, Any]]]:
     rewritten = text
     applied: list[dict[str, Any]] = []
+    placeholder_values: dict[str, str] = {}
+    placeholder_index = 0
+
     for original, local_path in sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True):
         effective_local_path = local_path
         if rewrite_relative_to_file and current_file_path is not None:
@@ -581,7 +633,10 @@ def rewrite_text_with_mapping(
         occurrences = rewritten.count(original)
         if occurrences <= 0:
             continue
-        rewritten = rewritten.replace(original, effective_local_path)
+        placeholder = f"__GAME_DOWNLOADER_REWRITE_{placeholder_index:06d}__"
+        placeholder_index += 1
+        rewritten = rewritten.replace(original, placeholder)
+        placeholder_values[placeholder] = effective_local_path
         applied.append(
             {
                 "original_url": original,
@@ -589,6 +644,10 @@ def rewrite_text_with_mapping(
                 "replacement_count": occurrences,
             }
         )
+
+    for placeholder, effective_local_path in placeholder_values.items():
+        rewritten = rewritten.replace(placeholder, effective_local_path)
+
     return rewritten, applied
 
 
@@ -1752,9 +1811,11 @@ class MirrorRun:
         replay_dir.mkdir(parents=True, exist_ok=True)
 
         replacements: dict[str, str] = {}
+        html_replacements: dict[str, str] = {}
         url_map_entries: list[dict[str, Any]] = []
+        entry_url_for_aliases = str(entry_summary.get("final_url") or entry_summary.get("source_url") or "")
         entry_origin_netloc = parse.urlparse(
-            str(entry_summary.get("final_url") or entry_summary.get("source_url") or "")
+            entry_url_for_aliases
         ).netloc.lower() or None
 
         for item in download_summary.get("downloaded") or []:
@@ -1780,6 +1841,14 @@ class MirrorRun:
             alias_urls = build_url_aliases(original_url, final_url)
             for alias_url in alias_urls:
                 replacements[alias_url] = replay_relative
+                html_replacements[alias_url] = replay_relative
+
+            entry_relative_aliases = build_entry_relative_aliases(
+                entry_url_for_aliases,
+                final_url or original_url,
+            )
+            for alias_url in entry_relative_aliases:
+                html_replacements[alias_url] = replay_relative
 
             url_map_entries.append(
                 {
@@ -1799,7 +1868,7 @@ class MirrorRun:
 
         rewritten_html, applied_replacements = rewrite_text_with_mapping(
             entry_html,
-            replacements,
+            html_replacements,
             current_file_path=replay_dir / "index.html",
             rewrite_relative_to_file=False,
         )
