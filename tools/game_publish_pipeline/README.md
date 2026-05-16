@@ -41,11 +41,16 @@ Post-publish helpers wired in pipeline args:
 6. optionally refresh app artifacts and validate published outputs
 7. write final JSON report
 
+Artifact refresh now also renders annotator dashboards at two scopes:
+- per-run dashboards under `games/published/runs/<run_id>/public|obfuscated/annotator.html`
+- root dashboards under `games/published/public/annotator.html` and `games/published/obfuscated/annotator.html`
+
 ## Additional scripts
 
 - `scripts/sync_to_gcs.py` — sync `games/published/public|obfuscated` to GCS
 - `scripts/refresh_app_artifacts.py` — refresh persistent app artifact snapshots
 - `scripts/validate_published_outputs.py` — validate outputs/screenshots/artifacts
+- `scripts/generate_annotator_entry.py` — render annotator dashboard HTML for run/root published artifact views
 
 ## Architecture boundary
 

@@ -15,10 +15,12 @@ REPO_ROOT = TOOL_ROOT.parents[1]
 
 DEFAULT_PUBLIC_ROOT = REPO_ROOT / "games" / "published" / "public"
 DEFAULT_OBFUSCATED_ROOT = REPO_ROOT / "games" / "published" / "obfuscated"
+DEFAULT_RUNS_ROOT = REPO_ROOT / "games" / "published" / "runs"
 
 INDEX_NAME = "index.json"
 APP_TAGS_NAME = "app_tags.json"
 APP_NAME = "app.json"
+ANNOTATOR_NAME = "annotator.html"
 
 
 def load_json(path: Path) -> Any:
@@ -40,7 +42,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", required=True, help="Collection manifest with entries.")
     parser.add_argument("--public-root", default=str(DEFAULT_PUBLIC_ROOT), help="Published public root.")
     parser.add_argument("--obfuscated-root", default=str(DEFAULT_OBFUSCATED_ROOT), help="Published obfuscated root.")
+    parser.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT), help="Published runs root.")
+    parser.add_argument("--run-id", help="Optional run id for validating run-scoped dashboard artifacts.")
     parser.add_argument("--collection-slug", default="vatsal_app_alpha", help="Collection slug for app artifacts.")
+    parser.add_argument("--annotator-html-name", default=ANNOTATOR_NAME, help="Expected annotator dashboard filename.")
     parser.add_argument("--report-path", help="Optional path to write the JSON validation report.")
     parser.add_argument(
         "--strict",
@@ -510,9 +515,28 @@ def validate_catalog_artifact(
     }
 
 
+def validate_dashboard_artifact(label: str, path: Path) -> dict[str, Any]:
+    failures: list[dict[str, Any]] = []
+    if not path.is_file():
+        failures.append(
+            make_failure(
+                "missing_dashboard_artifact",
+                f"{label} dashboard artifact is missing.",
+                expected=str(path),
+            )
+        )
+    return {
+        "label": label,
+        "path": str(path),
+        "status": "failed" if failures else "passed",
+        "failures": failures,
+    }
+
+
 def build_summary(
     entry_results: list[dict[str, Any]],
     app_artifacts: list[dict[str, Any]],
+    dashboard_artifacts: list[dict[str, Any]],
 ) -> dict[str, Any]:
     counter: Counter[str] = Counter()
 
@@ -527,6 +551,10 @@ def build_summary(
             for failure in record.get("failures", []):
                 counter[failure["category"]] += 1
 
+    for artifact in dashboard_artifacts:
+        for failure in artifact["failures"]:
+            counter[failure["category"]] += 1
+
     total_failures = sum(counter.values())
     return {
         "entries_total": len(entry_results),
@@ -534,6 +562,8 @@ def build_summary(
         "entries_failed": sum(1 for item in entry_results if item["status"] == "failed"),
         "app_artifacts_total": len(app_artifacts),
         "app_artifacts_failed": sum(1 for item in app_artifacts if item["status"] == "failed"),
+        "dashboard_artifacts_total": len(dashboard_artifacts),
+        "dashboard_artifacts_failed": sum(1 for item in dashboard_artifacts if item["status"] == "failed"),
         "failure_count": total_failures,
         "failure_categories": dict(sorted(counter.items())),
         "status": "failed" if total_failures else "passed",
@@ -546,7 +576,9 @@ def main() -> None:
     manifest_path = Path(args.manifest).resolve()
     public_root = Path(args.public_root).resolve()
     obfuscated_root = Path(args.obfuscated_root).resolve()
+    runs_root = Path(args.runs_root).resolve()
     collection_slug = str(args.collection_slug)
+    annotator_html_name = str(args.annotator_html_name)
 
     manifest_payload = load_json(manifest_path)
     entries = infer_manifest_entries(manifest_payload, public_root=public_root)
@@ -603,15 +635,29 @@ def main() -> None:
         ),
     ]
 
-    dashboard_artifacts: list[dict[str, Any]] = []
+    dashboard_artifacts: list[dict[str, Any]] = [
+        validate_dashboard_artifact("public_root_dashboard", public_root / annotator_html_name),
+        validate_dashboard_artifact("obfuscated_root_dashboard", obfuscated_root / annotator_html_name),
+    ]
+    if args.run_id:
+        run_dir = runs_root / str(args.run_id)
+        dashboard_artifacts.extend(
+            [
+                validate_dashboard_artifact("run_public_dashboard", run_dir / "public" / annotator_html_name),
+                validate_dashboard_artifact("run_obfuscated_dashboard", run_dir / "obfuscated" / annotator_html_name),
+            ]
+        )
 
-    summary = build_summary(entry_results, app_artifacts)
+    summary = build_summary(entry_results, app_artifacts, dashboard_artifacts)
 
     report = {
         "manifest": str(manifest_path),
         "collection_slug": collection_slug,
+        "annotator_html_name": annotator_html_name,
         "public_root": str(public_root),
         "obfuscated_root": str(obfuscated_root),
+        "runs_root": str(runs_root),
+        "run_id": args.run_id,
         "entry_results": entry_results,
         "app_artifacts": app_artifacts,
         "dashboard_artifacts": dashboard_artifacts,

@@ -38,6 +38,146 @@
 
 ## 📝 Journal Entries
 
+### 2026-05-16 11:54 - Final operator command recap for dashboard-aware publish flow
+
+**What Changed:**
+- documented the final operator-facing commands for the working local publish flow
+- documented the final command shape for dashboard artifact refresh and validation
+- documented the intended separate GCS sync command shape
+- recorded the grounded finding that direct `gcloud storage` operations are currently hanging outside the Python wrapper
+
+**Final Working Local Commands:**
+
+**1. Main publish pipeline**
+```bash
+python3 tools/game_publish_pipeline/scripts/publish_games.py \
+  --manifest docs/publish_manifests/vatsal_app_alpha_231_manifest.json \
+  --published-public-root games/published/public \
+  --published-obfuscated-root games/published/obfuscated \
+  --overwrite
+```
+
+**2. Artifact refresh with run-scoped + root dashboards**
+```bash
+python3 tools/game_publish_pipeline/scripts/refresh_app_artifacts.py \
+  --manifest <artifacts-manifest.json> \
+  --runs-root games/published/runs \
+  --run-id <run_id> \
+  --collection-slug vatsal_app_alpha \
+  --public-root games/published/public \
+  --obfuscated-root games/published/obfuscated
+```
+
+**3. Published output validation, including dashboards**
+```bash
+python3 tools/game_publish_pipeline/scripts/validate_published_outputs.py \
+  --manifest <artifacts-manifest.json> \
+  --public-root games/published/public \
+  --obfuscated-root games/published/obfuscated \
+  --runs-root games/published/runs \
+  --run-id <run_id> \
+  --collection-slug vatsal_app_alpha \
+  --annotator-html-name annotator.html
+```
+
+**4. Direct dashboard generation utility**
+```bash
+python3 tools/game_publish_pipeline/scripts/generate_annotator_entry.py \
+  --target both \
+  --public-root games/published/public \
+  --obfuscated-root games/published/obfuscated \
+  --entry-name annotator.html \
+  --app-json-name app.json
+```
+
+**Final Dashboard Contract:**
+- run public:
+  - `games/published/runs/<run_id>/public/annotator.html`
+- run obfuscated:
+  - `games/published/runs/<run_id>/obfuscated/annotator.html`
+- root public:
+  - `games/published/public/annotator.html`
+- root obfuscated:
+  - `games/published/obfuscated/annotator.html`
+
+**Intended Separate GCS Sync Command Shape:**
+```bash
+python3 tools/game_publish_pipeline/scripts/sync_to_gcs.py \
+  --target both \
+  --mode per-item \
+  --project jabali-prod \
+  --public-root games/published/public \
+  --obfuscated-root games/published/obfuscated
+```
+
+**Useful GCS Sync Variants:**
+
+**Dry run:**
+```bash
+python3 tools/game_publish_pipeline/scripts/sync_to_gcs.py \
+  --target both \
+  --mode per-item \
+  --project jabali-prod \
+  --public-root games/published/public \
+  --obfuscated-root games/published/obfuscated \
+  --dry-run
+```
+
+**Single item public sync:**
+```bash
+python3 tools/game_publish_pipeline/scripts/sync_to_gcs.py \
+  --target public \
+  --mode per-item \
+  --project jabali-prod \
+  --public-root games/published/public \
+  --only-item <game_id>
+```
+
+**Grounded GCS Finding:**
+- the current hang is not isolated to `sync_to_gcs.py`
+- direct commands also hang, including:
+  - `gcloud storage rsync -r ...`
+  - `gcloud storage cp /tmp/gcs-sync-test.txt ...`
+- this strongly indicates the present blocker is at the `gcloud` / GCS access layer rather than in the publish-pipeline wrapper logic
+
+**Recommended Next Diagnostics for GCS:**
+```bash
+gcloud auth list
+gcloud config list --format='text(core.account,core.project)'
+gcloud storage ls gs://friendjam-ios/games-prod/public --project jabali-prod
+```
+
+**Why:**
+This preserves the final, working local command set in one operator-facing journal entry and separates confirmed publish/dashboard work from the still-open Google Cloud transport issue.
+
+**Status:** In Progress
+
+### 2026-05-16 04:08 - Integrate annotator dashboards into artifact refresh lifecycle
+
+**What Changed:**
+- grounded the dashboard integration around the existing post-publish artifact ownership boundary
+- chose a stable dashboard filename contract of `annotator.html`
+- prepared to render run-scoped and root dashboards as part of `refresh_app_artifacts.py`
+
+**Why:**
+The publish pipeline already treats `refresh_app_artifacts.py` as the owner of run snapshots and root artifact materialization. Adding dashboards there keeps dashboard generation aligned with `app.json` creation without overloading the outer pipeline or the JSON-only materialization script.
+
+**Implementation Plan:**
+- update `tools/game_publish_pipeline/scripts/refresh_app_artifacts.py` to render:
+  - `games/published/runs/<run_id>/public/annotator.html`
+  - `games/published/runs/<run_id>/obfuscated/annotator.html`
+  - `games/published/public/annotator.html`
+  - `games/published/obfuscated/annotator.html`
+- reuse `tools/game_publish_pipeline/scripts/generate_annotator_entry.py` as the single HTML renderer
+- extend `tools/game_publish_pipeline/scripts/validate_published_outputs.py` to report dashboard presence
+- surface dashboard outputs in refresh/pipeline result payloads
+
+**Technical Decision:**
+- keep `materialize_artifact_view.py` JSON-only
+- treat dashboards as artifact-adjacent rendered outputs owned by the artifact refresh step, rather than mergeable artifacts
+
+**Status:** In Progress
+
 ### 2026-05-10 07:34 - Initial higher-order publish pipeline scaffold
 
 **What Changed:**
@@ -757,3 +897,43 @@ The run was intentionally stopped before manifest handoff to `publish_games.py` 
 ---
 
 *This journal documents the first pass of the higher-order `game_publish_pipeline` tool that orchestrates obfuscation followed by deploy packaging.*
+
+
+### 2026-05-16 03:21 - Add optional post-artifact GCG sync stage to publish pipeline
+
+**What Changed:**
+Updated `tools/game_publish_pipeline/game_publish_pipeline/pipeline.py` to support an optional post-artifact GCS sync step controlled by new CLI flags.
+
+**New CLI Flags:**
+- `--gcg-sync`
+- `--gcg-sync-project` (default: `jabali-prod`)
+- `--gcg-sync-dry-run`
+
+**Pipeline Integration:**
+- Added `SYNC_TO_GCS_SCRIPT` constant pointing to:
+  - `tools/game_publish_pipeline/scripts/sync_to_gcs.py`
+- Added a conditional sync stage that runs after refresh/validation stages when `--gcg-sync` is passed.
+- Wired command shape to:
+  - `--target both`
+  - `--mode per-item`
+  - `--project <gcg-sync-project>`
+  - `--public-root <published_public_root>`
+  - `--obfuscated-root <published_obfuscated_root>`
+  - optional `--dry-run` when `--gcg-sync-dry-run` is set.
+
+**Verification:**
+- Ran `python3 tools/game_publish_pipeline/scripts/publish_games.py --help` and confirmed new flags are exposed.
+- Ran dry-run with explicit published roots and sync flags:
+  - `--published-public-root games/published/public`
+  - `--published-obfuscated-root games/published/obfuscated`
+  - `--gcg-sync --gcg-sync-dry-run --dry-run`
+- Confirmed dry-run payload includes:
+  - `gcg_sync.enabled = true`
+  - `gcg_sync.project = "jabali-prod"`
+  - `gcg_sync.dry_run = true`
+
+**Notes:**
+- This keeps sync opt-in and preserves existing behavior when `--gcg-sync` is omitted.
+- The selected roots are now explicitly controlled by publish pipeline arguments, matching your requested command shape when targeting `public/obfuscated`.
+
+**Status:** Complete

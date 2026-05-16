@@ -13,8 +13,7 @@ DEFAULT_TEMPLATE_PATH = REPO_ROOT / "dashboard" / "annotator_template.html"
 DEFAULT_PUBLIC_ROOT = REPO_ROOT / "games" / "published" / "public"
 DEFAULT_OBFUSCATED_ROOT = REPO_ROOT / "games" / "published" / "obfuscated"
 
-ANNOTATOR_ENTRY_UUID = "9f1c3b7e-6a2d-4d55-a2b8"
-ANNOTATOR_ENTRY_NAME = f"{ANNOTATOR_ENTRY_UUID}-annotator.html"
+ANNOTATOR_ENTRY_NAME = "annotator.html"
 
 
 def build_parser() -> argparse.ArgumentParser:

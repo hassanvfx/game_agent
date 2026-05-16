@@ -17,10 +17,13 @@ GAMES_ROOT = REPO_ROOT / "games"
 RAW_ROOT = GAMES_ROOT / "raw"
 PUBLISHED_PUBLIC_ROOT = GAMES_ROOT / "published" / "public"
 PUBLISHED_OBFUSCATED_ROOT = GAMES_ROOT / "published" / "obfuscated"
+PUBLISHED_RUNS_ROOT = GAMES_ROOT / "published" / "runs"
 OBFUSCATOR_ROOT = REPO_ROOT / "tools" / "game_obfuscator"
 DEPLOY_SCRIPT = REPO_ROOT / "tools" / "game_deploy" / "scripts" / "deploy_games.py"
 REFRESH_APP_ARTIFACTS_SCRIPT = REPO_ROOT / "tools" / "game_publish_pipeline" / "scripts" / "refresh_app_artifacts.py"
 VALIDATE_PUBLISHED_OUTPUTS_SCRIPT = REPO_ROOT / "tools" / "game_publish_pipeline" / "scripts" / "validate_published_outputs.py"
+SYNC_TO_GCS_SCRIPT = REPO_ROOT / "tools" / "game_publish_pipeline" / "scripts" / "sync_to_gcs.py"
+ANNOTATOR_HTML_NAME = "annotator.html"
 
 
 def load_json(path: Path) -> Any:
@@ -73,10 +76,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(PUBLISHED_OBFUSCATED_ROOT),
         help="Published obfuscated root. Defaults to games/published/obfuscated.",
     )
+    parser.add_argument(
+        "--published-runs-root",
+        default=str(PUBLISHED_RUNS_ROOT),
+        help="Published runs root for per-run artifacts manifests. Defaults to games/published/runs.",
+    )
     parser.add_argument("--report-path", help="Optional explicit final pipeline report path.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing raw remix staging folders.")
     parser.add_argument("--dry-run", action="store_true", help="Prepare and print the plan without running subprocesses.")
-    parser.add_argument("--refresh-app-artifacts-manifest", help="Optional manifest used to refresh annotator-facing app artifacts after publish.")
+    parser.add_argument(
+        "--refresh-app-artifacts-manifest",
+        help="Optional explicit manifest for app artifact refresh. If omitted, pipeline auto-generates run-scoped artifacts_manifest.json from deployment outputs.",
+    )
     parser.add_argument("--refresh-app-artifacts-collection-slug", default="vatsal_app_alpha", help="Collection slug for refreshed app artifacts.")
     parser.add_argument("--validate-published-manifest", help="Optional manifest used by the post-publish integrity validator.")
     parser.add_argument(
@@ -86,13 +97,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--validate-published-annotator-html-name",
-        default="565a0bf4-5160-47b8-a905-2f4362475cdf-annotator.html",
+        default=ANNOTATOR_HTML_NAME,
         help="Annotator/dashboard file expected by the post-publish integrity validator.",
     )
     parser.add_argument(
         "--validate-published-strict",
         action="store_true",
         help="Fail the pipeline if the post-publish integrity validator reports any required failures.",
+    )
+    parser.add_argument(
+        "--gcg-sync",
+        action="store_true",
+        help="After artifact/dashboard steps, run sync_to_gcs.py using per-item sync.",
+    )
+    parser.add_argument(
+        "--gcg-sync-project",
+        default="jabali-prod",
+        help="Project forwarded to sync_to_gcs.py --project.",
+    )
+    parser.add_argument(
+        "--gcg-sync-dry-run",
+        action="store_true",
+        help="Forward --dry-run to sync_to_gcs.py.",
     )
     return parser
 
@@ -197,17 +223,47 @@ def build_report_path(args: argparse.Namespace) -> Path:
     return (REPO_ROOT / "tmp" / f"game_publish_pipeline_report_{timestamp}.json").resolve()
 
 
+def build_runtime_artifacts_manifest(deploy_results: list[dict[str, Any]], collection_slug: str) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    for item in deploy_results:
+        game_id = str(item["game_id"])
+        remix_id = f"remix-{item['remix_uuid']}"
+        published_path = f"{game_id}/{remix_id}"
+        source = str(item.get("source") or "")
+        entries.append(
+            {
+                "game_id": game_id,
+                "remix_id": remix_id,
+                "composite_key": f"{game_id}__{remix_id}",
+                "published_path": published_path,
+                "source": source,
+            }
+        )
+    return {
+        "batch_name": f"{collection_slug}_runtime",
+        "collection_slug": collection_slug,
+        "entry_count": len(entries),
+        "entries": entries,
+    }
+
+
 def run_pipeline(args: argparse.Namespace) -> int:
     raw_root = Path(args.raw_root).resolve()
     published_public_root = Path(args.published_public_root).resolve()
     published_obfuscated_root = Path(args.published_obfuscated_root).resolve()
+    published_runs_root = Path(args.published_runs_root).resolve()
     source_inputs = resolve_source_inputs(args)
     report_path = build_report_path(args)
+    pipeline_run_id = f"run_{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
+    pipeline_run_dir = (published_runs_root / pipeline_run_id).resolve()
 
     total_inputs = len(source_inputs)
     print(f"[pipeline] source inputs: {total_inputs}", flush=True)
     print(f"[pipeline] public root (stage): {published_public_root}", flush=True)
     print(f"[pipeline] obfuscated root: {published_obfuscated_root}", flush=True)
+    print(f"[pipeline] runs root: {published_runs_root}", flush=True)
+    print(f"[pipeline] run id: {pipeline_run_id}", flush=True)
+    print(f"[pipeline] run dir: {pipeline_run_dir}", flush=True)
     print(f"[pipeline] report path: {report_path}", flush=True)
 
     print(f"[1/4] Public stage deploy ({total_inputs} items)", flush=True)
@@ -231,6 +287,11 @@ def run_pipeline(args: argparse.Namespace) -> int:
             "deploy_manifest_path": str(deploy_manifest_path),
             "published_public_root": str(published_public_root),
             "published_obfuscated_root": str(published_obfuscated_root),
+            "gcg_sync": {
+                "enabled": bool(args.gcg_sync),
+                "project": str(args.gcg_sync_project),
+                "dry_run": bool(args.gcg_sync_dry_run),
+            },
             "report_path": str(report_path),
         }
         print(json.dumps(payload, indent=2))
@@ -298,6 +359,11 @@ def run_pipeline(args: argparse.Namespace) -> int:
     obfuscation_game_outputs = output_payload.get("game_outputs", [])
 
     final_report = {
+        "pipeline_run": {
+            "run_id": pipeline_run_id,
+            "run_dir": str(pipeline_run_dir),
+            "published_runs_root": str(published_runs_root),
+        },
         "source_inputs": [str(path) for path in source_inputs],
         "public_stage_inputs": staged_items,
         "deployment": {
@@ -315,14 +381,30 @@ def run_pipeline(args: argparse.Namespace) -> int:
         },
     }
 
+    refresh_manifest_path: Path
     if args.refresh_app_artifacts_manifest:
-        print("[3/4] Refresh app artifacts", flush=True)
         refresh_manifest_path = Path(args.refresh_app_artifacts_manifest).resolve()
+    else:
+        pipeline_run_dir.mkdir(parents=True, exist_ok=True)
+        refresh_manifest_path = pipeline_run_dir / "artifacts_manifest.json"
+        runtime_manifest_payload = build_runtime_artifacts_manifest(
+            deploy_results,
+            str(args.refresh_app_artifacts_collection_slug),
+        )
+        write_json(refresh_manifest_path, runtime_manifest_payload)
+        print(f"[pipeline] wrote runtime artifacts manifest: {refresh_manifest_path}", flush=True)
+
+    if refresh_manifest_path:
+        print("[3/4] Refresh app artifacts", flush=True)
         refresh_command = [
                 sys.executable,
                 str(REFRESH_APP_ARTIFACTS_SCRIPT),
                 "--manifest",
                 str(refresh_manifest_path),
+                "--runs-root",
+                str(published_runs_root),
+                "--run-id",
+                str(pipeline_run_id),
                 "--collection-slug",
                 str(args.refresh_app_artifacts_collection_slug),
                 "--public-root",
@@ -354,6 +436,10 @@ def run_pipeline(args: argparse.Namespace) -> int:
             str(published_obfuscated_root),
             "--collection-slug",
             str(args.validate_published_collection_slug),
+            "--runs-root",
+            str(published_runs_root),
+            "--run-id",
+            str(pipeline_run_id),
             "--annotator-html-name",
             str(args.validate_published_annotator_html_name),
         ]
@@ -367,6 +453,35 @@ def run_pipeline(args: argparse.Namespace) -> int:
             "annotator_html_name": str(args.validate_published_annotator_html_name),
             "strict": bool(args.validate_published_strict),
             "result": validate_result.get("payload"),
+        }
+
+    if args.gcg_sync:
+        print("[sync] GCG sync requested; invoking sync_to_gcs.py", flush=True)
+        sync_command = [
+            sys.executable,
+            str(SYNC_TO_GCS_SCRIPT),
+            "--target",
+            "both",
+            "--mode",
+            "per-item",
+            "--project",
+            str(args.gcg_sync_project),
+            "--public-root",
+            str(published_public_root),
+            "--obfuscated-root",
+            str(published_obfuscated_root),
+        ]
+        if args.gcg_sync_dry_run:
+            sync_command.append("--dry-run")
+        print(f"[pipeline] gcg sync command: {' '.join(sync_command)}", flush=True)
+        sync_result = run_command(sync_command)
+        final_report["gcg_sync"] = {
+            "enabled": True,
+            "project": str(args.gcg_sync_project),
+            "public_root": str(published_public_root),
+            "obfuscated_root": str(published_obfuscated_root),
+            "dry_run": bool(args.gcg_sync_dry_run),
+            "result": sync_result.get("payload"),
         }
 
     write_json(report_path, final_report)
