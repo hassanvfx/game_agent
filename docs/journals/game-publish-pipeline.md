@@ -715,4 +715,45 @@ Next operator step after a successful full publish is to run the sync helper aga
 
 ---
 
+### 2026-05-14 19:31 - Safe fresh 231-item publish preflight and launch setup
+
+**What Changed:**
+Started a fresh operator-safe publish pass for the canonical 231-item batch rooted at `docs/publish_manifests/vatsal_app_alpha_231_manifest.json`.
+
+**Execution Rules:**
+- rebuild a fresh runtime publish manifest from canonical `entries[].source` only
+- do not trust historical helper outputs as execution inputs
+- fail fast if any source path is missing
+- fail fast if required Google auth / application-default auth is not ready
+- only launch `tools/game_publish_pipeline/scripts/publish_games.py` after both preflight checks pass
+- keep cloud upload/sync as a separate explicit step rather than assuming it inside local publish
+
+**Current Investigation:**
+- confirmed the canonical 231 manifest stores source inputs under `entries[].source`
+- re-checked `game_publish_pipeline` CLI and implementation shape
+- confirmed local publish writes public + obfuscated outputs and optional refresh/validation steps, while cloud sync remains a separate script
+
+**Preflight Findings:**
+- fresh preflight helper added:
+  - `tmp/prepare_safe_231_publish_run.py`
+- canonical batch size:
+  - `231`
+- currently present source inputs:
+  - `107`
+- currently missing source inputs:
+  - `124`
+- Google CLI account is active:
+  - `hassanu@jabali.ai`
+- application-default auth is currently not usable in non-interactive mode and requires manual refresh via:
+  - `gcloud auth application-default login`
+
+**Blocking Outcome:**
+The run was intentionally stopped before manifest handoff to `publish_games.py` because both fail-fast guards tripped:
+1. missing source inputs in the canonical 231 manifest
+2. expired / non-interactive ADC refresh failure
+
+**Status:** Blocked pending source restoration and manual ADC login
+
+---
+
 *This journal documents the first pass of the higher-order `game_publish_pipeline` tool that orchestrates obfuscation followed by deploy packaging.*
