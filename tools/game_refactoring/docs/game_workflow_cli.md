@@ -45,6 +45,61 @@ The input game list must be supplied by the caller via:
 
 - `--games-manifest-source`
 
+### `creative_remix_v4`
+
+The `creative_remix_v4` workflow is defined in `scripts/game_workflow.py` and runs these nodes:
+
+1. `remix_inference_plus`
+2. `world_design_superprompt`
+3. `visuals_unified`
+4. `final_mobile_repair_aggressive`
+
+This is the base four-stage v4 remix pipeline.
+
+### `remix-v4-clone`
+
+The `remix-v4-clone` workflow is a rebuild-first clone of Remix v4. It runs these nodes:
+
+1. `clone_remix_inference_plus`
+2. `clone_rebuild_from_blueprint_and_old_refs`
+3. `clone_world_design_superprompt`
+4. `clone_visuals_unified`
+5. `clone_final_mobile_repair_aggressive`
+
+The key difference from `creative_remix_v4` is that this workflow is **not** primarily a reskin/remix-on-top-of-source flow.
+
+It first runs a clone-namespaced copy of the v4 inference/planning stage, then performs a dedicated rebuild step that preserves the source runtime by renaming `index.html` and directly linked local CSS/JS files with `_old`-style names while building a substantially new main game surface from the blueprint and mechanic analysis.
+
+Use `remix-v4-clone` when you want to:
+
+- preserve the original implementation as a fallback reference
+- rebuild the main public surface as a new game
+- minimize dependence on old source files except when resolving ambiguity or protecting core behavior expectations
+
+### `remix-v4-vite`
+
+The `remix-v4-vite` workflow is the Vite / compiled-bundle-specialized variant of v4. It runs these nodes:
+
+1. `vite_surface_unpack`
+2. `vite_remix_inference_plus`
+3. `vite_world_design_superprompt`
+4. `vite_visuals_unified`
+5. `vite_final_mobile_repair_aggressive`
+
+The key difference from `creative_remix_v4` is the extra prep stage:
+
+- `vite_surface_unpack`
+
+That stage is intended for shipped Vite-style or similarly compiled/minified app targets where later operators benefit from a reusable map of:
+
+- runtime entrypoints
+- bundle patch targets
+- UI string surfaces
+- control/input surfaces
+- high-leverage compiled edit regions
+
+Use `remix-v4-vite` when the workspace is dominated by compiled bundle artifacts and later remix stages need help avoiding token waste on irrelevant files.
+
 ## Why this script exists
 
 Earlier workflow orchestration was briefly adapted into `scripts/creative_refactor_cli.py`, but that increased regression risk in the main CLI.
@@ -99,6 +154,24 @@ python3 scripts/game_workflow.py \
   --id creative_remix_v1 \
   --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
   --remix-prompt "Remix this game around a strong user-defined creative direction."
+```
+
+## Creative remix v4 Vite example
+
+```bash
+python3 scripts/game_workflow.py \
+  --id remix-v4-vite \
+  --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
+  --remix-prompt "your remix prompt here"
+```
+
+## Remix v4 clone example
+
+```bash
+python3 scripts/game_workflow.py \
+  --id remix-v4-clone \
+  --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
+  --remix-prompt "your remix prompt here"
 ```
 
 ## Common options

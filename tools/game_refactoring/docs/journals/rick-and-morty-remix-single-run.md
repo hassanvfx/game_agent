@@ -153,6 +153,176 @@ This was not a manifest-shape issue and not a source-folder-structure issue. The
 
 ---
 
+### 2026-05-16 12:02 - Added `remix-v4-vite` workflow variant design and registry wiring
+
+**Achievement:**
+- Added a new workflow id, `remix-v4-vite`, to the workflow registry
+- Added a dedicated Vite/compiled-bundle prep stage prompt
+- Added bundle-aware wrapper prompts for the later v4 stages
+- Updated the CLI documentation to describe the new workflow variant
+
+**Why:**
+The earlier remix run showed that compiled Vite-style targets can spend too much worker effort rediscovering minified bundle structure and generating low-leverage planning artifacts before touching the real player-facing surfaces. The new workflow variant introduces a deterministic prep step so later stages can work from a compact map of relevant runtime surfaces.
+
+**Files Changed:**
+- `scripts/game_workflow.py`
+- `docs/game_workflow_cli.md`
+
+**Files Created:**
+- `prompts/operators_v2/00_creative_remix_v4_vite_surface_unpack.md`
+- `prompts/operators_v2/01_creative_remix_v4_vite_remix_inference_plus.md`
+- `prompts/operators_v2/02_creative_remix_v4_vite_world_design_superprompt.md`
+- `prompts/operators_v2/03_creative_remix_v4_vite_visuals_unified.md`
+- `prompts/operators_v2/04_creative_remix_v4_vite_final_mobile_repair_aggressive.md`
+
+**Technical Design:**
+- Base v4 remains unchanged:
+  - `remix_inference_plus`
+  - `world_design_superprompt`
+  - `visuals_unified`
+  - `final_mobile_repair_aggressive`
+- New variant adds one prep node before those stages:
+  - `vite_surface_unpack`
+- The prep stage is designed to produce artifacts like:
+  - `vite_surface_manifest.json`
+  - `bundle_patch_targets.json`
+  - `runtime_surface_map.md`
+  - `ui_string_inventory.json`
+- Later bundle-aware prompts are instructed to read those artifacts first and prioritize high-leverage compiled edit surfaces.
+
+**Validation:**
+- Verified that `remix-v4-vite` is present in `WORKFLOWS` via a Python import check.
+
+**Status:** Complete
+
+---
+
+### 2026-05-16 12:24 - Strengthened Vite variant for clearer provenance and bolder art replacement
+
+**Achievement:**
+- Updated the Vite workflow to use Vite-prefixed stage slugs for clearer output provenance
+- Strengthened the Vite prompts so later stages can be much more aggressive visually while preserving mechanics
+
+**Key Changes:**
+- Vite workflow stage ids now use distinct slugs:
+  - `vite_surface_unpack`
+  - `vite_remix_inference_plus`
+  - `vite_world_design_superprompt`
+  - `vite_visuals_unified`
+  - `vite_final_mobile_repair_aggressive`
+- Stage 0 now requires a `visual_component_map.json` so later stages know where bold visual replacement is safe.
+- Stage 2 now emphasizes component-level art direction rather than generic world prose.
+- Stage 3 now explicitly allows new procedural art helpers and enforces a stronger minimum visible-delta bar.
+- Stage 4 now includes a final originality gate, not just runtime correctness.
+
+**Why:**
+Live QA showed that the Vite variant improved compiled-surface discovery, but downstream stages were still too artifact-heavy and too conservative about replacing the original generic racer visuals.
+
+**Status:** Complete
+
+---
+
+### 2026-05-16 12:44 - Added top-10 mechanic-family composition references for deeper staged Vite reconstruction
+
+**Achievement:**
+- Expanded the Vite prompt chain with a top-10 mechanic-family composition reference library
+- Added family/subgenre-aware symbolic region guidance so later stages can target named runtime regions more precisely
+
+**Key Changes:**
+- Stage 0 now includes a top-10 mechanic-family reference library with subgenres and expected symbolic runtime regions.
+- Stage 0 now requires:
+  - `mechanic_family_classification.json`
+  - `symbolic_region_map.json`
+- Stage 1 now treats mechanic family + symbolic region outputs as the canonical runtime interpretation contract.
+- Stage 2 now maps world/theme direction onto those family-specific named regions.
+- Stage 3 now patches those named family-specific regions in priority order.
+
+**Why:**
+The generic compiled-bundle analysis approach still left too much ambiguity for World and Visuals. Adding family-specific composition templates should give the pipeline more focused symbolic decomposition for runners vs trivia vs card games and other common browser-game structures.
+
+**Status:** Complete
+
+---
+
+### 2026-05-16 13:16 - Regressed from the top-10 family taxonomy back to the simpler Vite midpoint
+
+**Achievement:**
+- Removed the heavy top-10 mechanic-family taxonomy and extra symbolic-region artifact burden from the Vite prompt chain
+- Preserved the better midpoint changes:
+  - Vite-prefixed stage slugs
+  - `visual_component_map.json`
+  - stronger component-level world guidance
+  - stronger visual-stage art execution rules
+
+**Why:**
+The grounded QA review of `node_04_vite_visuals_unified` showed that the latest expansion likely increased planning/classification overhead more than player-facing transformation. Regressing to the previous simpler step should help the operators spend more effort on actual visual edits instead of taxonomy and bookkeeping.
+
+**Status:** Complete
+
+---
+
+### 2026-05-16 16:26 - Simpler midpoint rerun completed successfully and improved quality
+
+**Achievement:**
+- Launched a fresh `remix-v4-vite` rerun after regressing from the heavy taxonomy step
+- Confirmed the rerun completed all five Vite stages successfully
+- User feedback indicated the resulting run quality was strong: "ok this run was very good"
+
+**Implementation Details:**
+- Rerun metadata:
+  - `run_id`: `run_game_remixer_20260516T191830Z`
+  - `run_dir`: `runs/run_game_remixer_20260516T191830Z`
+- Final status from `creative_refactor_cli.py status`:
+  - `status`: `transform_completed`
+  - `current_phase`: `parallel_batch_finished`
+  - `final_output_dirs[0]`: `runs/run_game_remixer_20260516T191830Z/output/game-c33db5bd-53ee-4637-bdba-4153f2805353`
+- Per-game completion confirmed in:
+  - `runs/run_game_remixer_20260516T191830Z/games/game-c33db5bd-53ee-4637-bdba-4153f2805353/game_state.json`
+
+**Completed Stages:**
+- `node_01_vite_surface_unpack`
+- `node_02_vite_remix_inference_plus`
+- `node_03_vite_world_design_superprompt`
+- `node_04_vite_visuals_unified`
+- `node_05_vite_final_mobile_repair_aggressive`
+
+**Grounded Conclusion:**
+- Keeping the Vite-specific workflow/slugs and the stronger art-execution guidance was useful.
+- The heavier top-10 taxonomy and symbolic-region burden was likely hurting execution quality.
+- Regressing to the simpler midpoint produced a better practical result than the more elaborate prompt chain.
+
+**Output Location:**
+- `runs/run_game_remixer_20260516T191830Z/output/game-c33db5bd-53ee-4637-bdba-4153f2805353`
+
+**Status:** Complete
+
+---
+
+### 2026-05-16 16:30 - Launched stronger explicit endless-runner prompt test
+
+**Achievement:**
+- Launched a new `remix-v4-vite` run using a more explicit creative prompt intended to push stronger visual execution and add vehicle selection
+
+**Prompt Used:**
+- `Make it an amazing rick & morty endless runner with super cool graphics, and motion graphics, make it allow to select your behicle`
+
+**Run Metadata:**
+- `run_id`: `run_game_remixer_20260516T223036Z`
+- `run_dir`: `runs/run_game_remixer_20260516T223036Z`
+- `workflow_manifest_path`: `runs/_workflow_manifests/remix-v4-vite__jabali_rick_and_morty_single_manifest.json`
+
+**Why:**
+The prior simpler-midpoint run produced a good result, but the user wants to test whether a more explicit user prompt can drive stronger graphics, stronger motion graphics, and a vehicle-selection concept without changing the working pipeline shape again.
+
+**Next Steps:**
+- [ ] Poll the new run until completion
+- [ ] Capture final output path
+- [ ] Compare whether the explicit prompt improved the visible result
+
+**Status:** In Progress
+
+---
+
 ## ✅ Testing Checklist
 
 - [x] Workflow ID identified

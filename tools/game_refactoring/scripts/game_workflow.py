@@ -226,6 +226,78 @@ WORKFLOWS: dict[str, WorkflowDefinition] = {
             },
         ],
     ),
+    "remix-v4-clone": WorkflowDefinition(
+        workflow_id="remix-v4-clone",
+        run_label="remix-v4-clone",
+        nodes=[
+            {
+                "id": "clone_remix_inference_plus",
+                "prompt_file": "prompts/operators_v2/00_remix_v4_clone_remix_inference_plus.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            },
+            {
+                "id": "clone_rebuild_from_blueprint_and_old_refs",
+                "prompt_file": "prompts/operators_v2/01_remix_v4_clone_rebuild_from_blueprint_and_old_refs.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            },
+            {
+                "id": "clone_world_design_superprompt",
+                "prompt_file": "prompts/operators_v2/02_remix_v4_clone_world_design_superprompt.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+            {
+                "id": "clone_visuals_unified",
+                "prompt_file": "prompts/operators_v2/03_remix_v4_clone_visuals_unified.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+            {
+                "id": "clone_final_mobile_repair_aggressive",
+                "prompt_file": "prompts/operators_v2/04_remix_v4_clone_final_mobile_repair_aggressive.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+        ],
+    ),
+    "remix-v4-vite": WorkflowDefinition(
+        workflow_id="remix-v4-vite",
+        run_label="creative-remix-v4-vite",
+        nodes=[
+            {
+                "id": "vite_surface_unpack",
+                "prompt_file": "prompts/operators_v2/00_creative_remix_v4_vite_surface_unpack.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            },
+            {
+                "id": "vite_remix_inference_plus",
+                "prompt_file": "prompts/operators_v2/01_creative_remix_v4_vite_remix_inference_plus.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            },
+            {
+                "id": "vite_world_design_superprompt",
+                "prompt_file": "prompts/operators_v2/02_creative_remix_v4_vite_world_design_superprompt.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+            {
+                "id": "vite_visuals_unified",
+                "prompt_file": "prompts/operators_v2/03_creative_remix_v4_vite_visuals_unified.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+            {
+                "id": "vite_final_mobile_repair_aggressive",
+                "prompt_file": "prompts/operators_v2/04_creative_remix_v4_vite_final_mobile_repair_aggressive.md",
+                "accepted_upstream_statuses": ["ok", "warning"],
+                "requires_contract": True,
+            },
+        ],
+    ),
     "game_obfuscator_cline_study": WorkflowDefinition(
         workflow_id="game_obfuscator_cline_study",
         run_label="game-obfuscator-cline-study",
