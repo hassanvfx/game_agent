@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game Remixer Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #374151;
+      --blue: #60a5fa;
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --purple: #a78bfa;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 24px; background: var(--bg); color: var(--text); }
+    h1, h2, h3 { margin: 0 0 10px; }
+    a { color: var(--blue); }
+    code { background: #0f172a; padding: 2px 6px; border-radius: 6px; }
+    .meta, .card, .stat, .note { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+    .meta, .card { padding: 16px; margin-bottom: 16px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .stat { padding: 14px; }
+    .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .stat .value { font-size: 24px; margin-top: 6px; font-weight: bold; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+    .muted { color: var(--muted); }
+    .note-list { display: grid; gap: 10px; }
+    .note { padding: 12px; }
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; margin-left: 8px; }
+    .pill.running { background: rgba(96,165,250,0.18); color: var(--blue); }
+    .pill.completed { background: rgba(52,211,153,0.18); color: var(--green); }
+    .pill.warning { background: rgba(251,191,36,0.18); color: var(--yellow); }
+    .pill.failed { background: rgba(248,113,113,0.18); color: var(--red); }
+    .pill.other { background: rgba(167,139,250,0.18); color: var(--purple); }
+    .kv { margin: 6px 0; line-height: 1.45; }
+    .section-title { margin: 24px 0 12px; }
+    .small { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Game Remixer Dashboard</h1>
+  <div class="meta">
+    <p><strong>Data source:</strong> <code>dashboard_data.json</code></p>
+    <p class="muted small">Run-level and per-game runtime state, including active jobs, heartbeat freshness, and failure reasons.</p>
+  </div>
+  <div id="app"></div>
+  <script>
+    function esc(value) {
+      const node = document.createElement('div');
+      node.textContent = String(value ?? '');
+      return node.innerHTML;
+    }
+
+    function pillClass(status) {
+      if (status === 'running') return 'running';
+      if (status === 'completed') return 'completed';
+      if (status === 'soft_completed' || status === 'transform_completed_with_warnings') return 'warning';
+      if (status === 'failed') return 'failed';
+      return 'other';
+    }
+
+    function formatAge(value) {
+      if (value === null || value === undefined) return 'n/a';
+      return `${value.toFixed ? value.toFixed(1) : value}s`;
+    }
+
+    function renderJob(job) {
+      if (!job) {
+        return '<p class="kv"><strong>Active Job:</strong> none</p>';
+      }
+      return `
+        <p class="kv"><strong>Job:</strong> ${esc(job.job_type || 'unknown')} <span class="pill ${pillClass(job.status)}">${esc(job.status || 'unknown')}</span></p>
+        <p class="kv"><strong>Heartbeat:</strong> ${esc(job.heartbeat_at || 'missing')}</p>
+        <p class="kv"><strong>Heartbeat Age:</strong> ${formatAge(job.heartbeat_age_seconds)}</p>
+        <p class="kv"><strong>Runtime Age:</strong> ${formatAge(job.runtime_age_seconds)}</p>
+        <p class="kv"><strong>Failure Reason:</strong> ${esc(job.failure_reason || 'none')}</p>
+      `;
+    }
+
+    async function main() {
+      const res = await fetch('./dashboard_data.json');
+      const data = await res.json();
+      const app = document.getElementById('app');
+
+      const summary = `
+        <div class="card">
+          <h2>Run Summary <span class="pill ${pillClass(data.run.status)}">${esc(data.run.status)}</span></h2>
+          <p class="kv"><strong>Run ID:</strong> ${esc(data.run.run_id)}</p>
+          <p class="kv"><strong>Phase:</strong> ${esc(data.run.current_phase)}</p>
+          <p class="kv"><strong>Created:</strong> ${esc(data.run.created_at || 'n/a')}</p>
+          <p class="kv"><strong>Updated:</strong> ${esc(data.run.updated_at || 'n/a')}</p>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="label">Total Games</div><div class="value">${data.summary.games_total}</div></div>
+          <div class="stat"><div class="label">Running</div><div class="value">${data.summary.games_running}</div></div>
+          <div class="stat"><div class="label">Completed</div><div class="value">${data.summary.games_completed}</div></div>
+          <div class="stat"><div class="label">Soft Accepted</div><div class="value">${data.summary.games_soft_completed}</div></div>
+          <div class="stat"><div class="label">Failed</div><div class="value">${data.summary.games_failed}</div></div>
+          <div class="stat"><div class="label">Active Jobs</div><div class="value">${data.summary.active_jobs}</div></div>
+          <div class="stat"><div class="label">Missing Heartbeats</div><div class="value">${data.summary.active_jobs_missing_heartbeat}</div></div>
+          <div class="stat"><div class="label">Heartbeat > 60s</div><div class="value">${data.summary.active_jobs_stale_over_60s}</div></div>
+          <div class="stat"><div class="label">Transform Soft Completed</div><div class="value">${data.summary.games_transform_soft_completed}</div></div>
+          <div class="stat"><div class="label">Transform Failed</div><div class="value">${data.summary.games_transform_failed}</div></div>
+        </div>`;
+
+      const activeJobs = `
+        <h2 class="section-title">Active Jobs</h2>
+        ${data.active_jobs.length ? `<div class="grid">${data.active_jobs.map(job => `
+          <div class="card">
+            <h3>${esc(job.display_name || job.game_id)}</h3>
+            <p class="kv"><strong>Game ID:</strong> ${esc(job.game_id)}</p>
+            ${renderJob(job)}
+          </div>`).join('')}</div>` : '<div class="card"><p>No active jobs currently.</p></div>'}
+      `;
+
+      const notes = `
+        <h2 class="section-title">Run Notes</h2>
+        ${data.run.notes.length ? `<div class="note-list">${data.run.notes.map(note => `<div class="note">${esc(note)}</div>`).join('')}</div>` : '<div class="card"><p>No notes recorded.</p></div>'}
+      `;
+
+      const cards = data.games.map(game => `
+        <div class="card">
+          <h2>${esc(game.display_name || game.game_id)} <span class="pill ${pillClass(game.status)}">${esc(game.status)}</span></h2>
+          <p class="kv"><strong>Game ID:</strong> ${esc(game.game_id)}</p>
+          <p class="kv"><strong>Phase:</strong> ${esc(game.current_phase)}</p>
+          <p class="kv"><strong>Integrity:</strong> ${esc(game.integrity_status || 'pending')}</p>
+          <p class="kv"><strong>Creative Status:</strong> ${esc(game.creative_status || 'n/a')}</p>
+          <p class="kv"><strong>Creative Phase:</strong> ${esc(game.creative_phase || 'n/a')}</p>
+          ${game.soft_acceptance_reason ? `<p class="kv"><strong>Accepted With Warnings:</strong> ${esc(game.soft_acceptance_reason)}</p>` : ''}
+          ${typeof game.soft_acceptance_warning_count === 'number' && game.soft_acceptance_warning_count > 0 ? `<p class="kv"><strong>Warning Count:</strong> ${esc(game.soft_acceptance_warning_count)}</p>` : ''}
+          <p class="kv"><strong>Attempts:</strong> ${esc(game.attempt_count ?? 'n/a')}</p>
+          <p class="kv"><strong>Updated:</strong> ${esc(game.updated_at || 'n/a')}</p>
+          ${renderJob(game.job)}
+          <p class="kv"><strong>Original:</strong> ${game.input_index_url ? `<a href="${game.input_index_url}" target="_blank">open input</a>` : 'missing'}</p>
+          <p class="kv"><strong>Output:</strong> ${game.output_index_url ? `<a href="${game.output_index_url}" target="_blank">open output</a>` : 'not generated yet'}</p>
+          <p class="kv"><strong>Error:</strong> ${esc(game.last_error || 'none')}</p>
+        </div>`).join('');
+
+      app.innerHTML = summary + activeJobs + notes + `<h2 class="section-title">Games</h2><div class="grid">${cards}</div>`;
+    }
+
+    main();
+  </script>
+</body>
+</html>

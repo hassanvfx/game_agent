@@ -1,0 +1,3 @@
+# Recreation Prompt
+
+Recreate a mobile-first browser-native 3D open-city chase game called Neon Felony: Overdrive District. Preserve a GTA-like sandbox loop: the player moves with a virtual joystick, rotates/zooms the camera, enters nearby cars, exits cars, summons a car when no car is nearby, switches between melee and sidearm, attacks, accumulates wanted stars after hostile takedowns, attracts police pursuit, takes damage from collisions/pressure, and restarts after BUSTED. Present the world as a neon night downtown with emissive roads, glowing high-rise windows, cyan/magenta pursuit lighting, body-armor HUD, wanted-star meter, and compact mobile controls.

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from pipeline_dashboard_presenter import build_dashboard_contract_extensions, generate_dashboard_html
+from upload_auth_preflight import DEFAULT_GCLOUD_PROJECT, run_gcloud_auth_preflight
 
 ROOT = Path(__file__).resolve().parent.parent
 PIPELINE_RUNS_DIR = ROOT / "pipeline_runs"
@@ -105,6 +106,7 @@ class PipelineRun:
         run_id: str,
         prompt: str,
         remix_prompt: str,
+        matcher_limit: int,
         publish_enabled: bool,
         poll_seconds: float,
         matcher_mode: str,
@@ -114,6 +116,7 @@ class PipelineRun:
         self.run_dir = PIPELINE_RUNS_DIR / run_id
         self.prompt = prompt
         self.remix_prompt = remix_prompt
+        self.matcher_limit = matcher_limit
         self.publish_enabled = publish_enabled
         self.poll_seconds = poll_seconds
         self.matcher_mode = matcher_mode
@@ -151,6 +154,7 @@ class PipelineRun:
             "started_at": now,
             "updated_at": now,
             "publish_enabled": publish_enabled,
+            "matcher_limit": matcher_limit,
             "poll_seconds": poll_seconds,
             "matcher_mode": matcher_mode,
             "remix_prompt": remix_prompt,
@@ -170,6 +174,7 @@ class PipelineRun:
                 "dashboard_path": str(self.dashboard_dir / "index.html"),
                 "dashboard_data_path": str(self.dashboard_data_path),
             },
+            "preflight": {},
             "final_output_dir": None,
             "final_output_dirs": [],
             "error": None,
@@ -181,7 +186,13 @@ class PipelineRun:
         self.append_event(
             "system",
             "run_initialized",
-            {"prompt": prompt, "remix_prompt": remix_prompt, "publish_enabled": publish_enabled, "upload_enabled": upload_enabled},
+            {
+                "prompt": prompt,
+                "remix_prompt": remix_prompt,
+                "matcher_limit": matcher_limit,
+                "publish_enabled": publish_enabled,
+                "upload_enabled": upload_enabled,
+            },
         )
         self.save_state()
 
@@ -294,6 +305,7 @@ class PipelineRun:
                 "failed": status_payload.get("failed", False),
                 "games_total": status_payload.get("games_total"),
                 "games_transform_completed": status_payload.get("games_transform_completed"),
+                "games_transform_soft_completed": status_payload.get("games_transform_soft_completed"),
                 "games_transform_failed": status_payload.get("games_transform_failed"),
             }
             self.save_state()
@@ -336,6 +348,8 @@ class PipelineRun:
             "status": "completed",
             "completed": True,
             "failed": result_payload.get("status") in {"transform_failed", "transform_incomplete"},
+            "last_known_status": result_payload.get("status"),
+            "games_transform_soft_completed": result_payload.get("games_transform_soft_completed"),
             "final_output_dirs": resolved_output_dirs,
         }
         self.save_state()
@@ -556,6 +570,7 @@ class PipelineRun:
             "started_at": self.state["started_at"],
             "completed_at": self.state.get("completed_at"),
             "publish_enabled": self.publish_enabled,
+            "matcher_limit": self.matcher_limit,
             "remix_prompt": self.remix_prompt,
             "upload_enabled": self.upload_enabled,
             "upload": self.state.get("upload"),
@@ -563,6 +578,7 @@ class PipelineRun:
             "artifacts": build_artifacts_map(self),
             "steps": steps,
             "recent_events": recent_events,
+            "preflight": self.state.get("preflight", {}),
             "links": self.state["artifacts"]
             | {
                 "final_output_dir": self.state["final_output_dir"],
@@ -974,8 +990,8 @@ def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str
             },
         )
 
-    if len(matches) < 2:
-        raise StepError("matcher", "matcher returned fewer than two matches", {"match_count": len(matches)})
+    if len(matches) == 0:
+        raise StepError("matcher", "matcher returned no matches", {"match_count": len(matches), "limit": limit})
 
     try:
         selected_matches = [
@@ -987,7 +1003,7 @@ def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str
                 match_count=len(matches),
                 validated_selected_tags=validated_selected_tags,
             )
-            for index, match in enumerate(matches[:2])
+            for index, match in enumerate(matches[:limit])
         ]
     except ValueError as exc:
         raise StepError("matcher", "matcher results missing usable game fields", {"message": str(exc)}) from exc
@@ -996,6 +1012,7 @@ def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str
         pipeline.matcher_dir / "parsed_matches.json",
         {
             "matcher_mode": pipeline.matcher_mode,
+            "matcher_limit": limit,
             "matches": matches,
             "selected_matches": selected_matches,
             "validated_selected_tags": validated_selected_tags,
@@ -1006,6 +1023,8 @@ def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str
         {
             "selected_game_ids": [item["game_id"] for item in selected_matches],
             "match_count": len(matches),
+            "selected_match_count": len(selected_matches),
+            "matcher_limit": limit,
             "matcher_mode": pipeline.matcher_mode,
             "validated_selected_tags_path": (
                 str(validated_selected_tags_path) if validated_selected_tags_path and validated_selected_tags_path.exists() else None
@@ -2155,9 +2174,11 @@ def build_final_response(
         "status": run.state["status"],
         "prompt": run.prompt,
         "remix_prompt": run.remix_prompt,
+        "matcher_limit": run.matcher_limit,
         "publish_enabled": run.publish_enabled,
         "upload_enabled": run.upload_enabled,
         "upload": upload_payload,
+        "preflight": run.state.get("preflight", {}),
         "final_output_dir": run.state["final_output_dir"],
         "final_output_dirs": run.state.get("final_output_dirs", []),
         "dashboard_path": str(run.dashboard_dir / "index.html"),
@@ -2171,6 +2192,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the observable game generation pipeline.")
     parser.add_argument("prompt", help="Matcher prompt, e.g. 'a harry potter flappy bird game'")
     parser.add_argument("--remix-prompt", help="Optional creative remix prompt override. Defaults to the matcher prompt.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_MATCHER_LIMIT,
+        help="Maximum number of matcher results to carry forward into refactoring. Defaults to 2.",
+    )
     parser.add_argument("--upload", action="store_true", help="Sync published public/obfuscated roots to GCS after local publish.")
     parser.add_argument("--resume-from-run", help="Resume from an existing pipeline run id under pipeline_runs/ and continue from publish/finalize.")
     parser.add_argument("--publish", action="store_true", help="Run the publish pipeline after refactoring.")
@@ -2186,6 +2213,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.limit < 1:
+        print(json.dumps({"status": "failed", "error": {"step": "args", "message": "--limit must be >= 1"}}, indent=2), file=sys.stderr)
+        return 1
     PIPELINE_RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
     resumed = bool(args.resume_from_run)
@@ -2227,11 +2257,27 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.publish, args.poll_seconds, args.matcher_mode, args.upload)
+        resumed_matcher_limit = resumed_state.get("matcher_limit", args.limit)
+        if not isinstance(resumed_matcher_limit, int) or resumed_matcher_limit < 1:
+            resumed_matcher_limit = args.limit
+        run = PipelineRun(
+            generate_run_id(),
+            prompt,
+            remix_prompt,
+            resumed_matcher_limit,
+            args.publish,
+            args.poll_seconds,
+            args.matcher_mode,
+            args.upload,
+        )
         run.append_event(
             "system",
             "resume_initialized",
-            {"resumed_from_run": args.resume_from_run, "resumed_from_run_dir": str(resumed_run_dir)},
+            {
+                "resumed_from_run": args.resume_from_run,
+                "resumed_from_run_dir": str(resumed_run_dir),
+                "matcher_limit": resumed_matcher_limit,
+            },
         )
         refactored_game_dirs = resumed_state.get("steps", {}).get("refactoring", {}).get("final_output_dirs", [])
         if not isinstance(refactored_game_dirs, list) or not refactored_game_dirs:
@@ -2259,12 +2305,50 @@ def main() -> int:
     else:
         prompt = args.prompt
         remix_prompt = args.remix_prompt or args.prompt
-        run = PipelineRun(generate_run_id(), prompt, remix_prompt, args.publish, args.poll_seconds, args.matcher_mode, args.upload)
+        run = PipelineRun(
+            generate_run_id(),
+            prompt,
+            remix_prompt,
+            args.limit,
+            args.publish,
+            args.poll_seconds,
+            args.matcher_mode,
+            args.upload,
+        )
 
     try:
+        if args.upload:
+            run.start_step("preflight", {"kind": "upload_auth", "project": DEFAULT_GCLOUD_PROJECT})
+            upload_auth_preflight = run_gcloud_auth_preflight(DEFAULT_GCLOUD_PROJECT)
+            run.state["preflight"] = {
+                **run.state.get("preflight", {}),
+                "upload_auth": upload_auth_preflight,
+            }
+            run.append_event(
+                "preflight",
+                "upload_auth_checked",
+                {
+                    "status": upload_auth_preflight.get("status"),
+                    "project": upload_auth_preflight.get("project"),
+                    "active_account": upload_auth_preflight.get("active_account"),
+                },
+            )
+            run.save_state()
+            if upload_auth_preflight.get("status") != "passed":
+                raise StepError("preflight", "upload requested but gcloud auth preflight failed", upload_auth_preflight)
+            run.complete_step(
+                "preflight",
+                {
+                    "kind": "upload_auth",
+                    "project": DEFAULT_GCLOUD_PROJECT,
+                    "active_account": upload_auth_preflight.get("active_account"),
+                    "configured_project": upload_auth_preflight.get("configured_project"),
+                },
+            )
+
         if not resumed:
             # 1. Run matcher
-            selected_matches = run_matcher(run, prompt, DEFAULT_MATCHER_LIMIT)
+            selected_matches = run_matcher(run, prompt, run.matcher_limit)
             # 2. Prepare matcher handoff metadata for refactoring
             matcher_context = [
                 {

@@ -106,6 +106,7 @@ def main() -> None:
         "games_integrity_passed": 0,
         "games_integrity_failed": 0,
         "games_transform_completed": 0,
+        "games_transform_soft_completed": 0,
         "games_transform_failed": 0,
         "source_mode": args.source_mode,
         "manifest_remix_prompt": manifest_remix_prompt,

@@ -134,6 +134,9 @@ def main() -> None:
                 "input_index_url": relative_url(input_index, ROOT) if input_index.exists() else None,
                 "output_index_url": relative_url(output_index, ROOT) if output_index.exists() else None,
                 "last_error": game_state.get("last_error"),
+                "soft_acceptance": game_state.get("soft_acceptance"),
+                "soft_acceptance_reason": game_state.get("soft_acceptance_reason"),
+                "soft_acceptance_warning_count": game_state.get("soft_acceptance_warning_count"),
                 "updated_at": game_state.get("updated_at"),
                 "job": job,
             }
@@ -155,9 +158,11 @@ def main() -> None:
             "games_integrity_passed": run_state["games_integrity_passed"],
             "games_integrity_failed": run_state["games_integrity_failed"],
             "games_transform_completed": run_state["games_transform_completed"],
+            "games_transform_soft_completed": run_state.get("games_transform_soft_completed", 0),
             "games_transform_failed": run_state["games_transform_failed"],
             "games_running": sum(1 for game in games_payload if game["status"] == "running"),
             "games_completed": sum(1 for game in games_payload if game["status"] == "completed"),
+            "games_soft_completed": sum(1 for game in games_payload if game["status"] == "soft_completed"),
             "games_failed": sum(1 for game in games_payload if game["status"] == "failed"),
             "active_jobs": len(active_jobs),
             "active_jobs_missing_heartbeat": heartbeat_missing_count,
@@ -208,6 +213,7 @@ def main() -> None:
     .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; margin-left: 8px; }
     .pill.running { background: rgba(96,165,250,0.18); color: var(--blue); }
     .pill.completed { background: rgba(52,211,153,0.18); color: var(--green); }
+    .pill.warning { background: rgba(251,191,36,0.18); color: var(--yellow); }
     .pill.failed { background: rgba(248,113,113,0.18); color: var(--red); }
     .pill.other { background: rgba(167,139,250,0.18); color: var(--purple); }
     .kv { margin: 6px 0; line-height: 1.45; }
@@ -232,6 +238,7 @@ def main() -> None:
     function pillClass(status) {
       if (status === 'running') return 'running';
       if (status === 'completed') return 'completed';
+      if (status === 'soft_completed' || status === 'transform_completed_with_warnings') return 'warning';
       if (status === 'failed') return 'failed';
       return 'other';
     }
@@ -271,10 +278,12 @@ def main() -> None:
           <div class="stat"><div class="label">Total Games</div><div class="value">${data.summary.games_total}</div></div>
           <div class="stat"><div class="label">Running</div><div class="value">${data.summary.games_running}</div></div>
           <div class="stat"><div class="label">Completed</div><div class="value">${data.summary.games_completed}</div></div>
+          <div class="stat"><div class="label">Soft Accepted</div><div class="value">${data.summary.games_soft_completed}</div></div>
           <div class="stat"><div class="label">Failed</div><div class="value">${data.summary.games_failed}</div></div>
           <div class="stat"><div class="label">Active Jobs</div><div class="value">${data.summary.active_jobs}</div></div>
           <div class="stat"><div class="label">Missing Heartbeats</div><div class="value">${data.summary.active_jobs_missing_heartbeat}</div></div>
           <div class="stat"><div class="label">Heartbeat > 60s</div><div class="value">${data.summary.active_jobs_stale_over_60s}</div></div>
+          <div class="stat"><div class="label">Transform Soft Completed</div><div class="value">${data.summary.games_transform_soft_completed}</div></div>
           <div class="stat"><div class="label">Transform Failed</div><div class="value">${data.summary.games_transform_failed}</div></div>
         </div>`;
 
@@ -301,6 +310,8 @@ def main() -> None:
           <p class="kv"><strong>Integrity:</strong> ${esc(game.integrity_status || 'pending')}</p>
           <p class="kv"><strong>Creative Status:</strong> ${esc(game.creative_status || 'n/a')}</p>
           <p class="kv"><strong>Creative Phase:</strong> ${esc(game.creative_phase || 'n/a')}</p>
+          ${game.soft_acceptance_reason ? `<p class="kv"><strong>Accepted With Warnings:</strong> ${esc(game.soft_acceptance_reason)}</p>` : ''}
+          ${typeof game.soft_acceptance_warning_count === 'number' && game.soft_acceptance_warning_count > 0 ? `<p class="kv"><strong>Warning Count:</strong> ${esc(game.soft_acceptance_warning_count)}</p>` : ''}
           <p class="kv"><strong>Attempts:</strong> ${esc(game.attempt_count ?? 'n/a')}</p>
           <p class="kv"><strong>Updated:</strong> ${esc(game.updated_at || 'n/a')}</p>
           ${renderJob(game.job)}

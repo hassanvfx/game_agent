@@ -1,0 +1,3 @@
+# Level Adapter Rationale
+
+The source is a single sandbox surface rather than discrete level files, so progression is expressed through runtime states and planned visual/difficulty beats instead of separate HTML variants. The 1.5-level proof validates start plus first interaction. The five-level plan is documentation for safe future escalation using existing knobs: wanted level, pursuit density, visual intensity, and HUD warnings. This avoids risky mechanic rewrites while giving the neon GTA-like world a learning curve.

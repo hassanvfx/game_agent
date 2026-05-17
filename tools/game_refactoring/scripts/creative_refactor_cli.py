@@ -590,7 +590,7 @@ def build_status_payload(run_dir: Path) -> dict:
 
     final_output_dirs = sorted(str(path) for path in output_root.iterdir() if path.is_dir()) if output_root.exists() else []
     status = run_state["status"]
-    completed = status in {"transform_completed", "transform_failed", "transform_incomplete"}
+    completed = status in {"transform_completed", "transform_completed_with_warnings", "transform_failed", "transform_incomplete"}
     failed = status in {"transform_failed", "transform_incomplete"}
     running = not completed
     payload = {
@@ -601,6 +601,7 @@ def build_status_payload(run_dir: Path) -> dict:
         "updated_at": run_state["updated_at"],
         "games_total": run_state.get("games_total", 0),
         "games_transform_completed": run_state.get("games_transform_completed", 0),
+        "games_transform_soft_completed": run_state.get("games_transform_soft_completed", 0),
         "games_transform_failed": run_state.get("games_transform_failed", 0),
         "dashboard_path": str(dashboard_path),
         "output_root": str(output_root),
@@ -617,7 +618,12 @@ def build_result_payload(run_dir: Path) -> dict:
     run_state = load_json(run_dir / "run_state.json")
     output_root = run_dir / "output"
     final_output_dirs = sorted(str(path) for path in output_root.iterdir() if path.is_dir()) if output_root.exists() else []
-    completed = run_state["status"] in {"transform_completed", "transform_failed", "transform_incomplete"}
+    completed = run_state["status"] in {
+        "transform_completed",
+        "transform_completed_with_warnings",
+        "transform_failed",
+        "transform_incomplete",
+    }
     payload = {
         "run_id": run_state["run_id"],
         "status": run_state["status"],
@@ -625,6 +631,7 @@ def build_result_payload(run_dir: Path) -> dict:
         "dashboard_path": str(run_dir / "dashboard" / "index.html"),
         "output_root": str(output_root),
         "completed": completed,
+        "games_transform_soft_completed": run_state.get("games_transform_soft_completed", 0),
     }
     if completed:
         payload["final_output_dirs"] = final_output_dirs

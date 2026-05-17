@@ -435,8 +435,9 @@ def initialize_run_status(run_dir: Path, max_concurrency: int, stale_heartbeat_s
 def finalize_run_status(run_dir: Path, remix_prompt: str | None) -> None:
     run_state_path = run_dir / "run_state.json"
     run_state = load_json(run_state_path)
+    soft_completed = int(run_state.get("games_transform_soft_completed") or 0)
     if run_state["games_transform_failed"] == 0 and run_state["games_transform_completed"] == run_state["games_total"]:
-        run_state["status"] = "transform_completed"
+        run_state["status"] = "transform_completed_with_warnings" if soft_completed > 0 else "transform_completed"
     elif run_state["games_transform_completed"] + run_state["games_transform_failed"] == run_state["games_total"]:
         run_state["status"] = "transform_failed"
     else:
@@ -589,6 +590,12 @@ def main() -> None:
                     run_state["games_transform_completed"] += 1
                     run_state.setdefault("notes", []).append(
                         f"{game_id} operator pipeline v2 transform completed."
+                    )
+                elif game_state["status"] == "soft_completed":
+                    run_state["games_transform_completed"] += 1
+                    run_state["games_transform_soft_completed"] = int(run_state.get("games_transform_soft_completed") or 0) + 1
+                    run_state.setdefault("notes", []).append(
+                        f"{game_id} operator pipeline v2 transform soft-completed with warnings."
                     )
                 elif game_state["status"] == "failed":
                     operator_stage_state_path = current_operator_pipeline_stage_state_path(run_dir, game_id)

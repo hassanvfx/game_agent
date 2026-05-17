@@ -290,6 +290,166 @@ def inspect_template_placeholders(workspace: Path, template_manifest: dict[str, 
     }
 
 
+def inspect_runtime_evidence(workspace: Path) -> dict[str, Any]:
+    evidence_path = workspace / "runtime_evidence.json"
+    if not evidence_path.exists() or not evidence_path.is_file():
+        return {
+            "present": False,
+            "valid": False,
+            "path": str(evidence_path),
+            "payload": None,
+            "checks": {},
+            "screenshots": [],
+        }
+
+    try:
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {
+            "present": True,
+            "valid": False,
+            "path": str(evidence_path),
+            "payload": None,
+            "checks": {},
+            "screenshots": [],
+        }
+
+    if not isinstance(payload, dict):
+        return {
+            "present": True,
+            "valid": False,
+            "path": str(evidence_path),
+            "payload": None,
+            "checks": {},
+            "screenshots": [],
+        }
+
+    checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+    screenshots = payload.get("screenshots") if isinstance(payload.get("screenshots"), list) else []
+    return {
+        "present": True,
+        "valid": True,
+        "path": str(evidence_path),
+        "payload": payload,
+        "checks": checks,
+        "screenshots": [item for item in screenshots if isinstance(item, str) and item],
+    }
+
+
+def evaluate_soft_acceptance_candidate(
+    workspace: Path,
+    template_manifest: dict[str, Any] | None,
+    placeholder_inspection: dict[str, Any],
+    contract_inspection: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    final_stage: bool,
+    final_attempt: bool,
+) -> dict[str, Any]:
+    runtime_evidence = inspect_runtime_evidence(workspace)
+    warnings: list[str] = []
+    blockers: list[str] = []
+
+    if not final_stage:
+        blockers.append("soft_acceptance_only_applies_to_terminal_stage_outputs")
+    if not final_attempt:
+        blockers.append("soft_acceptance_is_only_evaluated_after_the_final_attempt")
+
+    index_path = workspace / "index.html"
+    assets_path = workspace / "assets"
+    if not index_path.exists() or not index_path.is_file():
+        blockers.append("workspace_missing_index_html")
+    if not assets_path.exists() or not assets_path.is_dir():
+        blockers.append("workspace_missing_assets_directory")
+
+    if not runtime_evidence["present"] or not runtime_evidence["valid"]:
+        blockers.append("runtime_evidence_missing_or_invalid")
+
+    required_checks = (
+        "boot_load",
+        "spawn_flow",
+        "merge_flow",
+        "mobile_viewport",
+        "controls_reachable",
+    )
+    failed_checks = [
+        check_name
+        for check_name in required_checks
+        if runtime_evidence["checks"].get(check_name) is not True
+    ]
+    if failed_checks:
+        blockers.append("runtime_checks_failed:" + ",".join(failed_checks))
+
+    screenshot_names = runtime_evidence["screenshots"]
+    realized_screenshots = [name for name in screenshot_names if (workspace / name).exists()]
+    if not realized_screenshots:
+        blockers.append("runtime_screenshots_missing")
+
+    unresolved_files = [
+        name for name in (placeholder_inspection.get("unresolved_files") or []) if isinstance(name, str) and name
+    ]
+    allowed_unresolved_files = {"operator_result_contract.json"}
+    disallowed_unresolved_files = [name for name in unresolved_files if name not in allowed_unresolved_files]
+    if disallowed_unresolved_files:
+        blockers.append("unexpected_unresolved_template_files:" + ",".join(disallowed_unresolved_files))
+
+    procedural_issue_present = (
+        not bool(contract_inspection.get("valid"))
+        or bool(unresolved_files)
+        or result.get("execution_status") != "completed"
+        or int(result.get("returncode") or 0) != 0
+    )
+    if not procedural_issue_present:
+        blockers.append("no_procedural_issue_requiring_soft_acceptance")
+
+    if bool(result.get("timed_out")):
+        blockers.append("execution_timed_out")
+
+    if not bool(contract_inspection.get("valid")):
+        warnings.append("operator_result_contract_invalid_or_missing")
+    if unresolved_files:
+        warnings.append("template_artifacts_left_unresolved:" + ",".join(unresolved_files))
+    if result.get("execution_status") != "completed":
+        warnings.append(f"execution_status={result.get('execution_status')}")
+    if int(result.get("returncode") or 0) != 0:
+        warnings.append(f"returncode={result.get('returncode')}")
+    console_error_count = runtime_evidence["checks"].get("console_errors")
+    if isinstance(console_error_count, int) and console_error_count > 0:
+        warnings.append(f"console_errors={console_error_count}")
+
+    remaining_urls = result.get("remaining_potential_urls_to_remove")
+    if isinstance(remaining_urls, list) and remaining_urls:
+        warnings.append(f"remaining_url_findings={len(remaining_urls)}")
+    remaining_font_candidates = result.get("remaining_actionable_font_replacement_candidates")
+    if isinstance(remaining_font_candidates, list) and remaining_font_candidates:
+        warnings.append(f"remaining_font_findings={len(remaining_font_candidates)}")
+
+    eligible = not blockers
+    reason = None
+    if eligible:
+        reason = (
+            "Playable runtime evidence and screenshots are present, but final contract/cleanup artifacts remain incomplete."
+        )
+
+    return {
+        "eligible": eligible,
+        "reason": reason,
+        "warnings": warnings,
+        "blockers": blockers,
+        "basis": {
+            "workspace_index_path": str(index_path),
+            "workspace_assets_path": str(assets_path),
+            "runtime_evidence_path": runtime_evidence["path"],
+            "required_checks": list(required_checks),
+            "failed_checks": failed_checks,
+            "screenshots": realized_screenshots,
+            "contract_valid": bool(contract_inspection.get("valid")),
+            "template_unresolved_files": unresolved_files,
+            "allowed_unresolved_files": sorted(allowed_unresolved_files),
+        },
+    }
+
+
 def build_skill_catalog_policy_section(workspace_catalogs: dict[str, Path]) -> list[str]:
     skill_catalog_path = workspace_catalogs.get("skills/")
     section = [
@@ -723,6 +883,9 @@ def mark_game_failed(game_state_path: Path, message: str) -> None:
     game_state["current_phase"] = "operator_pipeline_failed"
     game_state["creative_phase"] = "operator_pipeline_failed"
     game_state["creative_status"] = "failed"
+    game_state["soft_acceptance"] = None
+    game_state["soft_acceptance_reason"] = None
+    game_state["soft_acceptance_warning_count"] = 0
     game_state["last_error"] = message
     game_state["updated_at"] = utc_now()
     write_json(game_state_path, game_state)
@@ -991,6 +1154,8 @@ def main() -> None:
     artifacts: list[str] = []
     usage_artifacts: list[Path] = []
     previous_contract_status: str | None = None
+    soft_acceptance_summary: dict[str, Any] | None = None
+    final_stage_slug = operators[-1].stage_slug if operators else None
 
     try:
         for operator in operators:
@@ -1215,15 +1380,36 @@ def main() -> None:
                     "operator_usage_path": str(paths["operator_usage"]),
                     "usage_summary": None if args.dry_run_operators else execution.usage_summary,
                 }
+                soft_acceptance: dict[str, Any] | None = None
+                if operator.stage_slug == final_stage_slug and attempt_number == max_retries_per_stage:
+                    evaluated_soft_acceptance = evaluate_soft_acceptance_candidate(
+                        paths["workspace"].resolve(),
+                        template_manifest,
+                        placeholder_inspection,
+                        contract_inspection,
+                        result,
+                        final_stage=True,
+                        final_attempt=True,
+                    )
+                    if evaluated_soft_acceptance["eligible"]:
+                        soft_acceptance = evaluated_soft_acceptance
+                        result["status"] = "soft_completed"
+                        result["soft_accepted"] = True
+                        result["soft_acceptance"] = evaluated_soft_acceptance
+                        result["soft_acceptance_reason"] = evaluated_soft_acceptance["reason"]
                 write_json(paths["operator_result"], result)
 
+                stage_result_status = str(result["status"])
+
                 def mark_finished(payload: dict[str, Any]) -> None:
-                    payload["status"] = operator_status
+                    payload["status"] = stage_result_status
                     payload["updated_at"] = utc_now()
                     payload["finished_at"] = payload["updated_at"]
                     payload["operator_result_path"] = str(paths["operator_result"])
                     payload["returncode"] = execution_returncode
                     payload["timed_out"] = execution_timed_out
+                    if soft_acceptance is not None:
+                        payload["soft_acceptance"] = soft_acceptance
 
                 update_json_file(paths["operator_stage_state"], mark_finished)
 
@@ -1242,8 +1428,8 @@ def main() -> None:
                 )
                 usage_artifacts.append(paths["operator_usage"])
 
-                last_status = operator_status
-                if operator_status == "completed":
+                last_status = stage_result_status
+                if stage_result_status == "completed":
                     if placeholder_inspection["checked"] and placeholder_inspection["unresolved_files"]:
                         last_status = "failed"
                         continue
@@ -1267,6 +1453,13 @@ def main() -> None:
                     completed_stage_slugs.append(operator.stage_slug)
                     stage_completed = True
                     break
+                if stage_result_status == "soft_completed" and soft_acceptance is not None:
+                    previous_contract_status = contract_status or "warning"
+                    copy_workspace(paths["workspace"], current_workspace, replace=True)
+                    completed_stage_slugs.append(operator.stage_slug)
+                    soft_acceptance_summary = soft_acceptance
+                    stage_completed = True
+                    break
 
             if not stage_completed:
                 raise OperatorPipelineGameError(f"{operator.stage_slug} failed after retries; last_status={last_status}")
@@ -1274,14 +1467,23 @@ def main() -> None:
         copy_workspace(current_workspace, output_dir, replace=True)
 
         game_state = load_json(game_state_path)
-        game_state["status"] = "completed"
-        game_state["current_phase"] = "creative_refactor_completed"
-        game_state["creative_phase"] = "creative_refactor_completed"
-        game_state["creative_status"] = "completed"
+        completion_status = "soft_completed" if soft_acceptance_summary is not None else "completed"
+        completion_phase = "creative_refactor_soft_completed" if soft_acceptance_summary is not None else "creative_refactor_completed"
+        game_state["status"] = completion_status
+        game_state["current_phase"] = completion_phase
+        game_state["creative_phase"] = completion_phase
+        game_state["creative_status"] = completion_status
         game_state["creative_output_path"] = str(output_dir)
         game_state["operator_pipeline_completed_stages"] = completed_stage_slugs
         game_state["attempt_count"] = 1
         game_state["last_error"] = None
+        game_state["soft_acceptance"] = soft_acceptance_summary
+        game_state["soft_acceptance_reason"] = (
+            soft_acceptance_summary.get("reason") if isinstance(soft_acceptance_summary, dict) else None
+        )
+        game_state["soft_acceptance_warning_count"] = (
+            len(soft_acceptance_summary.get("warnings") or []) if isinstance(soft_acceptance_summary, dict) else 0
+        )
         game_state["updated_at"] = utc_now()
         game_state["operator_pipeline_artifacts"] = artifacts
         cost_report_path = pipeline_dir / "cost_report.json"

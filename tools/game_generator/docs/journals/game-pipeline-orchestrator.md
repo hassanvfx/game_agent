@@ -1,6 +1,6 @@
 # Game Pipeline Orchestrator Implementation Journal
 
-**Last Updated:** 2026-05-17 08:44 America/Mexico_City  
+**Last Updated:** 2026-05-17 12:34 America/Mexico_City  
 **Feature Spec:** N/A  
 **Backend Reference:** N/A
 
@@ -37,6 +37,233 @@
 ---
 
 ## 📝 Journal Entries
+
+### 2026-05-17 12:23 - Restored root artifact materialization to default across all published runs
+
+**Achievement:**
+- Fixed the publish-side artifact materialization flow so root `public/app.json`, `public/index.json`, and related root views no longer collapse to only the most recent publish run by default
+- Preserved targeted materialization support while making the default behavior aggregate all `run_*` snapshots under the published runs directory
+
+**Implementation Details:**
+- `../game_publish_pipeline/scripts/materialize_artifact_view.py`
+  - made `--runs` optional instead of required
+  - added `--runs-root` with default `games/published/runs`
+  - added automatic discovery of all `run_*` directories when `--runs` is omitted
+  - added materialization reporting for `run_source` and `runs_root`
+- `../game_publish_pipeline/scripts/refresh_app_artifacts.py`
+  - stopped invoking the materializer with only the current `run_dir`
+  - now invokes the materializer with `--runs-root <published runs root>` so the root artifact view is rebuilt from the full run history instead of the single latest run
+
+**Technical Decisions:**
+- Kept explicit `--runs` support for one-off remediation or investigation flows where an operator wants to materialize a specific subset of runs
+- Passed `--runs-root` from `refresh_app_artifacts.py` even though the materializer now has a default, so custom publish roots still behave correctly when callers override the runs root
+- Preserved `latest-wins` precedence so the newest run snapshot still overrides older collisions while keeping historical coverage intact
+
+**Testing:**
+- Verified syntax:
+  - `python3 -m py_compile ../game_publish_pipeline/scripts/materialize_artifact_view.py ../game_publish_pipeline/scripts/refresh_app_artifacts.py`
+- Verified default-all-runs discovery:
+  - `python3 ../game_publish_pipeline/scripts/materialize_artifact_view.py --dry-run`
+  - confirmed:
+    - `run source: auto-discovered`
+    - `run count: 12`
+    - root materialization no longer scopes itself to only the current run
+- Executed real write-back:
+  - `python3 ../game_publish_pipeline/scripts/materialize_artifact_view.py`
+  - confirmed merged root artifacts were rebuilt from all discovered runs with:
+    - `merged_records: 1135`
+    - `records kept after sanitization: 860`
+    - `records removed as stale/missing-index: 275`
+- Rebuilt matcher v2 artifacts against the rematerialized root catalog:
+  - `python3 ../game_matcher_v2/cli/build_artifacts.py --force`
+  - confirmed matcher v2 `game_count: 860`
+- Re-ran the original debug experiment:
+  - `python3 tmp/debug_first_prompt_matcher_limit6.py`
+  - prompt `Mario platformer` now returns `ranked_match_count: 6` instead of the earlier single-result failure mode
+
+**Next Steps:**
+- [ ] Commit the publish materialization fix and verified corpus rebuild
+- [ ] Optionally rerun a full pipeline/batch flow now that the matcher corpus has been restored
+
+**Status:** Complete
+
+### 2026-05-17 12:34 - Verified corpus recovery after all-runs rematerialization
+
+**Achievement:**
+- Confirmed the root published catalog and matcher v2 corpus recovered from the one-game collapsed state after real all-runs materialization
+- Verified that the original `Mario platformer` `limit 6` experiment now produces the expected multi-result ranking
+
+**Implementation Details:**
+- Root published artifact view now reflects the full materialized corpus under:
+  - `games/published/public/app.json`
+- Matcher v2 derived artifacts now reflect the rebuilt catalog under:
+  - `../game_matcher_v2/fixtures/derived/metadata.json`
+  - `../game_matcher_v2/fixtures/derived/normalized_games.json`
+- The debug helper outputs captured the restored ranking behavior:
+  - `tmp/debug_first_prompt_selected_tags.json`
+  - `tmp/debug_first_prompt_ranked_matches.json`
+
+**Technical Decisions:**
+- Validated the fix through the same exact prompt/limit experiment used during diagnosis so the before/after comparison stayed apples-to-apples
+- Kept the focus on corpus correctness rather than altering matcher ranking logic, because the earlier one-result behavior was proven to be a data-view problem
+
+**Testing:**
+- Live counts after write-back:
+  - root published `app.json`: `860`
+  - matcher v2 derived corpus: `860`
+- Repeat matcher experiment:
+  - prompt: `Mario platformer`
+  - limit: `6`
+  - ranked results returned: `6`
+
+**Next Steps:**
+- [ ] Commit all verified changes together with the journal update
+
+**Status:** Complete
+
+### 2026-05-17 10:40 - Added upload auth preflight for single-run and batch launches
+
+**Achievement:**
+- Added a non-interactive gcloud auth preflight so upload-enabled runs fail fast before expensive matcher/refactor/publish work begins
+- Extended the batch launcher to perform the same preflight once at batch start when any item requests upload
+
+**Implementation Details:**
+- `scripts/upload_auth_preflight.py`
+  - added shared helpers for:
+    - `gcloud --version`
+    - `gcloud auth list --filter=status:ACTIVE --format=value(account)`
+    - `gcloud config get-value project`
+- `scripts/run_pipeline.py`
+  - stores upload preflight payloads under `state.preflight.upload_auth`
+  - records an explicit `preflight` step when `--upload` is requested
+  - fails early with a clear operator-facing error if no active gcloud auth is available
+- `scripts/run_batch_pipeline.py`
+  - checks resolved items for `upload=true`
+  - runs one shared preflight before launching item 1
+  - persists the batch-level preflight result and blocks the batch if it fails
+- `scripts/batch_pipeline_state.py`
+  - added `preflight` to persisted batch state
+  - preserves batch `blocked` status when preflight fails
+- `README.md`
+  - documented fail-fast upload auth preflight behavior for both single-run and batch launches
+
+**Technical Decisions:**
+- Kept the preflight non-interactive and lightweight so it catches the most common operator issue—missing/expired gcloud login—without introducing a heavy storage probe before every run
+- Persisted preflight payloads directly in run and batch state so observer tooling can explain why a launch was blocked
+- Chose batch-level preflight once per invocation instead of once per item because all upload-enabled items share the same local gcloud auth context
+
+**Testing:**
+- Planned validation:
+  - `python3 -m py_compile scripts/upload_auth_preflight.py scripts/run_pipeline.py scripts/run_batch_pipeline.py scripts/batch_pipeline_state.py`
+  - dry/local verification that batch state records preflight results before item launch
+
+**Next Steps:**
+- [ ] Validate syntax after the preflight changes
+- [ ] Create the top-10 franchises manifest with `limit=1`, `publish=true`, `upload=true`
+- [ ] Launch the batch and inspect whether preflight passes or blocks the run cleanly
+
+**Status:** In Progress
+
+### 2026-05-17 10:27 - Added durable serial batch orchestration and first-class matcher limits
+
+**Achievement:**
+- Extended the single-run pipeline CLI so matcher/refactor fan-out is configurable with a first-class `--limit`
+- Added a resumable serial batch orchestration layer with persistent item state, resolved manifests, and a dedicated observer CLI
+
+**Implementation Details:**
+- `scripts/run_pipeline.py`
+  - added `--limit` argument and persisted `matcher_limit` into run state, dashboard payloads, and final response payloads
+  - updated matcher selection to carry forward up to `limit` matches instead of always truncating to two
+  - relaxed matcher failure from “fewer than two” to “no matches” so one-item runs are valid
+- `scripts/demo_pipeline_launch.py`
+  - added `--limit` passthrough so the convenience launcher can drive the same single-run behavior
+- `scripts/batch_pipeline_state.py`
+  - added persistent batch helpers for:
+    - batch directory layout
+    - manifest validation/resolution
+    - top-level defaults + per-item override merging
+    - item files under `batch_runs/<batch_id>/items/`
+    - summary/count recomputation and event logging
+- `scripts/run_batch_pipeline.py`
+  - added a serial batch launcher that:
+    - creates a persisted batch run from `--manifest`
+    - or resumes with `--resume-batch`
+    - launches one child `run_pipeline.py` item at a time
+    - detects the created child `pipeline_run_id`
+    - reconciles persisted child run state on resume
+- `scripts/observe_batch_pipeline.py`
+  - added terminal/JSON/watch inspection for batch runs
+- `README.md`
+  - documented the new `--limit`, batch manifest shape, and batch observer commands
+
+**Technical Decisions:**
+- Kept `run_pipeline.py` as the single-run execution engine and put all queue/resume behavior into separate batch scripts for clean encapsulation
+- Resolved manifest defaults once into a persisted `manifest.resolved.json` so resuming a batch never depends on future default changes
+- Chose conservative resume semantics: running items reconcile against persisted child `pipeline_runs/<run_id>/run_state.json`, and items missing a child run id are blocked instead of silently relaunched
+
+**Testing:**
+- Planned validation:
+  - `python3 -m py_compile scripts/run_pipeline.py scripts/demo_pipeline_launch.py scripts/batch_pipeline_state.py scripts/run_batch_pipeline.py scripts/observe_batch_pipeline.py`
+  - create a minimal manifest and validate empty/synthetic observer paths plus manifest resolution behavior
+
+**Next Steps:**
+- [ ] Run syntax checks for the new batch files and updated pipeline scripts
+- [ ] Create a small manifest fixture and validate batch creation/observation behavior
+- [ ] Decide whether a batch HTML dashboard is worth adding later or if terminal/JSON observer coverage is enough
+
+**Status:** In Progress
+
+### 2026-05-17 09:57 - Added downstream visibility for soft-accepted refactor outputs
+
+**Achievement:**
+- Extended the local pipeline orchestrator and dashboard presenter so upstream refactor runs can finish with warnings without being flattened into hard failure
+- Preserved downstream compatibility by continuing to consume `final_output_dirs` while surfacing the new warning-oriented status and per-game acceptance metadata
+
+**Implementation Details:**
+- `scripts/run_pipeline.py`
+  - captured upstream `games_transform_soft_completed` during refactor polling
+  - persisted upstream terminal status via `last_known_status`
+  - preserved existing completion behavior as long as `final_output_dirs` exist
+- `scripts/pipeline_dashboard_presenter.py`
+  - changed refactor stage status derivation to prefer upstream `last_known_status`
+  - added support for `transform_completed_with_warnings` in stage flow rendering
+  - added per-card soft-acceptance fields:
+    - `soft_acceptance_reason`
+    - `soft_acceptance_warning_count`
+  - updated refactor card copy so `soft_completed` renders as `Refactor Accepted With Warnings`
+- Added tmp validation helpers for shorter, reusable verification commands:
+  - `tmp/validate_soft_acceptance.py`
+  - `tmp/verify_soft_acceptance_flow.py`
+
+**Technical Decisions:**
+- Kept the orchestrator contract permissive: refactoring is still operationally usable when upstream emits finalized outputs plus a warning-grade terminal status
+- Treated `transform_completed_with_warnings` as distinct from hard failure, but still visually cautionary in the dashboard
+- Used fixture-style tmp scripts instead of long inline Python one-liners so verification is easier to rerun and less brittle
+
+**Testing:**
+- Syntax validation:
+  - `python3 -m py_compile ../game_refactoring/scripts/create_run.py ../game_refactoring/scripts/run_operator_pipeline_game.py ../game_refactoring/scripts/run_operator_pipeline_batch.py ../game_refactoring/scripts/creative_refactor_cli.py ../game_refactoring/scripts/build_dashboard.py scripts/run_pipeline.py scripts/pipeline_dashboard_presenter.py`
+- Soft-acceptance eligibility proof:
+  - `python3 tmp/validate_soft_acceptance.py`
+  - confirmed the failed `Archive Rush 3D` workspace is eligible because it has:
+    - playable `index.html`
+    - `assets/`
+    - passing runtime evidence checks
+    - screenshots
+    - only contract/finalization-style unresolved artifacts remaining
+- End-to-end downstream proof:
+  - `python3 tmp/verify_soft_acceptance_flow.py`
+  - confirmed fixture output flows through:
+    - upstream `status`: `transform_completed_with_warnings`
+    - dashboard summary soft-completed counters
+    - pipeline presenter refactor stage status
+    - refactor card warning messaging for `Archive Rush 3D`
+
+**Next Steps:**
+- [ ] Run one real upstream refactor execution after this code pass so the new state is produced by live code, not only by fixture simulation
+- [ ] Decide whether publish/finalize should optionally exclude `soft_completed` outputs unless an operator explicitly opts in
+
+**Status:** Complete
 
 ### 2026-05-17 08:44 - Expanded dashboard to show failed refactor entries plus publish/finalize path status
 

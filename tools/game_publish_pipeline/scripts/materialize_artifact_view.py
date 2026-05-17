@@ -10,6 +10,7 @@ SCRIPT_PATH = Path(__file__).resolve()
 TOOL_ROOT = SCRIPT_PATH.parents[1]
 REPO_ROOT = TOOL_ROOT.parents[1]
 
+DEFAULT_RUNS_ROOT = REPO_ROOT / "games" / "published" / "runs"
 DEFAULT_PUBLIC_ROOT = REPO_ROOT / "games" / "published" / "public"
 DEFAULT_OBFUSCATED_ROOT = REPO_ROOT / "games" / "published" / "obfuscated"
 
@@ -23,7 +24,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Materialize root published artifact view from one or more run-scoped artifact snapshots."
     )
-    parser.add_argument("--runs", nargs="+", required=True, help="Run directories (e.g. games/published/runs/<run_id>).")
+    parser.add_argument(
+        "--runs",
+        nargs="+",
+        help="Optional explicit run directories (e.g. games/published/runs/<run_id>). If omitted, auto-discover run_* dirs under --runs-root.",
+    )
+    parser.add_argument(
+        "--runs-root",
+        default=str(DEFAULT_RUNS_ROOT),
+        help="Runs root used for automatic run discovery when --runs is omitted.",
+    )
     parser.add_argument("--public-root", default=str(DEFAULT_PUBLIC_ROOT), help="Published public root to materialize.")
     parser.add_argument("--obfuscated-root", default=str(DEFAULT_OBFUSCATED_ROOT), help="Published obfuscated root to materialize.")
     parser.add_argument(
@@ -48,6 +58,25 @@ def load_json_object(path: Path) -> dict[str, Any]:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def discover_run_dirs(runs_root: Path) -> list[Path]:
+    if not runs_root.exists() or not runs_root.is_dir():
+        raise SystemExit(f"Runs root does not exist or is not a directory: {runs_root}")
+
+    run_dirs = sorted(
+        [path for path in runs_root.iterdir() if path.is_dir() and path.name.startswith("run_")],
+        key=lambda path: path.name,
+    )
+    if not run_dirs:
+        raise SystemExit(f"No run_* directories found under runs root: {runs_root}")
+    return run_dirs
+
+
+def resolve_run_dirs(explicit_runs: list[str] | None, runs_root: Path) -> tuple[list[Path], str]:
+    if explicit_runs:
+        return [Path(item).resolve() for item in explicit_runs], "explicit"
+    return discover_run_dirs(runs_root), "auto-discovered"
 
 
 def _safe_join(root: Path, relative_path: str) -> Path | None:
@@ -150,12 +179,15 @@ def merge_payloads(paths: list[Path], precedence: str) -> tuple[dict[str, Any], 
 
 def main() -> None:
     args = build_parser().parse_args()
-    run_dirs = [Path(item).resolve() for item in args.runs]
+    runs_root = Path(args.runs_root).resolve()
+    run_dirs, run_source = resolve_run_dirs(args.runs, runs_root)
     public_root = Path(args.public_root).resolve()
     obfuscated_root = Path(args.obfuscated_root).resolve()
 
     print("[materialize] =============================", flush=True)
     print("[materialize] Materialize root artifact view", flush=True)
+    print(f"[materialize] run source: {run_source}", flush=True)
+    print(f"[materialize] runs root: {runs_root}", flush=True)
     print(f"[materialize] precedence: {args.precedence}", flush=True)
     print(f"[materialize] dry_run: {args.dry_run}", flush=True)
     print(f"[materialize] run count: {len(run_dirs)}", flush=True)
@@ -164,6 +196,8 @@ def main() -> None:
     print("[materialize] =============================", flush=True)
 
     result: dict[str, Any] = {
+        "run_source": run_source,
+        "runs_root": str(runs_root),
         "precedence": args.precedence,
         "dry_run": bool(args.dry_run),
         "runs": [str(path) for path in run_dirs],

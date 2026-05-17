@@ -332,6 +332,8 @@ def build_refactor_cards(base_payload: dict[str, Any], name_map: dict[str, str])
                     "upstream_output_path": upstream_output_path,
                     "input_mirror_path": input_mirror_path,
                     "last_error": last_error,
+                    "soft_acceptance_reason": item.get("soft_acceptance_reason"),
+                    "soft_acceptance_warning_count": item.get("soft_acceptance_warning_count"),
                     "preview_url": preview_url,
                 }
             )
@@ -695,7 +697,9 @@ def build_current_run_view(base_payload: dict[str, Any], run_dir: Path) -> dict[
             isinstance(refactor_state.get("games_transform_failed"), int)
             and int(refactor_state.get("games_transform_failed") or 0) > 0
         ) or str(refactor_state.get("last_known_status") or "").endswith("failed")
-    raw_refactor_status = str(refactor_step.get("status") or refactor_state.get("status") or "pending")
+    raw_refactor_status = str(
+        refactor_state.get("last_known_status") or refactor_step.get("status") or refactor_state.get("status") or "pending"
+    )
     refactor_status = "failed" if refactor_failed else raw_refactor_status
     match_status = str(match_step.get("status") or "pending")
     finalize_status = str(finalize_step.get("status") or ("completed" if base_payload.get("final_output_dir") else "pending"))
@@ -1045,7 +1049,7 @@ def generate_dashboard_html() -> str:
       margin-top: 10px;
     }
 
-    .status-running { color: var(--warning); }
+    .status-running, .status-warning, .status-soft_completed, .status-transform_completed_with_warnings { color: var(--warning); }
     .status-completed, .status-done, .status-success { color: var(--success); }
     .status-failed, .status-error { color: var(--danger); }
     .status-pending, .status-skipped, .status-disabled, .status-unknown { color: var(--muted); }
@@ -1326,7 +1330,7 @@ def generate_dashboard_html() -> str:
       return `<div class="card-grid">${cards.map((card) => `
         <article class="card">
           <div>
-            <div class="eyebrow" style="margin-bottom:6px;">${esc(card.status === 'failed' ? 'Refactor Failed' : 'Refactor')}</div>
+            <div class="eyebrow" style="margin-bottom:6px;">${esc(card.status === 'failed' ? 'Refactor Failed' : (card.status === 'soft_completed' ? 'Refactor Accepted With Warnings' : 'Refactor'))}</div>
             <h3>${esc(card.title)}</h3>
             <div class="card-meta">${esc(card.game_id)} · ${esc(humanStatus(card.status || 'unknown'))}</div>
           </div>
@@ -1334,6 +1338,8 @@ def generate_dashboard_html() -> str:
           ${card.local_path ? `<div class="muted"><strong>Path:</strong> ${esc(card.local_path)}</div>` : ''}
           ${card.input_mirror_path ? `<div class="muted"><strong>Input:</strong> ${esc(card.input_mirror_path)}</div>` : ''}
           ${card.upstream_output_path && card.upstream_output_path !== card.local_path ? `<div class="muted"><strong>Upstream Output:</strong> ${esc(card.upstream_output_path)}</div>` : ''}
+          ${card.soft_acceptance_reason ? `<div class="muted" style="color:#fde68a;"><strong>Accepted With Warnings:</strong> ${esc(card.soft_acceptance_reason)}</div>` : ''}
+          ${typeof card.soft_acceptance_warning_count === 'number' && card.soft_acceptance_warning_count > 0 ? `<div class="muted"><strong>Warning Count:</strong> ${esc(card.soft_acceptance_warning_count)}</div>` : ''}
           ${card.last_error ? `<div class="muted" style="color:#ffb4bf;"><strong>Error:</strong> ${esc(card.last_error)}</div>` : ''}
           <div class="card-actions">
             ${card.preview_url ? `<button type="button" onclick="openPreview('${esc(card.preview_url)}')">Open 400x700</button>` : ''}

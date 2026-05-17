@@ -24,6 +24,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("prompt", help="Creative prompt for the pipeline run.")
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=2,
+        help="Maximum number of matcher results to carry forward into refactoring.",
+    )
+    parser.add_argument(
         "--poll-seconds",
         type=float,
         default=5.0,
@@ -92,6 +98,8 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
         sys.executable,
         str(RUN_PIPELINE_SCRIPT),
         args.prompt,
+        "--limit",
+        str(args.limit),
         "--poll-seconds",
         str(args.poll_seconds),
     ]

@@ -377,8 +377,8 @@ def main() -> None:
         materialize_command = [
             sys.executable,
             str(MATERIALIZE_SCRIPT),
-            "--runs",
-            str(run_dir),
+            "--runs-root",
+            str(runs_root),
             "--public-root",
             str(public_root),
             "--obfuscated-root",
@@ -389,7 +389,8 @@ def main() -> None:
         run_command(materialize_command)
         materialize_result = {
             "script": str(MATERIALIZE_SCRIPT),
-            "runs": [str(run_dir)],
+            "runs_root": str(runs_root),
+            "run_source": "auto-discovered",
             "precedence": "latest-wins",
         }
 

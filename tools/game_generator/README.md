@@ -18,12 +18,15 @@ python3 scripts/run_pipeline.py "your prompt"
 Arguments (from `parse_args`):
 
 - positional `prompt`
+- `--limit`
 - `--remix-prompt`
 - `--publish`
 - `--upload`
 - `--poll-seconds`
 - `--matcher-mode` (`v1` or `v2`)
 - `--resume-from-run`
+
+When `--upload` is enabled, `run_pipeline.py` now performs a **non-interactive gcloud auth preflight** before expensive work starts. It fails fast if no active `gcloud` account is available.
 
 Run artifacts are persisted under:
 
@@ -40,10 +43,58 @@ python3 scripts/demo_pipeline_launch.py "your prompt" --poll-seconds 5
 
 Useful flags:
 
+- `--limit`
 - `--remix-prompt`
 - `--publish`
 - `--upload`
 - `--no-open`
+
+## `run_batch_pipeline.py`
+
+Runs a **durable serial batch** of `run_pipeline.py` items from a manifest with top-level defaults plus per-item overrides.
+
+```bash
+python3 scripts/run_batch_pipeline.py --manifest batch_manifest.json
+python3 scripts/run_batch_pipeline.py --resume-batch <batch_id>
+```
+
+Manifest shape:
+
+```json
+{
+  "defaults": {
+    "limit": 2,
+    "remix_prompt": null,
+    "publish": false,
+    "upload": false,
+    "poll_seconds": 60,
+    "matcher_mode": "v2"
+  },
+  "runs": [
+    {"prompt": "3d gta"},
+    {"prompt": "mario kart in space", "limit": 5, "remix_prompt": "more neon arcade"}
+  ]
+}
+```
+
+Batch artifacts are persisted under:
+
+- `batch_runs/<batch_id>/batch_state.json`
+- `batch_runs/<batch_id>/events.jsonl`
+- `batch_runs/<batch_id>/items/*.json`
+- `batch_runs/<batch_id>/manifest.resolved.json`
+
+When any batch item has `upload: true`, `run_batch_pipeline.py` runs the same **gcloud auth preflight** once before item 1 starts. Failed preflight blocks the batch before matcher/refactor/publish work begins.
+
+## `observe_batch_pipeline.py`
+
+Read a persisted batch run and print JSON or terminal view.
+
+```bash
+python3 scripts/observe_batch_pipeline.py --batch-id <batch_id>
+python3 scripts/observe_batch_pipeline.py --batch-dir batch_runs/<batch_id> --json
+python3 scripts/observe_batch_pipeline.py --batch-id <batch_id> --watch --interval 3
+```
 
 ## `observe_pipeline_run.py`
 
