@@ -6,12 +6,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import http.server
+import json
 import os
 import signal
 import socketserver
 import subprocess
 import time
 from pathlib import Path
+
+from pipeline_dashboard_presenter import (
+    build_dashboard_contract_extensions,
+    generate_dashboard_html,
+    resolve_dashboard_request_path,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 PIPELINE_RUNS_DIR = ROOT / "pipeline_runs"
@@ -88,8 +95,42 @@ def kill_processes_on_port(port: int) -> list[int]:
     return pids
 
 
+def refresh_dashboard_assets(run_dir: Path, dashboard_dir: Path) -> None:
+    dashboard_data_path = dashboard_dir / "dashboard_data.json"
+    if dashboard_data_path.exists():
+        payload = json.loads(dashboard_data_path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            enriched_payload = {
+                **payload,
+                **build_dashboard_contract_extensions(run_dir, payload),
+            }
+            dashboard_data_path.write_text(
+                json.dumps(enriched_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+    (dashboard_dir / "index.html").write_text(generate_dashboard_html(), encoding="utf-8")
+
+
 class ReusableTCPServer(socketserver.TCPServer):
     allow_reuse_address = True
+
+
+class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, run_dir: Path, directory: str, **kwargs):
+        self.run_dir = run_dir
+        super().__init__(*args, directory=directory, **kwargs)
+
+    def do_GET(self) -> None:
+        resolved_path = resolve_dashboard_request_path(self.run_dir, self.path)
+        if resolved_path is not None:
+            self.send_response(200)
+            self.send_header("Content-type", self.guess_type(str(resolved_path)))
+            self.send_header("Content-Length", str(resolved_path.stat().st_size))
+            self.end_headers()
+            with resolved_path.open("rb") as handle:
+                self.wfile.write(handle.read())
+            return
+        super().do_GET()
 
 
 def main() -> int:
@@ -98,12 +139,14 @@ def main() -> int:
     dashboard_dir = run_dir / "dashboard"
     if not dashboard_dir.exists():
         raise SystemExit(f"dashboard directory not found: {dashboard_dir}")
+    refresh_dashboard_assets(run_dir, dashboard_dir)
 
     port = args.port or pick_dashboard_port(run_dir)
     replaced_pids = kill_processes_on_port(port)
 
-    handler = lambda *handler_args, **handler_kwargs: http.server.SimpleHTTPRequestHandler(
+    handler = lambda *handler_args, **handler_kwargs: DashboardRequestHandler(
         *handler_args,
+        run_dir=run_dir,
         directory=str(dashboard_dir),
         **handler_kwargs,
     )

@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Melody Bus Run</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sky-top: #07112d;
+            --sky-mid: #10215a;
+            --sky-bottom: #1f4aa8;
+            --sun-glow: #7cf7ff;
+            --panel-bg: rgba(10, 15, 39, 0.84);
+            --panel-border: rgba(129, 240, 255, 0.9);
+            --panel-shadow: rgba(0, 0, 0, 0.38);
+            --text-main: #f7fbff;
+            --text-soft: #b7d8ff;
+            --accent-note: #ffd84d;
+            --accent-hit: #ff8f5a;
+            --accent-safe: #7ef7c7;
+            --road-dark: #182237;
+            --road-line: #72f0ff;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background:
+                radial-gradient(circle at top, rgba(124, 247, 255, 0.2), transparent 24%),
+                linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 45%, var(--sky-bottom) 100%);
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Exo 2', sans-serif;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(255,255,255,0.18) 0 2px, transparent 3px),
+                radial-gradient(circle at 72% 26%, rgba(255,255,255,0.12) 0 1.5px, transparent 2.5px),
+                radial-gradient(circle at 84% 12%, rgba(255,255,255,0.16) 0 2px, transparent 3px),
+                radial-gradient(circle at 33% 30%, rgba(255,255,255,0.10) 0 1.5px, transparent 2.5px);
+            opacity: 0.65;
+        }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        .font-comic {
+            font-family: 'Audiowide', sans-serif;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        
+        /* UI Animations */
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 80% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 rgba(124, 247, 255, 0.0), 0 18px 40px rgba(0, 0, 0, 0.28); }
+            50% { box-shadow: 0 0 24px rgba(124, 247, 255, 0.35), 0 18px 40px rgba(0, 0, 0, 0.34); }
+        }
+        
+        .anim-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .anim-float { animation: float 3s ease-in-out infinite; }
+        
+        .text-stroke {
+            -webkit-text-stroke: 2px rgba(6, 12, 31, 0.9);
+            paint-order: stroke fill;
+            text-shadow: 0 0 18px rgba(124, 247, 255, 0.28);
+        }
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(17, 27, 65, 0.95), rgba(10, 16, 41, 0.92));
+            border: 3px solid var(--panel-border);
+            box-shadow: 0 14px 36px var(--panel-shadow), inset 0 0 0 1px rgba(255,255,255,0.08);
+            border-radius: 20px;
+            color: var(--text-main);
+            backdrop-filter: blur(10px);
+        }
+        
+        #ui-layer {
+            pointer-events: none;
+            padding:
+                calc(1.5rem + env(safe-area-inset-top, 0px))
+                calc(1.5rem + env(safe-area-inset-right, 0px))
+                calc(1.5rem + env(safe-area-inset-bottom, 0px))
+                calc(1.5rem + env(safe-area-inset-left, 0px));
+        }
+        .interactive { pointer-events: auto; }
+        .hud-chip {
+            min-height: 52px;
+            animation: pulseGlow 2.2s ease-in-out infinite;
+        }
+        .info-card {
+            background: linear-gradient(180deg, rgba(15, 36, 82, 0.88), rgba(7, 20, 51, 0.94));
+            border: 2px solid rgba(126, 247, 199, 0.55);
+            box-shadow: inset 0 0 20px rgba(126, 247, 199, 0.08);
+        }
+        .arcade-btn {
+            background: linear-gradient(180deg, #ff8f5a, #ff5c5c);
+            box-shadow: 0 12px 24px rgba(255, 92, 92, 0.32), inset 0 1px 0 rgba(255,255,255,0.35);
+        }
+        .arcade-btn.secondary {
+            background: linear-gradient(180deg, #89ffcf, #34d399);
+            box-shadow: 0 12px 24px rgba(52, 211, 153, 0.28), inset 0 1px 0 rgba(255,255,255,0.35);
+        }
+        .arcade-btn:hover { filter: brightness(1.05); }
+        
+        /* Speech Bubble */
+        .speech-bubble {
+            position: absolute;
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(224,247,255,0.98));
+            border: 3px solid rgba(8, 15, 36, 0.9);
+            border-radius: 20px;
+            padding: 10px 20px;
+            font-family: 'Exo 2', sans-serif;
+            font-weight: 700;
+            font-size: 20px;
+            color: #061229;
+            box-shadow: 0 10px 22px rgba(0,0,0,0.26);
+            white-space: nowrap;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            transform: translateY(10px) scale(0.9);
+        }
+        .speech-bubble.active { opacity: 1; transform: translateY(0) scale(1); }
+        .speech-bubble::after {
+            content: ''; position: absolute; bottom: -10px; left: 50%; margin-left: -10px;
+            border-width: 10px 10px 0; border-style: solid; border-color: #000 transparent; display: block; width: 0;
+        }
+        .speech-bubble::before {
+            content: ''; position: absolute; bottom: -6px; left: 50%; margin-left: -7px;
+            border-width: 7px 7px 0; border-style: solid; border-color: #E0F7FF transparent; display: block; width: 0; z-index: 1;
+        }
+        .feedback-gif {
+            position: absolute;
+            right: 14px;
+            width: min(26vw, 132px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.75);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.34);
+            background: rgba(8, 15, 36, 0.55);
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(14px) scale(0.9);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .feedback-gif.active {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+        #collect-gif {
+            top: 96px;
+            border-color: rgba(126, 247, 199, 0.82);
+        }
+        #danger-gif {
+            bottom: 120px;
+            border-color: rgba(255, 143, 90, 0.82);
+        }
+        @media (max-width: 640px) {
+            #ui-layer {
+                padding:
+                    calc(1rem + env(safe-area-inset-top, 0px))
+                    calc(1rem + env(safe-area-inset-right, 0px))
+                    calc(1rem + env(safe-area-inset-bottom, 0px))
+                    calc(1rem + env(safe-area-inset-left, 0px));
+            }
+            .glass-panel { border-width: 2px; border-radius: 18px; }
+            .speech-bubble {
+                max-width: min(70vw, 260px);
+                white-space: normal;
+                text-align: center;
+                font-size: 15px;
+                padding: 8px 12px;
+            }
+            .feedback-gif {
+                right: 10px;
+                width: min(31vw, 104px);
+                border-radius: 14px;
+            }
+            #collect-gif { top: 86px; }
+            #danger-gif { bottom: 104px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Config & Assets -->
+<div id="assets" style="display: none;">
+    <script id="game-config" type="application/x-game-config">
+    {
+        "busSpeed": { "type": "number", "label": "Bus Speed", "value": 400, "min": 200, "max": 800 },
+        "voiceVolume": { "type": "number", "label": "Voice Volume", "value": 1.0, "min": 0, "max": 1 },
+        "showLyrics": { "type": "boolean", "label": "Show Lyrics", "value": true }
+    }
+    </script>
+</div>
+
+<!-- Game Container -->
+<div id="game-container" class="relative w-full h-full">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Dynamic Speech Bubble -->
+    <div id="bus-speech" class="speech-bubble">Keep the melody rolling!</div>
+    <img id="collect-gif" class="feedback-gif" src="https://i.giphy.com/2Pw6NK0XrHTiNnUbPv.webp" alt="Celebration reaction animation" decoding="async" loading="eager" aria-hidden="true">
+    <img id="danger-gif" class="feedback-gif" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" alt="Arcade explosion reaction animation" decoding="async" loading="eager" aria-hidden="true">
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 flex flex-col justify-between p-6">
+        
+        <!-- HUD -->
+        <div id="hud" class="flex justify-between items-start w-full hidden">
+            <div class="glass-panel hud-chip px-4 py-2 flex items-center gap-2">
+                <span class="text-3xl" aria-hidden="true">🎵</span>
+                <span class="font-comic text-xs tracking-[0.25em] text-cyan-200">SCORE</span>
+                <span id="score" class="font-comic text-2xl sm:text-3xl text-white font-bold">0</span>
+            </div>
+            <button id="mute-btn" class="interactive glass-panel hud-chip p-2 hover:scale-105 transition-transform" aria-label="Toggle sound">
+                <span id="mute-icon" class="text-2xl">🔊</span>
+            </button>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 interactive flex flex-col items-center justify-center bg-black/30 backdrop-blur-sm z-50">
+            <div class="glass-panel p-6 sm:p-8 flex flex-col items-center text-center max-w-md anim-float">
+                <div class="mb-4 text-6xl sm:text-7xl drop-shadow-[0_0_20px_rgba(124,247,255,0.45)]" aria-hidden="true">🚌🎤</div>
+                <h1 class="font-comic text-4xl sm:text-6xl text-[#7CF7FF] text-stroke mb-2">MELODY BUS</h1>
+                <h2 class="font-comic text-2xl sm:text-3xl text-[#FFD84D] text-stroke mb-6">NEON LANE JAM</h2>
+                <div class="info-card p-4 rounded-xl mb-6">
+                    <p class="font-comic text-lg sm:text-xl text-cyan-100">Tap to switch lanes!</p>
+                    <p class="text-base sm:text-lg font-semibold text-blue-100 mt-2">Catch glowing notes and dodge sharp roadblocks through the night parade.</p>
+                </div>
+                <button id="start-btn" class="interactive arcade-btn text-white font-comic text-2xl sm:text-3xl font-bold py-3 px-8 sm:px-10 rounded-full border-2 border-white/80 hover:scale-105 active:scale-95 transition-all">
+                    START JAM!
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over -->
+        <div id="game-over-screen" class="hidden absolute inset-0 interactive flex items-center justify-center bg-black/50 backdrop-blur-md z-50">
+            <div class="glass-panel p-6 sm:p-8 text-center anim-pop max-w-sm mx-4">
+                <div class="mb-3 text-5xl drop-shadow-[0_0_16px_rgba(255,216,77,0.45)]" aria-hidden="true">💥🎵</div>
+                <h2 class="font-comic text-4xl sm:text-5xl text-[#FF8F5A] text-stroke mb-2">JAM OVER!</h2>
+                <p class="text-lg sm:text-2xl font-semibold text-slate-200 mb-6">A roadblock cut the melody short.</p>
+                <div class="text-3xl sm:text-4xl font-bold text-slate-100 mb-8">Notes: <span id="final-score" class="text-[#FFD84D] text-stroke">0</span></div>
+                <button id="restart-btn" class="interactive arcade-btn secondary text-slate-950 font-comic text-xl sm:text-2xl font-bold py-3 px-8 rounded-full border-2 border-white/80 hover:scale-105 active:scale-95 transition-all">
+                    PLAY AGAIN
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * MELODY BUS RUN
+ * Lane-switching bus run with note collection, roadblock avoidance,
+ * speech-synced lyrics, and catalog-guided music.
+ */
+// [agent-note][stage4] repaired: parse-error | element: bootstrap comments | action: removed stray diff markers
+// [agent-note][stage4] repaired: mobile-safe-area | element: #ui-layer | action: added notch/home-indicator padding
+// [agent-note][stage4] repaired: font-remap | element: body/display text | action: switched to catalog fonts Exo 2 + Audiowide
+
+// --- Configuration ---
+window.gameConfigDefs = JSON.parse(document.getElementById('game-config').textContent);
+window.gameConfig = {};
+Object.keys(window.gameConfigDefs).forEach(k => window.gameConfig[k] = window.gameConfigDefs[k].value);
+
+window.updateGameConfig = (key, val) => {
+    if (window.gameConfig.hasOwnProperty(key)) window.gameConfig[key] = val;
+};
+
+// --- Voice Manager (The "Soul" of this remix) ---
+class VoiceManager {
+    constructor() {
+        this.synth = window.speechSynthesis;
+        this.enabled = true;
+        this.voices = [];
+        this.selectedVoice = null;
+        
+        // Try to load voices
+        if (this.synth) {
+            this.voices = this.synth.getVoices();
+            this.synth.onvoiceschanged = () => {
+                this.voices = this.synth.getVoices();
+                this.selectVoice();
+            };
+            this.selectVoice();
+        }
+    }
+
+    selectVoice() {
+        // Prefer a bright voice for the bus announcer
+        this.selectedVoice = this.voices.find(v => v.name.includes('Female') || v.name.includes('Google US English')) || this.voices[0];
+    }
+
+    unlock() {
+        // Mobile browsers need a user gesture to "warm up" TTS
+        if (this.synth) {
+            this.synth.cancel();
+            const u = new SpeechSynthesisUtterance('');
+            u.volume = 0;
+            this.synth.speak(u);
+        }
+    }
+
+    sing(text) {
+        if (!this.synth || !this.enabled || !window.gameConfig.voiceVolume) return;
+        
+        this.synth.cancel(); // Interrupt previous
+        const u = new SpeechSynthesisUtterance(text);
+        u.voice = this.selectedVoice;
+        u.pitch = 1.2; // Higher pitch = cuter
+        u.rate = 1.1;  // Slightly faster
+        u.volume = window.gameConfig.voiceVolume;
+        
+        this.synth.speak(u);
+        
+        // Trigger Visual
+        if (window.gameConfig.showLyrics) {
+            const bubble = document.getElementById('bus-speech');
+            bubble.innerText = text;
+            bubble.classList.add('active');
+            
+            // Auto hide
+            if (this.bubbleTimeout) clearTimeout(this.bubbleTimeout);
+            this.bubbleTimeout = setTimeout(() => {
+                bubble.classList.remove('active');
+            }, 1500);
+        }
+    }
+}
+
+// --- Audio Manager (Catalog-Guided Media Layer) ---
+class AudioManager {
+    constructor(voiceMgr) {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.voiceMgr = voiceMgr;
+        this.unlocked = false;
+        this.muted = false;
+        this.isPlaying = false;
+        this.nextNoteTime = 0;
+        this.noteIndex = 0;
+        this.tempo = 100;
+        this.masterGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.masterGain.connect(this.ctx.destination);
+        this.musicGain.connect(this.masterGain);
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.gain.value = 0.2;
+        this.sfxGain.gain.value = 0.7;
+        this.activeSfx = new Map();
+        this.audioEls = {};
+        this.audioCatalog = {
+            start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3',
+            lane: 'https://gamezone-virid.vercel.app/assets/audios/sfx/jump_01.mp3',
+            collect: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3',
+            crash: 'https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3',
+            gameOver: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3',
+            mute: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3',
+            loop: 'https://gamezone-virid.vercel.app/assets/audios/music/music_loop_01.mp3'
+        };
+        
+        // Melody Map: F4=349, A4=440, C5=523, G4=392, E4=329, D4=293
+        this.melody = [
+            {f: 349, d: 1, l: "Keep the beat, bus"}, {f: 349, d: 1}, {f: 349, d: 1}, {f: 349, d: 1},
+            {f: 440, d: 1, l: "Rolling lane to lane"}, {f: 523, d: 2},
+            {f: 440, d: 1, l: "Catch the bright notes"}, {f: 349, d: 2},
+            {f: 392, d: 1, l: "Dodge the roadblocks!"}, {f: 329, d: 1}, {f: 261, d: 2},
+            {f: 349, d: 1, l: "Keep the beat, bus"}, {f: 440, d: 1}, {f: 523, d: 2},
+            {f: 349, d: 1, l: "Rolling lane to lane"}, {f: 349, d: 1}, {f: 349, d: 1}, {f: 349, d: 1},
+            {f: 440, d: 1, l: "Play it through the town!"}, {f: 523, d: 2}, {f: 440, d: 1}, {f: 349, d: 2},
+            {f: 0, d: 2}
+        ];
+    }
+
+    primeMedia() {
+        Object.entries(this.audioCatalog).forEach(([key, url]) => {
+            if (this.audioEls[key]) return;
+            const audio = new Audio(url);
+            audio.preload = 'auto';
+            audio.playsInline = true;
+            audio.loop = key === 'loop';
+            audio.volume = key === 'loop' ? 0.2 : 0.62;
+            this.audioEls[key] = audio;
+        });
+    }
+
+    unlock() {
+        if (this.unlocked) return;
+        this.primeMedia();
+        this.ctx.resume().then(() => {
+            this.unlocked = true;
+            this.voiceMgr.unlock();
+        }).catch(() => {});
+    }
+
+    setMuted(nextMuted) {
+        this.muted = nextMuted;
+        this.masterGain.gain.value = this.muted ? 0 : 1;
+        const loop = this.audioEls.loop;
+        if (loop) {
+            if (this.muted) {
+                loop.pause();
+            } else if (this.isPlaying) {
+                this.playHtmlAudio('loop', true);
+            }
+        }
+    }
+
+    playHtmlAudio(key, fromLoop = false) {
+        if (!this.unlocked || this.muted) return;
+        const audio = this.audioEls[key];
+        if (!audio) return;
+        if (!fromLoop) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        const playAttempt = audio.play();
+        if (playAttempt && typeof playAttempt.catch === 'function') {
+            playAttempt.catch(() => {});
+        }
+    }
+
+    start() {
+        if (!this.unlocked) return;
+        this.isPlaying = true;
+        this.noteIndex = 0;
+        this.nextNoteTime = this.ctx.currentTime + 0.1;
+        this.playHtmlAudio('start');
+        this.playHtmlAudio('loop', true);
+        this.scheduler();
+    }
+
+    stop() {
+        this.isPlaying = false;
+        if (this.voiceMgr.synth) this.voiceMgr.synth.cancel();
+        document.getElementById('bus-speech').classList.remove('active');
+        const loop = this.audioEls.loop;
+        if (loop) {
+            loop.pause();
+            loop.currentTime = 0;
+        }
+    }
+
+    scheduler() {
+        if (!this.isPlaying) return;
+
+        while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+            this.playNote(this.melody[this.noteIndex]);
+            this.advanceNote();
+        }
+        setTimeout(() => this.scheduler(), 25);
+    }
+
+    advanceNote() {
+        const beatLen = 60.0 / this.tempo;
+        this.nextNoteTime += this.melody[this.noteIndex].d * 0.5 * beatLen;
+        this.noteIndex = (this.noteIndex + 1) % this.melody.length;
+    }
+
+    playNote(note) {
+        if (this.muted) return;
+
+        if (note.l) {
+            this.voiceMgr.sing(note.l);
+            if (window.game) window.game.triggerSinging();
+        }
+
+        if (note.f === 0) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.value = note.f;
+
+        osc.connect(gain);
+        gain.connect(this.musicGain);
+
+        const now = this.nextNoteTime;
+        const dur = 0.2;
+
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+        osc.start(now);
+        osc.stop(now + dur);
+    }
+
+    playSynthTone(config) {
+        if (!this.unlocked || this.muted) return;
+        const id = config.id;
+        const now = this.ctx.currentTime;
+        const lastAt = this.activeSfx.get(id) || 0;
+        if (now - lastAt < (config.cooldown || 0.08)) return;
+        this.activeSfx.set(id, now);
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = config.type;
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+
+        gain.gain.setValueAtTime(config.volume ?? 0.08, now);
+        if (config.attack) {
+            gain.gain.linearRampToValueAtTime((config.peak ?? config.volume ?? 0.12), now + config.attack);
+        }
+        if (config.ramp === 'exp') {
+            gain.gain.exponentialRampToValueAtTime(0.001, now + config.duration);
+        } else {
+            gain.gain.linearRampToValueAtTime(0.001, now + config.duration);
+        }
+
+        osc.frequency.setValueAtTime(config.from, now);
+        if (config.to) {
+            if (config.ramp === 'exp') {
+                osc.frequency.exponentialRampToValueAtTime(config.to, now + config.duration);
+            } else {
+                osc.frequency.linearRampToValueAtTime(config.to, now + config.duration);
+            }
+        }
+
+        osc.start(now);
+        osc.stop(now + config.duration);
+    }
+
+    playSfx(type) {
+        if (!this.unlocked || this.muted) return;
+
+        if (type === 'start') {
+            this.playHtmlAudio('start');
+            this.playSynthTone({ id: 'start', type: 'triangle', from: 320, to: 640, duration: 0.16, volume: 0.08 });
+        } else if (type === 'jump') {
+            this.playHtmlAudio('lane');
+            this.playSynthTone({ id: 'jump', type: 'sine', from: 200, to: 410, duration: 0.12, volume: 0.07 });
+        } else if (type === 'collect') {
+            this.playHtmlAudio('collect');
+            this.playSynthTone({ id: 'collect', type: 'triangle', from: 880, to: 1540, duration: 0.18, volume: 0.1, ramp: 'exp', cooldown: 0.1 });
+        } else if (type === 'crash') {
+            this.playHtmlAudio('crash');
+            this.playSynthTone({ id: 'crash', type: 'sawtooth', from: 170, to: 45, duration: 0.46, volume: 0.16, ramp: 'exp', cooldown: 0.25 });
+        } else if (type === 'gameOver') {
+            this.playHtmlAudio('gameOver');
+            this.playSynthTone({ id: 'gameOver', type: 'square', from: 240, to: 80, duration: 0.3, volume: 0.08, ramp: 'exp', cooldown: 0.3 });
+        } else if (type === 'mute') {
+            this.playHtmlAudio('mute');
+            this.playSynthTone({ id: 'mute', type: 'triangle', from: 560, to: 430, duration: 0.08, volume: 0.04, cooldown: 0.05 });
+        }
+    }
+}
+
+// --- Game Engine ---
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d', { alpha: false });
+        this.voiceMgr = new VoiceManager();
+        this.audio = new AudioManager(this.voiceMgr);
+        
+        this.state = 'START';
+        this.score = 0;
+        this.speed = 0;
+        this.lastTime = 0;
+        this.distance = 0;
+        
+        this.player = {
+            lane: 0, 
+            y: 0,
+            animY: 0,
+            mouthOpen: 0,
+            bounce: 0
+        };
+        
+        this.entities = [];
+        this.particles = [];
+        this.clouds = [];
+        this.trees = [];
+        this.gifTimeouts = {};
+        
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        this.bindInput();
+        this.initWorld();
+        
+        requestAnimationFrame(t => this.loop(t));
+    }
+
+    resize() {
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.dpr = window.devicePixelRatio || 1;
+        
+        this.canvas.width = this.width * this.dpr;
+        this.canvas.height = this.height * this.dpr;
+        this.canvas.style.width = this.width + 'px';
+        this.canvas.style.height = this.height + 'px';
+        
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        
+        const roadCenter = this.height * 0.7;
+        this.laneY = [roadCenter - 60, roadCenter + 60];
+        
+        if (this.state === 'START') {
+            this.player.y = this.laneY[0];
+            this.player.animY = this.player.y;
+        }
+    }
+
+    initWorld() {
+        for(let i=0; i<6; i++) this.clouds.push(this.createCloud(Math.random() * this.width));
+        for(let i=0; i<12; i++) this.trees.push(this.createTree(Math.random() * this.width));
+    }
+
+    createCloud(x) {
+        return { x, y: Math.random() * this.height * 0.3, size: 40 + Math.random() * 40, speed: 20 + Math.random() * 20 };
+    }
+
+    createTree(x) {
+        return { x, y: this.height * 0.55 + Math.random() * 20, size: 30 + Math.random() * 30, color: Math.random() > 0.5 ? '#388E3C' : '#2E7D32' };
+    }
+
+    bindInput() {
+        const startAction = () => {
+            if (this.state === 'START' || this.state === 'GAMEOVER') {
+                this.startGame();
+            } else if (this.state === 'PLAYING') {
+                this.switchLane();
+            }
+        };
+
+        const downHandler = (e) => {
+            if (e.target.closest('button')) return;
+            e.preventDefault();
+            this.audio.unlock();
+            startAction();
+        };
+
+        this.canvas.addEventListener('pointerdown', downHandler, { passive: false });
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                e.preventDefault();
+                this.audio.unlock();
+                startAction();
+            }
+        }, { passive: false });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            this.audio.unlock();
+            this.startGame();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            this.audio.unlock();
+            this.startGame();
+        });
+
+        document.getElementById('mute-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nextMuted = !this.audio.muted;
+            if (!nextMuted) this.audio.playSfx('mute');
+            this.audio.setMuted(nextMuted);
+            document.getElementById('mute-icon').innerText = this.audio.muted ? '🔇' : '🔊';
+        });
+    }
+
+    startGame() {
+        this.state = 'PLAYING';
+        this.score = 0;
+        this.speed = window.gameConfig.busSpeed;
+        this.entities = [];
+        this.particles = [];
+        this.player.lane = 0;
+        this.player.y = this.laneY[0];
+        this.player.animY = this.player.y;
+        this.hideGif('collect-gif');
+        this.hideGif('danger-gif');
+
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('score').innerText = '0';
+
+        this.audio.playSfx('start');
+        this.audio.start();
+    }
+
+    switchLane() {
+        this.player.lane = this.player.lane === 0 ? 1 : 0;
+        this.audio.playSfx('jump');
+        // Dust particles
+        for(let i=0; i<8; i++) {
+            this.spawnParticle(120, this.player.animY + 40, '#FFF', (Math.random()-0.5)*100, Math.random()*50);
+        }
+    }
+
+    triggerSinging() {
+        this.player.mouthOpen = 1.0;
+    }
+
+    showGif(id, duration = 900) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add('active');
+        if (this.gifTimeouts[id]) clearTimeout(this.gifTimeouts[id]);
+        this.gifTimeouts[id] = setTimeout(() => this.hideGif(id), duration);
+    }
+
+    hideGif(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('active');
+    }
+
+    spawnObstacle() {
+        const lane = Math.random() > 0.5 ? 1 : 0;
+        const isBad = Math.random() > 0.3; // 70% bad, 30% good
+        this.entities.push({
+            x: this.width + 100,
+            lane: lane,
+            type: isBad ? 'ROCK' : 'NOTE',
+            collected: false
+        });
+    }
+
+    spawnParticle(x, y, c, vx, vy) {
+        this.particles.push({ x, y, c, vx, vy, life: 1.0 });
+    }
+
+    update(dt) {
+        // Parallax
+        const moveSpeed = this.state === 'PLAYING' ? this.speed : 50;
+        
+        this.clouds.forEach(c => {
+            c.x -= c.speed * dt;
+            if (c.x < -100) { c.x = this.width + 100; c.y = Math.random() * this.height * 0.3; }
+        });
+        
+        this.trees.forEach(t => {
+            t.x -= moveSpeed * 0.5 * dt;
+            if (t.x < -50) { t.x = this.width + 50; }
+        });
+
+        // Player Animation
+        const targetY = this.laneY[this.player.lane];
+        this.player.animY += (targetY - this.player.animY) * 10 * dt;
+        this.player.bounce = Math.sin(Date.now() / 80) * 4;
+        this.player.mouthOpen = Math.max(0, this.player.mouthOpen - dt * 3);
+        
+        // Update Speech Bubble Pos
+        const bubble = document.getElementById('bus-speech');
+        if (bubble.classList.contains('active')) {
+            const screenY = this.player.animY - 80;
+            bubble.style.left = '100px';
+            bubble.style.top = screenY + 'px';
+        }
+
+        if (this.state !== 'PLAYING') return;
+
+        this.distance += this.speed * dt;
+        this.speed += 5 * dt; // Acceleration
+
+        // Spawning
+        if (this.entities.length === 0 || (this.width - this.entities[this.entities.length-1].x) > (350 + Math.random()*300)) {
+            this.spawnObstacle();
+        }
+
+        // Entities
+        for (let i = this.entities.length - 1; i >= 0; i--) {
+            let e = this.entities[i];
+            e.x -= this.speed * dt;
+            
+            // Collision
+            if (!e.collected && Math.abs(e.x - 100) < 50 && Math.abs(this.player.animY - this.laneY[e.lane]) < 40) {
+                if (e.type === 'NOTE') {
+                    e.collected = true;
+                    this.score += 1;
+                    document.getElementById('score').innerText = this.score;
+                    this.audio.playSfx('collect');
+                    this.showGif('collect-gif', 950);
+                    // Sparkles
+                    for(let k=0; k<10; k++) this.spawnParticle(e.x, this.laneY[e.lane], '#FFD700', (Math.random()-0.5)*300, (Math.random()-0.5)*300);
+                } else {
+                    this.showGif('danger-gif', 1300);
+                    this.gameOver();
+                }
+            }
+            
+            if (e.x < -100 || e.collected) {
+                if (e.x < -100 || e.collected) this.entities.splice(i, 1);
+            }
+        }
+
+        // Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.vy += 500 * dt; // Gravity
+            p.life -= dt * 2;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+    }
+
+    gameOver() {
+        this.state = 'GAMEOVER';
+        this.showGif('danger-gif', 1600);
+        this.audio.playSfx('crash');
+        this.audio.stop();
+        this.audio.playSfx('gameOver');
+        document.getElementById('final-score').innerText = this.score;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('hud').classList.add('hidden');
+
+        // Explosion
+        for(let i=0; i<30; i++) {
+            this.spawnParticle(100, this.player.animY, '#FFC107', (Math.random()-0.5)*500, (Math.random()-0.5)*500);
+        }
+    }
+
+    draw() {
+        const skyGradient = this.ctx.createLinearGradient(0, 0, 0, this.height);
+        skyGradient.addColorStop(0, '#07112D');
+        skyGradient.addColorStop(0.45, '#17367C');
+        skyGradient.addColorStop(1, '#3F86D9');
+        this.ctx.fillStyle = skyGradient;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        const glowGradient = this.ctx.createRadialGradient(this.width * 0.7, this.height * 0.18, 20, this.width * 0.7, this.height * 0.18, this.width * 0.35);
+        glowGradient.addColorStop(0, 'rgba(124,247,255,0.55)');
+        glowGradient.addColorStop(1, 'rgba(124,247,255,0)');
+        this.ctx.fillStyle = glowGradient;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Clouds
+        this.ctx.fillStyle = 'rgba(240,250,255,0.82)';
+        this.clouds.forEach(c => {
+            this.ctx.beginPath();
+            this.ctx.arc(c.x, c.y, c.size, 0, Math.PI*2);
+            this.ctx.arc(c.x+c.size*0.7, c.y+c.size*0.1, c.size*0.8, 0, Math.PI*2);
+            this.ctx.fill();
+        });
+
+        // Ground
+        const groundGradient = this.ctx.createLinearGradient(0, this.height * 0.55, 0, this.height);
+        groundGradient.addColorStop(0, '#213B34');
+        groundGradient.addColorStop(1, '#0B1718');
+        this.ctx.fillStyle = groundGradient;
+        this.ctx.fillRect(0, this.height*0.55, this.width, this.height*0.45);
+
+        for (let i = 0; i < this.width; i += 80) {
+            this.ctx.fillStyle = 'rgba(126,247,199,0.08)';
+            this.ctx.fillRect(i, this.height * 0.72, 28, this.height * 0.28);
+        }
+
+        // Trees
+        this.trees.forEach(t => {
+            this.ctx.fillStyle = '#1B1028';
+            this.ctx.fillRect(t.x-t.size/5, t.y, t.size/2.5, t.size * 1.15);
+            this.ctx.fillStyle = t.color;
+            this.ctx.beginPath();
+            this.ctx.arc(t.x, t.y, t.size, 0, Math.PI*2);
+            this.ctx.fill();
+            this.ctx.fillStyle = 'rgba(126,247,199,0.12)';
+            this.ctx.beginPath();
+            this.ctx.arc(t.x - t.size * 0.18, t.y - t.size * 0.2, t.size * 0.45, 0, Math.PI*2);
+            this.ctx.fill();
+        });
+
+        // Road
+        const roadTop = this.laneY[0] - 50;
+        const roadBot = this.laneY[1] + 50;
+        const roadGradient = this.ctx.createLinearGradient(0, roadTop, 0, roadBot);
+        roadGradient.addColorStop(0, '#2A3552');
+        roadGradient.addColorStop(1, '#121A2B');
+        this.ctx.fillStyle = roadGradient;
+        this.ctx.fillRect(0, roadTop, this.width, roadBot - roadTop);
+
+        this.ctx.strokeStyle = 'rgba(124,247,255,0.14)';
+        this.ctx.lineWidth = 14;
+        this.ctx.strokeRect(0, roadTop + 8, this.width, roadBot - roadTop - 16);
+        
+        // Markings
+        this.ctx.strokeStyle = '#72F0FF';
+        this.ctx.lineWidth = 4;
+        this.ctx.setLineDash([40, 40]);
+        this.ctx.lineDashOffset = -this.distance;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, (this.laneY[0]+this.laneY[1])/2);
+        this.ctx.lineTo(this.width, (this.laneY[0]+this.laneY[1])/2);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+
+        // Entities
+        this.entities.forEach(e => {
+            const y = this.laneY[e.lane];
+            this.ctx.save();
+            this.ctx.translate(e.x, y);
+            if (e.type === 'ROCK') {
+                this.ctx.fillStyle = '#2B1634';
+                this.ctx.beginPath();
+                this.ctx.moveTo(-22, 22);
+                this.ctx.lineTo(-4, -14);
+                this.ctx.lineTo(22, 18);
+                this.ctx.lineTo(6, 24);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#FF8F5A';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+                this.ctx.strokeStyle = 'rgba(255, 216, 77, 0.6)';
+                this.ctx.beginPath();
+                this.ctx.moveTo(-6, 4);
+                this.ctx.lineTo(4, -4);
+                this.ctx.lineTo(10, 8);
+                this.ctx.stroke();
+            } else {
+                const noteGlow = this.ctx.createRadialGradient(0, 0, 2, 0, 0, 28);
+                noteGlow.addColorStop(0, 'rgba(255,248,184,0.95)');
+                noteGlow.addColorStop(1, 'rgba(255,216,77,0)');
+                this.ctx.fillStyle = noteGlow;
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, 28, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#FFD84D';
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, 18, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#112347';
+                this.ctx.font = '700 21px "Audiowide"';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('♫', 0, 2);
+            }
+            this.ctx.restore();
+        });
+
+        // Bus
+        if (this.state !== 'GAMEOVER') {
+            this.drawBus(100, this.player.animY + this.player.bounce);
+        }
+
+        // Particles
+        this.particles.forEach(p => {
+            this.ctx.globalAlpha = p.life;
+            this.ctx.fillStyle = p.c;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+            this.ctx.fill();
+        });
+        this.ctx.globalAlpha = 1;
+    }
+
+    drawBus(x, y) {
+        this.ctx.save();
+        this.ctx.translate(x, y);
+        
+        // Glow
+        const aura = this.ctx.createRadialGradient(0, 0, 6, 0, 0, 72);
+        aura.addColorStop(0, 'rgba(124,247,255,0.34)');
+        aura.addColorStop(1, 'rgba(124,247,255,0)');
+        this.ctx.fillStyle = aura;
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 72, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Body
+        const busGradient = this.ctx.createLinearGradient(-40, -30, 40, 20);
+        busGradient.addColorStop(0, '#7CF7FF');
+        busGradient.addColorStop(0.55, '#4EA1FF');
+        busGradient.addColorStop(1, '#6B57FF');
+        this.ctx.fillStyle = busGradient;
+        this.ctx.beginPath();
+        this.ctx.roundRect(-42, -32, 84, 54, 14);
+        this.ctx.fill();
+        this.ctx.strokeStyle = '#E7FEFF';
+        this.ctx.lineWidth = 3;
+        this.ctx.stroke();
+
+        this.ctx.fillStyle = '#0E1A42';
+        this.ctx.fillRect(-38, -6, 76, 8);
+
+        // Windows
+        const windowGradient = this.ctx.createLinearGradient(-30, -25, 20, -5);
+        windowGradient.addColorStop(0, '#E9F9FF');
+        windowGradient.addColorStop(1, '#72DFFF');
+        this.ctx.fillStyle = windowGradient;
+        this.ctx.fillRect(-30, -24, 20, 16);
+        this.ctx.fillRect(0, -24, 20, 16);
+        this.ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        this.ctx.fillRect(-27, -22, 8, 4);
+        this.ctx.fillRect(3, -22, 8, 4);
+
+        // Star badge
+        this.ctx.fillStyle = '#FFD84D';
+        this.ctx.beginPath();
+        this.ctx.moveTo(-4, 5);
+        this.ctx.lineTo(0, -3);
+        this.ctx.lineTo(4, 5);
+        this.ctx.lineTo(12, 7);
+        this.ctx.lineTo(6, 13);
+        this.ctx.lineTo(8, 21);
+        this.ctx.lineTo(0, 17);
+        this.ctx.lineTo(-8, 21);
+        this.ctx.lineTo(-6, 13);
+        this.ctx.lineTo(-12, 7);
+        this.ctx.closePath();
+        this.ctx.fill();
+
+        // Mouth (Singing)
+        const mouthH = 5 + (this.player.mouthOpen * 10);
+        this.ctx.fillStyle = '#091226';
+        this.ctx.beginPath();
+        this.ctx.ellipse(34, 1, 6, mouthH, 0, 0, Math.PI*2);
+        this.ctx.fill();
+        if (this.player.mouthOpen > 0.15) {
+            this.ctx.fillStyle = '#FF7AA8';
+            this.ctx.beginPath();
+            this.ctx.ellipse(34, 4, 3, mouthH * 0.4, 0, 0, Math.PI*2);
+            this.ctx.fill();
+        }
+
+        // Eye
+        this.ctx.fillStyle = '#FFF';
+        this.ctx.beginPath();
+        this.ctx.arc(22, -14, 9, 0, Math.PI*2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#0A1635';
+        this.ctx.beginPath();
+        this.ctx.arc(24, -14, 4, 0, Math.PI*2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#FFF';
+        this.ctx.beginPath();
+        this.ctx.arc(25.5, -15.5, 1.5, 0, Math.PI*2);
+        this.ctx.fill();
+
+        // Accent stripe
+        this.ctx.strokeStyle = '#FFD84D';
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        this.ctx.moveTo(-32, 12);
+        this.ctx.lineTo(18, 12);
+        this.ctx.stroke();
+
+        // Wheels
+        this.ctx.fillStyle = '#111827';
+        this.ctx.beginPath(); this.ctx.arc(-25, 22, 11, 0, Math.PI*2); this.ctx.fill();
+        this.ctx.beginPath(); this.ctx.arc(25, 22, 11, 0, Math.PI*2); this.ctx.fill();
+        this.ctx.fillStyle = '#72F0FF';
+        this.ctx.beginPath(); this.ctx.arc(-25, 22, 4, 0, Math.PI*2); this.ctx.fill();
+        this.ctx.beginPath(); this.ctx.arc(25, 22, 4, 0, Math.PI*2); this.ctx.fill();
+
+        this.ctx.restore();
+    }
+
+    loop(t) {
+        try {
+            const dt = Math.min((t - this.lastTime) / 1000, 0.1);
+            this.lastTime = t;
+            this.update(dt);
+            this.draw();
+            requestAnimationFrame(time => this.loop(time));
+        } catch (e) { console.error(e); }
+    }
+}
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', () => {
+    window.game = new Game();
+});
+</script>
+</body>
+</html>

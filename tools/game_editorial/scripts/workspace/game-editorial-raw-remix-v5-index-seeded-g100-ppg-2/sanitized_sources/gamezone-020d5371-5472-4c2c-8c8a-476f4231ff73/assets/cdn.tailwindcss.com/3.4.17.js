@@ -1,0 +1,1 @@
+/* [agent-note][stage4] retired-unused-runtime: disallowed tailwindcss.com doc URL removed per policy hint; game uses handcrafted styles in index.html */

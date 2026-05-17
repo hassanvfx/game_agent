@@ -1,0 +1,22 @@
+Create a polished, full-screen mobile-friendly top-down action game called **Frontier Dispatch**. The game should feel like a retro-futurist frontier courier mission with neon sci-fi UI, pixel-like primitive art, energetic arcade feedback, and a compact quest-driven survival loop. Present the player as a lone ranger/courier stationed on a remote dispatch route, with the opening scene placing them near an NPC called the **Dispatcher** who delivers the mission briefing through a tap-to-advance dialogue box.
+
+Build the world as a single arena-like overworld viewed from above. Use a 64x64-style tile field impression with a central stone or paved hub area, darker grass-like terrain around it, water or impassable borders at the edges, scattered trees as obstacles, and a few decorative flowers or glowing details. The player should spawn near the center beside the Dispatcher, then roam the map while the camera stays centered on the character. Movement must feel designed for touchscreens: the left half of the screen acts like a virtual analog joystick, while the right side contains large action buttons.
+
+The core controls should be:
+- **Move** on the left half of the screen with a drag joystick
+- **TAG** button for a short-range directional melee strike
+- **TOOL** button for a special skill
+- **SWAP** button to cycle the equipped skill
+
+Include three swappable cooldown-based skills that define the combat rhythm:
+1. **SCAN**: a forward projectile shot used for safer ranged damage
+2. **BURST**: a mobility burst that effectively behaves like a dash or temporary speed boost for repositioning
+3. **PATCH**: a heal that restores a chunk of health
+
+The gameplay loop should be direct and readable. At the start, the player automatically enters dialogue when standing near the Dispatcher while idle. The Dispatcher explains that hostile globs are blocking the supply route and orders the player to clear them. After this briefing, the quest text updates and the player must defeat **five standard enemies**. During this phase, small hostile globs spawn repeatedly around the player and chase aggressively when nearby. They should deal contact damage on touch, forcing the player to kite, attack, swap skills, and manage cooldowns intelligently. When five globs are defeated, update the mission UI to something urgent like **TAG CHIEF!** and spawn a larger boss enemy offscreen or just beyond the player. Defeating the boss should end the run in victory.
+
+Add light RPG progression during the run. Standard enemies should grant XP and credits. When enough XP is earned, the player ranks up, gains more maximum health, fully refreshes health, and hits harder. Keep this progression simple and arcadey rather than menu-heavy. Show the current rank, credits, active objective, health bar, and active skill cooldown in a compact HUD pinned to the screen. The current skill name should also be visible near the action buttons so the player always knows what TOOL will do.
+
+Presentation should strongly support the game feel. Use crisp abstract sprites or primitive pixel-art blocks for the player, enemies, NPC, and terrain rather than detailed illustration. Give the player a bright visor or glowing ranger silhouette, make enemies read as rounded hostile globs, and make the boss look heavier and more threatening with a larger health pool and stronger damage. Add floating damage numbers, hit particles, simple enemy health bars, and brief animated feedback overlays or equivalent juice on big hits, failure, and victory. Include an attractive title screen with the name **FRONTIER DISPATCH**, a subtitle suggesting a starline ranger shift, a short field-orders panel explaining the controls, and a strong start button. Also include a fail screen for losing the route and a success screen that confirms the route is secured and the convoy can move again.
+
+The overall tone should be **heroic, tense, readable, and arcade-forward**, with short mission fiction wrapped around satisfying top-down combat. Preserve the signature structure: a mobile joystick-and-buttons layout, one NPC briefing, repeated enemy pressure, three swappable tools, a five-kill objective, a boss finale, rank-up progression, and a retro neon dispatch aesthetic.

@@ -16,6 +16,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from pipeline_dashboard_presenter import build_dashboard_contract_extensions, generate_dashboard_html
+
 ROOT = Path(__file__).resolve().parent.parent
 PIPELINE_RUNS_DIR = ROOT / "pipeline_runs"
 PIPELINE_OUTPUTS_DIR = ROOT / "output"
@@ -186,7 +188,7 @@ class PipelineRun:
     # --- NEW: Game Refactoring and Publish Integration ---
     def run_refactoring(self, selected_matches, matcher_context, remix_prompt):
         """
-        Launch creative_remix_v4 via the workflow CLI, then poll until the final
+        Launch creative_remix_v5 via the workflow CLI, then poll until the final
         output directories are available.
         """
         games_manifest = {
@@ -213,7 +215,7 @@ class PipelineRun:
             "scripts/game_workflow.py",
             "--json",
             "--id",
-            "creative_remix_v4",
+            "creative_remix_v5",
             "--games-manifest-source",
             str(games_manifest_path),
             "--remix-prompt",
@@ -371,9 +373,26 @@ class PipelineRun:
 
         report_payload = read_json(report_path)
         report_payload["projected_cdn_urls"] = build_projected_cdn_urls(report_payload)
+        scoped_upload_game_ids = extract_publish_game_ids(report_payload)
 
         if self.upload_enabled:
-            sync_args = ["python3", "scripts/sync_to_gcs.py", "--target", "both"]
+            if not scoped_upload_game_ids:
+                raise StepError(
+                    "publish",
+                    "publish report missing game_ids required for scoped upload",
+                    {"report_path": str(report_path)},
+                )
+
+            sync_args = [
+                "python3",
+                "scripts/sync_to_gcs.py",
+                "--target",
+                "both",
+                "--mode",
+                "per-item",
+            ]
+            for game_id in scoped_upload_game_ids:
+                sync_args.extend(["--only-item", game_id])
             sync_command = execute_command(sync_args, GAME_PUBLISH_PIPELINE_ROOT)
             self.write_command_artifacts(self.publish_dir, "sync_to_gcs", sync_command)
             if sync_command.exit_code != 0:
@@ -386,6 +405,7 @@ class PipelineRun:
                     "stdout_path": str(self.publish_dir / "sync_to_gcs.stdout.txt"),
                     "stderr_path": str(self.publish_dir / "sync_to_gcs.stderr.txt"),
                     "command_path": str(self.publish_dir / "sync_to_gcs.command.json"),
+                    "only_items": scoped_upload_game_ids,
                 }
                 if stdout_text:
                     upload_payload["stdout_excerpt"] = stdout_text[-2000:]
@@ -403,6 +423,7 @@ class PipelineRun:
                 report_payload["upload"] = {
                     "enabled": True,
                     "status": "completed",
+                    "only_items": scoped_upload_game_ids,
                     "sync_result": sync_payload,
                 }
         else:
@@ -526,7 +547,7 @@ class PipelineRun:
                     "details": step_state,
                 }
             )
-        return {
+        base_payload = {
             "run_id": self.run_id,
             "prompt": self.prompt,
             "status": self.state["status"],
@@ -547,6 +568,10 @@ class PipelineRun:
                 "final_output_dirs": self.state.get("final_output_dirs", []),
             },
             "error": self.state["error"],
+        }
+        return {
+            **base_payload,
+            **build_dashboard_contract_extensions(self.run_dir, base_payload),
         }
 
     def write_text(self, path: Path, content: str) -> None:
@@ -669,6 +694,29 @@ def build_projected_cdn_urls(report_payload: dict[str, Any]) -> list[dict[str, A
             }
         )
     return projected
+
+
+def extract_publish_game_ids(report_payload: dict[str, Any]) -> list[str]:
+    ordered_game_ids: list[str] = []
+    seen: set[str] = set()
+
+    sources = [
+        report_payload.get("deployment", {}).get("results", []),
+        report_payload.get("obfuscation", {}).get("game_outputs", []),
+    ]
+
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            game_id = item.get("game_id")
+            if isinstance(game_id, str) and game_id and game_id not in seen:
+                seen.add(game_id)
+                ordered_game_ids.append(game_id)
+
+    return ordered_game_ids
 
 
 def generate_run_id() -> str:
@@ -909,6 +957,21 @@ def run_matcher(pipeline: PipelineRun, prompt: str, limit: int) -> list[dict[str
                 validated_selected_tags = loaded_tags
     else:
         matches = parse_matcher_output(command.stdout)
+
+    if len(matches) == 0 and pipeline.matcher_mode == "v2":
+        raise StepError(
+            "matcher",
+            "matcher v2 had no controlled-vocabulary coverage for prompt",
+            {
+                "prompt": prompt,
+                "match_count": 0,
+                "validated_selected_tags_path": (
+                    str(validated_selected_tags_path)
+                    if validated_selected_tags_path is not None
+                    else None
+                ),
+            },
+        )
 
     if len(matches) < 2:
         raise StepError("matcher", "matcher returned fewer than two matches", {"match_count": len(matches)})
@@ -1667,6 +1730,8 @@ def finalize_output(pipeline: PipelineRun, source_dirs: list[Path]) -> Path:
 
 
 def ensure_dashboard_html(path: Path) -> None:
+    path.write_text(generate_dashboard_html(), encoding="utf-8")
+    return
     path.write_text(
         """<!doctype html>
 <html lang="en">
@@ -2209,7 +2274,7 @@ def main() -> int:
                 }
                 for m in selected_matches
             ]
-            # 3. Run creative_remix_v4 refactoring workflow
+            # 3. Run creative_remix_v5 refactoring workflow
             run.start_step("refactoring", {"prompt": prompt, "remix_prompt": remix_prompt, "matcher_context": matcher_context})
             refactored_game_dirs = run.run_refactoring(selected_matches, matcher_context, remix_prompt)
             run.complete_step("refactoring", {"refactored_game_dirs": refactored_game_dirs})

@@ -596,6 +596,48 @@ Created and launched three more full 107-game prompt batches sequentially, each 
 
 ---
 
+### 2026-05-17 06:45 - Central copy-mode metadata ignore fix promoted into `game_refactoring`
+
+**Achievement:**
+Promoted the macOS metadata workaround into the shared `game_refactoring` copy-preparation path so copy-mode runs no longer fail on `.DS_Store` or `._*` AppleDouble sidecar artifacts.
+
+**Problem Encountered:**
+A `creative_remix_v5` batch launched from `game_editorial` stalled at `run_created` because `prepare_inputs.py` crashed while purging a copied input tree on the external volume:
+
+```text
+FileNotFoundError: ... /input/gamezone-.../._.DS_Store
+```
+
+This was triggered by metadata artifacts originating from macOS copy behavior and raw source `.DS_Store` files.
+
+**Implementation Details:**
+- Updated `tools/game_refactoring/scripts/prepare_inputs.py`
+  - added `should_ignore_copy_artifact(name)`
+  - changed `mirror_directory()` to use:
+    - `ignore` patterns for `.DS_Store` and `._*`
+    - `copy_function=shutil.copyfile` to avoid metadata-preserving copy behavior that can emit AppleDouble sidecars on external volumes
+  - hardened `purge_prepared_directory()` so ignored metadata artifacts are deleted/ignored safely
+  - switched destructive file removal calls to `missing_ok=True` / `ignore_errors=True` for resilience during purge
+- Preserved existing product behavior:
+  - `copy` mode still prepares disposable local inputs
+  - `inplace` mode still skips purge and leaves external sources untouched
+
+**Why:**
+This removes the need for tool-specific workarounds and makes copy-mode execution robust at the central preparation layer used by workflow-driven runs.
+
+**Validation:**
+- Re-ran the formerly failing 2-game × 2-prompt `creative_remix_v5` copy-mode case after the fix.
+- Confirmed the replacement run progressed to:
+  - `status = running`
+  - `current_phase = parallel_batch_running`
+  - `games_mirrored = 4`
+  - `games_integrity_passed = 4`
+  - `games_integrity_failed = 0`
+
+**Status:** Complete
+
+---
+
 ### 2026-05-08 22:34 - Trump vs Elon and super mario world clone full batches launched
 
 **Achievement:**

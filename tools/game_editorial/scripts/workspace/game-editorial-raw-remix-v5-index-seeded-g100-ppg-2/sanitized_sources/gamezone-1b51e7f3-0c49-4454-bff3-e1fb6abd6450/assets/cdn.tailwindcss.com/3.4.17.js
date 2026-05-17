@@ -1,0 +1,1 @@
+/* Stage 04 policy cleanup: removed disallowed tailwindcss.com reference. Unused local mirror intentionally stubbed. */

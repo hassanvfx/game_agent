@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Signal Shift</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Orbitron:wght@400;700&display=swap");
+
+    :root {
+      --bg1: #070b1f;
+      --bg2: #111c43;
+      --bg3: #1a1142;
+      --panel: rgba(13, 23, 59, 0.72);
+      --panel-strong: rgba(35, 52, 113, 0.88);
+      --text: #eef7ff;
+      --accent: #70f1ff;
+      --accent-strong: #46c8ff;
+      --danger: #ff5d73;
+      --good: #7affc1;
+      --warning: #ffd95a;
+      --grid-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+      --tile-shadow: 0 8px 16px rgba(0, 0, 0, 0.32);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(112, 241, 255, 0.24) 0%, rgba(112, 241, 255, 0) 26%),
+        radial-gradient(circle at 82% 18%, rgba(255, 93, 115, 0.2) 0%, rgba(255, 93, 115, 0) 28%),
+        linear-gradient(180deg, var(--bg2) 0%, var(--bg3) 42%, var(--bg1) 100%);
+      color: var(--text);
+      font-family: "Orbitron", system-ui, sans-serif;
+    }
+
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(112, 241, 255, 0.08), transparent 42%),
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+    }
+
+    #overlay::before,
+    #overlay::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    #overlay::before {
+      background:
+        linear-gradient(90deg, rgba(112, 241, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(112, 241, 255, 0.06) 1px, transparent 1px);
+      background-size: 36px 36px;
+      opacity: 0.35;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.85));
+    }
+
+    #overlay::after {
+      background:
+        radial-gradient(circle at 15% 30%, rgba(255,255,255,0.28) 0 1px, transparent 2px),
+        radial-gradient(circle at 70% 18%, rgba(112, 241, 255, 0.3) 0 1px, transparent 2px),
+        radial-gradient(circle at 82% 64%, rgba(255, 217, 90, 0.28) 0 1px, transparent 2px),
+        radial-gradient(circle at 26% 78%, rgba(255,255,255,0.22) 0 1px, transparent 2px);
+      opacity: 0.7;
+    }
+
+    .danmaku {
+      position: absolute;
+      left: 100%;
+      white-space: nowrap;
+      font-family: "Audiowide", "Orbitron", system-ui, sans-serif;
+      font-weight: 400;
+      font-size: clamp(20px, 4vw, 36px);
+      letter-spacing: 0.5px;
+      text-shadow:
+        0 2px 0 rgba(0,0,0,0.4),
+        0 0 8px rgba(255,255,255,0.35);
+      animation: fly linear forwards;
+      opacity: 0.95;
+      filter: saturate(1.2);
+      user-select: none;
+    }
+
+    @keyframes fly {
+      from { transform: translateX(0); }
+      to { transform: translateX(-140vw); }
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      top: calc(env(safe-area-inset-top) + 14px);
+      transform: translateX(-50%);
+      background: linear-gradient(180deg, rgba(16, 29, 73, 0.94), rgba(8, 14, 40, 0.94));
+      border: 1px solid rgba(112, 241, 255, 0.45);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.28), 0 0 16px rgba(70, 200, 255, 0.18);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-family: "Orbitron", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #toast.show { opacity: 1; }
+
+    #startHint {
+      position: fixed;
+      right: 12px;
+      bottom: calc(env(safe-area-inset-bottom) + 12px);
+      font-family: "Orbitron", system-ui, sans-serif;
+      font-size: 11px;
+      opacity: 0.84;
+      color: var(--text);
+      background: linear-gradient(180deg, rgba(16, 29, 73, 0.88), rgba(7, 13, 31, 0.88));
+      border: 1px solid rgba(255,255,255,0.15);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.22);
+      border-radius: 12px;
+      padding: 8px 10px;
+      pointer-events: none;
+      z-index: 8;
+    }
+
+    .reaction-gif {
+      position: fixed;
+      right: 10px;
+      width: min(28vw, 120px);
+      max-width: 120px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.34);
+      background: rgba(6, 10, 28, 0.62);
+      opacity: 0;
+      transform: scale(0.86) translateY(12px);
+      transition: opacity 180ms ease, transform 180ms ease;
+      pointer-events: none;
+      z-index: 9;
+    }
+
+    .reaction-gif.show {
+      opacity: 0.92;
+      transform: scale(1) translateY(0);
+    }
+
+    #comboGif {
+      top: calc(env(safe-area-inset-top) + 84px);
+    }
+
+    #failGif {
+      bottom: calc(env(safe-area-inset-bottom) + 60px);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="overlay"></div>
+  <div id="toast"></div>
+  <div id="startHint">Tap to power the signal deck 🔊</div>
+  <!-- [agent-note][stage3] resolved-gif: combo/fail reactions -> catalogs/gifs.json -->
+  <img
+    id="comboGif"
+    class="reaction-gif"
+    alt="combo reaction"
+    src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp"
+  />
+  <img
+    id="failGif"
+    class="reaction-gif"
+    alt="fail reaction"
+    src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp"
+  />
+
+  <!-- [agent-note][stage3] resolved-audio: gameplay loop and semantic sfx -> catalogs/audios.json -->
+  <audio id="bgm" preload="auto" loop src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3"></audio>
+  <audio id="sfxSwap" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3"></audio>
+  <audio id="sfxCollect" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3"></audio>
+  <audio id="sfxCombo" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3"></audio>
+  <audio id="sfxFail" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3"></audio>
+  <audio id="sfxGameOver" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3"></audio>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const COLS = 6;
+      const ROWS = 8;
+      const GAME_SECONDS = 60;
+      const BASE_MATCH_SCORE = 100;
+      const SWAP_TIME = 150;
+      const FALL_TIME = 180;
+      const SPAWN_TIME = 190;
+      const CLEAR_TIME = 110;
+      const COMBO_TEXTS = [
+        "Signal Surge!",
+        "Neon Sync!",
+        "Pulse Chain!",
+        "Turbo Relay!",
+        "Circuit Lock!",
+        "Flux Cascade!",
+        "Prism Burst!",
+        "Data Bloom!"
+      ];
+
+      const CHARACTER_SET = [
+        { emoji: "🤖", label: "bot", base: "#7cf8ff", glow: "rgba(124, 248, 255, 0.45)", accent: "#ffffff", mood: "hero" },
+        { emoji: "👾", label: "glitch", base: "#ff77cf", glow: "rgba(255, 119, 207, 0.4)", accent: "#ffe7ff", mood: "enemy" },
+        { emoji: "🛰️", label: "sat", base: "#ffd85f", glow: "rgba(255, 216, 95, 0.38)", accent: "#fff6d8", mood: "ally" },
+        { emoji: "🔋", label: "cell", base: "#7affc1", glow: "rgba(122, 255, 193, 0.38)", accent: "#effff8", mood: "ally" },
+        { emoji: "💎", label: "crystal", base: "#72a3ff", glow: "rgba(114, 163, 255, 0.4)", accent: "#eef3ff", mood: "hero" },
+        { emoji: "⚡", label: "spark", base: "#ff8f6b", glow: "rgba(255, 143, 107, 0.4)", accent: "#fff1e8", mood: "hazard" }
+      ];
+
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const overlay = document.getElementById("overlay");
+      const toast = document.getElementById("toast");
+      const bgm = document.getElementById("bgm");
+      const startHint = document.getElementById("startHint");
+      const comboGif = document.getElementById("comboGif");
+      const failGif = document.getElementById("failGif");
+
+      const sfx = {
+        swap: document.getElementById("sfxSwap"),
+        collect: document.getElementById("sfxCollect"),
+        combo: document.getElementById("sfxCombo"),
+        fail: document.getElementById("sfxFail"),
+        gameOver: document.getElementById("sfxGameOver")
+      };
+
+      let dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      let W = 0, H = 0;
+      let boardX = 0, boardY = 0, tileSize = 0;
+      let hudH = 92;
+
+      let audioCtx = null;
+      let sfxReady = false;
+      let soundUnlocked = false;
+
+      const state = {
+        grid: [],
+        selected: null,
+        pointerDownCell: null,
+        score: 0,
+        timeLeft: GAME_SECONDS,
+        comboChain: 0,
+        lastTs: performance.now(),
+        resolving: false,
+        gameOver: false
+      };
+
+      function randInt(max) { return Math.floor(Math.random() * max); }
+      function lerp(a,b,t){ return a + (b-a)*t; }
+      function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+      function showToast(msg, ms = 900) {
+        toast.textContent = msg;
+        toast.classList.add("show");
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => toast.classList.remove("show"), ms);
+      }
+
+      function flashGif(el, ms = 1400) {
+        if (!el) return;
+        el.classList.add("show");
+        clearTimeout(el._hideTimer);
+        el._hideTimer = setTimeout(() => el.classList.remove("show"), ms);
+      }
+
+      function spawnDanmaku(text, combo = 1) {
+        const el = document.createElement("div");
+        el.className = "danmaku";
+        el.textContent = text;
+        const topMin = hudH + 10;
+        const topMax = H - 60;
+        const y = Math.floor(lerp(topMin, topMax, Math.random()));
+        const hue = (Math.random() * 360) | 0;
+        const dur = clamp(5200 - combo * 280 + Math.random() * 700, 2800, 5600);
+        el.style.top = `${y}px`;
+        el.style.color = `hsl(${hue} 95% 70%)`;
+        el.style.animationDuration = `${dur}ms`;
+        overlay.appendChild(el);
+        setTimeout(() => el.remove(), dur + 60);
+      }
+
+      function playSfx(name, volume = 0.5) {
+        if (!soundUnlocked) return;
+        const base = sfx[name];
+        if (!base) return;
+        try {
+          const instance = base.cloneNode();
+          instance.volume = volume;
+          instance.play().catch(() => {});
+        } catch (_) {}
+      }
+
+      function syncBgmState() {
+        if (!soundUnlocked) return;
+        bgm.volume = 0.2;
+        if (state.gameOver) return;
+        bgm.play().catch(() => {});
+      }
+
+      function ensureAudio() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        sfxReady = true;
+
+        if (!soundUnlocked) {
+          soundUnlocked = true;
+          syncBgmState();
+          playSfx("swap", 0.3);
+          startHint.style.display = "none";
+        }
+      }
+
+      function blip(freq = 640, dur = 0.08, type = "square", gain = 0.03) {
+        if (!sfxReady || !audioCtx) return;
+        const t0 = audioCtx.currentTime;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, t0);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.connect(g).connect(audioCtx.destination);
+        o.start(t0);
+        o.stop(t0 + dur + 0.01);
+      }
+
+      function playEliminateSfx(chain = 0) {
+        const base = 460 + chain * 40;
+        playSfx("collect", 0.34);
+        blip(base, 0.07, "square", 0.024);
+        setTimeout(() => blip(base * 1.4, 0.06, "triangle", 0.02), 45);
+      }
+
+      function playComboSfx(chain = 2) {
+        const notes = [640, 780, 920 + chain * 30];
+        playSfx("combo", 0.38);
+        notes.forEach((n, i) => setTimeout(() => blip(n, 0.09, "triangle", 0.024), i * 55));
+      }
+
+      function makeTile(type, row, col) {
+        return {
+          type,
+          row,
+          col,
+          x: boardX + col * tileSize,
+          y: boardY + row * tileSize,
+          scale: 1,
+          alpha: 1
+        };
+      }
+
+      function resize() {
+        W = window.innerWidth;
+        H = window.innerHeight;
+        dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        canvas.width = Math.floor(W * dpr);
+        canvas.height = Math.floor(H * dpr);
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        hudH = 92;
+        const usableH = H - hudH - 20;
+        tileSize = Math.floor(Math.min((W - 24) / COLS, usableH / ROWS));
+        const boardW = tileSize * COLS;
+        const boardH = tileSize * ROWS;
+        boardX = Math.floor((W - boardW) / 2);
+        boardY = Math.floor(hudH + (usableH - boardH) / 2);
+
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const t = state.grid[r] && state.grid[r][c];
+            if (t) {
+              t.x = boardX + c * tileSize;
+              t.y = boardY + r * tileSize;
+            }
+          }
+        }
+      }
+
+      function randomType() { return randInt(CHARACTER_SET.length); }
+
+      function createsMatchAt(grid, row, col, type) {
+        let count = 1;
+        for (let c = col - 1; c >= 0; c--) {
+          const t = grid[row][c];
+          if (!t || t.type !== type) break;
+          count++;
+        }
+        for (let c = col + 1; c < COLS; c++) {
+          const t = grid[row][c];
+          if (!t || t.type !== type) break;
+          count++;
+        }
+        if (count >= 3) return true;
+
+        count = 1;
+        for (let r = row - 1; r >= 0; r--) {
+          const t = grid[r][col];
+          if (!t || t.type !== type) break;
+          count++;
+        }
+        for (let r = row + 1; r < ROWS; r++) {
+          const t = grid[r][col];
+          if (!t || t.type !== type) break;
+          count++;
+        }
+        return count >= 3;
+      }
+
+      function initBoard() {
+        state.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            let t;
+            do { t = randomType(); } while (createsMatchAt(state.grid, r, c, t));
+            state.grid[r][c] = makeTile(t, r, c);
+          }
+        }
+      }
+
+      function drawRoundedRect(x, y, w, h, r) {
+        const rr = Math.min(r, w * 0.5, h * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+      }
+
+      function drawHUD() {
+        const pad = 12;
+        const barW = W - pad * 2;
+        const scoreH = 28;
+        const timerH = 18;
+
+        ctx.save();
+        drawRoundedRect(pad, 14, barW, scoreH, 12);
+        ctx.fillStyle = "rgba(10, 18, 46, 0.78)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(112, 241, 255, 0.3)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        const scoreProgress = clamp((state.score % 5000) / 5000, 0, 1);
+        drawRoundedRect(pad + 3, 17, (barW - 6) * Math.max(0.08, scoreProgress), scoreH - 6, 10);
+        const scoreGrad = ctx.createLinearGradient(pad, 17, pad + barW, 17);
+        scoreGrad.addColorStop(0, "#70f1ff");
+        scoreGrad.addColorStop(1, "#ffd95a");
+        ctx.fillStyle = scoreGrad;
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.font = '700 15px "Orbitron", system-ui, sans-serif';
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`SIGNAL ${state.score}`, pad + 10, 14 + scoreH / 2);
+
+        drawRoundedRect(pad, 50, barW, timerH, 10);
+        ctx.fillStyle = "rgba(10, 18, 46, 0.7)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        const tRate = clamp(state.timeLeft / GAME_SECONDS, 0, 1);
+        drawRoundedRect(pad + 3, 53, (barW - 6) * tRate, timerH - 6, 8);
+        ctx.fillStyle = tRate < 0.25 ? "rgba(255,93,115,0.95)" : "rgba(122,255,193,0.95)";
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.font = '700 11px "Orbitron", system-ui, sans-serif';
+        ctx.textAlign = "center";
+        ctx.fillText(`UPLINK ${Math.ceil(state.timeLeft)}S`, W / 2, 59);
+        ctx.restore();
+      }
+
+      function drawBoardFrame() {
+        const bw = COLS * tileSize;
+        const bh = ROWS * tileSize;
+        ctx.save();
+        drawRoundedRect(boardX - 8, boardY - 8, bw + 16, bh + 16, 18);
+        ctx.fillStyle = "rgba(7, 15, 39, 0.76)";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+        ctx.shadowBlur = 26;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(112, 241, 255, 0.3)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        for (let r = 1; r < ROWS; r++) {
+          const y = boardY + r * tileSize;
+          ctx.strokeStyle = "rgba(112, 241, 255, 0.08)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(boardX, y);
+          ctx.lineTo(boardX + bw, y);
+          ctx.stroke();
+        }
+        for (let c = 1; c < COLS; c++) {
+          const x = boardX + c * tileSize;
+          ctx.beginPath();
+          ctx.moveTo(x, boardY);
+          ctx.lineTo(x, boardY + bh);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawTile(t) {
+        const x = t.x;
+        const y = t.y;
+        const s = tileSize;
+        const inset = 4;
+        const w = s - inset * 2;
+        const h = s - inset * 2;
+        const chip = CHARACTER_SET[t.type % CHARACTER_SET.length];
+
+        ctx.save();
+        ctx.globalAlpha = t.alpha;
+        ctx.translate(x + s * 0.5, y + s * 0.5);
+        ctx.scale(t.scale, t.scale);
+        ctx.translate(-s * 0.5, -s * 0.5);
+
+        const tileGrad = ctx.createLinearGradient(inset, inset, inset + w, inset + h);
+        tileGrad.addColorStop(0, "rgba(255,255,255,0.24)");
+        tileGrad.addColorStop(0.2, chip.base);
+        tileGrad.addColorStop(1, "rgba(6,10,28,0.94)");
+        drawRoundedRect(inset, inset, w, h, Math.max(10, s * 0.15));
+        ctx.fillStyle = tileGrad;
+        ctx.shadowColor = chip.glow;
+        ctx.shadowBlur = 14;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        drawRoundedRect(inset + 2, inset + 2, w - 4, h - 4, Math.max(8, s * 0.13));
+        ctx.fillStyle = "rgba(8, 14, 36, 0.52)";
+        ctx.fill();
+
+        const pulse = ((performance.now() * 0.003) + (t.row + t.col) * 0.45) % (Math.PI * 2);
+        const coreR = Math.max(10, s * 0.19 + Math.sin(pulse) * 2);
+        const cx = inset + w * 0.5;
+        const cy = inset + h * 0.34;
+        const core = ctx.createRadialGradient(cx, cy, coreR * 0.15, cx, cy, coreR * 1.7);
+        core.addColorStop(0, chip.accent);
+        core.addColorStop(0.5, chip.base);
+        core.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(cx, cy, coreR * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `${Math.floor(s * 0.48)}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(chip.emoji, inset + w * 0.5, inset + h * 0.55);
+
+        ctx.font = `${Math.max(9, Math.floor(s * 0.11))}px "Orbitron", system-ui, sans-serif`;
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillText(chip.label.toUpperCase(), inset + w * 0.5, inset + h - Math.max(9, s * 0.12));
+
+        const g = ctx.createLinearGradient(inset, inset, inset, inset + h);
+        g.addColorStop(0, "rgba(255,255,255,0.32)");
+        g.addColorStop(0.4, "rgba(255,255,255,0.08)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        drawRoundedRect(inset + 2, inset + 2, w - 4, h * 0.42, 8);
+        ctx.fillStyle = g;
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      function drawSelection() {
+        if (!state.selected) return;
+        const { row, col } = state.selected;
+        const x = boardX + col * tileSize;
+        const y = boardY + row * tileSize;
+        ctx.save();
+        ctx.shadowColor = "rgba(255, 221, 87, 0.75)";
+        ctx.shadowBlur = 14;
+        drawRoundedRect(x + 3, y + 3, tileSize - 6, tileSize - 6, 10);
+        ctx.strokeStyle = "rgba(255, 221, 87, 0.95)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, W, H);
+        drawHUD();
+        drawBoardFrame();
+
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const t = state.grid[r][c];
+            if (t) drawTile(t);
+          }
+        }
+        drawSelection();
+
+        if (state.gameOver) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+            ctx.font = '400 34px "Audiowide", "Orbitron", system-ui, sans-serif';
+          ctx.fillText("Signal Lost!", W / 2, H * 0.42);
+            ctx.font = '700 24px "Orbitron", system-ui, sans-serif';
+          ctx.fillText(`Signal ${state.score}`, W / 2, H * 0.5);
+            ctx.font = '700 16px "Orbitron", system-ui, sans-serif';
+          ctx.fillText("Tap to reroute", W / 2, H * 0.57);
+          ctx.restore();
+        }
+      }
+
+      function animateTo(tile, toRow, toCol, ms) {
+        const fromX = tile.x, fromY = tile.y;
+        const toX = boardX + toCol * tileSize;
+        const toY = boardY + toRow * tileSize;
+        return new Promise((resolve) => {
+          const st = performance.now();
+          function step(now) {
+            const t = clamp((now - st) / ms, 0, 1);
+            const e = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+            tile.x = lerp(fromX, toX, e);
+            tile.y = lerp(fromY, toY, e);
+            if (t < 1) requestAnimationFrame(step);
+            else {
+              tile.x = toX;
+              tile.y = toY;
+              tile.row = toRow;
+              tile.col = toCol;
+              resolve();
+            }
+          }
+          requestAnimationFrame(step);
+        });
+      }
+
+      function areAdjacent(a, b) {
+        return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
+      }
+
+      function findMatches(grid) {
+        const mark = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+        const groups = [];
+
+        for (let r = 0; r < ROWS; r++) {
+          let c = 0;
+          while (c < COLS) {
+            const cur = grid[r][c];
+            if (!cur) { c++; continue; }
+            let c2 = c + 1;
+            while (c2 < COLS && grid[r][c2] && grid[r][c2].type === cur.type) c2++;
+            const len = c2 - c;
+            if (len >= 3) {
+              const cells = [];
+              for (let k = c; k < c2; k++) {
+                mark[r][k] = true;
+                cells.push({ row: r, col: k });
+              }
+              groups.push({ len, cells, dir: "h" });
+            }
+            c = c2;
+          }
+        }
+
+        for (let c = 0; c < COLS; c++) {
+          let r = 0;
+          while (r < ROWS) {
+            const cur = grid[r][c];
+            if (!cur) { r++; continue; }
+            let r2 = r + 1;
+            while (r2 < ROWS && grid[r2][c] && grid[r2][c].type === cur.type) r2++;
+            const len = r2 - r;
+            if (len >= 3) {
+              const cells = [];
+              for (let k = r; k < r2; k++) {
+                mark[k][c] = true;
+                cells.push({ row: k, col: c });
+              }
+              groups.push({ len, cells, dir: "v" });
+            }
+            r = r2;
+          }
+        }
+
+        const cells = [];
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (mark[r][c]) cells.push({ row: r, col: c });
+          }
+        }
+        return { cells, groups };
+      }
+
+      function calcScore(groups, chain) {
+        let gained = 0;
+        for (const g of groups) {
+          let mult = 1;
+          if (g.len >= 5) mult = 3;
+          else if (g.len === 4) mult = 2;
+          gained += BASE_MATCH_SCORE * g.len * mult;
+        }
+        if (chain > 1) gained = Math.floor(gained * (1 + (chain - 1) * 0.25));
+        return gained;
+      }
+
+      async function swapCells(a, b, ms = SWAP_TIME) {
+        const ta = state.grid[a.row][a.col];
+        const tb = state.grid[b.row][b.col];
+        state.grid[a.row][a.col] = tb;
+        state.grid[b.row][b.col] = ta;
+        await Promise.all([
+          animateTo(ta, b.row, b.col, ms),
+          animateTo(tb, a.row, a.col, ms)
+        ]);
+      }
+
+      async function clearMatches(match) {
+        const fades = [];
+        for (const cell of match.cells) {
+          const t = state.grid[cell.row][cell.col];
+          if (!t) continue;
+          fades.push(new Promise((resolve) => {
+            const st = performance.now();
+            function step(now) {
+              const p = clamp((now - st) / CLEAR_TIME, 0, 1);
+              t.alpha = 1 - p;
+              t.scale = 1 - 0.25 * p;
+              if (p < 1) requestAnimationFrame(step);
+              else resolve();
+            }
+            requestAnimationFrame(step);
+          }));
+        }
+        await Promise.all(fades);
+        for (const cell of match.cells) {
+          state.grid[cell.row][cell.col] = null;
+        }
+      }
+
+      async function collapseBoard() {
+        const moves = [];
+        for (let c = 0; c < COLS; c++) {
+          let write = ROWS - 1;
+          for (let r = ROWS - 1; r >= 0; r--) {
+            const t = state.grid[r][c];
+            if (!t) continue;
+            if (write !== r) {
+              state.grid[write][c] = t;
+              state.grid[r][c] = null;
+              moves.push(animateTo(t, write, c, FALL_TIME));
+            }
+            write--;
+          }
+
+          for (let r = write; r >= 0; r--) {
+            const type = randomType();
+            const t = makeTile(type, r, c);
+            t.y = boardY - (write - r + 1) * tileSize - 8;
+            state.grid[r][c] = t;
+            moves.push(animateTo(t, r, c, SPAWN_TIME));
+          }
+        }
+        await Promise.all(moves);
+      }
+
+      async function resolveBoardFromCurrent(chainStart = 1) {
+        state.resolving = true;
+        let chain = chainStart;
+        while (true) {
+          const match = findMatches(state.grid);
+          if (!match.cells.length) break;
+
+          const gain = calcScore(match.groups, chain);
+          state.score += gain;
+
+          playEliminateSfx(chain - 1);
+          if (chain >= 2) {
+            playComboSfx(chain);
+            flashGif(comboGif, 1500);
+            const text = COMBO_TEXTS[randInt(COMBO_TEXTS.length)];
+            spawnDanmaku(`${text} x${chain}`, chain);
+            showToast(`Chain x${chain}! +${gain}`);
+          } else {
+            showToast(`+${gain} data`);
+          }
+
+          await clearMatches(match);
+          await collapseBoard();
+          chain++;
+        }
+        state.resolving = false;
+      }
+
+      function cellFromPoint(x, y) {
+        if (x < boardX || y < boardY) return null;
+        const c = Math.floor((x - boardX) / tileSize);
+        const r = Math.floor((y - boardY) / tileSize);
+        if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
+        return { row: r, col: c };
+      }
+
+      async function trySwap(a, b) {
+        if (state.resolving || state.gameOver) return;
+        if (!areAdjacent(a, b)) return;
+        state.resolving = true;
+
+        playSfx("swap", 0.32);
+        await swapCells(a, b, SWAP_TIME);
+        const match = findMatches(state.grid);
+
+        if (!match.cells.length) {
+          playSfx("fail", 0.4);
+          flashGif(failGif, 1200);
+          playEliminateSfx(0);
+          await swapCells(a, b, SWAP_TIME);
+          showToast("Link failed!");
+          state.resolving = false;
+          return;
+        }
+
+        state.resolving = false;
+        await resolveBoardFromCurrent(1);
+      }
+
+      function restartGame() {
+        state.score = 0;
+        state.timeLeft = GAME_SECONDS;
+        state.resolving = false;
+        state.selected = null;
+        state.pointerDownCell = null;
+        state.gameOver = false;
+        initBoard();
+        syncBgmState();
+        resolveBoardFromCurrent(1).then(() => {
+          state.resolving = false;
+        });
+      }
+
+      function onPointerDown(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        ensureAudio();
+
+        if (state.gameOver) {
+          restartGame();
+          return;
+        }
+
+        const cell = cellFromPoint(x, y);
+        state.pointerDownCell = cell;
+        if (!cell || state.resolving) return;
+
+        if (!state.selected) {
+          state.selected = cell;
+        } else {
+          if (cell.row === state.selected.row && cell.col === state.selected.col) {
+            state.selected = null;
+          } else if (areAdjacent(state.selected, cell)) {
+            const a = state.selected;
+            state.selected = null;
+            trySwap(a, cell);
+          } else {
+            state.selected = cell;
+          }
+        }
+      }
+
+      function onPointerMove(e) {
+        if (!state.pointerDownCell || state.resolving || state.gameOver) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const cell = cellFromPoint(x, y);
+        if (!cell) return;
+        const start = state.pointerDownCell;
+        if (areAdjacent(start, cell)) {
+          state.pointerDownCell = null;
+          state.selected = null;
+          trySwap(start, cell);
+        }
+      }
+
+      function onPointerUp() {
+        state.pointerDownCell = null;
+      }
+
+      function tick(now) {
+        const dt = Math.min(0.05, (now - state.lastTs) / 1000);
+        state.lastTs = now;
+
+        if (!state.gameOver) {
+          state.timeLeft -= dt;
+          if (state.timeLeft <= 0) {
+            state.timeLeft = 0;
+            state.gameOver = true;
+            bgm.pause();
+            playSfx("gameOver", 0.46);
+            flashGif(failGif, 1800);
+            spawnDanmaku("Signal Lost!", 3);
+            showToast("Window closed!");
+          }
+        }
+
+        render();
+        requestAnimationFrame(tick);
+      }
+
+      async function boot() {
+        resize();
+        window.addEventListener("resize", resize);
+        canvas.addEventListener("pointerdown", onPointerDown, { passive: true });
+        canvas.addEventListener("pointermove", onPointerMove, { passive: true });
+        window.addEventListener("pointerup", onPointerUp, { passive: true });
+
+        bgm.volume = 0.2;
+        initBoard();
+        resolveBoardFromCurrent(1);
+        requestAnimationFrame((t) => {
+          state.lastTs = t;
+          tick(t);
+        });
+      }
+
+      boot();
+    })();
+  </script>
+</body>
+</html>

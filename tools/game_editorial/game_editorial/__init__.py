@@ -1,15 +1,21 @@
-"""Editorial batch tooling for published game corpus analysis."""
-
-from .mechanic_editorial import (
-    DEFAULT_APP_JSON_PATH,
-    DEFAULT_WORKSPACE_ROOT,
-    generate_mechanic_identity_batch,
-    rank_mechanic_identities,
+from .deterministic_remix_manifest import (
+    DEFAULT_OUTPUT_RUNS_ROOT,
+    DEFAULT_WORKFLOW_ID,
+    build_expanded_entries,
+    build_prompt_catalog,
+    compose_remix_prompt,
+    discover_raw_games,
+    generate_batch_artifacts,
+    load_remix_ideas,
 )
 
 __all__ = [
-    "DEFAULT_APP_JSON_PATH",
-    "DEFAULT_WORKSPACE_ROOT",
-    "generate_mechanic_identity_batch",
-    "rank_mechanic_identities",
+    "DEFAULT_OUTPUT_RUNS_ROOT",
+    "DEFAULT_WORKFLOW_ID",
+    "build_expanded_entries",
+    "build_prompt_catalog",
+    "compose_remix_prompt",
+    "discover_raw_games",
+    "generate_batch_artifacts",
+    "load_remix_ideas",
 ]

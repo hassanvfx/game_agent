@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Neon Courier 3D</title>
+    <script src="assets/cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- [agent-note][stage4] repaired: catalog-font-remap | roles: display/ui/icons -> Orbitron/Rajdhani/Material Symbols Rounded -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&family=Material+Symbols+Rounded" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #070b17;
+            --bg-mid: #10172b;
+            --panel: rgba(14, 24, 46, 0.76);
+            --panel-strong: rgba(10, 18, 34, 0.92);
+            --line: rgba(109, 226, 255, 0.25);
+            --cyan: #6ee7ff;
+            --cyan-strong: #19c8ff;
+            --violet: #8f7dff;
+            --magenta: #ff5cb8;
+            --gold: #ffd76f;
+            --danger: #ff6b89;
+            --text-main: #f7fbff;
+            --text-dim: rgba(231, 242, 255, 0.76);
+            --shadow: 0 16px 40px rgba(0, 0, 0, 0.42);
+        }
+
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, #1f2b55 0%, rgba(12, 16, 30, 0.35) 25%, transparent 55%),
+                linear-gradient(180deg, #090d18 0%, #060911 100%);
+            color: var(--text-main);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 50% 12%, rgba(143, 125, 255, 0.12), transparent 40%),
+                linear-gradient(180deg, #0b1020 0%, #04070f 100%);
+        }
+
+        #canvas-container,
+        #canvas-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #game-container::before {
+            background:
+                linear-gradient(90deg, rgba(110, 231, 255, 0.06) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(110, 231, 255, 0.05) 1px, transparent 1px);
+            background-size: 48px 48px;
+            mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.9) 35%, rgba(0,0,0,0.1) 100%);
+            opacity: 0.4;
+        }
+
+        #game-container::after {
+            background:
+                radial-gradient(circle at 20% 20%, rgba(255, 92, 184, 0.12), transparent 24%),
+                radial-gradient(circle at 80% 18%, rgba(25, 200, 255, 0.12), transparent 28%),
+                linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.02) 100%);
+        }
+
+        .screen-fill { position: absolute; inset: 0; }
+        .full-size { width: 100%; height: 100%; }
+        .hidden { display: none !important; }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            width: 100%;
+            pointer-events: auto;
+        }
+
+        .hud-cluster {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(25, 40, 74, 0.92), rgba(9, 16, 31, 0.9));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .hud-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 14px;
+            border-radius: 999px;
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            line-height: 1;
+            min-height: 44px;
+        }
+
+        .hud-score-value {
+            color: var(--gold);
+            text-shadow: 0 0 12px rgba(255, 215, 111, 0.48);
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 14px;
+        }
+
+        .hud-label-icon,
+        .mode-icon {
+            font-family: 'Material Symbols Rounded';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 18px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            direction: ltr;
+            vertical-align: middle;
+            font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .hud-btn {
+            cursor: pointer;
+            color: var(--text-main);
+            padding: 11px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            line-height: 1;
+            min-height: 44px;
+            background:
+                linear-gradient(180deg, rgba(18, 30, 57, 0.95), rgba(9, 14, 27, 0.95));
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease;
+        }
+
+        .hud-btn:hover,
+        .hud-btn:focus-visible,
+        #start-btn:hover,
+        #start-btn:focus-visible,
+        .color-btn:hover,
+        .color-btn:focus-visible {
+            transform: translateY(-1px);
+            filter: brightness(1.08);
+            border-color: rgba(110, 231, 255, 0.52);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 0 1px rgba(110, 231, 255, 0.2), 0 12px 28px rgba(11, 28, 57, 0.48);
+            outline: none;
+        }
+
+        .hud-btn:active,
+        #start-btn:active,
+        .color-btn:active {
+            transform: scale(0.97);
+        }
+
+        #start-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background:
+                radial-gradient(circle at 50% 20%, rgba(111, 214, 255, 0.16), transparent 28%),
+                linear-gradient(180deg, rgba(3, 6, 14, 0.54), rgba(3, 6, 14, 0.82));
+            backdrop-filter: blur(9px);
+            -webkit-backdrop-filter: blur(9px);
+        }
+
+        .start-card {
+            position: relative;
+            width: min(100%, 420px);
+            border-radius: 28px;
+            padding: 22px 18px 18px;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .start-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 50% 0%, rgba(110, 231, 255, 0.18), transparent 35%),
+                linear-gradient(135deg, rgba(143, 125, 255, 0.15), transparent 45%, rgba(255, 92, 184, 0.15));
+            pointer-events: none;
+        }
+
+        .start-card > * { position: relative; z-index: 1; }
+
+        .runner-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            margin-bottom: 14px;
+            border-radius: 999px;
+            background: rgba(8, 16, 31, 0.72);
+            border: 1px solid rgba(110, 231, 255, 0.24);
+            color: var(--cyan);
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 11px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .runner-avatar {
+            width: 114px;
+            height: 114px;
+            margin: 0 auto 14px;
+            border-radius: 32px;
+            border: 1px solid rgba(110, 231, 255, 0.34);
+            background:
+                radial-gradient(circle at 50% 30%, rgba(255,255,255,0.92) 0 8px, transparent 9px),
+                radial-gradient(circle at 38% 30%, #6ee7ff 0 4px, transparent 5px),
+                radial-gradient(circle at 62% 30%, #6ee7ff 0 4px, transparent 5px),
+                linear-gradient(180deg, rgba(110, 231, 255, 0.22), transparent 30%),
+                linear-gradient(180deg, #17294f 0%, #0b1120 100%);
+            position: relative;
+            box-shadow: 0 0 26px rgba(25, 200, 255, 0.3), inset 0 0 22px rgba(255,255,255,0.06);
+        }
+
+        .runner-avatar::before {
+            content: "🤖";
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            font-size: 58px;
+            filter: drop-shadow(0 0 12px rgba(110, 231, 255, 0.42));
+        }
+
+        .runner-avatar::after {
+            content: "";
+            position: absolute;
+            left: 26px;
+            right: 26px;
+            bottom: 18px;
+            height: 8px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--cyan), var(--magenta));
+            box-shadow: 0 0 18px rgba(111, 214, 255, 0.65);
+        }
+
+        .start-title {
+            margin: 0 0 6px;
+            color: var(--text-main);
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: clamp(28px, 7vw, 42px);
+            font-weight: 700;
+            line-height: 0.98;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            text-shadow: 0 0 18px rgba(110, 231, 255, 0.22);
+        }
+
+        .start-subtitle {
+            margin: 0 0 16px;
+            color: var(--cyan);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+        }
+
+        .start-copy {
+            margin: 0 0 16px;
+            color: var(--text-dim);
+            font-size: 15px;
+            line-height: 1.25;
+        }
+
+        .selection-card {
+            margin: 0 0 16px;
+            padding: 14px 12px;
+            border-radius: 20px;
+            background: rgba(6, 11, 22, 0.54);
+            border: 1px solid rgba(143, 125, 255, 0.22);
+        }
+
+        .selection-label {
+            margin: 0 0 10px;
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .palette-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .color-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 999px;
+            border: 2px solid transparent;
+            opacity: 0.78;
+            box-shadow: 0 10px 22px rgba(0,0,0,0.22), inset 0 0 0 2px rgba(255,255,255,0.16);
+            cursor: pointer;
+            transition: transform 160ms ease, opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        }
+
+        .color-btn.is-selected {
+            border-color: rgba(255, 255, 255, 0.95);
+            opacity: 1;
+            transform: scale(1.08);
+            box-shadow: 0 0 0 4px rgba(110, 231, 255, 0.14), 0 12px 26px rgba(0,0,0,0.28);
+        }
+
+        #start-btn {
+            width: 100%;
+            border: 1px solid rgba(110, 231, 255, 0.32);
+            border-radius: 18px;
+            padding: 15px 16px;
+            background: linear-gradient(90deg, #1095d9 0%, #645dff 52%, #ff5cb8 100%);
+            color: #fff;
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: 0 16px 34px rgba(64, 92, 255, 0.34);
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+        }
+
+        .start-hint {
+            margin: 12px 0 0;
+            color: rgba(231, 242, 255, 0.7);
+            font-size: 12px;
+            line-height: 1.2;
+        }
+
+        .chat-bubble {
+            position: absolute;
+            background: linear-gradient(180deg, rgba(245, 251, 255, 0.96), rgba(230, 245, 255, 0.92));
+            color: #081222;
+            padding: 7px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(25, 200, 255, 0.18);
+            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            white-space: nowrap;
+        }
+
+        .chat-bubble.visible {
+            opacity: 1;
+            transform: translate(-50%, calc(-100% - 4px));
+        }
+
+        .chat-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: rgba(234, 247, 255, 0.98) transparent transparent transparent;
+        }
+
+        /* [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction */
+        #joystick-zone {
+            position: absolute;
+            bottom: calc(18px + env(safe-area-inset-bottom));
+            left: calc(16px + env(safe-area-inset-left));
+            width: 118px;
+            height: 118px;
+            border-radius: 50%;
+            touch-action: none;
+            display: none;
+            background:
+                radial-gradient(circle at 50% 50%, rgba(110, 231, 255, 0.12), rgba(13, 20, 39, 0.72) 68%);
+            border: 1px solid rgba(110, 231, 255, 0.16);
+            box-shadow: 0 14px 30px rgba(0,0,0,0.28), inset 0 0 18px rgba(110, 231, 255, 0.08);
+        }
+
+        #joystick-zone::before,
+        #joystick-zone::after {
+            content: "";
+            position: absolute;
+            inset: 14px;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        #joystick-zone::before {
+            border: 1px dashed rgba(110, 231, 255, 0.2);
+        }
+
+        #joystick-zone::after {
+            inset: 50%;
+            width: 12px;
+            height: 12px;
+            margin: -6px 0 0 -6px;
+            background: rgba(255,255,255,0.22);
+            box-shadow: 0 0 14px rgba(110, 231, 255, 0.32);
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            #joystick-zone { display: block; }
+        }
+
+        #joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95), rgba(121, 232, 255, 0.76) 42%, rgba(8, 22, 44, 0.92) 100%);
+            border: 1px solid rgba(255,255,255,0.22);
+            box-shadow: 0 0 18px rgba(110, 231, 255, 0.34), inset 0 -6px 10px rgba(0,0,0,0.24);
+        }
+
+        #chat-layer {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 8;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: 14px;
+            bottom: calc(140px + env(safe-area-inset-bottom));
+            width: min(34vw, 132px);
+            border-radius: 18px;
+            border: 1px solid rgba(110, 231, 255, 0.28);
+            box-shadow: 0 14px 26px rgba(0, 0, 0, 0.34);
+            background: rgba(7, 11, 23, 0.52);
+            opacity: 0;
+            transform: translateY(10px) scale(0.94);
+            transition: opacity 180ms ease, transform 180ms ease;
+            will-change: transform, opacity;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.is-fail {
+            right: auto;
+            left: 14px;
+            bottom: calc(154px + env(safe-area-inset-bottom));
+            width: min(30vw, 116px);
+            border-color: rgba(255, 107, 137, 0.32);
+        }
+
+        .feedback-toast {
+            position: absolute;
+            left: 50%;
+            bottom: calc(94px + env(safe-area-inset-bottom));
+            transform: translate(-50%, 18px);
+            min-width: min(70vw, 260px);
+            max-width: min(78vw, 300px);
+            padding: 10px 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(110, 231, 255, 0.2);
+            background: rgba(6, 11, 22, 0.86);
+            color: var(--text-main);
+            text-align: center;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        }
+
+        .feedback-toast.visible {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        @media (max-width: 640px) {
+            #ui-layer {
+                padding-top: max(10px, env(safe-area-inset-top));
+                padding-right: max(10px, env(safe-area-inset-right));
+                padding-left: max(10px, env(safe-area-inset-left));
+                padding-bottom: max(12px, env(safe-area-inset-bottom));
+            }
+
+            #hud {
+                gap: 8px;
+            }
+
+            .hud-pill {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            .hud-score-value { font-size: 13px; }
+
+            .hud-btn {
+                padding: 10px 12px;
+                font-size: 10px;
+            }
+
+            .start-card {
+                padding: 20px 14px 16px;
+                border-radius: 24px;
+            }
+
+            .runner-avatar {
+                width: 98px;
+                height: 98px;
+                border-radius: 28px;
+            }
+
+            .runner-avatar::before { font-size: 50px; }
+
+            .start-copy {
+                font-size: 14px;
+                margin-bottom: 14px;
+            }
+
+            #joystick-zone {
+                width: 108px;
+                height: 108px;
+                left: calc(12px + env(safe-area-inset-left));
+                bottom: calc(14px + env(safe-area-inset-bottom));
+            }
+
+            #joystick-knob {
+                width: 44px;
+                height: 44px;
+            }
+
+            .feedback-gif {
+                width: min(32vw, 100px);
+                right: 10px;
+                bottom: calc(132px + env(safe-area-inset-bottom));
+            }
+
+            .feedback-gif.is-fail {
+                left: 10px;
+                bottom: calc(144px + env(safe-area-inset-bottom));
+                width: min(28vw, 88px);
+            }
+
+            .feedback-toast {
+                bottom: calc(84px + env(safe-area-inset-bottom));
+                min-width: min(76vw, 250px);
+                padding: 9px 12px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="canvas-container" class="full-size"></div>
+
+        <div id="ui-layer" class="screen-fill">
+            <div id="hud" class="hidden">
+                <div class="glass-panel hud-pill">
+                    <span class="hud-label-icon" aria-hidden="true">local_shipping</span>
+                    <span>Deliveries</span>
+                    <span id="score" class="hud-score-value">0</span>
+                </div>
+
+                <div class="hud-cluster">
+                    <button id="quality-btn" class="hud-btn">
+                        <span class="mode-icon" aria-hidden="true">settings</span>
+                        <span>Quality: High</span>
+                    </button>
+                    <button id="cam-btn" class="hud-btn">
+                        <span class="mode-icon" aria-hidden="true">videocam</span>
+                        <span>Cam: Iso</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="start-screen">
+                <div class="glass-panel start-card">
+                    <div class="runner-badge">
+                        <span class="mode-icon" aria-hidden="true">bolt</span>
+                        <span>Courier Sync Online</span>
+                    </div>
+                    <div class="runner-avatar" aria-hidden="true"></div>
+                    <h1 class="start-title">Neon Courier</h1>
+                    <p class="start-subtitle">Arcade delivery drift</p>
+                    <p class="start-copy">Slide through the grid, tag each courier, and keep your chrome runner glowing under city lights.</p>
+
+                    <div class="selection-card">
+                        <p class="selection-label">Choose runner suit</p>
+                        <div class="palette-row">
+                            <button class="color-btn is-selected" style="background:#ef4444" data-color="0xef4444" aria-label="Crimson runner suit"></button>
+                            <button class="color-btn" style="background:#3b82f6" data-color="0x3b82f6" aria-label="Azure runner suit"></button>
+                            <button class="color-btn" style="background:#10b981" data-color="0x10b981" aria-label="Mint runner suit"></button>
+                            <button class="color-btn" style="background:#f59e0b" data-color="0xf59e0b" aria-label="Amber runner suit"></button>
+                        </div>
+                    </div>
+
+                    <button id="start-btn">Start Route</button>
+                    <p class="start-hint">Desktop: WASD • Mobile: thumb stick • Touch-safe HUD preserved</p>
+                </div>
+            </div>
+
+            <div id="joystick-zone" class="pointer-events-auto">
+                <div id="joystick-knob"></div>
+            </div>
+
+            <div id="chat-layer"></div>
+            <div id="feedback-layer" aria-hidden="true">
+                <!-- [agent-note][stage3] resolved-gif: delivery/fail overlays -> catalogs/gifs.json -->
+                <img id="success-gif" class="feedback-gif" alt="" src="https://i.giphy.com/34HAaqlL2oCUo.webp">
+                <img id="fail-gif" class="feedback-gif is-fail" alt="" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp">
+                <div id="feedback-toast" class="feedback-toast">Route locked</div>
+            </div>
+        </div>
+    </div>
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        uniform float time;
+        uniform vec3 colorA;
+        uniform vec3 colorB;
+        varying vec2 vUv;
+        
+        void main() {
+            float grid = step(0.95, fract(vUv.x * 20.0)) + step(0.95, fract(vUv.y * 20.0));
+            vec3 color = mix(colorA, colorB, vUv.y + sin(time * 0.5 + vUv.x * 5.0) * 0.1);
+            vec3 finalColor = mix(color, vec3(1.0), grid * 0.3);
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    </script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3",
+            sfx: {
+                collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+                chime: "https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3",
+                click: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                blocked: "https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3",
+                mode: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3"
+            }
+        };
+
+        class AudioController {
+            constructor() {
+                this.unlocked = false;
+                this.lastPlayed = new Map();
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                this.sfxVolume = {
+                    collect: 0.54,
+                    chime: 0.46,
+                    click: 0.38,
+                    blocked: 0.5,
+                    mode: 0.42
+                };
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const audio = new Audio(v);
+                    audio.preload = 'auto';
+                    this.sfx[k] = audio;
+                }
+            }
+            unlock() {
+                this.unlocked = true;
+            }
+            playBGM() {
+                if (!this.unlocked) return;
+                this.bgm.currentTime = this.bgm.currentTime || 0;
+                this.bgm.play().catch(() => {});
+            }
+            pauseBGM() {
+                this.bgm.pause();
+            }
+            playSFX(key, debounceMs = 90) {
+                if (!this.unlocked || !this.sfx[key]) return;
+                const now = performance.now();
+                if (now - (this.lastPlayed.get(key) || 0) < debounceMs) return;
+                this.lastPlayed.set(key, now);
+                const clone = this.sfx[key].cloneNode();
+                clone.volume = this.sfxVolume[key] ?? 0.5;
+                clone.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+        const successGif = document.getElementById('success-gif');
+        const failGif = document.getElementById('fail-gif');
+        const feedbackToast = document.getElementById('feedback-toast');
+        let feedbackTimer = null;
+        let failFlashTimer = null;
+
+        function flashFeedback({ message, success = true, duration = 1600 }) {
+            feedbackToast.textContent = message;
+            feedbackToast.classList.add('visible');
+            const gif = success ? successGif : failGif;
+            gif.classList.add('visible');
+            clearTimeout(feedbackTimer);
+            feedbackTimer = setTimeout(() => {
+                feedbackToast.classList.remove('visible');
+                successGif.classList.remove('visible');
+                failGif.classList.remove('visible');
+            }, duration);
+        }
+
+        let gameState = {
+            active: false,
+            score: 0,
+            playerColor: 0xef4444,
+            quality: 'HIGH',
+            camMode: 'ISO'
+        };
+
+        const NAMES = ["Depot-7", "Nova", "Jet", "Pixel", "Echo", "Comet", "Dash", "Vex", "Kite", "Orbit"];
+        const GREETINGS = ["Route clear!", "Package logged!", "Stay on schedule!", "Nice pace!", "Courier synced!", "Drop confirmed!", "Keep moving!"];
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x070b17);
+        scene.fog = new THREE.FogExp2(0x0a1020, 0.018);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0x9cc6ff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0x98f4ff, 1.15);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 50;
+        dirLight.shadow.camera.left = -20;
+        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.camera.top = 20;
+        dirLight.shadow.camera.bottom = -20;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.PointLight(0xff5cb8, 0.7, 40);
+        fillLight.position.set(-8, 8, -8);
+        scene.add(fillLight);
+
+        const beaconLight = new THREE.PointLight(0x19c8ff, 0.9, 45);
+        beaconLight.position.set(8, 10, 6);
+        scene.add(beaconLight);
+
+        const shaderUniforms = {
+            time: { value: 0 },
+            colorA: { value: new THREE.Color(0x182543) },
+            colorB: { value: new THREE.Color(0x050912) }
+        };
+        const floorGeo = new THREE.PlaneGeometry(100, 100);
+        const floorMatHigh = new THREE.ShaderMaterial({
+            uniforms: shaderUniforms,
+            vertexShader: document.getElementById('vertexShader').textContent,
+            fragmentShader: document.getElementById('fragmentShader').textContent
+        });
+        const floorMatLow = new THREE.MeshLambertMaterial({ color: 0x182033 });
+        
+        const floor = new THREE.Mesh(floorGeo, floorMatHigh);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const laneLines = new THREE.Group();
+        const lineGeo = new THREE.BoxGeometry(0.2, 0.01, 100);
+        const lineMatA = new THREE.MeshBasicMaterial({ color: 0x19c8ff, transparent: true, opacity: 0.24 });
+        const lineMatB = new THREE.MeshBasicMaterial({ color: 0xff5cb8, transparent: true, opacity: 0.18 });
+        [-20, -10, 0, 10, 20].forEach((x, index) => {
+            const lane = new THREE.Mesh(lineGeo, index % 2 === 0 ? lineMatA : lineMatB);
+            lane.position.set(x, 0.02, 0);
+            laneLines.add(lane);
+        });
+        const crossGeo = new THREE.BoxGeometry(100, 0.01, 0.2);
+        [-20, -10, 0, 10, 20].forEach((z, index) => {
+            const cross = new THREE.Mesh(crossGeo, index % 2 === 0 ? lineMatB : lineMatA);
+            cross.position.set(0, 0.02, z);
+            laneLines.add(cross);
+        });
+        scene.add(laneLines);
+
+        const playerGroup = new THREE.Group();
+        const playerGeo = typeof THREE.CapsuleGeometry === 'function'
+            ? new THREE.CapsuleGeometry(0.5, 1, 4, 8)
+            : new THREE.CylinderGeometry(0.5, 0.5, 2, 12, 1);
+        let playerMat = new THREE.MeshStandardMaterial({
+            color: gameState.playerColor,
+            emissive: gameState.playerColor,
+            emissiveIntensity: 0.35,
+            roughness: 0.35,
+            metalness: 0.25
+        });
+        const playerMesh = new THREE.Mesh(playerGeo, playerMat);
+        playerMesh.position.y = 1;
+        playerMesh.castShadow = true;
+        playerGroup.add(playerMesh);
+
+        const visorGeo = new THREE.BoxGeometry(0.6, 0.2, 0.3);
+        const visorMat = new THREE.MeshStandardMaterial({
+            color: 0x9ef8ff,
+            emissive: 0x3bd7ff,
+            emissiveIntensity: 0.7,
+            roughness: 0.15
+        });
+        const visor = new THREE.Mesh(visorGeo, visorMat);
+        visor.position.set(0, 1.3, 0.2);
+        playerGroup.add(visor);
+
+        const backpackGeo = new THREE.BoxGeometry(0.48, 0.6, 0.34);
+        const backpackMat = new THREE.MeshStandardMaterial({
+            color: 0x111a2c,
+            emissive: 0x253d66,
+            emissiveIntensity: 0.35,
+            roughness: 0.45,
+            metalness: 0.3
+        });
+        const backpack = new THREE.Mesh(backpackGeo, backpackMat);
+        backpack.position.set(0, 0.95, -0.28);
+        backpack.castShadow = true;
+        playerGroup.add(backpack);
+
+        const boosterGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.24, 12);
+        const boosterMat = new THREE.MeshStandardMaterial({
+            color: 0xffd76f,
+            emissive: 0xffa533,
+            emissiveIntensity: 0.65
+        });
+        const boosterL = new THREE.Mesh(boosterGeo, boosterMat);
+        boosterL.rotation.z = Math.PI / 2;
+        boosterL.position.set(-0.18, 0.82, -0.45);
+        playerGroup.add(boosterL);
+
+        const boosterR = boosterL.clone();
+        boosterR.position.x = 0.18;
+        playerGroup.add(boosterR);
+
+        const playerRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.88, 0.05, 8, 32),
+            new THREE.MeshBasicMaterial({ color: 0x6ee7ff, transparent: true, opacity: 0.55 })
+        );
+        playerRing.rotation.x = Math.PI / 2;
+        playerRing.position.y = 0.08;
+        playerGroup.add(playerRing);
+
+        scene.add(playerGroup);
+
+        const npcs = [];
+        const npcGroup = new THREE.Group();
+        scene.add(npcGroup);
+
+        const npcAccentPalette = [0x7ef9ff, 0xff8ed8, 0x8fff9d, 0xffcf66, 0xb19cff];
+
+        function createNpcMarker(color) {
+            const marker = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.24, 0.24, 0.1, 16),
+                new THREE.MeshStandardMaterial({
+                    color,
+                    emissive: color,
+                    emissiveIntensity: 0.8,
+                    transparent: true,
+                    opacity: 0.85
+                })
+            );
+            marker.position.set(0, 2.1, 0);
+            return marker;
+        }
+
+        function spawnNPC() {
+            const group = new THREE.Group();
+            const color = npcAccentPalette[Math.floor(Math.random() * npcAccentPalette.length)];
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0x273352,
+                emissive: color,
+                emissiveIntensity: 0.18,
+                roughness: 0.42,
+                metalness: 0.18
+            });
+            const mesh = new THREE.Mesh(playerGeo, mat);
+            mesh.position.y = 1;
+            mesh.scale.set(0.94, 0.95, 0.94);
+            mesh.castShadow = true;
+            group.add(mesh);
+
+            const v = new THREE.Mesh(visorGeo, visorMat.clone());
+            v.material.color.setHex(color);
+            v.material.emissive.setHex(color);
+            v.material.emissiveIntensity = 0.82;
+            v.position.set(0, 1.3, 0.2);
+            group.add(v);
+
+            const marker = createNpcMarker(color);
+            group.add(marker);
+
+            const x = (Math.random() - 0.5) * 40;
+            const z = (Math.random() - 0.5) * 40;
+            group.position.set(x, 0, z);
+
+            group.userData = {
+                name: NAMES[Math.floor(Math.random() * NAMES.length)] + "_" + Math.floor(Math.random()*99),
+                targetX: x,
+                targetZ: z,
+                speed: 0.02 + Math.random() * 0.03,
+                lastChat: 0,
+                met: false,
+                marker,
+                bobOffset: Math.random() * Math.PI * 2
+            };
+
+            npcGroup.add(group);
+            npcs.push(group);
+        }
+
+        for (let i = 0; i < 15; i++) spawnNPC();
+
+        const keys = { w: false, a: false, s: false, d: false };
+
+        function tryMoveKey(key) {
+            if (!gameState.active) return;
+            const lowerKey = key.toLowerCase();
+            if (!(lowerKey in keys)) return;
+            const movingOnAxis = (lowerKey === 'w' || lowerKey === 's')
+                ? keys.w || keys.s
+                : keys.a || keys.d;
+            if (movingOnAxis) {
+                audio.playSFX('blocked', 140);
+                flashFeedback({ message: 'Lane lock', success: false, duration: 900 });
+            }
+        }
+        const joystick = { active: false, dx: 0, dy: 0, originX: 0, originY: 0 };
+        const joyZone = document.getElementById('joystick-zone');
+        const joyKnob = document.getElementById('joystick-knob');
+
+        window.addEventListener('keydown', (e) => {
+            tryMoveKey(e.key);
+            if (e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = false;
+        });
+
+        joyZone.addEventListener('pointerdown', (e) => {
+            joystick.active = true;
+            joystick.originX = e.clientX;
+            joystick.originY = e.clientY;
+            joyKnob.style.transition = 'none';
+            joyZone.setPointerCapture(e.pointerId);
+        });
+        
+        joyZone.addEventListener('pointermove', (e) => {
+            if (!joystick.active) return;
+            const maxDist = 35;
+            let dx = e.clientX - joystick.originX;
+            let dy = e.clientY - joystick.originY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > maxDist) {
+                const ratio = maxDist / dist;
+                dx *= ratio;
+                dy *= ratio;
+            }
+            
+            joystick.dx = dx / maxDist;
+            joystick.dy = dy / maxDist;
+            
+            joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        });
+
+        const resetJoystick = () => {
+            joystick.active = false;
+            joystick.dx = 0;
+            joystick.dy = 0;
+            joyKnob.style.transition = 'transform 0.2s';
+            joyKnob.style.transform = 'translate(-50%, -50%)';
+        };
+        joyZone.addEventListener('pointerup', resetJoystick);
+        joyZone.addEventListener('pointercancel', resetJoystick);
+
+        function updatePlayer(time) {
+            const speed = 0.15;
+            let dx = 0;
+            let dz = 0;
+
+            if (keys.w) dz -= 1;
+            if (keys.s) dz += 1;
+            if (keys.a) dx -= 1;
+            if (keys.d) dx += 1;
+
+            if (joystick.active) {
+                dx += joystick.dx;
+                dz += joystick.dy;
+            }
+
+            const isMoving = dx !== 0 || dz !== 0;
+
+            if (isMoving) {
+                if (!joystick.active && Math.abs(dx) + Math.abs(dz) > 1) {
+                    dx *= 0.707;
+                    dz *= 0.707;
+                }
+
+                playerGroup.position.x += dx * speed;
+                playerGroup.position.z += dz * speed;
+
+                const angle = Math.atan2(dx, dz);
+                playerGroup.rotation.y = angle;
+
+                playerGroup.position.x = Math.max(-48, Math.min(48, playerGroup.position.x));
+                playerGroup.position.z = Math.max(-48, Math.min(48, playerGroup.position.z));
+            }
+
+            const pulse = time * 0.004;
+            playerRing.scale.setScalar(1 + Math.sin(pulse * 2.2) * 0.04);
+            playerRing.material.opacity = 0.38 + Math.sin(pulse * 2.2) * 0.1;
+            visor.material.emissiveIntensity = isMoving ? 1.05 : 0.72;
+            boosterL.material.emissiveIntensity = isMoving ? 1.1 : 0.62;
+            boosterR.material.emissiveIntensity = isMoving ? 1.1 : 0.62;
+            playerMesh.position.y = 1 + Math.sin(pulse * 3.6) * (isMoving ? 0.08 : 0.04);
+
+            if (gameState.camMode === 'ISO') {
+                camera.position.x += (playerGroup.position.x + 10 - camera.position.x) * 0.1;
+                camera.position.z += (playerGroup.position.z + 10 - camera.position.z) * 0.1;
+                camera.position.y = 15;
+                camera.lookAt(playerGroup.position);
+            } else {
+                camera.position.x += (playerGroup.position.x - camera.position.x) * 0.1;
+                camera.position.z += (playerGroup.position.z - camera.position.z) * 0.1;
+                camera.position.y = 30;
+                camera.lookAt(playerGroup.position);
+            }
+        }
+
+        function updateNPCs(time) {
+            npcs.forEach(npc => {
+                const dx = npc.userData.targetX - npc.position.x;
+                const dz = npc.userData.targetZ - npc.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist < 0.5) {
+                    npc.userData.targetX = (Math.random() - 0.5) * 40;
+                    npc.userData.targetZ = (Math.random() - 0.5) * 40;
+                } else {
+                    npc.position.x += (dx / dist) * npc.userData.speed;
+                    npc.position.z += (dz / dist) * npc.userData.speed;
+                    npc.rotation.y = Math.atan2(dx, dz);
+                }
+
+                npc.userData.marker.position.y = 2.08 + Math.sin(time * 0.004 + npc.userData.bobOffset) * 0.12;
+                npc.userData.marker.material.opacity = 0.56 + Math.sin(time * 0.004 + npc.userData.bobOffset) * 0.18;
+
+                const distToPlayer = npc.position.distanceTo(playerGroup.position);
+                if (distToPlayer < 3) {
+                    if (!npc.userData.met) {
+                        npc.userData.met = true;
+                        gameState.score++;
+                        document.getElementById('score').innerText = gameState.score;
+                        audio.playSFX('collect');
+                        audio.playSFX('chime', 180);
+                        flashFeedback({ message: `Drop synced ${gameState.score}`, success: true, duration: 1500 });
+                        showChat(npc, `Drop-off synced: ${npc.userData.name}`);
+                    } else if (time - npc.userData.lastChat > 5000 && Math.random() < 0.01) {
+                        npc.userData.lastChat = time;
+                        showChat(npc, GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
+                    }
+                } else {
+                    npc.userData.met = false;
+                }
+            });
+        }
+
+        const chatLayer = document.getElementById('chat-layer');
+        function showChat(target3D, text) {
+            const bubble = document.createElement('div');
+            bubble.className = 'chat-bubble';
+            bubble.innerText = text;
+            chatLayer.appendChild(bubble);
+
+            const updatePos = () => {
+                if (!gameState.active || !bubble.parentNode) return;
+                
+                const vec = target3D.position.clone();
+                vec.y += 2.5;
+                vec.project(camera);
+
+                const x = (vec.x * .5 + .5) * window.innerWidth;
+                const y = (-(vec.y * .5) + .5) * window.innerHeight;
+
+                bubble.style.left = `${x}px`;
+                bubble.style.top = `${y}px`;
+                
+                if (vec.z > 1) bubble.style.display = 'none';
+                else bubble.style.display = 'block';
+
+                requestAnimationFrame(updatePos);
+            };
+
+            requestAnimationFrame(() => {
+                bubble.classList.add('visible');
+                updatePos();
+            });
+
+            setTimeout(() => {
+                bubble.classList.remove('visible');
+                setTimeout(() => bubble.remove(), 300);
+            }, 2500);
+        }
+
+        function gameLoop(time) {
+            if (!gameState.active) return;
+            
+            shaderUniforms.time.value = time * 0.001;
+            laneLines.rotation.z = Math.sin(time * 0.0001) * 0.01;
+            fillLight.intensity = 0.62 + Math.sin(time * 0.0018) * 0.12;
+            beaconLight.intensity = 0.82 + Math.cos(time * 0.0014) * 0.14;
+
+            updatePlayer(time);
+            updateNPCs(time);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateHudLabels() {
+            document.querySelector('#quality-btn span:last-child').innerText = `Quality: ${gameState.quality}`;
+            document.querySelector('#cam-btn span:last-child').innerText = `Cam: ${gameState.camMode === 'ISO' ? 'Iso' : 'Top'}`;
+        }
+
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('is-selected'));
+                e.currentTarget.classList.add('is-selected');
+                gameState.playerColor = parseInt(e.currentTarget.dataset.color);
+            });
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            playerMat.color.setHex(gameState.playerColor);
+            playerMat.emissive.setHex(gameState.playerColor);
+
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            audio.unlock();
+            audio.playBGM();
+            audio.playSFX('click');
+            audio.playSFX('mode', 180);
+            flashFeedback({ message: 'Route live', success: true, duration: 1400 });
+            gameState.active = true;
+            updateHudLabels();
+            gameLoop(0);
+        });
+
+        document.getElementById('quality-btn').addEventListener('click', () => {
+            if (gameState.quality === 'HIGH') {
+                gameState.quality = 'LOW';
+                renderer.shadowMap.enabled = false;
+                floor.material = floorMatLow;
+                scene.fog = null;
+                fillLight.intensity = 0.45;
+                beaconLight.intensity = 0.58;
+            } else {
+                gameState.quality = 'HIGH';
+                renderer.shadowMap.enabled = true;
+                floor.material = floorMatHigh;
+                scene.fog = new THREE.FogExp2(0x0a1020, 0.018);
+                fillLight.intensity = 0.7;
+                beaconLight.intensity = 0.9;
+            }
+            audio.playSFX('mode');
+            flashFeedback({ message: `Render ${gameState.quality}`, success: true, duration: 1000 });
+            floor.material.needsUpdate = true;
+            updateHudLabels();
+        });
+
+        document.getElementById('cam-btn').addEventListener('click', () => {
+            if (gameState.camMode === 'ISO') {
+                gameState.camMode = 'TOP';
+            } else {
+                gameState.camMode = 'ISO';
+            }
+            audio.playSFX('click');
+            flashFeedback({ message: `Camera ${gameState.camMode}`, success: true, duration: 1000 });
+            updateHudLabels();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                audio.pauseBGM();
+            } else if (gameState.active) {
+                audio.playBGM();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    });
+    </script>
+</body>
+</html>

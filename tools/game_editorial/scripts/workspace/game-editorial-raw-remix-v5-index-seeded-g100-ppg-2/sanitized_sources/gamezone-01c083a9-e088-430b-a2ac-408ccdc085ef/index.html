@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Hex Siege</title>
+    <!-- [agent-note][stage3] resolved-font: title=Audiowide | ui=Rajdhani | accent=Press Start 2P from catalogs/fonts.json -->
+    <!-- [agent-note][stage3] resolved-audio: bgm/ui/capture/win/lose from catalogs/audios.json -->
+    <!-- [agent-note][stage3] resolved-gif: capture+endgame feedback from catalogs/gifs.json -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Audiowide&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root {
+            --bg-deep: #090816;
+            --bg-mid: #151332;
+            --panel: rgba(18, 20, 44, 0.88);
+            --panel-strong: rgba(31, 34, 72, 0.95);
+            --text-color: #eef4ff;
+            --text-dim: #9ab2ff;
+            --accent-cyan: #78f6ff;
+            --accent-blue: #5ca4ff;
+            --accent-pink: #ff69b4;
+            --accent-gold: #ffd447;
+            --danger: #ff557d;
+            --player-core: #ff5f87;
+            --player-glow: #ffb1ce;
+            --enemy-core: #7a8ca8;
+            --enemy-glow: #d9e4ff;
+            --socket-fill: #131833;
+            --socket-ring: rgba(120, 246, 255, 0.2);
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(120, 246, 255, 0.12), transparent 30%),
+                linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-deep) 100%);
+            font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            color: var(--text-color);
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::before {
+            background:
+                radial-gradient(circle at 20% 18%, rgba(255, 105, 180, 0.16), transparent 18%),
+                radial-gradient(circle at 78% 22%, rgba(120, 246, 255, 0.14), transparent 18%),
+                radial-gradient(circle at 50% 80%, rgba(92, 164, 255, 0.12), transparent 28%);
+        }
+
+        body::after {
+            opacity: 0.12;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .btn,
+        #sound-toggle {
+            touch-action: manipulation;
+        }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: calc(env(safe-area-inset-top) + 16px) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 12px);
+            z-index: 10;
+        }
+
+        /* Wood/Parchment Cards */
+        .card {
+            background:
+                linear-gradient(180deg, rgba(30, 33, 70, 0.96) 0%, rgba(12, 14, 34, 0.96) 100%);
+            border-radius: 18px;
+            box-shadow:
+                0 18px 40px rgba(0,0,0,0.48),
+                0 0 28px rgba(120, 246, 255, 0.18),
+                inset 0 0 24px rgba(255,255,255,0.06);
+            border: 2px solid rgba(120, 246, 255, 0.46);
+            padding: 30px 22px;
+            text-align: center;
+            pointer-events: auto;
+            position: relative;
+            backdrop-filter: blur(8px);
+        }
+        .card::before {
+            content: '◉';
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            color: var(--accent-cyan);
+            font-size: 14px;
+            text-shadow: 0 0 10px rgba(120, 246, 255, 0.75);
+        }
+        .card::after {
+            content: '';
+            position: absolute;
+            top: 8px; left: 8px; right: 8px; bottom: 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            pointer-events: none;
+        }
+
+        .btn {
+            background: linear-gradient(180deg, rgba(58, 76, 158, 0.95) 0%, rgba(26, 35, 89, 0.98) 100%);
+            color: var(--text-color);
+            border: 2px solid rgba(120, 246, 255, 0.45);
+            border-radius: 10px;
+            padding: 15px 18px;
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-weight: 400;
+            font-size: 14px;
+            line-height: 1.5;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 rgba(7, 10, 32, 0.95), 0 0 18px rgba(92, 164, 255, 0.25);
+            transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+            display: inline-block;
+            margin-top: 22px;
+            outline: none;
+            width: 100%;
+            text-shadow: 0 0 6px rgba(120, 246, 255, 0.3);
+        }
+        .btn:active {
+            transform: translateY(4px);
+            filter: brightness(1.08);
+            box-shadow: 0 0 0 rgba(7, 10, 32, 0.95), inset 0 2px 5px rgba(0,0,0,0.45);
+        }
+        .btn-primary {
+            background: linear-gradient(180deg, #ffe26c 0%, #ff7b54 55%, #ff4d8d 100%);
+            color: #171327;
+            border-color: rgba(255,255,255,0.38);
+            box-shadow: 0 4px 0 #81254d, 0 0 20px rgba(255, 105, 180, 0.34);
+            text-shadow: none;
+        }
+        .btn-primary:active {
+            box-shadow: 0 0 0 #81254d, inset 0 2px 5px rgba(0,0,0,0.25);
+        }
+
+        /* HUD */
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            pointer-events: none;
+        }
+        
+        .score-pill {
+            background: linear-gradient(180deg, rgba(24, 29, 63, 0.92), rgba(11, 14, 34, 0.95));
+            border: 1px solid rgba(120, 246, 255, 0.35);
+            border-radius: 12px;
+            padding: 8px 14px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 58px;
+            color: #FFF;
+            backdrop-filter: blur(6px);
+        }
+        
+        .score-val {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-weight: 400;
+            font-size: 18px;
+            line-height: 1.2;
+            text-shadow: 0 0 8px rgba(255,255,255,0.2);
+        }
+        .score-label {
+            font-size: 9px;
+            font-weight: 700;
+            opacity: 0.88;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+        }
+
+        #turn-indicator {
+            background: linear-gradient(180deg, rgba(35, 42, 89, 0.96), rgba(14, 18, 42, 0.96));
+            padding: 9px 16px;
+            border-radius: 18px;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.22);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(120, 246, 255, 0.4);
+            font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(2, 4, 18, 0.58);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            pointer-events: auto;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(6px);
+        }
+        .hidden { 
+            opacity: 0; 
+            pointer-events: none !important; 
+            visibility: hidden;
+        }
+
+        h1 {
+            font-family: 'Audiowide', 'Trebuchet MS', sans-serif;
+            font-size: clamp(28px, 10vw, 52px);
+            margin: 0;
+            color: #fbfdff;
+            letter-spacing: 1px;
+            line-height: 1;
+            text-transform: uppercase;
+            text-shadow: 0 0 18px rgba(120, 246, 255, 0.34);
+        }
+        
+        .subtitle {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 10px;
+            line-height: 1.6;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 12px 0 22px;
+            color: var(--accent-cyan);
+        }
+
+        .rules {
+            text-align: left;
+            margin-bottom: 20px;
+            font-size: 16px;
+            font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+            background: rgba(120, 246, 255, 0.07);
+            padding: 14px;
+            border-radius: 10px;
+            color: #dfe7ff;
+            line-height: 1.55;
+            border: 1px solid rgba(120, 246, 255, 0.18);
+            box-shadow: inset 0 0 14px rgba(120, 246, 255, 0.06);
+        }
+
+        .rules strong {
+            color: #ffe26c;
+        }
+
+        /* Sound Toggle */
+        #sound-toggle {
+            position: absolute;
+            top: calc(env(safe-area-inset-top) + 16px);
+            right: calc(env(safe-area-inset-right) + 12px);
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(34, 39, 84, 0.96), rgba(13, 16, 37, 0.98));
+            border: 1px solid rgba(120, 246, 255, 0.42);
+            color: var(--accent-cyan);
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.28);
+            pointer-events: auto;
+            z-index: 30;
+        }
+
+        /* Toast */
+        .toast {
+            position: absolute;
+            bottom: 25%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(12, 15, 38, 0.96);
+            color: #FFF;
+            padding: 12px 16px;
+            font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            border-radius: 10px;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.38);
+            animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            white-space: nowrap;
+            border: 1px solid rgba(120, 246, 255, 0.35);
+            max-width: calc(100vw - 32px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @keyframes popUp {
+            from { transform: translateX(-50%) scale(0.8); opacity: 0; }
+            to { transform: translateX(-50%) scale(1); opacity: 1; }
+        }
+
+        .feedback-gif {
+            position: absolute;
+            left: 50%;
+            bottom: calc(env(safe-area-inset-bottom) + 88px);
+            transform: translateX(-50%) scale(0.9);
+            width: min(42vw, 160px);
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 2px solid rgba(120, 246, 255, 0.42);
+            box-shadow: 0 16px 34px rgba(0,0,0,0.38), 0 0 24px rgba(120, 246, 255, 0.24);
+            background: rgba(8, 12, 27, 0.6);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 16;
+        }
+
+        .feedback-gif.show {
+            opacity: 0.95;
+            transform: translateX(-50%) scale(1);
+        }
+
+        .feedback-gif.endgame {
+            top: calc(env(safe-area-inset-top) + 84px);
+            bottom: auto;
+            right: calc(env(safe-area-inset-right) + 10px);
+            left: auto;
+            transform: scale(0.9);
+            width: min(30vw, 120px);
+        }
+
+        .feedback-gif.endgame.show {
+            transform: scale(1);
+        }
+
+        @media (max-width: 480px) {
+            #hud {
+                padding: 0 4px;
+                gap: 8px;
+            }
+
+            .score-pill {
+                padding: 8px 10px;
+                min-width: 52px;
+            }
+
+            .score-val {
+                font-size: 15px;
+            }
+
+            .score-label {
+                font-size: 8px;
+            }
+
+            #turn-indicator {
+                padding: 8px 10px;
+                font-size: 11px;
+                max-width: 38vw;
+            }
+
+            .card {
+                padding: 24px 16px;
+            }
+
+            .rules {
+                font-size: 13px;
+            }
+
+            .btn {
+                font-size: 12px;
+                padding: 14px 12px;
+            }
+
+            .toast {
+                white-space: normal;
+                text-align: center;
+                width: calc(100vw - 40px);
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div class="score-pill">
+                <span class="score-label">RED CLAN</span>
+                <span id="score-p" class="score-val" style="color: #D32F2F;">6</span>
+            </div>
+            <div id="turn-indicator">RED CLAN TURN</div>
+            <div class="score-pill">
+                <span class="score-label">IRON CLAN</span>
+                <span id="score-ai" class="score-val" style="color: #9E9E9E;">6</span>
+            </div>
+        </div>
+
+        <button id="sound-toggle" class="hidden">🔊</button>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen">
+            <div class="card" style="max-width: 320px; width: 90%;">
+                <h1>Hex Siege</h1>
+                <div class="subtitle">Clan board duel</div>
+                
+                <div class="rules">
+                    <strong>GOAL:</strong> Surround rival stones to break their line.<br>
+                    <strong>RULE:</strong> Never end a move with 3 allied stones in a row.<br>
+                    <strong>WIN:</strong> Cut the Iron Clan down to 2 stones.
+                </div>
+
+                <button id="btn-start" class="btn btn-primary">Begin Siege</button>
+            </div>
+        </div>
+
+        <!-- Game Over -->
+        <div id="game-over-screen" class="screen hidden">
+            <div class="card" style="max-width: 320px; width: 90%;">
+                <h1 style="font-size: 42px; margin-bottom: 10px;" id="go-title">SIEGE WON</h1>
+                <p id="go-msg" style="margin-bottom: 30px; color: #dfe7ff; font-size: 16px; font-weight: bold;">The Iron Clan line collapsed.</p>
+                <button id="btn-restart" class="btn btn-primary">Fight Again</button>
+            </div>
+        </div>
+
+        <img id="capture-gif" class="feedback-gif" alt="Battle impact reaction" />
+        <img id="endgame-gif" class="feedback-gif endgame" alt="Endgame celebration reaction" />
+
+        <div id="toast-area"></div>
+    </div>
+
+    <script>
+        /* 
+         * Hex Siege
+         * Clan duel framing over the original abstract board logic
+         */
+
+        const CONFIG = {
+            boardRadius: 3,
+            hexSizeDivisor: 14, 
+            animSpeed: 0.25, 
+            aiDelay: 800,
+            colors: {
+                spaceBase: '#090816',
+                spaceGlow: '#1a1f4f',
+                socketFill: '#131833',
+                socketRing: 'rgba(120, 246, 255, 0.22)',
+                highlight: 'rgba(120, 246, 255, 0.26)',
+                validStroke: '#78F6FF',
+                error: '#FF557D',
+                playerPrimary: '#FF5F87',
+                playerSecondary: '#FFD447',
+                aiPrimary: '#7A8CA8',
+                aiSecondary: '#78F6FF',
+                titleGlow: 'rgba(255, 212, 71, 0.22)'
+            }
+        };
+
+        // --- MEDIA MAPPING ---
+        const MEDIA = {
+            fonts: {
+                primary: 'Audiowide',
+                secondary: 'Rajdhani',
+                accent: 'Press Start 2P'
+            },
+            audio: {
+                bgm: 'https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3',
+                menuOpen: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3',
+                start: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3',
+                select: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3',
+                move: 'https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3',
+                blocked: 'https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3',
+                capture: 'https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3',
+                playerLoss: 'https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3',
+                enemyLoss: 'https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_defeat_02.mp3',
+                win: 'https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3',
+                lose: 'https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3',
+                restart: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3'
+            },
+            gifs: {
+                capture: 'https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp',
+                endgameWin: 'https://i.giphy.com/ye080RbECtcCnkrSyD.webp',
+                endgameLose: 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp'
+            }
+        };
+
+        // --- AUDIO SYSTEM ---
+        const AudioSys = {
+            enabled: true,
+            unlocked: false,
+            sfx: {},
+            bgm: null,
+            lastPlayedAt: {},
+            preload() {
+                Object.entries(MEDIA.audio).forEach(([key, url]) => {
+                    if (key === 'bgm') {
+                        if (!this.bgm) {
+                            const audio = new Audio(url);
+                            audio.loop = true;
+                            audio.preload = 'auto';
+                            audio.volume = 0.2;
+                            this.bgm = audio;
+                        }
+                        return;
+                    }
+                    if (!this.sfx[key]) {
+                        const audio = new Audio(url);
+                        audio.preload = 'auto';
+                        audio.volume = ['capture', 'win', 'lose'].includes(key) ? 0.42 : 0.32;
+                        this.sfx[key] = audio;
+                    }
+                });
+            },
+            init() {
+                if (this.unlocked) return;
+                this.unlocked = true;
+                this.preload();
+                this.startLoop();
+            },
+            startLoop() {
+                if (!this.enabled || !this.bgm) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            },
+            stopLoop() {
+                if (!this.bgm) return;
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            },
+            pauseLoop() {
+                if (!this.bgm) return;
+                this.bgm.pause();
+            },
+            resumeLoop() {
+                if (!this.enabled || !this.unlocked || !this.bgm) return;
+                this.bgm.play().catch(() => {});
+            },
+            toggle() {
+                this.enabled = !this.enabled;
+                if (!this.enabled) {
+                    this.pauseLoop();
+                } else if (this.unlocked) {
+                    this.resumeLoop();
+                }
+                return this.enabled;
+            },
+            play(type, minGap = 90) {
+                if (!this.enabled || !this.unlocked || !this.sfx[type]) return;
+                const now = performance.now();
+                if ((this.lastPlayedAt[type] || 0) + minGap > now) return;
+                this.lastPlayedAt[type] = now;
+
+                const base = this.sfx[type];
+                try {
+                    base.pause();
+                    base.currentTime = 0;
+                    base.play().catch(() => {});
+                } catch (_) {}
+            }
+        };
+
+        // --- GIF FEEDBACK ---
+        const GifSys = {
+            init() {
+                this.captureEl = document.getElementById('capture-gif');
+                this.endgameEl = document.getElementById('endgame-gif');
+                this.captureTimer = null;
+                this.endgameTimer = null;
+            },
+            showCapture() {
+                if (!this.captureEl) return;
+                this.captureEl.src = MEDIA.gifs.capture;
+                this.captureEl.classList.add('show');
+                clearTimeout(this.captureTimer);
+                this.captureTimer = setTimeout(() => {
+                    this.captureEl.classList.remove('show');
+                }, 1350);
+            },
+            showEndgame(win) {
+                if (!this.endgameEl) return;
+                this.endgameEl.src = win ? MEDIA.gifs.endgameWin : MEDIA.gifs.endgameLose;
+                this.endgameEl.classList.add('show');
+                clearTimeout(this.endgameTimer);
+                this.endgameTimer = setTimeout(() => {
+                    this.endgameEl.classList.remove('show');
+                }, 3200);
+            },
+            clearEndgame() {
+                if (!this.endgameEl) return;
+                this.endgameEl.classList.remove('show');
+            }
+        };
+
+        // --- MATH HELPERS ---
+        const HEX_DIRS = [
+            {q: 1, r: 0}, {q: 0, r: 1}, {q: -1, r: 1},
+            {q: -1, r: 0}, {q: 0, r: -1}, {q: 1, r: -1}
+        ];
+
+        function hexDist(a, b) {
+            return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;
+        }
+
+        function hexRound(q, r) {
+            let s = -q - r;
+            let rq = Math.round(q);
+            let rr = Math.round(r);
+            let rs = Math.round(s);
+            const q_diff = Math.abs(rq - q);
+            const r_diff = Math.abs(rr - r);
+            const s_diff = Math.abs(rs - s);
+            if (q_diff > r_diff && q_diff > s_diff) rq = -rr - rs;
+            else if (r_diff > s_diff) rr = -rq - rs;
+            return {q: rq, r: rr};
+        }
+
+        // --- GAME ENGINE ---
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+                
+                this.bgCanvas = document.createElement('canvas');
+                this.bgCtx = this.bgCanvas.getContext('2d');
+                this.pieceCanvasP1 = document.createElement('canvas');
+                this.pieceCanvasAI = document.createElement('canvas');
+
+                this.width = 0;
+                this.height = 0;
+                this.hexSize = 0;
+                
+                this.state = {
+                    pieces: [],
+                    turn: 'player', 
+                    selectedId: null,
+                    validMoves: [],
+                    animating: false,
+                    gameOver: false
+                };
+
+                // Timer tracking for stability
+                this.aiTimeout = null;
+                this.animTimeout = null;
+
+                this.lastTime = 0;
+
+                this.resize = this.resize.bind(this);
+                this.loop = this.loop.bind(this);
+                this.handleInput = this.handleInput.bind(this);
+
+                window.addEventListener('resize', this.resize);
+                this.canvas.addEventListener('pointerdown', this.handleInput);
+                
+                document.getElementById('btn-start').addEventListener('click', () => this.start());
+                document.getElementById('btn-restart').addEventListener('click', () => this.restart());
+                document.getElementById('sound-toggle').addEventListener('click', (e) => {
+                    const on = AudioSys.toggle();
+                    e.target.innerText = on ? '🔊' : '🔇';
+                    e.target.style.opacity = on ? 1 : 0.5;
+                });
+
+                GifSys.init();
+                AudioSys.preload();
+                AudioSys.play('menuOpen');
+                this.resize();
+                requestAnimationFrame(this.loop);
+            }
+
+            resize() {
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                this.bgCanvas.width = this.width;
+                this.bgCanvas.height = this.height;
+
+                this.hexSize = Math.min(this.width, this.height) / CONFIG.hexSizeDivisor;
+
+                this.prerenderAssets();
+                
+                if (this.state.pieces.length > 0) {
+                    this.state.pieces.forEach(p => {
+                        const pos = this.hexToPixel(p.q, p.r);
+                        p.x = pos.x;
+                        p.y = pos.y;
+                    });
+                }
+            }
+
+            prerenderAssets() {
+                const w = this.width;
+                const h = this.height;
+                const ctx = this.bgCtx;
+                
+                // Neon arcade sky
+                const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+                bgGrad.addColorStop(0, '#171a3d');
+                bgGrad.addColorStop(0.45, '#0f1330');
+                bgGrad.addColorStop(1, CONFIG.colors.spaceBase);
+                ctx.fillStyle = bgGrad;
+                ctx.fillRect(0, 0, w, h);
+
+                // Soft aurora glow
+                const aurora = ctx.createRadialGradient(w * 0.5, h * 0.28, h * 0.08, w * 0.5, h * 0.28, h * 0.6);
+                aurora.addColorStop(0, 'rgba(120, 246, 255, 0.24)');
+                aurora.addColorStop(0.35, 'rgba(92, 164, 255, 0.12)');
+                aurora.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = aurora;
+                ctx.fillRect(0, 0, w, h);
+
+                // Starlight field
+                for (let i = 0; i < 90; i++) {
+                    const sx = Math.random() * w;
+                    const sy = Math.random() * h * 0.9;
+                    const sr = Math.random() * 1.7 + 0.4;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+                    ctx.fillStyle = i % 3 === 0 ? 'rgba(255, 212, 71, 0.7)' : 'rgba(255,255,255,0.62)';
+                    ctx.fill();
+                }
+
+                // Neon arena ring behind board
+                const arena = ctx.createRadialGradient(w/2, h/2, h*0.12, w/2, h/2, h*0.5);
+                arena.addColorStop(0, 'rgba(255,105,180,0.14)');
+                arena.addColorStop(0.55, 'rgba(92,164,255,0.10)');
+                arena.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = arena;
+                ctx.fillRect(0, 0, w, h);
+
+                // Vignette
+                const grad = ctx.createRadialGradient(w/2, h/2, h*0.3, w/2, h/2, h*0.82);
+                grad.addColorStop(0, 'rgba(0,0,0,0)');
+                grad.addColorStop(1, 'rgba(2, 4, 18, 0.58)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+
+                // Draw Sockets
+                for (let q = -CONFIG.boardRadius; q <= CONFIG.boardRadius; q++) {
+                    let r1 = Math.max(-CONFIG.boardRadius, -q - CONFIG.boardRadius);
+                    let r2 = Math.min(CONFIG.boardRadius, -q + CONFIG.boardRadius);
+                    for (let r = r1; r <= r2; r++) {
+                        const pos = this.hexToPixel(q, r);
+                        this.drawSocketToContext(ctx, pos.x, pos.y);
+                    }
+                }
+
+                // Prerender Checkers Pieces
+                const pSize = Math.ceil(this.hexSize * 2);
+                this.pieceCanvasP1.width = pSize;
+                this.pieceCanvasP1.height = pSize;
+                this.pieceCanvasAI.width = pSize;
+                this.pieceCanvasAI.height = pSize;
+
+                this.drawPieceSprite(this.pieceCanvasP1.getContext('2d'), pSize/2, pSize/2, 'player');
+                this.drawPieceSprite(this.pieceCanvasAI.getContext('2d'), pSize/2, pSize/2, 'ai');
+            }
+
+            drawSocketToContext(ctx, x, y) {
+                const size = this.hexSize * 0.85;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI*2);
+                ctx.fillStyle = CONFIG.colors.socketFill;
+                ctx.fill();
+
+                const ring = ctx.createRadialGradient(x, y, size * 0.15, x, y, size);
+                ring.addColorStop(0, 'rgba(255,255,255,0.02)');
+                ring.addColorStop(1, CONFIG.colors.socketRing);
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI*2);
+                ctx.fillStyle = ring;
+                ctx.fill();
+                
+                ctx.save();
+                ctx.clip();
+                ctx.beginPath();
+                ctx.arc(x + size*0.16, y + size*0.16, size, 0, Math.PI*2);
+                ctx.strokeStyle = "rgba(0,0,0,0.45)";
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(x - size*0.1, y - size*0.14, size * 0.95, 0, Math.PI*2);
+                ctx.strokeStyle = "rgba(255,255,255,0.16)";
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.beginPath();
+                ctx.arc(x, y, size * 0.72, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(120, 246, 255, 0.15)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            drawPieceSprite(ctx, x, y, type) {
+                const r = this.hexSize * 0.75;
+                const isPlayer = type === 'player';
+                const outer = isPlayer ? CONFIG.colors.playerPrimary : CONFIG.colors.aiPrimary;
+                const inner = isPlayer ? CONFIG.colors.playerSecondary : CONFIG.colors.aiSecondary;
+                const shadow = isPlayer ? 'rgba(255, 95, 135, 0.34)' : 'rgba(120, 246, 255, 0.22)';
+
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                
+                // Drop shadow
+                ctx.beginPath();
+                ctx.ellipse(x, y + r * 0.18, r * 0.94, r * 0.42, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.42)';
+                ctx.fill();
+
+                // Aura
+                const aura = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.3);
+                aura.addColorStop(0, shadow);
+                aura.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.beginPath();
+                ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+                ctx.fillStyle = aura;
+                ctx.fill();
+
+                // Main orb
+                const bodyGrad = ctx.createRadialGradient(x - r * 0.28, y - r * 0.32, r * 0.18, x, y, r);
+                bodyGrad.addColorStop(0, '#ffffff');
+                bodyGrad.addColorStop(0.18, inner);
+                bodyGrad.addColorStop(0.62, outer);
+                bodyGrad.addColorStop(1, 'rgba(9, 8, 22, 0.95)');
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bodyGrad;
+                ctx.fill();
+
+                // Neon rim
+                ctx.beginPath();
+                ctx.arc(x, y, r * 0.94, 0, Math.PI * 2);
+                ctx.strokeStyle = isPlayer ? 'rgba(255, 205, 224, 0.95)' : 'rgba(213, 243, 255, 0.92)';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // Faceplate ring
+                ctx.beginPath();
+                ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(14, 18, 42, 0.75)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Character eyes
+                const eyeY = y - r * 0.12;
+                const eyeOffset = r * 0.22;
+                const eyeRadius = r * 0.1;
+                ctx.beginPath();
+                ctx.arc(x - eyeOffset, eyeY, eyeRadius, 0, Math.PI * 2);
+                ctx.arc(x + eyeOffset, eyeY, eyeRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(8, 10, 26, 0.88)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(x - eyeOffset - eyeRadius * 0.2, eyeY - eyeRadius * 0.2, eyeRadius * 0.35, 0, Math.PI * 2);
+                ctx.arc(x + eyeOffset - eyeRadius * 0.2, eyeY - eyeRadius * 0.2, eyeRadius * 0.35, 0, Math.PI * 2);
+                ctx.fillStyle = isPlayer ? 'rgba(255, 250, 180, 0.9)' : 'rgba(120, 246, 255, 0.9)';
+                ctx.fill();
+
+                // Mouth / expression
+                ctx.beginPath();
+                if (isPlayer) {
+                    ctx.arc(x, y + r * 0.08, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI, false);
+                } else {
+                    ctx.arc(x, y + r * 0.18, r * 0.22, 1.15 * Math.PI, 1.85 * Math.PI, true);
+                }
+                ctx.strokeStyle = 'rgba(14, 18, 42, 0.9)';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // Crest detail
+                ctx.beginPath();
+                ctx.moveTo(x, y - r * 0.78);
+                ctx.lineTo(x + r * 0.16, y - r * 0.42);
+                ctx.lineTo(x - r * 0.16, y - r * 0.42);
+                ctx.closePath();
+                ctx.fillStyle = isPlayer ? 'rgba(255, 212, 71, 0.95)' : 'rgba(120, 246, 255, 0.95)';
+                ctx.fill();
+
+                // Specular sweep
+                const grad = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+                grad.addColorStop(0, 'rgba(255,255,255,0.24)');
+                grad.addColorStop(0.4, 'rgba(255,255,255,0.02)');
+                grad.addColorStop(1, 'rgba(0,0,0,0.25)');
+                
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI*2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+            }
+
+            start() {
+                AudioSys.init();
+                AudioSys.play('start', 0);
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('hud').classList.remove('hidden');
+                document.getElementById('sound-toggle').classList.remove('hidden');
+                setTimeout(() => document.getElementById('start-screen').style.display = 'none', 300);
+                this.initBoard();
+            }
+
+            restart() {
+                AudioSys.play('restart', 0);
+                GifSys.clearEndgame();
+                document.getElementById('game-over-screen').classList.add('hidden');
+                setTimeout(() => document.getElementById('game-over-screen').style.display = 'none', 300);
+                document.getElementById('hud').classList.remove('hidden');
+                this.initBoard();
+            }
+
+            initBoard() {
+                // Clear any pending AI or animations from previous game
+                if(this.aiTimeout) clearTimeout(this.aiTimeout);
+                if(this.animTimeout) clearTimeout(this.animTimeout);
+
+                this.state.pieces = [];
+                this.state.turn = 'player';
+                this.state.selectedId = null;
+                this.state.validMoves = [];
+                this.state.animating = false;
+                this.state.gameOver = false;
+
+                // Initial positions
+                const pStart = [{q:0, r:3}, {q:-1, r:3}, {q:1, r:2}, {q:-2, r:3}, {q:2, r:1}, {q:-3, r:3}];
+                const aiStart = [{q:0, r:-3}, {q:1, r:-3}, {q:-1, r:-2}, {q:2, r:-3}, {q:-2, r:-1}, {q:3, r:-3}];
+
+                let idCounter = 0;
+                pStart.forEach(p => this.state.pieces.push({
+                    id: idCounter++, q: p.q, r: p.r, team: 'player', 
+                    x: 0, y: 0
+                }));
+                aiStart.forEach(p => this.state.pieces.push({
+                    id: idCounter++, q: p.q, r: p.r, team: 'ai', 
+                    x: 0, y: 0
+                }));
+
+                // Set initial visual positions
+                this.state.pieces.forEach(p => {
+                    const pos = this.hexToPixel(p.q, p.r);
+                    p.x = pos.x;
+                    p.y = pos.y;
+                });
+
+                this.updateUI();
+            }
+
+            getPieceAt(q, r) {
+                return this.state.pieces.find(p => p.q === q && p.r === r);
+            }
+
+            isValidHex(q, r) {
+                return hexDist({q:0, r:0}, {q, r}) <= CONFIG.boardRadius;
+            }
+
+            checkLineOf3(q, r, team, ignoreId) {
+                const axes = [{dq: 1, dr: 0}, {dq: 0, dr: 1}, {dq: 1, dr: -1}];
+                for (let axis of axes) {
+                    let count = 1; 
+                    for (let i = 1; i <= 2; i++) {
+                        const p = this.getPieceAt(q + axis.dq*i, r + axis.dr*i);
+                        if (p && p.team === team && p.id !== ignoreId) count++; else break;
+                    }
+                    for (let i = 1; i <= 2; i++) {
+                        const p = this.getPieceAt(q - axis.dq*i, r - axis.dr*i);
+                        if (p && p.team === team && p.id !== ignoreId) count++; else break;
+                    }
+                    if (count >= 3) return true;
+                }
+                return false;
+            }
+
+            getMoves(piece) {
+                let moves = [];
+                const isCenter = (piece.q === 0 && piece.r === 0);
+                const range = isCenter ? CONFIG.boardRadius * 2 : 1;
+
+                HEX_DIRS.forEach(d => {
+                    for (let k = 1; k <= range; k++) {
+                        const tq = piece.q + d.q * k;
+                        const tr = piece.r + d.r * k;
+                        
+                        if (!this.isValidHex(tq, tr)) break;
+                        if (this.getPieceAt(tq, tr)) break; 
+
+                        if (!this.checkLineOf3(tq, tr, piece.team, piece.id)) {
+                            moves.push({q: tq, r: tr});
+                        }
+                        if (!isCenter) break; 
+                    }
+                });
+                return moves;
+            }
+
+            handleInput(e) {
+                if (this.state.gameOver || this.state.animating || this.state.turn !== 'player') return;
+                
+                e.preventDefault();
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const cx = this.width/2;
+                const cy = this.height/2;
+                const relX = x - cx;
+                const relY = y - cy;
+                
+                const q = (2/3 * relX) / this.hexSize;
+                const r = (-1/3 * relX + Math.sqrt(3)/3 * relY) / this.hexSize;
+                const hex = hexRound(q, r);
+
+                const clickedPiece = this.getPieceAt(hex.q, hex.r);
+                const isMove = this.state.validMoves.find(m => m.q === hex.q && m.r === hex.r);
+
+                if (isMove && this.state.selectedId != null) {
+                    const p = this.state.pieces.find(x => x.id === this.state.selectedId);
+                    this.movePiece(p, hex.q, hex.r);
+                } else if (clickedPiece && clickedPiece.team === 'player') {
+                    this.state.selectedId = clickedPiece.id;
+                    this.state.validMoves = this.getMoves(clickedPiece);
+                    AudioSys.play('select');
+                } else {
+                    if (this.state.selectedId && !clickedPiece && this.isValidHex(hex.q, hex.r)) {
+                        const p = this.state.pieces.find(x => x.id === this.state.selectedId);
+                        if (this.checkLineOf3(hex.q, hex.r, 'player', p.id)) {
+                            this.showToast("No 3-stone line allowed");
+                            AudioSys.play('blocked', 180);
+                        } else {
+                            this.showToast("That path is blocked");
+                            AudioSys.play('blocked', 180);
+                        }
+                    }
+                    this.state.selectedId = null;
+                    this.state.validMoves = [];
+                }
+            }
+
+            movePiece(piece, tq, tr) {
+                this.state.animating = true;
+                this.state.selectedId = null;
+                this.state.validMoves = [];
+                
+                piece.q = tq;
+                piece.r = tr;
+                
+                AudioSys.play('move', 60);
+
+                this.animTimeout = setTimeout(() => {
+                    this.processTurnEnd();
+                }, 300);
+            }
+
+            processTurnEnd() {
+                const toRemove = [];
+                this.state.pieces.forEach(p => {
+                    let enemies = 0;
+                    HEX_DIRS.forEach(d => {
+                        const n = this.getPieceAt(p.q + d.q, p.r + d.r);
+                        if (n && n.team !== p.team) enemies++;
+                    });
+                    if (enemies >= 3) toRemove.push(p);
+                });
+
+                if (toRemove.length > 0) {
+                    const lostPlayer = toRemove.some(p => p.team === 'player');
+                    const lostAI = toRemove.some(p => p.team === 'ai');
+                    AudioSys.play('capture', 0);
+                    if (lostPlayer) AudioSys.play('playerLoss', 0);
+                    if (lostAI) AudioSys.play('enemyLoss', 0);
+                    GifSys.showCapture();
+                    toRemove.forEach(p => {
+                        const idx = this.state.pieces.indexOf(p);
+                        if (idx > -1) this.state.pieces.splice(idx, 1);
+                    });
+                }
+
+                this.updateUI();
+
+                const pCount = this.state.pieces.filter(p => p.team === 'player').length;
+                const aiCount = this.state.pieces.filter(p => p.team === 'ai').length;
+
+                if (pCount <= 2) this.endGame(false);
+                else if (aiCount <= 2) this.endGame(true);
+                else {
+                    this.state.turn = this.state.turn === 'player' ? 'ai' : 'player';
+                    this.state.animating = false;
+                    this.updateUI();
+
+                    if (this.state.turn === 'ai') {
+                        this.aiTimeout = setTimeout(() => this.runAI(), CONFIG.aiDelay);
+                    }
+                }
+            }
+
+            runAI() {
+                // Safety check: ensure game is still running and it is actually AI's turn
+                if (this.state.gameOver || this.state.turn !== 'ai') return;
+
+                const aiPieces = this.state.pieces.filter(p => p.team === 'ai');
+                let bestScore = -Infinity;
+                let bestMove = null;
+
+                for (let p of aiPieces) {
+                    const moves = this.getMoves(p);
+                    const originalQ = p.q;
+                    const originalR = p.r;
+
+                    for (let m of moves) {
+                        p.q = m.q; p.r = m.r;
+                        
+                        let score = 0;
+                        let kills = 0;
+                        let suicide = false;
+
+                        let enemiesAroundAI = 0;
+                        HEX_DIRS.forEach(d => {
+                            const n = this.getPieceAt(p.q + d.q, p.r + d.r);
+                            if (n && n.team === 'player') enemiesAroundAI++;
+                        });
+                        if (enemiesAroundAI >= 3) suicide = true;
+
+                        this.state.pieces.forEach(target => {
+                            if (target.team === 'player') {
+                                let enemies = 0;
+                                HEX_DIRS.forEach(d => {
+                                    const n = this.getPieceAt(target.q + d.q, target.r + d.r);
+                                    if (n && n.team === 'ai') enemies++;
+                                });
+                                if (enemies >= 3) kills++;
+                            }
+                        });
+
+                        if (suicide) score -= 1000;
+                        score += kills * 500;
+                        
+                        const dist = hexDist({q:0, r:0}, m);
+                        score += (5 - dist) * 10;
+                        score += Math.random() * 5;
+
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = { p, q: m.q, r: m.r };
+                        }
+
+                        p.q = originalQ; p.r = originalR;
+                    }
+                }
+
+                if (bestMove) {
+                    this.movePiece(bestMove.p, bestMove.q, bestMove.r);
+                } else {
+                    // AI stuck/no moves, pass turn back
+                    this.state.turn = 'player';
+                    this.state.animating = false;
+                    this.updateUI();
+                }
+            }
+
+            endGame(win) {
+                this.state.gameOver = true;
+                this.state.animating = false;
+                const title = document.getElementById('go-title');
+                const msg = document.getElementById('go-msg');
+                const btn = document.getElementById('btn-restart');
+                
+                AudioSys.pauseLoop();
+                if (win) {
+                    title.innerText = "SIEGE WON";
+                    title.style.color = CONFIG.colors.playerSecondary;
+                    msg.innerText = "The Iron Clan line collapsed.";
+                    btn.className = "btn btn-primary";
+                    AudioSys.play('win', 0);
+                } else {
+                    title.innerText = "SIEGE LOST";
+                    title.style.color = CONFIG.colors.error;
+                    msg.innerText = "The Red Clan was surrounded.";
+                    btn.className = "btn btn-primary";
+                    AudioSys.play('lose', 0);
+                }
+                GifSys.showEndgame(win);
+                
+                document.getElementById('hud').classList.add('hidden');
+                const goScreen = document.getElementById('game-over-screen');
+                goScreen.style.display = 'flex';
+                goScreen.classList.remove('hidden');
+            }
+
+            showToast(msg) {
+                const area = document.getElementById('toast-area');
+                const t = document.createElement('div');
+                t.className = 'toast';
+                t.innerText = msg;
+                area.appendChild(t);
+                setTimeout(() => t.remove(), 2000);
+            }
+
+            updateUI() {
+                const pScore = this.state.pieces.filter(p => p.team === 'player').length;
+                const aiScore = this.state.pieces.filter(p => p.team === 'ai').length;
+                document.getElementById('score-p').innerText = pScore;
+                document.getElementById('score-ai').innerText = aiScore;
+                
+                const turnBadge = document.getElementById('turn-indicator');
+                if (this.state.turn === 'player') {
+                    turnBadge.innerText = "Red Clan Turn";
+                    turnBadge.style.color = '#ffe26c';
+                    turnBadge.style.borderColor = 'rgba(255, 212, 71, 0.55)';
+                } else {
+                    turnBadge.innerText = "Iron Clan Plans...";
+                    turnBadge.style.color = '#d5f3ff';
+                    turnBadge.style.borderColor = 'rgba(120, 246, 255, 0.55)';
+                }
+            }
+
+            hexToPixel(q, r) {
+                const x = this.width/2 + this.hexSize * (1.5 * q);
+                const y = this.height/2 + this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+                return {x, y};
+            }
+
+            draw() {
+                // Background
+                this.ctx.drawImage(this.bgCanvas, 0, 0);
+
+                // Highlights
+                if (this.state.selectedId !== null) {
+                    this.state.validMoves.forEach(m => {
+                        const pos = this.hexToPixel(m.q, m.r);
+                        this.ctx.beginPath();
+                        this.ctx.arc(pos.x, pos.y, this.hexSize * 0.4, 0, Math.PI*2);
+                        this.ctx.fillStyle = CONFIG.colors.highlight;
+                        this.ctx.fill();
+                        this.ctx.strokeStyle = CONFIG.colors.validStroke;
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+                    });
+                }
+
+                // Pieces
+                this.state.pieces.sort((a,b) => a.y - b.y);
+                
+                const spriteSize = Math.ceil(this.hexSize * 2);
+                const offset = spriteSize / 2;
+
+                this.state.pieces.forEach(p => {
+                    const sprite = p.team === 'player' ? this.pieceCanvasP1 : this.pieceCanvasAI;
+                    this.ctx.drawImage(sprite, p.x - offset, p.y - offset);
+                    
+                    // Selection Ring
+                    if (p.id === this.state.selectedId) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.x, p.y, this.hexSize * 0.8, 0, Math.PI*2);
+                        this.ctx.strokeStyle = CONFIG.colors.validStroke;
+                        this.ctx.lineWidth = 4;
+                        this.ctx.stroke();
+                    }
+                });
+            }
+
+            loop(timestamp) {
+                const dt = Math.min(timestamp - this.lastTime, 100);
+                this.lastTime = timestamp;
+
+                let animating = false;
+                this.state.pieces.forEach(p => {
+                    const target = this.hexToPixel(p.q, p.r);
+                    const dx = target.x - p.x;
+                    const dy = target.y - p.y;
+                    
+                    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+                        p.x += dx * CONFIG.animSpeed;
+                        p.y += dy * CONFIG.animSpeed;
+                        animating = true;
+                    } else {
+                        p.x = target.x;
+                        p.y = target.y;
+                    }
+                });
+
+                this.draw();
+                requestAnimationFrame(this.loop);
+            }
+        }
+
+        window.onload = () => {
+            new Game();
+        };
+
+    </script>
+</body>
+</html>

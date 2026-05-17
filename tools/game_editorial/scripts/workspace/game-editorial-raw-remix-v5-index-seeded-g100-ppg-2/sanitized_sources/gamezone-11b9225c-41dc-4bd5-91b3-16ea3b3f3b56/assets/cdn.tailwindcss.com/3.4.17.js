@@ -1,0 +1,1 @@
+/* Removed unused mirrored Tailwind bundle placeholder for stage 03 policy cleanup. */

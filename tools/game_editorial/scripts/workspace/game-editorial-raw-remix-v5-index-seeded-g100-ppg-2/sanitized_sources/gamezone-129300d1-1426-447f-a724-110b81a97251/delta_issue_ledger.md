@@ -1,0 +1,6 @@
+# Delta Issue Ledger
+
+| Observed area | Static evidence | Browser evidence | Confidence classification | Proposed action | Why |
+|---|---|---|---|---|---|
+| `index.html` / looping background music safety | `AudioController` configured `this.bgm.loop = true` and `this.bgm.volume = 0.24`, which exceeds the required 20% cap for continuous audio | The bounded mobile pass exercised game start and active play with BGM start logic reachable; audio safety violation was confirmed directly in source regardless of audible capture | confirmed | fix | Hard policy violation with a one-line safe fix |
+| Remote resource loading during runtime | Playwright captured two console `404` resource errors, but the exact asset URL was not surfaced by the bounded pass output | Gameplay still loaded, runtime identity passed, start flow worked, weapon switch worked, and tap-to-fire worked; screenshots did not confirm a visible break tied to the 404s | uncertain | leave_as_is | Evidence was too weak to justify a gameplay or asset patch |

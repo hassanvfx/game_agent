@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Checkpoint Command 3D</title>
+    <script src="assets/cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #07131f;
+            --bg-bottom: #02050a;
+            --panel: rgba(6, 17, 28, 0.82);
+            --panel-strong: rgba(10, 28, 44, 0.92);
+            --line: rgba(126, 241, 255, 0.32);
+            --text: #eefaff;
+            --muted: #8ea8bb;
+            --cyan: #74efff;
+            --cyan-strong: #00c8ff;
+            --gold: #ffd66b;
+            --warning: #ffb84f;
+            --danger: #ff637f;
+            --danger-deep: #a71f3a;
+            --safe: #70ffbf;
+            --safe-deep: #13804f;
+            --shadow: 0 16px 38px rgba(0, 0, 0, 0.42);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(0, 200, 255, 0.16), transparent 28%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text);
+        }
+
+        button,
+        input,
+        textarea,
+        select {
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            touch-action: none;
+        }
+
+        .game-shell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background:
+                linear-gradient(180deg, rgba(8, 23, 35, 0.66), rgba(1, 6, 12, 0.86)),
+                radial-gradient(circle at 50% 20%, rgba(0, 255, 255, 0.08), transparent 45%);
+        }
+
+        .game-shell::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.05), transparent 18%, transparent 82%, rgba(0,0,0,0.28)),
+                repeating-linear-gradient(
+                    180deg,
+                    rgba(116, 239, 255, 0.04) 0,
+                    rgba(116, 239, 255, 0.04) 2px,
+                    transparent 2px,
+                    transparent 6px
+                );
+            mix-blend-mode: screen;
+            opacity: 0.6;
+        }
+
+        .game-shell.crt::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%),
+                linear-gradient(90deg, rgba(0, 200, 255, 0.05), rgba(255, 214, 107, 0.03), rgba(255, 99, 127, 0.05));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            box-shadow: 0 0 14px rgba(116, 239, 255, 0.85);
+            animation: scan 2s linear infinite;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        .reaction-layer {
+            position: absolute;
+            inset: 12px 12px auto auto;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .reaction-card {
+            width: min(30vw, 124px);
+            min-width: 82px;
+            padding: 6px;
+            border-radius: 18px;
+            border: 1px solid rgba(126, 241, 255, 0.22);
+            background: rgba(4, 14, 24, 0.76);
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transform: translateY(-8px) scale(0.96);
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+
+        .reaction-card.is-active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .reaction-card img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 12px;
+        }
+
+        .reaction-card--success {
+            border-color: rgba(112, 255, 191, 0.42);
+        }
+
+        .reaction-card--fail {
+            border-color: rgba(255, 99, 127, 0.42);
+        }
+
+        .reaction-label {
+            display: block;
+            margin-top: 6px;
+            text-align: center;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: 0.66rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #dff8ff;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .hud-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 14px;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .hud-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .status-card,
+        .panel-card {
+            position: relative;
+            background: linear-gradient(180deg, rgba(8, 22, 34, 0.88), rgba(2, 10, 18, 0.92));
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            overflow: hidden;
+        }
+
+        .status-card::before,
+        .panel-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(116, 239, 255, 0.12), transparent 45%, rgba(255, 214, 107, 0.08));
+            pointer-events: none;
+        }
+
+        .status-card {
+            min-width: 0;
+            padding: 10px 16px;
+        }
+
+        .status-label {
+            display: block;
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .score-value {
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(1.6rem, 4vw, 2.25rem);
+            line-height: 1;
+            color: var(--gold);
+            text-shadow: 0 0 16px rgba(255, 214, 107, 0.35);
+        }
+
+        .status-value {
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(1rem, 2.8vw, 1.35rem);
+            line-height: 1.1;
+            color: var(--safe);
+            text-shadow: 0 0 14px rgba(112, 255, 191, 0.28);
+        }
+
+        .controls-wrap {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: max(12px, env(safe-area-inset-bottom));
+            pointer-events: auto;
+            transition: transform 220ms ease, opacity 220ms ease;
+        }
+
+        .translate-y-20 {
+            transform: translateY(80px);
+            opacity: 0;
+        }
+
+        .action-btn {
+            position: relative;
+            min-width: 0;
+            border: 1px solid rgba(255,255,255,0.16);
+            border-bottom-width: 4px;
+            border-radius: 18px;
+            color: #f9fdff;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(0.92rem, 2.8vw, 1.08rem);
+            letter-spacing: 0.04em;
+            padding: 14px 18px;
+            box-shadow: 0 12px 22px rgba(0,0,0,0.26);
+            transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+            cursor: pointer;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .action-btn:hover,
+        .action-btn:focus-visible {
+            transform: translateY(-1px);
+            filter: brightness(1.08);
+        }
+
+        .action-btn:active,
+        .action-btn.is-pressed {
+            transform: translateY(2px) scale(0.985);
+            border-bottom-width: 2px;
+        }
+
+        .action-btn--danger {
+            background: linear-gradient(180deg, #ff6f88, #cf2747);
+            border-color: rgba(255, 169, 184, 0.55);
+            box-shadow: 0 0 24px rgba(255, 99, 127, 0.34);
+        }
+
+        .action-btn--scan {
+            background: linear-gradient(180deg, #39e6ff, #0489d6);
+            border-color: rgba(126, 241, 255, 0.68);
+            box-shadow: 0 0 24px rgba(0, 200, 255, 0.3);
+        }
+
+        .action-btn--safe {
+            background: linear-gradient(180deg, #4dffaf, #13935f);
+            border-color: rgba(133, 255, 203, 0.58);
+            box-shadow: 0 0 24px rgba(76, 255, 174, 0.3);
+        }
+
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 18px;
+            pointer-events: auto;
+            z-index: 6;
+        }
+
+        .overlay-screen--start {
+            background: linear-gradient(180deg, rgba(2, 8, 18, 0.56), rgba(2, 4, 10, 0.82));
+        }
+
+        .overlay-screen--gameover {
+            background: linear-gradient(180deg, rgba(65, 5, 15, 0.68), rgba(31, 2, 8, 0.88));
+        }
+
+        .briefing-card {
+            width: min(100%, 420px);
+            padding: 22px 18px 20px;
+        }
+
+        .briefing-title {
+            margin: 0 0 8px;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(1.9rem, 7vw, 2.8rem);
+            line-height: 1.02;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #f7fdff;
+            text-shadow: 0 0 20px rgba(116, 239, 255, 0.24);
+        }
+
+        .briefing-accent {
+            width: 96px;
+            height: 6px;
+            border-radius: 999px;
+            margin: 0 auto 16px;
+            background: linear-gradient(90deg, var(--cyan), var(--gold));
+            box-shadow: 0 0 18px rgba(116, 239, 255, 0.45);
+        }
+
+        .briefing-copy {
+            margin: 0 0 18px;
+            color: #d6ebf4;
+            font-size: clamp(1rem, 3.4vw, 1.08rem);
+            line-height: 1.45;
+        }
+
+        .accent-danger {
+            color: #ff9aae;
+            font-weight: 700;
+        }
+
+        .accent-scan {
+            color: #8ceeff;
+            font-weight: 700;
+        }
+
+        .start-btn,
+        .restart-btn {
+            border: 0;
+            border-radius: 999px;
+            padding: 14px 24px;
+            min-width: min(100%, 240px);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(1rem, 3vw, 1.12rem);
+            color: #07131f;
+            background: linear-gradient(180deg, #fefefe, #bdeeff);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+            transition: transform 140ms ease, box-shadow 140ms ease;
+            cursor: pointer;
+        }
+
+        .start-btn:hover,
+        .start-btn:focus-visible,
+        .restart-btn:hover,
+        .restart-btn:focus-visible {
+            transform: translateY(-1px) scale(1.015);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
+        }
+
+        .gameover-copy {
+            margin: 0 0 16px;
+            color: #ffd4dc;
+            font-size: clamp(1rem, 3.4vw, 1.18rem);
+        }
+
+        .final-score-box {
+            margin-bottom: 18px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.26);
+            border: 1px solid rgba(255, 152, 171, 0.24);
+            color: #fff6f8;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(1.2rem, 4vw, 1.6rem);
+        }
+
+        .intro-badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .intro-badge {
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(9, 22, 34, 0.72);
+            color: #dcf7ff;
+            padding: 6px 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .agent-avatar {
+            width: 92px;
+            height: 92px;
+            margin: 0 auto 14px;
+            border-radius: 28px;
+            position: relative;
+            background:
+                radial-gradient(circle at 50% 38%, #a9fcff 0 18%, transparent 19%),
+                radial-gradient(circle at 35% 38%, #03111b 0 4%, transparent 5%),
+                radial-gradient(circle at 65% 38%, #03111b 0 4%, transparent 5%),
+                radial-gradient(circle at 50% 60%, #ffd66b 0 11%, #ff8a5c 12%, transparent 18%),
+                linear-gradient(180deg, #16314a, #08131f);
+            border: 1px solid rgba(126, 241, 255, 0.46);
+            box-shadow:
+                inset 0 0 24px rgba(255,255,255,0.08),
+                0 0 30px rgba(0, 200, 255, 0.25);
+        }
+
+        .agent-avatar::before,
+        .agent-avatar::after {
+            content: "";
+            position: absolute;
+            top: 18px;
+            width: 20px;
+            height: 10px;
+            border-radius: 10px 10px 0 0;
+            border: 2px solid rgba(116, 239, 255, 0.7);
+            border-bottom: 0;
+        }
+
+        .agent-avatar::before { left: 14px; transform: rotate(-18deg); }
+        .agent-avatar::after { right: 14px; transform: rotate(18deg); }
+
+        .threat-grid {
+            position: absolute;
+            inset: auto 0 14%;
+            display: flex;
+            justify-content: center;
+            gap: clamp(18px, 6vw, 42px);
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.46;
+        }
+
+        .threat-mark {
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.01));
+            color: rgba(255,255,255,0.8);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: 1rem;
+            display: grid;
+            place-items: center;
+            box-shadow: inset 0 0 12px rgba(255,255,255,0.04);
+        }
+
+        .status-warning {
+            color: var(--warning) !important;
+            text-shadow: 0 0 14px rgba(255, 184, 79, 0.26);
+        }
+
+        .status-safe {
+            color: var(--safe) !important;
+        }
+
+        @media (max-width: 720px) {
+            .hud-layer {
+                padding: 10px;
+            }
+
+            .hud-bar {
+                gap: 8px;
+            }
+
+            .status-card {
+                flex: 1 1 0;
+                padding: 10px 12px;
+                border-radius: 18px;
+            }
+
+            .controls-wrap {
+                gap: 8px;
+                margin-bottom: calc(8px + env(safe-area-inset-bottom));
+            }
+
+            .action-btn {
+                flex: 1 1 0;
+                padding: 13px 10px;
+                font-size: 0.84rem;
+                border-radius: 16px;
+                letter-spacing: 0.03em;
+            }
+
+            .briefing-card {
+                width: min(100%, 360px);
+                padding: 18px 14px;
+                border-radius: 24px;
+            }
+
+            .briefing-copy {
+                font-size: 0.96rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hud-layer {
+                padding: 8px;
+            }
+
+            .status-label {
+                font-size: 0.62rem;
+                letter-spacing: 0.16em;
+            }
+
+            .score-value {
+                font-size: 1.28rem;
+            }
+
+            .status-value {
+                font-size: 0.85rem;
+            }
+
+            .controls-wrap {
+                align-items: stretch;
+                gap: 6px;
+            }
+
+            .action-btn {
+                padding: 12px 8px;
+                font-size: 0.72rem;
+            }
+
+            .intro-badge {
+                font-size: 0.72rem;
+                padding: 5px 8px;
+            }
+
+            .agent-avatar {
+                width: 78px;
+                height: 78px;
+                border-radius: 24px;
+            }
+
+            .threat-grid {
+                gap: 12px;
+                inset: auto 0 18%;
+            }
+
+            .threat-mark {
+                width: 30px;
+                height: 30px;
+                border-radius: 11px;
+                font-size: 0.84rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="game-shell crt">
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="threat-grid" aria-hidden="true">
+            <div class="threat-mark">!</div>
+            <div class="threat-mark">XR</div>
+            <div class="threat-mark">⚠</div>
+        </div>
+
+        <div id="scan-overlay" class="scan-line"></div>
+
+        <div class="reaction-layer" aria-live="polite">
+            <!-- [agent-note][stage3] resolved-gif: success-fail-feedback -> catalogs/gifs.json | keep compact off-playfield -->
+            <div id="success-gif-card" class="reaction-card reaction-card--success" aria-hidden="true">
+                <img src="https://i.giphy.com/34HAaqlL2oCUo.webp" alt="Success reaction">
+                <span class="reaction-label">Cleared</span>
+            </div>
+            <div id="fail-gif-card" class="reaction-card reaction-card--fail" aria-hidden="true">
+                <img src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="Alert reaction">
+                <span class="reaction-label">Alert</span>
+            </div>
+        </div>
+
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe, restyled only -->
+        <div id="ui-layer" class="hud-layer">
+            <div id="hud" class="hud-bar hidden">
+                <div class="status-card">
+                    <span class="status-label">Checkpoint Score</span>
+                    <div class="score-value" id="score">0</div>
+                </div>
+                <div class="status-card">
+                    <span class="status-label">Status</span>
+                    <div class="status-value status-safe" id="status-text">AWAITING CRATE</div>
+                </div>
+            </div>
+
+            <!-- [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction -->
+            <div id="controls" class="controls-wrap hidden translate-y-20">
+                <button id="btn-arrest" class="action-btn action-btn--danger">
+                    FLAG 🚨
+                </button>
+
+                <button id="btn-xray" class="action-btn action-btn--scan">
+                    SCAN 🔍
+                </button>
+
+                <button id="btn-pass" class="action-btn action-btn--safe">
+                    CLEAR ✅
+                </button>
+            </div>
+
+            <div id="start-screen" class="overlay-screen overlay-screen--start">
+                <div class="panel-card briefing-card">
+                    <div class="agent-avatar" aria-hidden="true"></div>
+                    <h1 class="briefing-title">Checkpoint Command</h1>
+                    <div class="briefing-accent"></div>
+                    <div class="intro-badges" aria-hidden="true">
+                        <span class="intro-badge">Sky Dock Patrol</span>
+                        <span class="intro-badge">X-Ray Cadet</span>
+                    </div>
+                    <p class="briefing-copy">
+                        Screen each cargo crate before it rolls through.<br>
+                        <span class="accent-danger">Weapons and bombs</span> must be flagged.<br>
+                        Hold <span class="accent-scan">SCAN</span> to inspect the contents.
+                    </p>
+                    <button id="start-btn" class="start-btn">
+                        START WATCH
+                    </button>
+                </div>
+            </div>
+
+            <div id="game-over-screen" class="overlay-screen overlay-screen--gameover hidden">
+                <div class="panel-card briefing-card">
+                    <h2 class="briefing-title">Watch Ended</h2>
+                    <p class="gameover-copy">A dangerous crate slipped past your call.</p>
+                    <div class="final-score-box">Final Score: <span id="finalScore">0</span></div>
+                    <button id="restart-btn" class="restart-btn">
+                        RESTART WATCH
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3",
+            gifs: {
+                success: "https://i.giphy.com/34HAaqlL2oCUo.webp",
+                fail: "https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+            },
+            sfx: {
+                ui: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                scan: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3",
+                success: "https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3",
+                blocked: "https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3",
+                warning: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3"
+            }
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.bgm = this.createAudio(ASSETS.bgm, { loop: true, volume: 0.2 });
+                this.sfx = Object.fromEntries(
+                    Object.entries(ASSETS.sfx).map(([key, src]) => [key, this.createAudio(src, { preload: 'auto', volume: 0.62 })])
+                );
+            }
+            createAudio(src, config = {}) {
+                const audio = new Audio(src);
+                Object.assign(audio, config);
+                return audio;
+            }
+            unlock() {
+                this.enabled = true;
+                Object.values(this.sfx).forEach(sound => {
+                    sound.load();
+                });
+            }
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+            playSFX(key, volume = null) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const clone = this.sfx[key].cloneNode();
+                clone.volume = volume ?? this.sfx[key].volume ?? 0.62;
+                clone.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+
+        /** 3. GAME STATE */
+        let score = 0;
+        let gameActive = false;
+        let isXray = false;
+        let currentBag = null;
+        let bagHasContraband = false;
+        let isProcessing = false;
+        let activeReactionTimer = null;
+
+        // Three.js Globals
+        let scene, camera, renderer;
+        let suitcaseGroup;
+        let itemsGroup = [];
+        let conveyorBelt;
+
+        /** 4. THREE.JS SETUP */
+        function initThreeJS() {
+            const container = document.getElementById('game-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x08111b);
+            scene.fog = new THREE.Fog(0x08111b, 10, 50);
+
+            // Camera (Isometric-ish)
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(0, 15, 15);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            renderer.setSize(width, height);
+            renderer.shadowMap.enabled = true;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xcbeeff, 0.7);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xe0faff, 1.05);
+            dirLight.position.set(10, 20, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+
+            const fillLight = new THREE.PointLight(0x00c8ff, 1.1, 36, 2);
+            fillLight.position.set(-8, 6, 8);
+            scene.add(fillLight);
+
+            const warningLight = new THREE.PointLight(0xff637f, 0.9, 28, 2);
+            warningLight.position.set(8, 4, -6);
+            scene.add(warningLight);
+
+            // Environment
+            const planeGeo = new THREE.PlaneGeometry(100, 100);
+            const planeMat = new THREE.MeshStandardMaterial({
+                color: 0x0a1622,
+                roughness: 0.88,
+                metalness: 0.15
+            });
+            const floor = new THREE.Mesh(planeGeo, planeMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const beltGeo = new THREE.BoxGeometry(30, 0.5, 6);
+            const beltMat = new THREE.MeshStandardMaterial({
+                color: 0x121d28,
+                roughness: 0.68,
+                metalness: 0.4
+            });
+            conveyorBelt = new THREE.Mesh(beltGeo, beltMat);
+            conveyorBelt.position.y = -0.5;
+            conveyorBelt.receiveShadow = true;
+            scene.add(conveyorBelt);
+
+            const beltTrim = new THREE.Mesh(
+                new THREE.BoxGeometry(30.1, 0.08, 6.1),
+                new THREE.MeshStandardMaterial({
+                    color: 0x1fe0ff,
+                    emissive: 0x0b6b78,
+                    transparent: true,
+                    opacity: 0.18
+                })
+            );
+            beltTrim.position.set(0, -0.18, 0);
+            scene.add(beltTrim);
+
+            window.addEventListener('resize', () => {
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+                renderer.setSize(w, h);
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!gameActive) return;
+                const x = (e.clientX / window.innerWidth) * 2 - 1;
+                const y = (e.clientY / window.innerHeight) * 2 - 1;
+                camera.position.x = x * 1;
+                camera.position.y = 15 + y * 1;
+                camera.lookAt(0, 0, 0);
+            });
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (suitcaseGroup) {
+                suitcaseGroup.rotation.y = Math.sin(Date.now() * 0.0016) * 0.04;
+            }
+            renderer.render(scene, camera);
+        }
+
+        /** 5. GAME LOGIC: GENERATION */
+        function createItem(type) {
+            const group = new THREE.Group();
+            let isIllegal = false;
+            let material = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+
+            if (type === 'gun') {
+                isIllegal = true;
+                const dangerMat = new THREE.MeshLambertMaterial({ color: 0x3f1a22, emissive: 0x4d0918 });
+                const handle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.3), dangerMat);
+                const barrel = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 0.3), dangerMat);
+                barrel.position.set(0.5, 0.5, 0);
+                group.add(handle, barrel);
+                group.userData = { type: 'gun', illegal: true };
+            } else if (type === 'bomb') {
+                isIllegal = true;
+                const ball = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.6, 16, 16),
+                    new THREE.MeshLambertMaterial({ color: 0x26030c, emissive: 0x5a1121 })
+                );
+                const fuse = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.1, 0.1, 0.5),
+                    new THREE.MeshLambertMaterial({ color: 0xffd66b, emissive: 0x7e5f13 })
+                );
+                fuse.position.y = 0.6;
+                group.add(ball, fuse);
+                group.userData = { type: 'bomb', illegal: true };
+            } else if (type === 'knife') {
+                isIllegal = true;
+                const handle = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.2, 0.8, 0.2),
+                    new THREE.MeshLambertMaterial({ color: 0x5b1d27 })
+                );
+                const blade = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.1, 1.2, 0.05),
+                    new THREE.MeshLambertMaterial({ color: 0xb9d9e6, emissive: 0x214b57 })
+                );
+                blade.position.y = 1.0;
+                group.add(handle, blade);
+                group.rotation.z = Math.PI / 4;
+                group.userData = { type: 'knife', illegal: true };
+            } else if (type === 'bottle') {
+                const bottle = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.3, 0.3, 1.2),
+                    new THREE.MeshLambertMaterial({ color: 0x34b6ff, emissive: 0x093f60 })
+                );
+                group.add(bottle);
+                group.userData = { type: 'safe', illegal: false };
+            } else if (type === 'laptop') {
+                const base = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.5, 0.1, 1),
+                    new THREE.MeshLambertMaterial({ color: 0x8ab6c9, emissive: 0x1c3443 })
+                );
+                group.add(base);
+                group.userData = { type: 'safe', illegal: false };
+            } else {
+                const palette = [0x3ec5ff, 0x7df7c0, 0xffd66b, 0x8fa0ff];
+                material = new THREE.MeshLambertMaterial({ color: palette[Math.floor(Math.random() * palette.length)] });
+                const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), material);
+                group.add(box);
+                group.userData = { type: 'safe', illegal: false };
+            }
+
+            group.rotation.y = Math.random() * Math.PI * 2;
+            return { mesh: group, illegal: isIllegal };
+        }
+
+        function spawnSuitcase() {
+            if (suitcaseGroup) scene.remove(suitcaseGroup);
+
+            suitcaseGroup = new THREE.Group();
+            bagHasContraband = false;
+            itemsGroup = [];
+
+            // Character-first visual identity: the crate scanner shell becomes the hero prop.
+            const shellMat = new THREE.MeshStandardMaterial({
+                color: 0x16354a,
+                metalness: 0.42,
+                roughness: 0.34,
+                emissive: 0x08202f
+            });
+            const shell = new THREE.Mesh(new THREE.BoxGeometry(4, 1.5, 3), shellMat);
+            shell.castShadow = true;
+            shell.userData = { isShell: true, originalMat: shellMat };
+            suitcaseGroup.add(shell);
+
+            const trim = new THREE.Mesh(
+                new THREE.BoxGeometry(4.12, 0.18, 3.12),
+                new THREE.MeshStandardMaterial({
+                    color: 0x77f4ff,
+                    emissive: 0x0b6e76,
+                    transparent: true,
+                    opacity: 0.24
+                })
+            );
+            trim.position.y = 0.82;
+            suitcaseGroup.add(trim);
+
+            const seal = new THREE.Mesh(
+                new THREE.BoxGeometry(0.54, 0.26, 1.3),
+                new THREE.MeshStandardMaterial({
+                    color: 0xffd66b,
+                    emissive: 0x6d5316,
+                    metalness: 0.52,
+                    roughness: 0.3
+                })
+            );
+            seal.position.set(0, 0.1, 1.56);
+            suitcaseGroup.add(seal);
+
+            const badge = new THREE.Mesh(
+                new THREE.CircleGeometry(0.34, 24),
+                new THREE.MeshBasicMaterial({ color: 0x74efff, transparent: true, opacity: 0.85 })
+            );
+            badge.position.set(1.55, 0.08, 1.53);
+            suitcaseGroup.add(badge);
+
+            const numItems = Math.floor(Math.random() * 3) + 3;
+            const shouldHaveContraband = Math.random() < 0.4;
+
+            let positions = [
+                {x: -1, z: -0.8}, {x: 1, z: -0.8},
+                {x: -1, z: 0.8}, {x: 1, z: 0.8},
+                {x: 0, z: 0}
+            ];
+
+            positions.sort(() => Math.random() - 0.5);
+
+            for (let i = 0; i < numItems; i++) {
+                let type = 'safe';
+                if (shouldHaveContraband && !bagHasContraband) {
+                    const badTypes = ['gun', 'bomb', 'knife'];
+                    type = badTypes[Math.floor(Math.random() * badTypes.length)];
+                    bagHasContraband = true;
+                } else if (shouldHaveContraband && Math.random() < 0.3) {
+                    const badTypes = ['gun', 'bomb', 'knife'];
+                    type = badTypes[Math.floor(Math.random() * badTypes.length)];
+                } else {
+                    const goodTypes = ['bottle', 'laptop', 'box', 'box'];
+                    type = goodTypes[Math.floor(Math.random() * goodTypes.length)];
+                }
+
+                const itemObj = createItem(type);
+                const itemMesh = itemObj.mesh;
+
+                if (positions[i]) {
+                    itemMesh.position.set(positions[i].x, 0, positions[i].z);
+                } else {
+                    itemMesh.position.set(0, 0.5, 0);
+                }
+
+                suitcaseGroup.add(itemMesh);
+                itemsGroup.push(itemMesh);
+            }
+
+            suitcaseGroup.position.x = -15;
+            scene.add(suitcaseGroup);
+
+            let start = -15;
+            const animateIn = () => {
+                if (start < 0) {
+                    start += 0.5;
+                    suitcaseGroup.position.x = start;
+                    requestAnimationFrame(animateIn);
+                } else {
+                    isProcessing = false;
+                    const statusText = document.getElementById('status-text');
+                    statusText.innerText = "SCAN ADVISED";
+                    statusText.className = "status-value status-warning";
+                    audio.playSFX('warning', 0.45);
+                    document.getElementById('controls').classList.remove('translate-y-20', 'hidden');
+                }
+            };
+            isProcessing = true;
+            animateIn();
+        }
+
+        function showReaction(type) {
+            const successCard = document.getElementById('success-gif-card');
+            const failCard = document.getElementById('fail-gif-card');
+            successCard.classList.remove('is-active');
+            failCard.classList.remove('is-active');
+            const card = type === 'success' ? successCard : failCard;
+            card.classList.add('is-active');
+            clearTimeout(activeReactionTimer);
+            activeReactionTimer = setTimeout(() => {
+                card.classList.remove('is-active');
+            }, type === 'success' ? 1300 : 1700);
+        }
+
+        function toggleXrayView(active) {
+            isXray = active;
+            const overlay = document.getElementById('scan-overlay');
+            const scanButton = document.getElementById('btn-xray');
+
+            if (active) {
+                overlay.style.opacity = '1';
+                scanButton.classList.add('is-pressed');
+                suitcaseGroup.children.forEach(child => {
+                    if (child.userData.isShell) {
+                        child.material = new THREE.MeshBasicMaterial({
+                            color: 0x39e6ff,
+                            wireframe: true,
+                            transparent: true,
+                            opacity: 0.15
+                        });
+                    }
+                });
+
+                itemsGroup.forEach(item => {
+                    item.children.forEach(mesh => {
+                        mesh.userData.originalMat = mesh.material;
+                        if (item.userData.illegal) {
+                            mesh.material = new THREE.MeshBasicMaterial({
+                                color: 0xff637f,
+                                wireframe: false,
+                                depthTest: false,
+                                transparent: true,
+                                opacity: 0.88
+                            });
+                        } else {
+                            mesh.material = new THREE.MeshBasicMaterial({
+                                color: 0x74efff,
+                                wireframe: false,
+                                depthTest: false,
+                                transparent: true,
+                                opacity: 0.56
+                            });
+                        }
+                    });
+                });
+                audio.playSFX('scan', 0.5);
+            } else {
+                overlay.style.opacity = '0';
+                scanButton.classList.remove('is-pressed');
+                suitcaseGroup.children.forEach(child => {
+                    if (child.userData.isShell) {
+                        child.material = child.userData.originalMat;
+                    }
+                });
+                itemsGroup.forEach(item => {
+                    item.children.forEach(mesh => {
+                        if (mesh.userData.originalMat) {
+                            mesh.material = mesh.userData.originalMat;
+                        }
+                    });
+                });
+            }
+        }
+
+        function makeDecision(decision) {
+            if (isProcessing) {
+                audio.playSFX('blocked', 0.44);
+                return;
+            }
+            isProcessing = true;
+
+            document.getElementById('controls').classList.add('translate-y-20');
+
+            if (isXray) toggleXrayView(false);
+
+            let correct = false;
+
+            if (decision === 'arrest') {
+                if (bagHasContraband) correct = true;
+            } else {
+                if (!bagHasContraband) correct = true;
+            }
+
+            if (correct) {
+                score += 100;
+                document.getElementById('score').innerText = score;
+                const statusText = document.getElementById('status-text');
+                statusText.innerText = "CRATE RESOLVED";
+                statusText.className = "status-value status-safe";
+                showReaction('success');
+                audio.playSFX('success', 0.56);
+
+                let pos = 0;
+                const animateOut = () => {
+                    if (pos < 15) {
+                        pos += 0.5;
+                        suitcaseGroup.position.x = pos;
+                        requestAnimationFrame(animateOut);
+                    } else {
+                        spawnSuitcase();
+                    }
+                };
+                setTimeout(animateOut, 500);
+            } else {
+                audio.stopBGM();
+                showReaction('fail');
+                audio.playSFX('fail', 0.62);
+                gameOver();
+            }
+        }
+
+        function gameOver() {
+            gameActive = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        function initGame() {
+            score = 0;
+            document.getElementById('score').innerText = "0";
+            spawnSuitcase();
+        }
+
+        /** 6. CONTROLS */
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.unlock();
+
+            initThreeJS();
+            audio.playSFX('start', 0.52);
+            audio.playBGM();
+            gameActive = true;
+            initGame();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playSFX('ui', 0.46);
+            audio.playBGM();
+            gameActive = true;
+            initGame();
+        });
+
+        const btnXray = document.getElementById('btn-xray');
+        const startXray = (e) => {
+            if (e.cancelable) e.preventDefault();
+            if (!isProcessing && gameActive) toggleXrayView(true);
+        };
+        const endXray = (e) => {
+            if (e.cancelable) e.preventDefault();
+            if (gameActive) toggleXrayView(false);
+        };
+
+        btnXray.addEventListener('mousedown', startXray);
+        btnXray.addEventListener('mouseup', endXray);
+        btnXray.addEventListener('mouseleave', endXray);
+        btnXray.addEventListener('touchstart', startXray, { passive: false });
+        btnXray.addEventListener('touchend', endXray, { passive: false });
+
+        document.getElementById('btn-arrest').addEventListener('click', () => {
+            audio.playSFX('ui', 0.48);
+            makeDecision('arrest');
+        });
+        document.getElementById('btn-pass').addEventListener('click', () => {
+            audio.playSFX('ui', 0.48);
+            makeDecision('pass');
+        });
+    });
+    </script>
+</body>
+</html>

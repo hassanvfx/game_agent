@@ -1,0 +1,16 @@
+Create a polished browser microgame called **"The Narrow Hallway"**: a tense neon-horror corridor escape played with a single hold/release input. The entire experience should revolve around a glowing player spark trying to reach an exit at the far end of a narrow sci-fi hallway while a hostile watcher periodically scans for movement. Present the game as an arcade-style survival sprint with strong readability on both desktop and mobile.
+
+Use a **one-button interaction model**. The player should **hold touch, mouse, or spacebar to run forward** and **release to freeze instantly**. There should be no free movement, steering, jumping, or lane switching; the player simply advances along a single horizontal corridor progress line. The core loop is: move during safe windows, stop the moment danger escalates, then continue pushing forward when the watcher is no longer locked on.
+
+Structure the threat system around a repeating three-state cycle:
+1. **Idle / safe** state where the player can move freely.
+2. **Warning** state that briefly telegraphs incoming danger.
+3. **Attack / lock-on** state where any movement immediately causes failure.
+
+Make the warning and attack phases extremely legible through audiovisual feedback. During warning, ramp up tension with amber/red status text, light vignette shifts, glitch artifacts, and a warning sting. During attack, intensify the screen with red surveillance-eye imagery, heavier vignette, CRT flicker, occasional screen shake, and an unmistakable “do not move” signal. If the player keeps moving during attack, they should instantly lose and be shown a dramatic game-over panel. If they survive enough cycles to fill the progress meter to 100%, show a victory screen and celebratory feedback.
+
+Visually, the game should feel like a **minimalist neon sci-fi horror dashboard**. Use a dark background, cyan glow accents, amber progress highlights, and red danger overlays. Render the actual playfield on a full-screen canvas as a one-dimensional corridor: a central horizontal line, a glowing moving player core with a soft flashlight-like aura, a bright exit marker at the far right, and abstract watcher visuals that appear mainly during danger phases. Layer the presentation with scanlines, subtle grain, HUD pills, glassmorphism-style menu panels, and stylized creepy typography for titles. Include occasional floating environmental words like hallway signage or unsettling phrases to enrich the atmosphere without changing the simple mechanics.
+
+Add a lightweight but expressive audio design: ambient looping tension during gameplay, a UI start sound, periodic progress pings as the player advances, a warning cue when danger rises, and distinct win/fail stingers. Include start, restart, game-over, and victory overlays with very clear messaging. The HUD should show a simple **exit percentage** and a dynamic status readout that changes based on watcher state.
+
+The overall tone should be **claustrophobic, reactive, eerie, and replayable**. This should feel like a short, focused horror reflex game built around nerve control and timing, not a complex action game. Preserve the signature mechanic that the player’s success depends on perfectly alternating between **holding to run** and **releasing to survive** as the watcher cycles between safe and deadly states.

@@ -24,6 +24,10 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def should_ignore_copy_artifact(name: str) -> bool:
+    return name == ".DS_Store" or name.startswith("._")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare source games locally and record integrity status for a Game Remixer run.")
     parser.add_argument("--run-dir", required=True)
@@ -34,7 +38,16 @@ def parse_args() -> argparse.Namespace:
 def mirror_directory(source: Path, destination: Path) -> None:
     if destination.exists():
         shutil.rmtree(destination)
-    shutil.copytree(source, destination)
+
+    def ignore_patterns(_directory: str, names: list[str]) -> set[str]:
+        return {name for name in names if should_ignore_copy_artifact(name)}
+
+    shutil.copytree(
+        source,
+        destination,
+        copy_function=shutil.copyfile,
+        ignore=ignore_patterns,
+    )
 
 
 def purge_prepared_directory(prepared_dir: Path) -> dict[str, list[str]]:
@@ -42,6 +55,14 @@ def purge_prepared_directory(prepared_dir: Path) -> dict[str, list[str]]:
     removed: list[str] = []
 
     for child in sorted(prepared_dir.iterdir(), key=lambda path: path.name):
+        if should_ignore_copy_artifact(child.name):
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+                removed.append(child.name + "/")
+            else:
+                child.unlink(missing_ok=True)
+                removed.append(child.name)
+            continue
         if child.name == "index.html" and child.is_file():
             kept.append(child.name)
             continue
@@ -49,10 +70,10 @@ def purge_prepared_directory(prepared_dir: Path) -> dict[str, list[str]]:
             kept.append(child.name + "/")
             continue
         if child.is_dir():
-            shutil.rmtree(child)
+            shutil.rmtree(child, ignore_errors=True)
             removed.append(child.name + "/")
         else:
-            child.unlink()
+            child.unlink(missing_ok=True)
             removed.append(child.name)
 
     return {
@@ -147,7 +168,7 @@ def main() -> None:
     run_state.setdefault("notes", []).append("Local input mirroring and integrity verification completed.")
     if args.source_mode == "copy":
         run_state.setdefault("notes", []).append(
-            "Prepared copied inputs were purged before pipeline execution to keep only index.html and assets/."
+            "Prepared copied inputs were purged before pipeline execution to keep only index.html and assets/, while ignoring .DS_Store and ._* metadata artifacts during copy/prep."
         )
     else:
         run_state.setdefault("notes", []).append(

@@ -485,9 +485,6 @@ def validate_selected_tags(
         if normalized_items:
             normalized_payload[family] = normalized_items
 
-    if not normalized_payload:
-        raise SelectorError("selector output did not contain any valid controlled-vocabulary tags")
-
     return normalized_payload
 
 

@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Embassy Orb Manager DX</title>
+    <!-- [agent-note][stage3] resolved-font: display -> Audiowide, ui -> Exo 2 via catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --font-display: 'Audiowide', sans-serif;
+            --font-ui: 'Exo 2', sans-serif;
+            --bg-top: #0b1634;
+            --bg-bottom: #08101f;
+            --panel: rgba(9, 18, 39, 0.76);
+            --panel-soft: rgba(17, 29, 58, 0.62);
+            --line: rgba(126, 228, 255, 0.34);
+            --line-strong: rgba(126, 228, 255, 0.7);
+            --glow: rgba(80, 220, 255, 0.22);
+            --text-main: #eefbff;
+            --text-dim: #9cc6db;
+            --accent: #5ce1ff;
+            --accent-2: #73ffa6;
+            --warning: #ffd166;
+        }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: radial-gradient(circle at top, #143464 0%, var(--bg-top) 42%, var(--bg-bottom) 100%); color: var(--text-main); font-family: var(--font-ui); -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 18%, rgba(92, 225, 255, 0.16), transparent 18%),
+                radial-gradient(circle at 80% 22%, rgba(115, 255, 166, 0.12), transparent 18%),
+                linear-gradient(180deg, rgba(255,255,255,0.06), transparent 22%);
+            pointer-events: none;
+        }
+        canvas { display: block; width: 100%; height: 100%; filter: saturate(1.08) contrast(1.02); touch-action: none; }
+        .glass {
+            background: linear-gradient(180deg, rgba(16, 32, 68, 0.92), rgba(9, 18, 39, 0.84));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--line);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 24px var(--glow);
+            color: var(--text-main);
+        }
+        .glass-dark { background: rgba(2, 8, 20, 0.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .btn-press { transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease; }
+        .btn-press:active { transform: scale(0.95); filter: brightness(1.08); }
+        .hidden { display: none !important; }
+        .hud-chip {
+            background: linear-gradient(180deg, rgba(14, 34, 75, 0.95), rgba(8, 17, 38, 0.88));
+            border: 1px solid var(--line);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px rgba(92, 225, 255, 0.18);
+        }
+        .panel-title, .font-display {
+            font-family: var(--font-display);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .tech-card {
+            background: linear-gradient(180deg, rgba(18, 35, 74, 0.98), rgba(9, 18, 39, 0.96));
+            border: 1px solid rgba(126, 228, 255, 0.26);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(0,0,0,0.3);
+        }
+        .control-dock {
+            background: linear-gradient(to top, rgba(2, 9, 21, 0.78), rgba(2, 9, 21, 0.36), transparent);
+        }
+        .modal-shell { max-height: 90vh; }
+        .modal-scroll { overflow-y: auto; }
+        .modal-actions { position: sticky; bottom: 0; }
+        .status-label {
+            font-family: var(--font-display);
+            font-size: 9px;
+            letter-spacing: 0.22em;
+            color: var(--text-dim);
+        }
+        .numeric-readout {
+            font-family: var(--font-display);
+            letter-spacing: 0.04em;
+            text-shadow: 0 0 12px rgba(92, 225, 255, 0.3);
+        }
+        .scanline {
+            position: relative;
+            overflow: hidden;
+        }
+        .scanline::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.06), transparent 35%, transparent 65%, rgba(255,255,255,0.04));
+            opacity: 0.45;
+            pointer-events: none;
+        }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(126, 228, 255, 0.35); border-radius: 4px; }
+        .feedback-overlay {
+            position: absolute;
+            z-index: 55;
+            width: min(28vw, 112px);
+            min-width: 72px;
+            aspect-ratio: 1;
+            border-radius: 1.25rem;
+            border: 1px solid rgba(126, 228, 255, 0.26);
+            background: rgba(8, 17, 38, 0.58);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.28), 0 0 24px rgba(92, 225, 255, 0.18);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            pointer-events: none;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .feedback-overlay.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-overlay img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .feedback-overlay.collect {
+            right: 1rem;
+            bottom: calc(7.4rem + env(safe-area-inset-bottom, 0px));
+        }
+        .feedback-overlay.blocked {
+            left: 1rem;
+            bottom: calc(7.4rem + env(safe-area-inset-bottom, 0px));
+        }
+        .feedback-caption {
+            position: absolute;
+            left: 0.45rem;
+            right: 0.45rem;
+            bottom: 0.4rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 999px;
+            background: rgba(1, 8, 20, 0.7);
+            color: #eefbff;
+            font-family: var(--font-display);
+            font-size: 0.52rem;
+            letter-spacing: 0.14em;
+            text-align: center;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(92, 225, 255, 0.45);
+        }
+
+        /* Rarity Styles */
+        .rarity-common { color: #7f8c8d; border-color: #bdc3c7; }
+        .rarity-uncommon { color: #27ae60; border-color: #2ecc71; }
+        .rarity-rare { color: #2980b9; border-color: #3498db; }
+        .rarity-epic { color: #8e44ad; border-color: #9b59b6; box-shadow: 0 0 5px rgba(155, 89, 182, 0.3); }
+        .rarity-legendary { color: #d35400; border-color: #f39c12; background: linear-gradient(135deg, #fff 80%, #fff3e0); }
+        .rarity-mythical { color: #c0392b; border-color: #e74c3c; animation: mythic-pulse 2s infinite; background: linear-gradient(135deg, #fff 80%, #ffebee); }
+        .rarity-godly { color: #6a0dad; border-color: #9932cc; animation: godly-pulse 1.5s infinite; background: linear-gradient(135deg, #f3e5f5 0%, #fff 50%, #e1bee7 100%); box-shadow: 0 0 15px rgba(148, 0, 211, 0.4); }
+
+        @keyframes mythic-pulse { 0% { box-shadow: 0 0 0 rgba(231, 76, 60, 0); } 50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.5); } 100% { box-shadow: 0 0 0 rgba(231, 76, 60, 0); } }
+        @keyframes godly-pulse { 0% { box-shadow: 0 0 0 rgba(148, 0, 211, 0); border-color: #9932cc; } 50% { box-shadow: 0 0 20px rgba(148, 0, 211, 0.6); border-color: #ffd700; } 100% { box-shadow: 0 0 0 rgba(148, 0, 211, 0); border-color: #9932cc; } }
+        
+        .map-card-selected { border-color: #5ce1ff; box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.2), 0 0 20px rgba(92, 225, 255, 0.18); }
+        .orb-avatar {
+            position: relative;
+            overflow: hidden;
+            border-radius: 999px;
+        }
+        .orb-avatar::after {
+            content: "";
+            position: absolute;
+            inset: 8% 14% auto 18%;
+            height: 28%;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0));
+            pointer-events: none;
+        }
+        .orb-core {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            box-shadow: inset -6px -10px 16px rgba(0,0,0,0.18), inset 8px 10px 14px rgba(255,255,255,0.16);
+        }
+        @media (max-width: 640px) {
+            .panel-title { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/collect/blocked/pause -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_coin" data-editable="audio" data-label="Coin SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_buy" data-editable="audio" data-label="Buy SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3" preload="auto"></audio>
+<audio id="sfx_save" data-editable="audio" data-label="Save SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_click" data-editable="audio" data-label="Click SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_restock" data-editable="audio" data-label="Restock SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+<audio id="sfx_map_select" data-editable="audio" data-label="Map Select SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_boost" data-editable="audio" data-label="Boost SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3" preload="auto"></audio>
+<audio id="sfx_equip" data-editable="audio" data-label="Equip SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3" preload="auto"></audio>
+<audio id="sfx_unequip" data-editable="audio" data-label="Unequip SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_02.mp3" preload="auto"></audio>
+<audio id="sfx_blocked" data-editable="audio" data-label="Blocked SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3" preload="auto"></audio>
+<audio id="sfx_pause" data-editable="audio" data-label="Pause SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/pause_01.mp3" preload="auto"></audio>
+<audio id="sfx_resume" data-editable="audio" data-label="Resume SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/resume_01.mp3" preload="auto"></audio>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">{"restockTime":{"type":"number","label":"Restock Time (s)","value":60,"min":10,"max":600},"maxBalls":{"type":"number","label":"Max Active Balls","value":150,"min":10,"max":500}}</script>
+
+<!-- UI Layer -->
+<div id="ui-layer" class="absolute inset-0 z-50 pointer-events-none flex flex-col justify-between">
+    <!-- [agent-note][stage3] resolved-gif: collect/blocked feedback overlays -> catalogs/gifs.json -->
+    <div id="feedback-collect" class="feedback-overlay collect" aria-hidden="true">
+        <img src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="Celebration feedback">
+        <div class="feedback-caption">credit spike</div>
+    </div>
+    <div id="feedback-blocked" class="feedback-overlay blocked" aria-hidden="true">
+        <img src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp" alt="Blocked action feedback">
+        <div class="feedback-caption">route blocked</div>
+    </div>
+    <!-- Top HUD -->
+        <div class="pointer-events-auto p-4 pt-safe flex justify-between items-start">
+            <div class="glass hud-chip rounded-full px-4 py-2 flex items-center gap-3 shadow-lg scanline">
+                <span class="text-2xl">🛰️</span>
+                <div class="flex flex-col">
+                    <span class="status-label">CREDITS</span>
+                    <span id="score-display" class="text-xl sm:text-2xl font-bold numeric-readout">0</span>
+                </div>
+            </div>
+            <div class="flex gap-2 items-start">
+                <div class="glass hud-chip rounded-full px-4 py-2 flex flex-col items-center min-w-[84px] shadow-lg scanline">
+                    <span class="status-label">STOCK</span>
+                    <span id="restock-timer" class="text-base sm:text-lg font-bold numeric-readout text-cyan-200">00:00</span>
+                </div>
+                <button id="btn-save-manual" class="glass hud-chip w-10 h-10 rounded-full flex items-center justify-center text-xl btn-press shadow-lg">
+                    💾
+                </button>
+                <button id="btn-menu" class="glass hud-chip w-10 h-10 rounded-full flex items-center justify-center text-xl btn-press shadow-lg">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+
+    <!-- Active Boost Indicator -->
+    <div id="boost-indicator" class="hidden absolute top-[12%] right-4 glass hud-chip rounded-full px-3 py-1 flex items-center gap-1 shadow-md animate-bounce scanline">
+        <span class="text-lg">❄️</span>
+        <span class="text-xs font-bold text-cyan-200 numeric-readout">+15%</span>
+    </div>
+
+    <!-- Center Messages -->
+    <div id="message-area" class="absolute top-[20%] w-full text-center pointer-events-none flex flex-col items-center gap-2"></div>
+    
+    <!-- Save Toast -->
+    <div id="save-toast" class="absolute top-[15%] w-full flex justify-center pointer-events-none opacity-0 transition-opacity duration-500" style="opacity: 0;">
+        <div class="glass hud-chip px-4 py-2 rounded-full text-sm font-bold backdrop-blur-md flex items-center gap-2 shadow-xl scanline">
+            <span>💾</span> Archive Updated
+        </div>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="pointer-events-auto p-4 pb-8 pb-safe flex gap-2 justify-center items-end control-dock">
+        <button id="btn-shop" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 scanline">
+            <span class="text-2xl">🛒</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">MARKET</span>
+        </button>
+        <button id="btn-inventory" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 border border-transparent transition-colors scanline">
+            <span class="text-2xl">🎒</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">ROSTER</span>
+        </button>
+        <button id="btn-map" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 border border-cyan-300/40 scanline">
+            <span class="text-2xl">🗺️</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">REGIONS</span>
+        </button>
+        <button id="btn-index" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 scanline">
+            <span class="text-2xl">📚</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">ARCHIVE</span>
+        </button>
+    </div>
+</div>
+
+<!-- Modals -->
+<div id="modal-overlay" class="hidden absolute inset-0 z-[60] glass-dark flex items-center justify-center p-4">
+    
+    <!-- Map Modal -->
+    <div id="map-modal" class="hidden glass modal-shell w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 transform transition-all h-[70%]">
+        <div class="flex justify-between items-center border-b border-cyan-200/15 pb-3">
+            <h2 class="text-xl font-bold panel-title">Diplomatic Regions</h2>
+            <button class="close-modal w-8 h-8 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold">×</button>
+        </div>
+        <div class="tech-card p-3 rounded-xl text-sm text-cyan-50 italic text-center">
+            "Assign your orbiting envoys to richer routes."
+        </div>
+        <div id="map-list" class="modal-scroll flex-1 space-y-3 custom-scroll p-1"></div>
+    </div>
+
+    <!-- Shop Modal -->
+    <div id="shop-modal" class="hidden glass modal-shell w-full max-w-md h-[80%] rounded-3xl flex flex-col overflow-hidden shadow-2xl transform transition-all">
+        <div class="p-5 border-b border-cyan-200/15 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold panel-title">Exchange Desk</h2>
+                <div class="text-xs text-cyan-100/75">Refreshes in <span id="shop-timer-display" class="numeric-readout font-bold">00:00</span></div>
+            </div>
+            <button class="close-modal w-10 h-10 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold text-xl transition-colors">×</button>
+        </div>
+        <div id="shop-list" class="modal-scroll flex-1 p-4 space-y-3 custom-scroll bg-slate-950/10"></div>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="inventory-modal" class="hidden glass modal-shell w-full max-w-md h-[80%] rounded-3xl flex flex-col overflow-hidden shadow-2xl transform transition-all">
+        <div class="p-5 border-b border-cyan-200/15 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold panel-title">Envoy Roster</h2>
+                <div class="text-xs text-cyan-100/75">Deploy or store your embassy orbs</div>
+            </div>
+            <button class="close-modal w-10 h-10 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold text-xl transition-colors">×</button>
+        </div>
+        <div class="tech-card p-2 text-center text-xs text-yellow-100 border-b border-yellow-200/10">
+            Active Envoys: <span id="capacity-display" class="font-bold numeric-readout">0/150</span>
+        </div>
+        <div id="inventory-list" class="modal-scroll flex-1 p-4 space-y-3 custom-scroll bg-slate-950/10"></div>
+    </div>
+
+    <!-- Collection Modal -->
+    <div id="index-modal" class="hidden glass modal-shell w-full max-w-md h-[80%] rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="p-5 border-b border-cyan-200/15 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold panel-title">Embassy Archive</h2>
+                <div class="text-xs text-cyan-100/75">Records & unlocks</div>
+            </div>
+            <button class="close-modal w-10 h-10 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold text-xl transition-colors">×</button>
+        </div>
+        <div id="index-grid" class="modal-scroll flex-1 p-4 grid grid-cols-2 gap-3 custom-scroll bg-slate-950/10 content-start"></div>
+    </div>
+
+    <!-- Settings/Menu Modal -->
+    <div id="menu-modal" class="hidden glass modal-shell w-[80%] max-w-xs rounded-3xl p-6 flex flex-col items-center gap-4 shadow-2xl">
+        <h2 class="text-2xl font-bold panel-title text-center">Operations Paused</h2>
+        <button id="btn-reset" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl shadow btn-press">
+            Clear Archive
+        </button>
+        <button class="close-modal w-full tech-card text-cyan-50 font-bold py-3 rounded-xl shadow btn-press">
+            Resume Shift
+        </button>
+        <div class="text-xs text-cyan-100/55 mt-2">v10.0 Embassy Archive • Auto-Save ON</div>
+    </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const BALL_TYPES = {
+    mexico: { name: "Mexico", price: 100, income: 1, rarity: "Common", weight: 100, colors: ["#006847", "#ffffff", "#ce1126"], type: 'v-stripe' },
+    poland: { name: "Poland", price: 250, income: 12, rarity: "Uncommon", weight: 80, colors: ["#ffffff", "#dc143c"], type: 'h-stripe' },
+    brazil: { name: "Brazil", price: 500, income: 120, rarity: "Rare", weight: 60, colors: ["#009c3b", "#ffdf00", "#002776"], type: 'brazil' },
+    spain: { name: "Spain", price: 666, income: 30, rarity: "Uncommon", weight: 75, colors: ["#AA151B", "#F1BF00", "#AA151B"], type: 'h-stripe-uneven' },
+    saudi: { name: "Saudi Arabia", price: 777, income: 75, rarity: "Rare", weight: 60, colors: ["#006C35"], type: 'solid-text' },
+    canada: { name: "Canada", price: 1000, income: 175, rarity: "Epic", weight: 40, colors: ["#FF0000", "#ffffff", "#FF0000"], type: 'v-stripe-leaf' },
+    uk: { name: "UK", price: 2500, income: 300, rarity: "Legendary", weight: 20, colors: ["#012169", "#ffffff", "#C8102E"], type: 'uk-jack' },
+    portugal: { name: "Portugal", price: 12000, income: 666, rarity: "Epic", weight: 35, colors: ["#006600", "#ff0000", "#ffff00"], type: 'portugal' },
+    denmark: { name: "Denmark", price: 19000, income: 888, rarity: "Epic", weight: 35, colors: ["#C60C30", "#ffffff"], type: 'nordic' },
+    indonesia: { name: "Indonesia", price: 27100, income: 825, rarity: "Legendary", weight: 20, colors: ["#dc143c", "#ffffff"], type: 'h-stripe' },
+    france: { name: "France", price: 34000, income: 8800, rarity: "Legendary", weight: 15, colors: ["#0055A4", "#ffffff", "#EF4135"], type: 'v-stripe' },
+    jordania: { name: "Jordan", price: 50000, income: 1100, rarity: "Legendary", weight: 15, colors: ["#000000", "#FFFFFF", "#007A3D", "#CE1126"], type: 'jordan' },
+    lebanon: { name: "Lebanon", price: 54000, income: 2500, rarity: "Legendary", weight: 15, colors: ["#EE161F", "#FFFFFF", "#00A651"], type: 'lebanon' },
+    turkey: { name: "Turkey", price: 50100, income: 9100, rarity: "Legendary", weight: 15, colors: ["#E30A17", "#ffffff"], type: 'turkey' },
+    russia: { name: "Russia", price: 58000, income: 1100, rarity: "Legendary", weight: 20, colors: ["#ffffff", "#0039a6", "#d52b1e"], type: 'h-stripe-3' },
+    iraq: { name: "Iraq", price: 67000, income: 12000, rarity: "Mythical", weight: 10, colors: ["#CE1126", "#FFFFFF", "#000000", "#007A3D"], type: 'iraq' },
+    india: { name: "India", price: 90000, income: 17000, rarity: "Mythical", weight: 10, colors: ["#FF9933", "#FFFFFF", "#138808", "#000080"], type: 'india' },
+    switzerland: { name: "Switzerland", price: 67000, income: 2375, rarity: "Legendary", weight: 20, colors: ["#DA291C", "#FFFFFF"], type: 'swiss' },
+    nkorea: { name: "North Korea", price: 76863, income: 4750, rarity: "Mythical", weight: 10, colors: ["#024FA2", "#ED1C27", "#FFFFFF"], type: 'nkorea' },
+    sweden: { name: "Sweden", price: 91000, income: 9800, rarity: "Legendary", weight: 15, colors: ["#006AA7", "#FECC00"], type: 'nordic' },
+    finland: { name: "Finland", price: 125000, income: 17700, rarity: "Mythical", weight: 8, colors: ["#ffffff", "#003580"], type: 'nordic' },
+    kazakhstan: { name: "Kazakhstan", price: 137862, income: 7000, rarity: "Mythical", weight: 10, colors: ["#00AFCA", "#FEC50C"], type: 'kazakh' },
+    morocco: { name: "Morocco", price: 167000, income: 6700, rarity: "Mythical", weight: 8, colors: ["#C1272D", "#006233"], type: 'morocco' },
+    argentina: { name: "Argentina", price: 175000, income: 12000, rarity: "Mythical", weight: 8, colors: ["#75AADB", "#FFFFFF", "#F4B32E"], type: 'argentina' },
+    usa: { name: "USA", price: 199900, income: 4000, rarity: "Mythical", weight: 10, colors: ["#B22234", "#ffffff", "#3C3B6E"], type: 'usa' },
+    palestine: { name: "Palestine", price: 222000, income: 27300, rarity: "Mythical", weight: 5, colors: ["#000000", "#ffffff", "#007A3D", "#E4312b"], type: 'palestine' },
+    egypt: { name: "Egypt", price: 267000, income: 25000, rarity: "Mythical", weight: 7, colors: ["#CE1126", "#FFFFFF", "#000000", "#C09300"], type: 'egypt' },
+    philippines: { name: "Philippines", price: 300000, income: 35000, rarity: "Mythical", weight: 7, colors: ["#0038A8", "#CE1126", "#FFFFFF", "#FCD116"], type: 'philippines' },
+    ukraine: { name: "Ukraine", price: 340000, income: 24000, rarity: "Mythical", weight: 8, colors: ["#0057B7", "#FFDD00"], type: 'h-stripe' },
+    skorea: { name: "South Korea", price: 350000, income: 41000, rarity: "Mythical", weight: 7, colors: ["#FFFFFF", "#CD2E3A", "#0047A0", "#000000"], type: 'skorea' },
+    greece: { name: "Greece", price: 375000, income: 47000, rarity: "Godly", weight: 5, colors: ["#0D5EAF", "#FFFFFF"], type: 'greece' },
+    japan: { name: "Japan", price: 390000, income: 54000, rarity: "Godly", weight: 5, colors: ["#FFFFFF", "#BC002D"], type: 'japan' },
+    italy: { name: "Italy", price: 763926, income: 34100, rarity: "Godly", weight: 5, colors: ["#009246", "#ffffff", "#ce2b37"], type: 'v-stripe' },
+    norway: { name: "Norway", price: 937725, income: 47000, rarity: "Godly", weight: 5, colors: ["#BA0C2F", "#00205B", "#FFFFFF"], type: 'nordic' },
+    germany: { name: "Germany", price: 1000621, income: 67000, rarity: "Godly", weight: 5, colors: ["#000000", "#DD0000", "#FFCC00"], type: 'h-stripe' },
+    china: { name: "China", price: 1122926, income: 99000, rarity: "Godly", weight: 5, colors: ["#DE2910", "#FFDE00"], type: 'china' },
+    pakistan: { name: "Pakistan", price: 47926916, income: 100000, rarity: "Godly", weight: 3, colors: ["#FFFFFF", "#115740"], type: 'pakistan' },
+    iran: { name: "Iran", price: 67926915, income: 500000, rarity: "Godly", weight: 3, colors: ["#239F40", "#FFFFFF", "#DA0000"], type: 'iran' }
+};
+
+const MAP_DEFINITIONS = {
+    grassland: { id: 'grassland', name: 'Open Circuit', price: 0, boost: 1.0, desc: 'Standard embassy traffic lanes.', color: '#4CAF50' },
+    snow: { id: 'snow', name: 'Polar Route', price: 500000, boost: 1.15, desc: '+15% funding from premium routes.', color: '#00BCD4' }
+};
+
+const CHAT_PHRASES = {
+    mexico: ["Tacos!", "Amigo!", "Hola!"], poland: ["Space?", "Kurwa!", "Witam"], brazil: ["Huehue!", "Goal!", "Oi!"],
+    usa: ["Freedom!", "Oil?", "Burger!"], uk: ["Tea?", "Splendid!", "Cheers!"], france: ["Oui!", "Baguette!"],
+    germany: ["Wörk!", "Beer!"], italy: ["Pizza!", "Pasta!", "Ciao!"], china: ["Panda!", "Tea!", "Nihao"],
+    russia: ["Vodka!", "Da!", "Privet"], canada: ["Sorry!", "Eh?", "Hi!"], switzerland: ["Neutral.", "Gold?"],
+    japan: ["Anime!", "Sushi!", "Kawaii!"], greece: ["Opa!", "Gyro!"], egypt: ["Pyramid!", "Sand!"],
+    morocco: ["Tea!", "Sahara!", "Salam"], argentina: ["Messi!", "Mate!"], philippines: ["Halo-halo!", "Mabuhay"],
+    skorea: ["K-Pop!", "Kimchi!"], jordania: ["Petra!", "Mansaf!"], lebanon: ["Cedar!", "Hummus!"],
+    iraq: ["Tigris!", "Salam"], india: ["Curry!", "Namaste!"], ukraine: ["Slava!", "Borscht!"],
+    pakistan: ["Mango!", "K2!", "Salam"], iran: ["Persia!", "Saffron!"], default: ["Clay!", "Stronk!", "Bork!"]
+};
+
+const RARITY_COLORS = { Common: "#7f8c8d", Uncommon: "#27ae60", Rare: "#2980b9", Epic: "#8e44ad", Legendary: "#d35400", Mythical: "#c0392b", Godly: "#6a0dad" };
+const SAVE_KEY = 'embassy_orb_manager_save_v10_inventory';
+
+let gameState = 'PLAYING', money = 100, balls = [], storedBalls = {}, unlocked = new Set(['mexico']), shopStock = [], nextRestockTime = 0, floatingTexts = [];
+let currentMap = 'grassland', unlockedMaps = new Set(['grassland']);
+const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d', { alpha: false });
+let cw = 0, ch = 0, initialized = false, lastTime = 0, audioCtx = null;
+const audioBuffers = {};
+let bgmUnlocked = false;
+let lastSfxTimes = {};
+let feedbackTimers = {};
+const FONT_STACKS = {
+    display: "'Audiowide', 'Trebuchet MS', sans-serif",
+    ui: "'Exo 2', 'Segoe UI', sans-serif"
+};
+
+async function initAudio() {
+    if (audioCtx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+    const loadBuffer = async (id, url) => {
+        try {
+            const response = await fetch(url);
+            audioBuffers[id] = await audioCtx.decodeAudioData(await response.arrayBuffer());
+        } catch (e) { console.warn('Audio load failed', id); }
+    };
+    await Promise.all([
+        loadBuffer('coin', document.getElementById('sfx_coin').src),
+        loadBuffer('buy', document.getElementById('sfx_buy').src),
+        loadBuffer('save', document.getElementById('sfx_save').src),
+        loadBuffer('click', document.getElementById('sfx_click').src),
+        loadBuffer('restock', document.getElementById('sfx_restock').src),
+        loadBuffer('map_select', document.getElementById('sfx_map_select').src),
+        loadBuffer('boost', document.getElementById('sfx_boost').src),
+        loadBuffer('equip', document.getElementById('sfx_equip').src),
+        loadBuffer('unequip', document.getElementById('sfx_unequip').src),
+        loadBuffer('blocked', document.getElementById('sfx_blocked').src),
+        loadBuffer('pause', document.getElementById('sfx_pause').src),
+        loadBuffer('resume', document.getElementById('sfx_resume').src)
+    ]);
+}
+
+function playSfx(id, options = {}) {
+    if (!audioCtx) return;
+    const now = performance.now();
+    const cooldown = options.cooldown ?? 0;
+    if (cooldown > 0 && now - (lastSfxTimes[id] || 0) < cooldown) return;
+    lastSfxTimes[id] = now;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const buffer = audioBuffers[id];
+    if (buffer) {
+        const source = audioCtx.createBufferSource();
+        const gain = audioCtx.createGain();
+        source.buffer = buffer;
+        source.connect(gain);
+        gain.connect(audioCtx.destination);
+        gain.gain.value = options.volume ?? 0.18;
+        source.start(0);
+    } else {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(id === 'coin' ? 1200 : 400, audioCtx.currentTime);
+        gain.gain.setValueAtTime(options.volume ?? 0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    }
+}
+
+function vibrate(type = 'light') {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({ action: 'vibrate', params: { style: type } });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(type === 'heavy' ? 40 : 10);
+    }
+}
+
+function syncBgmState() {
+    const bgm = document.getElementById('bgm_main');
+    if (!bgm) return;
+    if (!bgmUnlocked) {
+        bgm.pause();
+        return;
+    }
+    if (gameState === 'PLAYING') {
+        if (bgm.paused) bgm.play().catch(() => {});
+    } else {
+        bgm.pause();
+    }
+}
+
+function flashFeedback(id, duration = 1600) {
+    const el = document.getElementById(`feedback-${id}`);
+    if (!el) return;
+    el.classList.add('visible');
+    clearTimeout(feedbackTimers[id]);
+    feedbackTimers[id] = setTimeout(() => el.classList.remove('visible'), duration);
+}
+
+function unlockAudio() {
+    if (!audioCtx) initAudio();
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
+    const bgm = document.getElementById('bgm_main');
+    if (bgm) {
+        bgm.volume = 0.2;
+        bgmUnlocked = true;
+        syncBgmState();
+    }
+}
+
+class Ball {
+    constructor(typeKey) {
+        this.typeKey = typeKey;
+        this.data = BALL_TYPES[typeKey] || BALL_TYPES['mexico'];
+        const income = this.data.income;
+        this.r = 25 + (income > 50000 ? 25 : (income > 10000 ? 15 : (income > 1000 ? 10 : (income > 100 ? 5 : 0))));
+        this.x = Math.random() * (cw - this.r * 2) + this.r;
+        this.y = Math.random() * (ch - this.r * 2) + this.r;
+        this.vx = (Math.random() - 0.5) * 5;
+        this.vy = (Math.random() - 0.5) * 5;
+        this.incomeTimer = 0;
+        this.blinkTimer = Math.random() * 300;
+        this.isBlinking = false;
+        this.chatTimer = Math.random() * 10 + 5;
+        this.chatBubble = null;
+        if (isFinite(cw) && isFinite(ch)) {
+            this.x = Math.max(this.r, Math.min(this.x, cw - this.r));
+            this.y = Math.max(this.r, Math.min(this.y, ch - this.r));
+        }
+    }
+    update(dt) {
+        this.x += this.vx * (dt * 60);
+        this.y += this.vy * (dt * 60);
+        if (this.x < this.r) { this.x = this.r; this.vx *= -1; }
+        if (this.x > cw - this.r) { this.x = cw - this.r; this.vx *= -1; }
+        if (this.y < this.r) { this.y = this.r; this.vy *= -1; }
+        if (this.y > ch - this.r) { this.y = ch - this.r; this.vy *= -1; }
+        if (gameState === 'PLAYING') {
+            this.incomeTimer += dt;
+            if (this.incomeTimer >= 1.0) {
+                this.incomeTimer = 0;
+                addMoney(this.data.income, this.x, this.y - this.r);
+            }
+            if (this.chatBubble) {
+                this.chatBubble.life -= dt;
+                if (this.chatBubble.life <= 0) this.chatBubble = null;
+            } else {
+                this.chatTimer -= dt;
+                if (this.chatTimer <= 0) {
+                    this.triggerChat();
+                    this.chatTimer = 8 + Math.random() * 15;
+                }
+            }
+        }
+        this.blinkTimer -= dt * 60;
+        if (this.blinkTimer <= 0) {
+            this.isBlinking = true;
+            if (this.blinkTimer < -10) {
+                this.isBlinking = false;
+                this.blinkTimer = 120 + Math.random() * 300;
+            }
+        }
+    }
+    triggerChat(forcedText = null) {
+        let text = forcedText;
+        if (!text) {
+            const phrases = CHAT_PHRASES[this.typeKey] || CHAT_PHRASES['default'];
+            text = phrases[Math.floor(Math.random() * phrases.length)];
+        }
+        this.chatBubble = { text: text, life: 3.0 };
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.beginPath(); ctx.ellipse(0, this.r * 0.85, this.r * 0.8, this.r * 0.3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(3,10,24,0.24)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI * 2); ctx.clip();
+        drawFlagPattern(ctx, this.r, this.data);
+
+        const rimGlow = ctx.createRadialGradient(0, 0, this.r * 0.15, 0, 0, this.r);
+        rimGlow.addColorStop(0, 'rgba(255,255,255,0)');
+        rimGlow.addColorStop(0.75, 'rgba(255,255,255,0)');
+        rimGlow.addColorStop(1, 'rgba(92,225,255,0.28)');
+        ctx.fillStyle = rimGlow;
+        ctx.fillRect(-this.r, -this.r, this.r * 2, this.r * 2);
+
+        ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+        let grad = ctx.createRadialGradient(-this.r*0.35, -this.r*0.45, this.r*0.15, 0, 0, this.r);
+        grad.addColorStop(0, 'rgba(255,255,255,0.5)');
+        grad.addColorStop(0.35, 'rgba(255,255,255,0.12)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.28)');
+        ctx.fillStyle = grad; ctx.fill();
+
+        ctx.beginPath();
+        ctx.ellipse(-this.r * 0.22, -this.r * 0.42, this.r * 0.3, this.r * 0.18, -0.35, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.34)';
+        ctx.fill();
+
+        ctx.lineWidth = 2.5; ctx.strokeStyle = '#163251'; ctx.stroke();
+        ctx.restore();
+        ctx.save(); ctx.translate(this.x, this.y); this.drawEyes(ctx); this.drawMouth(ctx); ctx.restore();
+        if (this.chatBubble) this.drawChatBubble(ctx);
+    }
+    drawEyes(ctx) {
+        const eyeW = this.r * 0.35, eyeH = this.isBlinking ? 3 : this.r * 0.35;
+        const eyeOffset = this.r * 0.18, eyeY = -this.r * 0.1;
+        ctx.fillStyle = '#f7fdff'; ctx.strokeStyle = '#163251'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.ellipse(-eyeOffset - eyeW/2, eyeY, eyeW/2, eyeH/2, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(eyeOffset + eyeW/2, eyeY, eyeW/2, eyeH/2, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        if (!this.isBlinking) {
+            ctx.fillStyle = '#07111f';
+            ctx.beginPath(); ctx.arc(-eyeOffset - eyeW/2, eyeY, this.r * 0.08, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(eyeOffset + eyeW/2, eyeY, this.r * 0.08, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.beginPath(); ctx.arc(-eyeOffset - eyeW/2 - this.r * 0.03, eyeY - this.r * 0.03, this.r * 0.025, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(eyeOffset + eyeW/2 - this.r * 0.03, eyeY - this.r * 0.03, this.r * 0.025, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    drawMouth(ctx) {
+        ctx.strokeStyle = '#163251';
+        ctx.lineWidth = Math.max(1.5, this.r * 0.07);
+        ctx.beginPath();
+        ctx.arc(0, this.r * 0.1, this.r * 0.18, 0.15 * Math.PI, 0.85 * Math.PI, false);
+        ctx.stroke();
+    }
+    drawChatBubble(ctx) {
+        const text = this.chatBubble.text;
+        ctx.font = `600 16px ${FONT_STACKS.ui}`;
+        const m = ctx.measureText(text), w = m.width + 20, h = 30;
+        ctx.save(); ctx.translate(this.x, this.y - this.r - 25);
+        ctx.beginPath();
+        ctx.moveTo(-w/2 + 10, -h); ctx.lineTo(w/2 - 10, -h); ctx.quadraticCurveTo(w/2, -h, w/2, -h + 10);
+        ctx.lineTo(w/2, -10); ctx.quadraticCurveTo(w/2, 0, w/2 - 10, 0); ctx.lineTo(5, 0);
+        ctx.lineTo(0, 8); ctx.lineTo(-5, 0); ctx.lineTo(-w/2 + 10, 0);
+        ctx.quadraticCurveTo(-w/2, 0, -w/2, -10); ctx.lineTo(-w/2, -h + 10);
+        ctx.quadraticCurveTo(-w/2, -h, -w/2 + 10, -h);
+        ctx.fillStyle = "rgba(241, 252, 255, 0.96)"; ctx.shadowColor = "rgba(0,0,0,0.22)"; ctx.shadowBlur = 8; ctx.fill();
+        ctx.strokeStyle = "rgba(92,225,255,0.45)"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = "#163251"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowBlur = 0;
+        ctx.fillText(text, 0, -h/2); ctx.restore();
+    }
+}
+
+function drawFlagPattern(ctx, r, data) {
+    const d = r * 2, colors = data.colors;
+    ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, d);
+    if (data.type === 'v-stripe') {
+        ctx.fillStyle = colors[1]; ctx.fillRect(-r/3, -r, d/3, d); ctx.fillStyle = colors[2]; ctx.fillRect(r/3, -r, d/3, d);
+    } else if (data.type === 'h-stripe') {
+        ctx.fillStyle = colors[1]; ctx.fillRect(-r, 0, d, r);
+        if (colors[2]) { ctx.fillStyle = colors[2]; ctx.fillRect(-r, r/2, d, r/2); }
+    } else if (data.type === 'h-stripe-3') {
+        ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r/3, d, d/3); ctx.fillStyle = colors[2]; ctx.fillRect(-r, r/3, d, d/3);
+    } else if (data.type === 'h-stripe-uneven') {
+        ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r/4, d, r/2);
+    } else if (data.type === 'uk-jack') {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = r/3; ctx.beginPath(); ctx.moveTo(-r,-r); ctx.lineTo(r,r); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r,-r); ctx.lineTo(-r,r); ctx.stroke();
+        ctx.strokeStyle = '#C8102E'; ctx.lineWidth = r/6; ctx.beginPath(); ctx.moveTo(-r,-r); ctx.lineTo(r,r); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r,-r); ctx.lineTo(-r,r); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.fillRect(-r/3, -r, r/1.5, d); ctx.fillRect(-r, -r/3, d, r/1.5);
+        ctx.fillStyle = '#C8102E'; ctx.fillRect(-r/5, -r, r/2.5, d); ctx.fillRect(-r, -r/5, d, r/2.5);
+    } else if (data.type === 'usa') {
+        ctx.fillStyle = '#fff'; ctx.fillRect(-r, -r, d, d); ctx.fillStyle = '#B22234'; for(let i=0; i<7; i++) ctx.fillRect(-r, -r + (i*d/7), d, d/14);
+        ctx.fillStyle = '#3C3B6E'; ctx.fillRect(-r, -r, r, r);
+    } else if (data.type === 'v-stripe-leaf') {
+        ctx.fillStyle = '#fff'; ctx.fillRect(-r, -r, d, d); ctx.fillStyle = '#FF0000'; ctx.fillRect(-r, -r, r/2, d); ctx.fillRect(r/2, -r, r/2, d);
+        ctx.beginPath(); ctx.moveTo(0, -r/2); ctx.lineTo(r/3, 0); ctx.lineTo(0, r/2); ctx.lineTo(-r/3, 0); ctx.fill();
+    } else if (data.type === 'solid-text') {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r/2, 0); ctx.lineTo(r/2, 0); ctx.stroke();
+    } else if (data.type === 'brazil') {
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.moveTo(0, -r*0.8); ctx.lineTo(r*0.9, 0); ctx.lineTo(0, r*0.8); ctx.lineTo(-r*0.9, 0); ctx.fill();
+        ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.arc(0, 0, r*0.35, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'portugal') {
+        ctx.fillStyle = colors[1]; ctx.fillRect(-r + (d*0.4), -r, d*0.6, d); ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.arc(-r + (d*0.4), 0, r*0.25, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'nordic') {
+        const barW = r * 0.35, offX = -r * 0.2; ctx.fillStyle = colors[1]; ctx.fillRect(offX - barW/2, -r, barW, d); ctx.fillRect(-r, -barW/2, d, barW);
+        if (colors[2]) { ctx.strokeStyle = colors[2]; ctx.lineWidth = r*0.1; ctx.strokeRect(offX - barW/2, -r, barW, d); ctx.strokeRect(-r, -barW/2, d, barW); }
+    } else if (data.type === 'turkey') {
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(-r*0.1, 0, r*0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = colors[0]; ctx.beginPath(); ctx.arc(0, 0, r*0.32, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(r*0.3, 0, r*0.1, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'palestine' || data.type === 'jordan' || data.type === 'iraq' || data.type === 'egypt' || data.type === 'iran') {
+        const h = d/3; ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, h); ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r+h, d, h); ctx.fillStyle = colors[2]; ctx.fillRect(-r, -r+h*2, d, h);
+        if (data.type === 'palestine' || data.type === 'jordan') { ctx.fillStyle = colors[3]; ctx.beginPath(); ctx.moveTo(-r, -r); ctx.lineTo(0, 0); ctx.lineTo(-r, r); ctx.fill(); }
+        if (data.type === 'jordan') { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-r*0.7, 0, r*0.1, 0, Math.PI*2); ctx.fill(); }
+        if (data.type === 'iraq') { ctx.fillStyle = colors[3]; ctx.beginPath(); ctx.arc(0, 0, r*0.15, 0, Math.PI*2); ctx.fill(); }
+        if (data.type === 'egypt') { ctx.fillStyle = colors[3]; ctx.beginPath(); ctx.arc(0, 0, r*0.2, 0, Math.PI*2); ctx.fill(); }
+        if (data.type === 'iran') { ctx.fillStyle = colors[3]||'#DA0000'; ctx.beginPath(); ctx.arc(0, 0, r*0.15, 0, Math.PI*2); ctx.fill(); }
+    } else if (data.type === 'swiss') {
+        ctx.fillStyle = colors[1]; const w = r * 1.2, t = r * 0.35; ctx.fillRect(-w/2, -t/2, w, t); ctx.fillRect(-t/2, -w/2, t, w);
+    } else if (data.type === 'nkorea') {
+        const h = d/5; ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, h); ctx.fillRect(-r, r-h, d, h);
+        ctx.fillStyle = colors[2]; ctx.fillRect(-r, -r+h, d, h*0.2); ctx.fillRect(-r, r-h-h*0.2, d, h*0.2);
+        ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r+h*1.2, d, d - 2.4*h);
+        ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.arc(-r*0.3, 0, r*0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(-r*0.3, 0, r*0.25, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'kazakh') {
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(0, 0, r*0.4, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'china') {
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(-r*0.4, -r*0.3, r*0.25, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-r*0.1, -r*0.6, r*0.08, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(r*0.1, -r*0.4, r*0.08, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'morocco') {
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, d); ctx.strokeStyle = colors[1]; ctx.lineWidth = r * 0.1; ctx.beginPath();
+        for(let i=0; i<5; i++) { const x = Math.cos(Math.PI*2/5*i*2-Math.PI/2)*r*0.5, y = Math.sin(Math.PI*2/5*i*2-Math.PI/2)*r*0.5; i===0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+        ctx.closePath(); ctx.stroke();
+    } else if (data.type === 'argentina') {
+        const h = d/3; ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, h); ctx.fillRect(-r, r-h, d, h); ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r+h, d, h);
+        ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.arc(0, 0, r*0.2, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'philippines') {
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, r); ctx.fillStyle = colors[1]; ctx.fillRect(-r, 0, d, r);
+        ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.moveTo(-r, -r); ctx.lineTo(0, 0); ctx.lineTo(-r, r); ctx.fill();
+        ctx.fillStyle = colors[3]; ctx.beginPath(); ctx.arc(-r*0.6, 0, r*0.15, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'skorea') {
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, d); ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(0, 0, r*0.4, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.arc(0, 0, r*0.4, 0, Math.PI); ctx.fill();
+        ctx.fillStyle = colors[3]; ctx.fillRect(-r*0.7, -r*0.7, r*0.3, r*0.05); ctx.fillRect(-r*0.7, -r*0.6, r*0.3, r*0.05);
+        ctx.fillRect(r*0.4, -r*0.7, r*0.3, r*0.05); ctx.fillRect(r*0.4, -r*0.6, r*0.3, r*0.05);
+        ctx.fillRect(-r*0.7, r*0.6, r*0.3, r*0.05); ctx.fillRect(-r*0.7, r*0.5, r*0.3, r*0.05);
+        ctx.fillRect(r*0.4, r*0.6, r*0.3, r*0.05); ctx.fillRect(r*0.4, r*0.5, r*0.3, r*0.05);
+    } else if (data.type === 'greece') {
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, d); ctx.fillStyle = colors[1]; for(let i=1; i<9; i+=2) ctx.fillRect(-r, -r + (i*d/9), d, d/9);
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d*0.4, d*0.4); ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r + d*0.18, d*0.4, d*0.04); ctx.fillRect(-r + d*0.18, -r, d*0.04, d*0.4);
+    } else if (data.type === 'japan') {
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, d); ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(0, 0, r*0.4, 0, Math.PI*2); ctx.fill();
+    } else if (data.type === 'lebanon') {
+        const h = d/4; ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, h); ctx.fillRect(-r, r-h, d, h); ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r+h, d, d/2);
+        ctx.fillStyle = colors[2]; ctx.beginPath(); ctx.moveTo(0, -r*0.3); ctx.lineTo(r*0.25, r*0.25); ctx.lineTo(-r*0.25, r*0.25); ctx.fill();
+    } else if (data.type === 'india') {
+        const h = d/3; ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, h); ctx.fillStyle = colors[1]; ctx.fillRect(-r, -r+h, d, h); ctx.fillStyle = colors[2]; ctx.fillRect(-r, -r+h*2, d, h);
+        ctx.strokeStyle = colors[3]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, r*0.2, 0, Math.PI*2); ctx.stroke();
+        for(let i=0; i<8; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(i*Math.PI/4)*r*0.2, Math.sin(i*Math.PI/4)*r*0.2); ctx.stroke(); }
+    } else if (data.type === 'pakistan') {
+        ctx.fillStyle = colors[0]; ctx.fillRect(-r, -r, d, d); ctx.fillStyle = colors[1]; ctx.fillRect(-r + d*0.25, -r, d*0.75, d);
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, 0, r*0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = colors[1]; ctx.beginPath(); ctx.arc(r*0.1, -r*0.1, r*0.35, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(r*0.2, -r*0.2, r*0.1, 0, Math.PI*2); ctx.fill();
+    }
+}
+
+function addMoney(amount, x, y) {
+    const mapBoost = MAP_DEFINITIONS[currentMap]?.boost || 1.0;
+    const finalAmount = amount * mapBoost;
+    money += finalAmount;
+    updateHUD();
+    floatingTexts.push({ text: `+$${Math.floor(finalAmount).toLocaleString()}`, x: x, y: y, life: 1.0, vy: -50, color: '#F1C40F' });
+    if (Math.random() < 0.15) playSfx('coin', { volume: 0.16, cooldown: 120 });
+    if (finalAmount >= 1000) flashFeedback('collect', 1400);
+    vibrate('light');
+}
+
+function updateHUD() {
+    document.getElementById('score-display').innerText = Math.floor(money).toLocaleString();
+    const boostInd = document.getElementById('boost-indicator');
+    if (currentMap === 'snow') boostInd.classList.remove('hidden'); else boostInd.classList.add('hidden');
+}
+
+function saveGame() {
+    if (gameState !== 'PLAYING') return;
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            money, unlocked: Array.from(unlocked), shopStock, nextRestockTime,
+            balls: balls.map(b => ({ typeKey: b.typeKey, x: b.x, y: b.y, vx: b.vx, vy: b.vy })),
+            storedBalls,
+            currentMap, unlockedMaps: Array.from(unlockedMaps),
+            timestamp: Date.now()
+        }));
+        showSaveToast();
+        playSfx('save', { volume: 0.18, cooldown: 180 });
+    } catch(e) {}
+}
+
+function loadGame() {
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        money = data.money || 100;
+        unlocked = new Set(data.unlocked || ['mexico']);
+        shopStock = data.shopStock || [];
+        nextRestockTime = data.nextRestockTime || 0;
+        currentMap = data.currentMap || 'grassland';
+        unlockedMaps = new Set(data.unlockedMaps || ['grassland']);
+        storedBalls = data.storedBalls || {};
+        balls = [];
+        if (Array.isArray(data.balls)) {
+            data.balls.forEach(bData => {
+                const b = new Ball(bData.typeKey);
+                b.x = bData.x; b.y = bData.y; b.vx = bData.vx; b.vy = bData.vy;
+                balls.push(b);
+            });
+        }
+        if (balls.length === 0 && Object.keys(storedBalls).length === 0) balls.push(new Ball('mexico'));
+        updateHUD();
+        return true;
+    } catch(e) { return false; }
+}
+
+function showSaveToast() {
+    const toast = document.getElementById('save-toast');
+    toast.style.opacity = '1';
+    setTimeout(() => toast.style.opacity = '0', 2000);
+}
+
+function restockShop() {
+    shopStock = [];
+    const pool = Object.keys(BALL_TYPES);
+    let totalWeight = pool.reduce((acc, key) => acc + BALL_TYPES[key].weight, 0);
+    for(let i=0; i<4; i++) {
+        let rnd = Math.random() * totalWeight, selected = pool[0];
+        for(const key of pool) {
+            rnd -= BALL_TYPES[key].weight;
+            if (rnd <= 0) { selected = key; break; }
+        }
+        shopStock.push(selected);
+    }
+    renderShop();
+    const duration = window.gameConfig.restockTime || 60;
+    nextRestockTime = Date.now() + (duration * 1000);
+    playSfx('restock', { volume: 0.16, cooldown: 300 });
+    saveGame(); 
+}
+
+function renderShop() {
+    const container = document.getElementById('shop-list');
+    container.innerHTML = '';
+    shopStock.forEach((key, idx) => {
+        const item = BALL_TYPES[key];
+        const div = document.createElement('div');
+        div.className = `tech-card p-3 rounded-2xl border-2 flex justify-between items-center shadow-sm rarity-${item.rarity.toLowerCase()}`;
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="orb-avatar w-12 h-12 border-2 border-cyan-100/20 shadow-inner relative" style="background: ${item.colors[0]}">
+                    <div class="orb-core" style="background:
+                        radial-gradient(circle at 34% 30%, rgba(255,255,255,0.36), transparent 26%),
+                        radial-gradient(circle at 62% 68%, rgba(0,0,0,0.18), transparent 52%)"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-[8px] opacity-50 font-bold text-slate-900">${item.name.substring(0,2).toUpperCase()}</div>
+                </div>
+                <div>
+                    <div class="font-bold text-cyan-50 text-lg leading-none">${item.name}</div>
+                    <div class="text-xs font-bold uppercase tracking-wide mt-1" style="color: ${RARITY_COLORS[item.rarity]}">${item.rarity}</div>
+                    <div class="text-xs text-cyan-100/65 numeric-readout">+$${item.income.toLocaleString()}/s</div>
+                </div>
+            </div>
+            <button class="bg-emerald-500 active:bg-emerald-600 text-slate-950 font-bold py-2 px-4 rounded-xl shadow btn-press min-w-[80px]" onclick="buyBall('${key}', ${idx})">$${item.price.toLocaleString()}</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function renderMapModal() {
+    const container = document.getElementById('map-list');
+    container.innerHTML = '';
+    Object.values(MAP_DEFINITIONS).forEach(map => {
+        const isUnlocked = unlockedMaps.has(map.id);
+        const isEquipped = currentMap === map.id;
+        const div = document.createElement('div');
+        div.className = `tech-card p-4 rounded-2xl border-2 shadow-sm flex flex-col gap-2 transition-all ${isEquipped ? 'map-card-selected' : ''}`;
+        
+        let buttonHtml = '';
+        if (isEquipped) {
+            buttonHtml = `<button class="w-full bg-gray-200 text-gray-500 font-bold py-2 rounded-xl cursor-default">EQUIPPED</button>`;
+        } else if (isUnlocked) {
+            buttonHtml = `<button class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 rounded-xl btn-press shadow" onclick="equipMap('${map.id}')">EQUIP</button>`;
+        } else {
+            buttonHtml = `<button class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-xl btn-press shadow" onclick="buyMap('${map.id}')">$${map.price.toLocaleString()}</button>`;
+        }
+
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="font-bold text-lg text-cyan-50">${map.name}</h3>
+                    <p class="text-xs text-cyan-100/65">${map.desc}</p>
+                </div>
+                <div class="orb-avatar w-10 h-10 border flex items-center justify-center text-xl" style="background: ${map.color}; border-color: rgba(255,255,255,0.16)">
+                    ${map.id === 'snow' ? '❄️' : '🌿'}
+                </div>
+            </div>
+            ${buttonHtml}
+        `;
+        container.appendChild(div);
+    });
+}
+
+function renderInventory() {
+    const container = document.getElementById('inventory-list');
+    container.innerHTML = '';
+    
+    // Calculate counts
+    const activeCounts = {};
+    balls.forEach(b => activeCounts[b.typeKey] = (activeCounts[b.typeKey] || 0) + 1);
+    
+    // Get all types we own (either active or stored)
+    const ownedTypes = new Set([...Object.keys(activeCounts), ...Object.keys(storedBalls).filter(k => storedBalls[k] > 0)]);
+    
+    document.getElementById('capacity-display').innerText = `${balls.length}/${window.gameConfig.maxBalls}`;
+    
+    if (ownedTypes.size === 0) {
+        container.innerHTML = '<div class="text-center text-cyan-100/55 py-10">No envoy orbs assigned yet.<br>Open the market to recruit more.</div>';
+        return;
+    }
+
+    Array.from(ownedTypes).sort((a,b) => BALL_TYPES[b].income - BALL_TYPES[a].income).forEach(key => {
+        const item = BALL_TYPES[key];
+        const active = activeCounts[key] || 0;
+        const stored = storedBalls[key] || 0;
+        
+        const div = document.createElement('div');
+        div.className = `tech-card p-3 rounded-2xl border-2 flex justify-between items-center shadow-sm rarity-${item.rarity.toLowerCase()}`;
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="orb-avatar w-10 h-10 border-2 border-cyan-100/20 shadow-inner overflow-hidden relative" style="background: ${item.colors[0]}">
+                    <div class="orb-core" style="background:
+                        radial-gradient(circle at 34% 30%, rgba(255,255,255,0.36), transparent 28%),
+                        radial-gradient(circle at 62% 68%, rgba(0,0,0,0.18), transparent 52%)"></div>
+                </div>
+                <div>
+                    <div class="font-bold text-cyan-50 text-sm leading-none">${item.name}</div>
+                    <div class="text-[10px] font-bold uppercase tracking-wide mt-0.5" style="color: ${RARITY_COLORS[item.rarity]}">${item.rarity}</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="flex flex-col items-end mr-2">
+                    <span class="text-xs font-bold text-emerald-300">Deployed: ${active}</span>
+                    <span class="text-[10px] font-bold text-cyan-100/45">Stored: ${stored}</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button class="w-8 h-8 rounded-lg bg-red-400/15 text-red-200 hover:bg-red-400/25 flex items-center justify-center font-bold btn-press shadow-sm" onclick="unequipBall('${key}')" ${active <= 0 ? 'disabled style="opacity:0.3"' : ''}>▼</button>
+                    <button class="w-8 h-8 rounded-lg bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25 flex items-center justify-center font-bold btn-press shadow-sm" onclick="equipBall('${key}')" ${stored <= 0 ? 'disabled style="opacity:0.3"' : ''}>▲</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+window.buyBall = function(key, idx) {
+    const item = BALL_TYPES[key];
+    if (money >= item.price) {
+        money -= item.price;
+        unlocked.add(key);
+        
+        if (balls.length >= window.gameConfig.maxBalls) {
+            // Auto-store if full
+            storedBalls[key] = (storedBalls[key] || 0) + 1;
+            const btn = document.activeElement;
+            if(btn) {
+                const originalText = btn.innerText;
+                btn.classList.add('bg-blue-500'); btn.innerText = "ARCHIVED";
+                setTimeout(() => { btn.classList.remove('bg-blue-500'); btn.innerText = originalText; }, 1000);
+            }
+        } else {
+            // Spawn active
+            balls.push(new Ball(key));
+        }
+
+        updateHUD();
+        playSfx('buy', { volume: 0.2, cooldown: 160 });
+        vibrate('medium');
+        shopStock.splice(idx, 1);
+        renderShop();
+        saveGame();
+    } else {
+        playSfx('blocked', { volume: 0.2, cooldown: 240 });
+        flashFeedback('blocked');
+        vibrate('heavy');
+    }
+};
+
+window.buyMap = function(id) {
+    const map = MAP_DEFINITIONS[id];
+    if (money >= map.price) {
+        money -= map.price;
+        unlockedMaps.add(id);
+        updateHUD();
+        playSfx('boost');
+        vibrate('heavy');
+        renderMapModal();
+        saveGame();
+    } else {
+        playSfx('blocked', { volume: 0.2, cooldown: 240 });
+        flashFeedback('blocked');
+        vibrate('heavy');
+    }
+};
+
+window.equipMap = function(id) {
+    currentMap = id;
+    playSfx('map_select');
+    vibrate('medium');
+    renderMapModal();
+    updateHUD();
+    saveGame();
+};
+
+window.equipBall = function(key) {
+    if ((storedBalls[key] || 0) > 0) {
+        if (balls.length >= window.gameConfig.maxBalls) {
+            playSfx('blocked', { volume: 0.2, cooldown: 240 });
+            flashFeedback('blocked');
+            vibrate('heavy');
+            return;
+        }
+        storedBalls[key]--;
+        balls.push(new Ball(key));
+        playSfx('equip');
+        vibrate('light');
+        renderInventory();
+        saveGame();
+    }
+};
+
+window.unequipBall = function(key) {
+    const idx = balls.findIndex(b => b.typeKey === key);
+    if (idx !== -1) {
+        balls.splice(idx, 1);
+        storedBalls[key] = (storedBalls[key] || 0) + 1;
+        playSfx('unequip');
+        vibrate('light');
+        renderInventory();
+        saveGame();
+    }
+};
+
+function renderIndex() {
+    const container = document.getElementById('index-grid');
+    container.innerHTML = '';
+    Object.keys(BALL_TYPES).sort((a,b) => BALL_TYPES[a].price - BALL_TYPES[b].price).forEach(key => {
+        const item = BALL_TYPES[key], isUnlocked = unlocked.has(key);
+        const div = document.createElement('div');
+        div.className = `glass tech-card p-2 rounded-2xl flex flex-col items-center justify-between gap-1 relative overflow-hidden transition-transform active:scale-95 h-40 scanline ${isUnlocked ? 'opacity-100' : 'opacity-60 grayscale'}`;
+        div.style.borderColor = isUnlocked ? RARITY_COLORS[item.rarity] : 'rgba(255,255,255,0.15)'; div.style.borderWidth = '2px';
+        div.innerHTML = `
+            <div class="flex-1 flex items-center justify-center w-full mt-1">
+                <div class="orb-avatar w-12 h-12 border-2 shadow-md flex-shrink-0" style="background: ${isUnlocked ? item.colors[0] : '#51617a'}; border-color: rgba(255,255,255,0.18)">
+                    <div class="orb-core" style="background:
+                        radial-gradient(circle at 34% 30%, rgba(255,255,255,0.36), transparent 26%),
+                        radial-gradient(circle at 62% 68%, rgba(0,0,0,0.18), transparent 52%)"></div>
+                </div>
+            </div>
+            <div class="w-full bg-slate-950/40 rounded-lg py-1 px-1 text-center flex flex-col gap-0.5">
+                <div class="text-xs font-black leading-tight truncate ${isUnlocked ? 'text-cyan-50' : 'text-cyan-100/45'}">${item.name}</div>
+                <div class="text-[9px] uppercase font-bold tracking-wider" style="color: ${RARITY_COLORS[item.rarity]}">${item.rarity}</div>
+                <div class="flex justify-between items-center w-full px-1 mt-1 border-t border-cyan-100/10 pt-1">
+                    <div class="flex flex-col items-start"><span class="text-[8px] text-cyan-100/40 font-bold">COST</span><span class="text-[10px] numeric-readout font-bold text-rose-300">$${item.price > 999 ? (item.price/1000).toFixed(1)+'k' : item.price}</span></div>
+                    <div class="flex flex-col items-end"><span class="text-[8px] text-cyan-100/40 font-bold">INC/s</span><span class="text-[10px] numeric-readout font-bold text-emerald-300">+${item.income > 999 ? (item.income/1000).toFixed(1)+'k' : item.income}</span></div>
+                </div>
+            </div>
+            ${!isUnlocked ? '<div class="absolute inset-0 flex items-center justify-center bg-black/20 z-10"><span class="text-3xl drop-shadow-lg">🔒</span></div>' : ''}
+        `;
+        container.appendChild(div);
+    });
+}
+
+function initGame() {
+    if (initialized) return;
+    if (localStorage.getItem(SAVE_KEY)) loadGame() || initNewGame(); else initNewGame();
+    if (shopStock.length === 0 || Date.now() >= nextRestockTime) restockShop(); else renderShop();
+    document.getElementById('ui-layer').classList.remove('hidden');
+    gameState = 'PLAYING'; initialized = true;
+    requestAnimationFrame(gameLoop);
+}
+
+function initNewGame() {
+    money = 100; balls = [new Ball('mexico')]; storedBalls = {}; unlocked = new Set(['mexico']); shopStock = [];
+    currentMap = 'grassland'; unlockedMaps = new Set(['grassland']);
+    restockShop(); saveGame(); updateHUD();
+}
+
+function resize() {
+    cw = canvas.width = window.innerWidth * window.devicePixelRatio;
+    ch = canvas.height = window.innerHeight * window.devicePixelRatio;
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    cw /= window.devicePixelRatio; ch /= window.devicePixelRatio;
+    if (initialized) balls.forEach(b => { b.x = Math.min(Math.max(b.x, b.r), cw - b.r); b.y = Math.min(Math.max(b.y, b.r), ch - b.r); });
+    if (!initialized) initGame();
+}
+
+function drawBackground(ctx, time) {
+    if (currentMap === 'snow') {
+        let grad = ctx.createLinearGradient(0, 0, 0, ch);
+        grad.addColorStop(0, '#B3E5FC'); grad.addColorStop(0.4, '#E1F5FE'); grad.addColorStop(0.4, '#FFFFFF'); grad.addColorStop(1, '#E0F7FA');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, cw, ch);
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        for (let i = 0; i < 28; i++) {
+            const sx = (i * 97 + time * 0.02) % (cw + 80) - 40;
+            const sy = (i * 53) % (ch * 0.42);
+            ctx.beginPath(); ctx.arc(sx, sy, (i % 3) + 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.strokeStyle = '#B2EBF2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, ch*0.4); ctx.lineTo(cw, ch*0.4); ctx.stroke();
+        ctx.fillStyle = '#CFD8DC'; ctx.beginPath(); ctx.moveTo(0, ch*0.4); ctx.lineTo(cw*0.2, ch*0.15); ctx.lineTo(cw*0.4, ch*0.4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cw*0.5, ch*0.4); ctx.lineTo(cw*0.75, ch*0.1); ctx.lineTo(cw, ch*0.4); ctx.fill();
+        ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.moveTo(cw*0.15, ch*0.21); ctx.lineTo(cw*0.2, ch*0.15); ctx.lineTo(cw*0.25, ch*0.21); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cw*0.68, ch*0.18); ctx.lineTo(cw*0.75, ch*0.1); ctx.lineTo(cw*0.82, ch*0.18); ctx.fill();
+        ctx.fillStyle = '#81D4FA'; ctx.beginPath(); ctx.ellipse(cw*0.75, ch*0.6, 80, 40, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(cw*0.75, ch*0.6, 70, 30, 0, 0, Math.PI*2); ctx.stroke();
+        ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#90A4AE'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cw*0.2, ch*0.5, 40, Math.PI, 0); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cw*0.2, ch*0.5-40); ctx.lineTo(cw*0.2, ch*0.5); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cw*0.2, ch*0.5, 20, Math.PI, 0); ctx.stroke();
+        ctx.fillStyle = '#546E7A'; ctx.beginPath(); ctx.arc(cw*0.2, ch*0.5, 12, Math.PI, 0); ctx.fill();
+        const drawTree = (tx, ty) => {
+            ctx.fillStyle = '#5D4037'; ctx.fillRect(tx-5, ty, 10, 15);
+            ctx.fillStyle = '#4CAF50'; 
+            ctx.beginPath(); ctx.moveTo(tx-20, ty); ctx.lineTo(tx, ty-40); ctx.lineTo(tx+20, ty); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(tx-15, ty-20); ctx.lineTo(tx, ty-50); ctx.lineTo(tx+15, ty-20); ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath(); ctx.moveTo(tx-20, ty); ctx.lineTo(tx-10, ty-10); ctx.lineTo(tx+10, ty-10); ctx.lineTo(tx+20, ty); ctx.lineTo(tx, ty); ctx.fill();
+        };
+        drawTree(cw*0.1, ch*0.8); drawTree(cw*0.9, ch*0.75); drawTree(cw*0.5, ch*0.9);
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        ctx.beginPath(); ctx.ellipse(cw*0.3, ch*0.6, 5, 3, 0.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cw*0.32, ch*0.62, 5, 3, 0.2, 0, Math.PI*2); ctx.fill();
+    } else {
+        let grad = ctx.createLinearGradient(0, 0, 0, ch);
+        grad.addColorStop(0, '#0f274f'); grad.addColorStop(0.34, '#214f7f'); grad.addColorStop(0.34, '#1f6940'); grad.addColorStop(1, '#0d2f1e');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, cw, ch);
+
+        const skylineGrad = ctx.createLinearGradient(0, ch * 0.08, 0, ch * 0.34);
+        skylineGrad.addColorStop(0, 'rgba(151,241,255,0.22)');
+        skylineGrad.addColorStop(1, 'rgba(151,241,255,0.02)');
+        ctx.fillStyle = skylineGrad;
+        for (let i = 0; i < 12; i++) {
+            const w = 28 + (i % 4) * 14;
+            const x = (cw / 12) * i;
+            const h = ch * (0.09 + ((i * 13) % 5) * 0.024);
+            ctx.fillRect(x, ch * 0.3 - h, w, h);
+        }
+
+        ctx.strokeStyle = 'rgba(126,228,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, ch*0.3); ctx.lineTo(cw, ch*0.3); ctx.stroke();
+        ctx.strokeStyle = 'rgba(115,255,166,0.16)';
+        for (let y = ch * 0.38; y < ch; y += 38) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        const cloudOffset = (time * 0.015) % (cw + 300) - 150;
+        ctx.beginPath(); ctx.arc(cloudOffset, ch*0.15, 30, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cloudOffset+40, ch*0.18, 40, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cloudOffset+80, ch*0.15, 35, 0, Math.PI*2); ctx.fill();
+
+        ctx.fillStyle = 'rgba(92,225,255,0.16)';
+        for (let i = 0; i < 18; i++) {
+            const px = (i * 71 + time * 0.03) % (cw + 60) - 30;
+            const py = ch * (0.34 + ((i * 17) % 44) / 100);
+            ctx.beginPath(); ctx.arc(px, py, (i % 3) + 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+}
+
+function gameLoop(time) {
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+    ctx.clearRect(0, 0, cw, ch);
+
+    drawBackground(ctx, time);
+
+    balls.forEach(b => { b.update(dt); b.draw(ctx); });
+
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.life -= dt; ft.y += ft.vy * dt;
+        ctx.save(); ctx.globalAlpha = Math.max(0, ft.life);
+        ctx.fillStyle = ft.color || '#fff'; ctx.font = `700 20px ${FONT_STACKS.display}`; ctx.strokeStyle = '#04111f'; ctx.lineWidth = 3;
+        ctx.strokeText(ft.text, ft.x, ft.y); ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+    }
+
+    if (gameState === 'PLAYING') {
+        if (Date.now() >= nextRestockTime) restockShop();
+        const timeLeft = Math.max(0, Math.ceil((nextRestockTime - Date.now()) / 1000));
+        const mins = Math.floor(timeLeft / 60), secs = timeLeft % 60;
+        const timeStr = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+        document.getElementById('restock-timer').innerText = timeStr;
+        document.getElementById('shop-timer-display').innerText = timeStr;
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+function handleGlobalInput(e) {
+    if (e.target?.closest('#ui-layer, #modal-overlay')) {
+        unlockAudio();
+        return;
+    }
+    unlockAudio();
+    if (gameState === 'PLAYING') {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        let clicked = false;
+        
+        for (let i = balls.length - 1; i >= 0; i--) {
+            const b = balls[i];
+            const dx = x - b.x, dy = y - b.y;
+            if (dx*dx + dy*dy <= b.r*b.r) {
+                b.vy = -12; b.vx = (Math.random() - 0.5) * 10;
+                addMoney(1, b.x, b.y);
+                b.triggerChat();
+                playSfx('click');
+                clicked = true; break;
+            }
+        }
+        if (!clicked) {
+            floatingTexts.push({ text: '.', x: x, y: y, life: 0.5, vy: 0, color: '#fff' });
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        const rawCfg = JSON.parse(document.getElementById('game-config').textContent);
+        window.gameConfigDefs = rawCfg;
+        window.gameConfig = Object.fromEntries(Object.entries(rawCfg).map(([k,v]) => [k, v.value]));
+    } catch(e) { 
+        console.error("Config Parse Error", e);
+        window.gameConfig = { restockTime: 60, maxBalls: 150 }; 
+    }
+
+    const ro = new ResizeObserver(entries => { for(let e of entries) resize(); });
+    ro.observe(canvas);
+
+    document.documentElement.style.setProperty('--font-display', FONT_STACKS.display);
+    document.documentElement.style.setProperty('--font-ui', FONT_STACKS.ui);
+
+    document.getElementById('btn-shop').onclick = () => { renderShop(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('shop-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-map').onclick = () => { renderMapModal(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('map-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-index').onclick = () => { renderIndex(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('index-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-inventory').onclick = () => { renderInventory(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('inventory-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-menu').onclick = () => { gameState = 'PAUSED'; syncBgmState(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('menu-modal').classList.remove('hidden'); playSfx('pause', { volume: 0.18, cooldown: 160 }); };
+    document.getElementById('btn-save-manual').onclick = () => { saveGame(); };
+    document.getElementById('btn-reset').onclick = () => { localStorage.removeItem(SAVE_KEY); location.reload(); };
+
+    document.querySelectorAll('.close-modal').forEach(btn => btn.onclick = () => {
+        document.getElementById('modal-overlay').classList.add('hidden');
+        document.querySelectorAll('#modal-overlay > div').forEach(d => d.classList.add('hidden'));
+        const wasPaused = gameState !== 'PLAYING';
+        gameState = 'PLAYING';
+        syncBgmState();
+        playSfx(wasPaused ? 'resume' : 'click', { volume: 0.16, cooldown: 140 });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            document.getElementById('bgm_main')?.pause();
+        } else {
+            syncBgmState();
+        }
+    });
+
+    // [agent-note][stage4] repaired: mobile-action-path | scope: gameplay canvas only | reason: keep native taps/clicks working for HUD and modal controls
+    canvas.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+    setInterval(saveGame, 30000);
+});
+</script>
+</body>
+</html>

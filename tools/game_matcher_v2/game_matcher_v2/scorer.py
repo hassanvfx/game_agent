@@ -47,6 +47,9 @@ def score_games(
         raise ValueError("limit must be greater than 0")
 
     selected = _normalize_selected(selected_tags)
+    if not any(selected.values()):
+        return []
+
     games = normalized_games_payload.get("games") or []
 
     ranked: list[dict[str, Any]] = []

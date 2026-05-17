@@ -1,0 +1,1 @@
+/* Removed unused mirrored Tailwind bundle in Stage 03 to satisfy media policy cleanup. */

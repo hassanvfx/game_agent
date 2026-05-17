@@ -1,6 +1,6 @@
 # Game Pipeline Orchestrator Implementation Journal
 
-**Last Updated:** 2026-04-26 19:12  
+**Last Updated:** 2026-05-17 07:24 America/Mexico_City  
 **Feature Spec:** N/A  
 **Backend Reference:** N/A
 
@@ -26,17 +26,263 @@
 
 **Status:** 🔧 In Progress
 
-### Phase 3: Observer CLI and HTML Dashboard - **PLANNED**
+### ✅ Phase 3: Observer CLI and HTML Dashboard - **COMPLETE**
 
-- [ ] Implement observer CLI terminal rendering and JSON mode
-- [ ] Implement auto-updating HTML dashboard backed by run files
-- [ ] Add lightweight local dashboard server and validate flow
+- [x] Implement observer CLI terminal rendering and JSON mode
+- [x] Implement auto-updating HTML dashboard backed by run files
+- [x] Add lightweight local dashboard server and validate flow
 
-**Status:** Planned
+**Status:** ✅ Complete
 
 ---
 
 ## 📝 Journal Entries
+
+### 2026-05-17 07:24 - Materialized all published runs and restored GTA-like matcher coverage
+
+**Achievement:**
+- Materialized the root published artifact views from all discovered published run snapshots
+- Expanded `games/published/public/app.json` from the previously observed 2-record slice to a merged 1,131-record catalog
+- Confirmed `game_matcher_v2` now returns real ranked matches for `3d game gta` once the root catalog was rebuilt from all runs
+
+**Implementation Details:**
+- Used the publish-pipeline materializer across all discovered run snapshots under `games/published/runs/`
+- Materialization merged 8 run directories into the root published views with `latest-wins` precedence
+- Rebuilt root artifacts:
+  - `games/published/public/index.json`
+  - `games/published/public/app_tags.json`
+  - `games/published/public/app.json`
+  - `games/published/obfuscated/index.json`
+  - `games/published/obfuscated/app_tags.json`
+  - `games/published/obfuscated/app.json`
+- Resulting merged record counts:
+  - public `index.json`: 1,131
+  - public `app_tags.json`: 1,131
+  - public `app.json`: 1,131
+  - obfuscated `index.json`: 1,131
+  - obfuscated `app_tags.json`: 1,131
+  - obfuscated `app.json`: 1,131
+
+**Technical Decisions:**
+- Kept the v2-only matcher repair in place and did not add deprecated matcher fallback logic
+- Confirmed the original path assumption was already correct (`games/published/public/app.json`); the real issue was that the root view had not been materialized from the full run history
+- Treated root-view materialization as the correct recovery path because `game_matcher_v2` derives its controlled vocabulary from the root published catalog
+
+**Testing:**
+- After materialization, direct `game_matcher_v2` CLI probing showed:
+  - prompt `3d game gta` now returns 2 ranked matches
+  - top hits included GTA-like tags such as:
+    - `Third person shooter`
+    - `Grand Theft Auto`
+    - `urban crime spree`
+    - `police pursuit`
+    - `open urban sandbox`
+- `mario kart racing xmas style` continued returning ranked matches successfully after the expanded catalog rebuild
+
+**Next Steps:**
+- [ ] Re-run the demo launcher against `3d game gta` using the materialized root catalog if needed for another end-to-end confirmation
+- [ ] Decide whether all-runs materialization should become part of the normal publish refresh workflow or remain an operator repair step
+
+**Status:** Complete
+
+---
+
+### 2026-05-17 07:05 - Repaired match v2 no-coverage behavior and clarified corpus limits
+
+**Achievement:**
+- Repaired `game_matcher_v2` so prompts with no controlled-vocabulary coverage now return an empty ranked result instead of crashing inside selector validation
+- Updated the local orchestrator to surface the no-coverage case as an explicit matcher failure message instead of the older generic selector error
+- Confirmed the current published corpus is still only two holiday-kart games, so matcher source pathing was not the actual root cause
+
+**Implementation Details:**
+- `../game_matcher_v2/game_matcher_v2/selector.py`
+  - removed the hard failure on an empty validated tag payload
+  - empty `{}` selected-tags payloads are now treated as a valid no-coverage outcome
+- `../game_matcher_v2/game_matcher_v2/scorer.py`
+  - returns `[]` immediately when no validated tags remain after normalization
+- `scripts/run_pipeline.py`
+  - detects `matcher_mode == "v2"` with zero matches and raises a specific error:
+    - `matcher v2 had no controlled-vocabulary coverage for prompt`
+  - preserves strict pipeline failure semantics while making the failure reason operator-readable
+- Temporary validation helpers created during repair:
+  - `tmp/matcher_corpus_probe.py`
+  - `tmp/validate_matcher_v2.py`
+  - `tmp/validate_pipeline_no_coverage.py`
+
+**Technical Decisions:**
+- Kept strict fail-hard behavior at the orchestrator level because downstream refactoring still requires two concrete source matches
+- Relaxed match-v2 internals instead of fabricating unrelated tags, so low-coverage prompts fail honestly rather than producing misleading holiday/kart matches
+- Confirmed that `games/published/public/app.json` is already the correct source path, but it currently contains only 2 entries, so corpus breadth is a separate data problem rather than a path bug
+
+**Testing:**
+- Corpus probe:
+  - `python3 tmp/matcher_corpus_probe.py`
+  - confirmed both published app.json files contain only 2 entries
+- Matcher validation:
+  - `python3 tmp/validate_matcher_v2.py`
+  - `3d game gta` now exits `0` with:
+    - `result_payload: []`
+    - `tags_payload: {}`
+  - `mario kart racing xmas style` still returns 2 ranked matches with validated tags
+- Orchestrator validation:
+  - `python3 tmp/validate_pipeline_no_coverage.py`
+  - confirmed pipeline now fails with explicit error:
+    - `matcher v2 had no controlled-vocabulary coverage for prompt`
+
+**Next Steps:**
+- [ ] Decide whether to keep the temporary validation helpers or remove them after review
+- [ ] Broaden the published tagged corpus if match v2 needs to support prompts outside the current holiday-kart slice
+
+**Status:** Complete
+
+---
+
+### 2026-05-17 06:47 - Validated demo launcher wiring against the current dashboard
+
+**Achievement:**
+- Confirmed `scripts/demo_pipeline_launch.py` launches a brand-new run and opens/serves the dashboard for that exact run id
+- Verified the current dashboard is not stale or pointed at an older successful run when a new run fails early
+- Reconciled the journal status with the codebase: observer CLI, live dashboard, and local dashboard server are implemented and validated
+
+**Implementation Details:**
+- Validation flow used:
+  - `python3 scripts/demo_pipeline_launch.py "3d game gta" --no-open`
+- New run created during validation:
+  - run id: `run_pipeline_20260517T124528Z`
+  - dashboard URL: `http://127.0.0.1:8438/index.html`
+- Inspected generated artifacts for the new run:
+  - `pipeline_runs/run_pipeline_20260517T124528Z/run_state.json`
+  - `pipeline_runs/run_pipeline_20260517T124528Z/dashboard/dashboard_data.json`
+  - `pipeline_runs/run_pipeline_20260517T124528Z/matcher/matcher.command.json`
+  - `pipeline_runs/run_pipeline_20260517T124528Z/matcher/matcher.stderr.txt`
+- The matcher failed for this prompt with:
+  - `selector output did not contain any valid controlled-vocabulary tags`
+- Despite the matcher failure, the served dashboard correctly showed:
+  - prompt `3d game gta`
+  - run id `run_pipeline_20260517T124528Z`
+  - failed matcher state for the current run
+  - older successful runs only inside the separate `recent_runs` section
+
+**Technical Decisions:**
+- Treated the dashboard payload files and served page as the source of truth for validation rather than relying on the journal’s older phase labels
+- Counted this as dashboard validation success even though the pipeline prompt failed, because the objective of this check was wiring/freshness of the dashboard, not matcher prompt quality
+
+**Testing:**
+- Demo launcher created a fresh run directory and reported a matching dashboard URL
+- Visual inspection of the served page confirmed it reflected the new failed run rather than a stale older run
+- Artifact inspection confirmed `dashboard_data.json` and `run_state.json` matched the same fresh run id and failure details
+
+**Next Steps:**
+- [ ] If desired, retry demo validation with a matcher-friendly prompt that produces valid controlled-vocabulary tags
+- [ ] Keep Phase 2 journal items focused on orchestration robustness while treating dashboard validation as complete
+
+**Status:** Complete
+
+---
+
+### 2026-05-17 05:09 - Completed v5 workflow migration and scoped upload verification
+
+**Achievement:**
+- Completed the local orchestrator migration from the old v4 refactoring handoff to `creative_remix_v5`
+- Fixed publish-stage upload scoping so GCS sync targets only the current run's game ids instead of sweeping the entire published roots
+- Verified the end-to-end publish+upload path with a clean rerun and live dashboard
+
+**Implementation Details:**
+- `scripts/run_pipeline.py`
+  - launches `creative_remix_v5` through `scripts/game_workflow.py`
+  - derives upload scope from the publish report via `extract_publish_game_ids(...)`
+  - invokes `scripts/sync_to_gcs.py` with `--mode per-item` and repeated `--only-item <game_id>` arguments
+- Successful verification run:
+  - prompt: `starwars meets kawaii space invaders`
+  - run id: `run_pipeline_20260517T110057Z`
+  - dashboard: `http://127.0.0.1:8602/index.html`
+- Verified upload payload reported only:
+  - `gamezone-34c63716-4569-4f8a-8b34-355250dda951`
+  - `gamezone-e5741de0-8da4-4b6d-8eab-9771c3300be2`
+
+**Technical Decisions:**
+- Scoped the fix inside `game_generator` because the regression came from this orchestrator's broad upload invocation, while the sibling publish tool already supported item-level targeting
+- Preserved the existing publish pipeline contract and reused `sync_to_gcs.py --only-item` rather than introducing a new upload manifest shape
+
+**Testing:**
+- `python3 -m py_compile scripts/run_pipeline.py`
+- temp helper validation confirmed scoped upload arguments are built from publish-report game ids
+- live rerun confirmed:
+  - publish completed
+  - upload completed
+  - dashboard opened successfully
+  - upload summary `only_items` matched the current run ids
+
+**Next Steps:**
+- [x] Run lightweight validation checks on the scoped-upload change
+- [x] Re-run the themed publish+upload flow
+- [x] Confirm upload artifacts show only current-run game ids being synced
+
+**Status:** Complete
+
+---
+
+### 2026-05-17 04:58 - Scoped publish upload to current run game ids
+
+**Achievement:**
+- Identified that publish+upload runs were spending time syncing the entire published roots instead of just the game ids produced by the current pipeline run
+- Updated the orchestrator upload handoff to scope `sync_to_gcs.py` to the current run's game ids only
+
+**Implementation Details:**
+- Modified `scripts/run_pipeline.py` to derive ordered `game_id` values from the publish report's deployment and obfuscation sections
+- Updated the upload invocation from a broad `sync_to_gcs.py --target both` call to a scoped per-item call using:
+  - `--mode per-item`
+  - repeated `--only-item <game_id>` arguments for the current run
+- Added guardrails so upload now fails fast if the publish report does not expose game ids needed for a scoped sync
+
+**Technical Decisions:**
+- Kept the fix local to `game_generator` rather than modifying the sibling publish pipeline because the immediate regression was caused by how this orchestrator invoked `sync_to_gcs.py`
+- Reused existing `sync_to_gcs.py --only-item` support instead of inventing a new manifest contract for uploads
+
+**Testing:**
+- Validate that `scripts/run_pipeline.py` compiles cleanly after the upload scoping change
+- Re-run a publish+upload flow and inspect `sync_to_gcs.command.json` to confirm it contains only run-scoped `--only-item` values
+
+**Next Steps:**
+- [ ] Run lightweight validation checks on the scoped-upload change
+- [ ] Re-run the themed publish+upload flow
+- [ ] Confirm upload artifacts show only current-run game ids being synced
+
+**Status:** In Progress
+
+---
+
+### 2026-05-17 04:25 - Switched orchestrator workflow handoff from v4 to v5
+
+**Achievement:**
+- Updated the local orchestrator to launch the upstream `creative_remix_v5` workflow instead of `creative_remix_v4`
+- Reconfirmed that the v5 source of truth lives in the sibling `../game_refactoring` repository docs and workflow registry
+- Prepared validation around the user-provided test query `mario bros platformer`
+
+**Implementation Details:**
+- Modified `scripts/run_pipeline.py` so `PipelineRun.run_refactoring()` now launches `scripts/game_workflow.py --json --id creative_remix_v5`
+- Updated orchestrator docstrings/comments that still described the older v4 workflow handoff
+- Revalidated upstream references in:
+  - `../game_refactoring/docs/game_workflow_cli.md`
+  - `../game_refactoring/scripts/game_workflow.py`
+  - `../game_refactoring/docs/operator_pipeline_manual.md`
+
+**Technical Decisions:**
+- Kept the existing manifest-driven integration boundary unchanged because the upstream v5 workflow still uses the same `game_workflow.py` launcher contract and `--games-manifest-source` handoff pattern
+- Treated the sibling repo documentation and workflow registry as authoritative rather than relying on older local comments or historical journal notes
+
+**Testing:**
+- Verify the orchestrator now references `creative_remix_v5` as the workflow id in `scripts/run_pipeline.py`
+- Run the pipeline with the test query `mario bros platformer` and confirm the refactoring launch artifacts record the v5 workflow handoff
+
+**Next Steps:**
+- [ ] Run lightweight validation checks on the updated orchestrator and journal changes
+- [ ] Execute a verification flow using `mario bros platformer`
+- [ ] Inspect generated run artifacts for the v5 workflow id and handoff metadata
+
+**Status:** In Progress
+
+---
 
 ### 2026-04-26 19:12 - Initial Setup
 
