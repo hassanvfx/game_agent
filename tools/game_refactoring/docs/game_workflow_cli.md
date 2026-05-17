@@ -76,6 +76,29 @@ Use `remix-v4-clone` when you want to:
 - rebuild the main public surface as a new game
 - minimize dependence on old source files except when resolving ambiguity or protecting core behavior expectations
 
+### `creative_remix_v5`
+
+The `creative_remix_v5` workflow is the single-super-operator evolution of the latest `remix-v4-clone` pipeline. It runs this node:
+
+1. `remix_v5_super_operator`
+
+This workflow uses:
+
+- Remix v5 skill catalogs under `tools/game_refactoring/catalogs/skills/`
+- a single generated prompt artifact:
+  - `prompts/operators_v2/00_creative_remix_v5_super_operator.md`
+
+The important design split is:
+
+- reusable analysis / world / visual / media / QA value lives in per-type skill catalogs
+- rebuild / `_old` preservation logic stays directly inside the assembled super prompt as an execution phase
+
+Use `creative_remix_v5` when you want:
+
+- the latest clone pipeline behavior preserved in one long-horizon operator
+- catalog-backed execution rails instead of a vague mega-prompt
+- a single-node workflow that still preserves blueprint, rebuild, worlding, visuals, media, and QA obligations
+
 ### `remix-v4-vite`
 
 The `remix-v4-vite` workflow is the Vite / compiled-bundle-specialized variant of v4. It runs these nodes:
@@ -170,6 +193,15 @@ python3 scripts/game_workflow.py \
 ```bash
 python3 scripts/game_workflow.py \
   --id remix-v4-clone \
+  --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
+  --remix-prompt "your remix prompt here"
+```
+
+## Creative remix v5 example
+
+```bash
+python3 scripts/game_workflow.py \
+  --id creative_remix_v5 \
   --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
   --remix-prompt "your remix prompt here"
 ```

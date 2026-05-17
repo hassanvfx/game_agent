@@ -18,6 +18,7 @@ from scripts.operator_registry_v2 import OperatorDefinition, OperatorRegistry, l
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REMIX_V5_TEMPLATE_ROOT = ROOT / "fixtures" / "remix_v5_contract_templates"
 
 
 class OperatorPipelineGameError(RuntimeError):
@@ -139,7 +140,166 @@ def copy_catalogs_into_workspace(workspace: Path) -> dict[str, Path]:
         shutil.copy2(source_catalog_path, destination_catalog_path)
         copied_catalogs[catalog_name] = destination_catalog_path.resolve()
 
+    optional_catalog_dir_names = ("skills",)
+    for catalog_dir_name in optional_catalog_dir_names:
+        source_catalog_subdir = source_catalog_dir / catalog_dir_name
+        if not source_catalog_subdir.exists():
+            continue
+        if not source_catalog_subdir.is_dir():
+            raise OperatorPipelineGameError(f"Optional catalog path is not a directory: {source_catalog_subdir}")
+
+        destination_catalog_subdir = destination_catalog_dir / catalog_dir_name
+        if destination_catalog_subdir.exists():
+            shutil.rmtree(destination_catalog_subdir)
+        shutil.copytree(
+            source_catalog_subdir,
+            destination_catalog_subdir,
+            symlinks=True,
+            ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"),
+        )
+        copied_catalogs[f"{catalog_dir_name}/"] = destination_catalog_subdir.resolve()
+
     return copied_catalogs
+
+
+def stringify_catalog_paths(workspace_catalogs: dict[str, Path]) -> dict[str, str]:
+    return {catalog_name: str(catalog_path) for catalog_name, catalog_path in sorted(workspace_catalogs.items())}
+
+
+def bullet_list(values: list[str] | None) -> str:
+    if not values:
+        return "- NONE"
+    return "\n".join(f"- {value}" for value in values)
+
+
+def load_remix_v5_template_manifest() -> dict[str, Any]:
+    manifest_path = REMIX_V5_TEMPLATE_ROOT / "manifest.json"
+    payload = load_json(manifest_path)
+    if not isinstance(payload, dict):
+        raise OperatorPipelineGameError(f"Invalid Remix v5 template manifest: {manifest_path}")
+    return payload
+
+
+def copy_remix_v5_contract_templates_into_workspace(workspace: Path, operator_id: str) -> dict[str, Any] | None:
+    if operator_id != "remix_v5_super_operator":
+        return None
+
+    manifest = load_remix_v5_template_manifest()
+    seeded_dir = REMIX_V5_TEMPLATE_ROOT / "seeded"
+    if not seeded_dir.exists() or not seeded_dir.is_dir():
+        raise OperatorPipelineGameError(f"Missing Remix v5 seeded template directory: {seeded_dir}")
+
+    for relative_name in manifest.get("seeded_artifacts", []):
+        source_path = seeded_dir / relative_name
+        destination_path = workspace / relative_name
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination_path)
+
+    for relative_name in manifest.get("support_files", []):
+        source_path = seeded_dir / relative_name
+        destination_path = workspace / relative_name
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination_path)
+
+    manifest_copy_path = workspace / "remix_v5_contract_manifest.json"
+    shutil.copy2(REMIX_V5_TEMPLATE_ROOT / "manifest.json", manifest_copy_path)
+    return manifest
+
+
+def build_remix_v5_template_contract_section(template_manifest: dict[str, Any] | None) -> list[str]:
+    if not template_manifest:
+        return []
+
+    placeholder_token = str(template_manifest.get("placeholder_token") or "__FILL_ME__")
+    seeded_artifacts = template_manifest.get("seeded_artifacts") or []
+    support_files = template_manifest.get("support_files") or []
+    runtime_generated = template_manifest.get("runtime_generated_artifacts") or []
+    return [
+        "## Remix v5 Seeded Contract Templates",
+        "",
+        "The attempt workspace already contains seeded starter files for the v5 contract.",
+        "Fill these files in place rather than inventing alternate structure or filenames.",
+        "",
+        f"Replace every literal placeholder token: `{placeholder_token}`",
+        "Do not create parallel variants when one of these files already exists.",
+        "",
+        "Seeded artifact files:",
+        bullet_list(seeded_artifacts),
+        "",
+        "Seeded support files:",
+        bullet_list(support_files),
+        "",
+        "Runtime-generated evidence files that must be created fresh:",
+        bullet_list(runtime_generated),
+        "",
+        "`operator_result_contract.json` must end valid for ingestion by using:",
+        "- `status`: one of `ok`, `warning`, `error`",
+        "- `detail`: a short non-empty summary string",
+        "Additional rich fields are allowed, but do not omit those two ingestion fields.",
+        "",
+    ]
+
+
+def inspect_template_placeholders(workspace: Path, template_manifest: dict[str, Any] | None) -> dict[str, Any]:
+    if not template_manifest:
+        return {"checked": False, "placeholder_token": None, "unresolved_files": []}
+
+    placeholder_token = str(template_manifest.get("placeholder_token") or "__FILL_ME__")
+    unresolved_files: list[str] = []
+    for relative_name in list(template_manifest.get("seeded_artifacts", [])) + list(template_manifest.get("support_files", [])):
+        path = workspace / relative_name
+        if not path.exists() or not path.is_file():
+            unresolved_files.append(relative_name)
+            continue
+        text = path.read_text(encoding="utf-8")
+        if placeholder_token in text:
+            unresolved_files.append(relative_name)
+    return {
+        "checked": True,
+        "placeholder_token": placeholder_token,
+        "unresolved_files": unresolved_files,
+    }
+
+
+def build_skill_catalog_policy_section(workspace_catalogs: dict[str, Path]) -> list[str]:
+    skill_catalog_path = workspace_catalogs.get("skills/")
+    section = [
+        "## Skill Catalog Policy",
+        "",
+    ]
+    if skill_catalog_path is None:
+        section.extend(
+            [
+                "- status: not_available",
+                "- path: NONE",
+                "",
+                "No `catalogs/skills/` directory was copied into this attempt workspace.",
+                "If this stage expects skill catalogs, treat their absence as a setup issue rather than inventing unavailable catalog entries.",
+            ]
+        )
+    else:
+        section.extend(
+            [
+                "- status: available",
+                f"- path: {skill_catalog_path}",
+                "- workspace_relative_path: catalogs/skills/",
+                "",
+                "`catalogs/skills/` contains read-only operator skill catalogs.",
+                "Use skill catalogs as capability references when the current stage or workflow asks for catalog-backed skills.",
+                "For `creative_remix_v5`, these catalogs are intended to be authoritative execution rails once the v5 super-operator is introduced.",
+            ]
+        )
+
+    section.extend(
+        [
+            "",
+            "Mandatory rules:",
+            "- Do not edit files under `catalogs/`.",
+            "- Treat `catalogs/` as runtime/reference input, not authored game output.",
+            "- When a catalog skill requires artifacts, write those artifacts outside `catalogs/` in the attempt workspace.",
+        ]
+    )
+    return section
 
 
 def build_retry_context_text(attempt_number: int) -> str:
@@ -173,9 +333,12 @@ def build_operator_prompt_text(
     previous_contract_status: str | None,
     previous_contract_detail: str | None,
     playwright_port: int | None,
+    workspace_catalogs: dict[str, Path] | None = None,
+    template_manifest: dict[str, Any] | None = None,
 ) -> str:
     operator_prompt = operator.prompt.read_text(encoding="utf-8")
     retry_context = build_retry_context_text(attempt_number)
+    workspace_catalogs = workspace_catalogs or {}
     raw_user_prompt = run_state.get("remix_prompt")
     has_explicit_user_prompt = isinstance(raw_user_prompt, str) and bool(raw_user_prompt.strip())
     prompt_text = raw_user_prompt
@@ -280,6 +443,7 @@ def build_operator_prompt_text(
         "",
         *user_prompt_section,
         *matcher_context_section,
+        *build_remix_v5_template_contract_section(template_manifest),
         "## Catalog Media Policy",
         "",
         "Use only approved remote media URLs from these catalog files:",
@@ -292,6 +456,8 @@ def build_operator_prompt_text(
         "- Do not use media files from assets/",
         "- From assets/, only CSS and JS files may be used",
         "- For media replacement or new media selection, prefer remote URLs represented in the catalog files",
+        "",
+        *build_skill_catalog_policy_section(workspace_catalogs),
         "",
         "",
         f"- status: {previous_contract_status or 'NONE'}",
@@ -379,6 +545,7 @@ def write_operator_usage_artifact(
     simulated: bool,
     operator: OperatorDefinition,
     game_id: str,
+    workspace_catalogs: dict[str, Path] | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "generated_at": utc_now(),
@@ -386,6 +553,7 @@ def write_operator_usage_artifact(
         "operator_id": operator.id,
         "stage_slug": operator.stage_slug,
         "simulated": simulated,
+        "workspace_catalogs": stringify_catalog_paths(workspace_catalogs or {}),
     }
 
     if simulated:
@@ -489,6 +657,7 @@ def write_stage_state(
     attempt_number: int,
     paths: dict[str, Path],
     playwright_port: int | None,
+    workspace_catalogs: dict[str, Path] | None = None,
 ) -> None:
     now = utc_now()
     write_json(
@@ -510,6 +679,7 @@ def write_stage_state(
             "operator_invocation_path": str(paths["operator_invocation"]),
             "operator_usage_path": str(paths["operator_usage"]),
             "media_policy_report_path": str(paths["media_policy_report"]),
+            "workspace_catalogs": stringify_catalog_paths(workspace_catalogs or {}),
             "worker_invoked": False,
             "playwright_port": playwright_port,
             "validation_root_url": f"http://127.0.0.1:{playwright_port}/" if playwright_port is not None else None,
@@ -724,13 +894,12 @@ def inspect_operator_result_contract(path: Path) -> dict[str, Any]:
             "payload": None,
         }
 
+    payload["status"] = status
+    payload["detail"] = detail.strip()
     return {
         "present": True,
         "valid": True,
-        "payload": {
-            "status": status,
-            "detail": detail.strip(),
-        },
+        "payload": payload,
     }
 
 
@@ -806,6 +975,7 @@ def main() -> None:
             for attempt_number in range(1, max_retries_per_stage + 1):
                 paths = attempt_paths(game_dir, operator, attempt_number)
                 copy_workspace(current_workspace, paths["workspace"], replace=False)
+                template_manifest = copy_remix_v5_contract_templates_into_workspace(paths["workspace"].resolve(), operator.id)
                 workspace_catalogs = copy_catalogs_into_workspace(paths["workspace"].resolve())
                 media_policy_report = write_media_policy_report(paths["workspace"].resolve(), paths["media_policy_report"])
                 potential_urls_to_remove = media_policy_report.get("potential_urls_to_remove", [])
@@ -836,6 +1006,8 @@ def main() -> None:
                     previous_contract_status=previous_contract_status,
                     previous_contract_detail=None,
                     playwright_port=args.playwright_port,
+                    workspace_catalogs=workspace_catalogs,
+                    template_manifest=template_manifest,
                 )
                 paths["operator_prompt"].parent.mkdir(parents=True, exist_ok=True)
                 paths["operator_prompt"].write_text(prompt, encoding="utf-8")
@@ -845,6 +1017,7 @@ def main() -> None:
                     attempt_number,
                     paths,
                     args.playwright_port,
+                    workspace_catalogs,
                 )
 
                 command = build_worker_command(prompt, paths["workspace"].resolve(), args.model, args.agent_timeout)
@@ -862,6 +1035,7 @@ def main() -> None:
                         "validation_root_url": (
                             f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
                         ),
+                        "workspace_catalogs": stringify_catalog_paths(workspace_catalogs),
                     },
                 )
 
@@ -887,6 +1061,7 @@ def main() -> None:
                         simulated=True,
                         operator=operator,
                         game_id=args.game_id,
+                        workspace_catalogs=workspace_catalogs,
                     )
                     result_text = execution["stdout_text"] if execution["stdout_text"].strip() else execution["stderr_text"]
                     parsed = parse_operator_stdout(result_text, execution["status"])
@@ -898,6 +1073,7 @@ def main() -> None:
                         simulated=False,
                         operator=operator,
                         game_id=args.game_id,
+                        workspace_catalogs=workspace_catalogs,
                     )
                     result_text = execution.stdout_text if execution.stdout_text.strip() else execution.stderr_text
                     parsed = parse_operator_stdout(result_text, execution.status)
@@ -952,6 +1128,7 @@ def main() -> None:
                 contract_valid = bool(contract_inspection["valid"])
                 contract_status = operator_result_contract["status"] if operator_result_contract else None
                 contract_detail = operator_result_contract["detail"] if operator_result_contract else None
+                placeholder_inspection = inspect_template_placeholders(paths["workspace"].resolve(), template_manifest)
 
                 result = {
                     "status": operator_status,
@@ -979,9 +1156,13 @@ def main() -> None:
                     "contract_detail": contract_detail,
                     "operator_result_contract": operator_result_contract,
                     "operator_result_contract_path": str(paths["operator_result_contract"]),
+                    "template_placeholders_checked": placeholder_inspection["checked"],
+                    "template_placeholder_token": placeholder_inspection["placeholder_token"],
+                    "template_unresolved_files": placeholder_inspection["unresolved_files"],
                     "stdout_path": str(paths["operator_stdout"]),
                     "stderr_path": str(paths["operator_stderr"]),
                     "workspace_path": str(paths["workspace"]),
+                    "workspace_catalogs": stringify_catalog_paths(workspace_catalogs),
                     "playwright_port": args.playwright_port,
                     "validation_root_url": (
                         f"http://127.0.0.1:{args.playwright_port}/" if args.playwright_port is not None else None
@@ -1031,6 +1212,9 @@ def main() -> None:
 
                 last_status = operator_status
                 if operator_status == "completed":
+                    if placeholder_inspection["checked"] and placeholder_inspection["unresolved_files"]:
+                        last_status = "failed"
+                        continue
                     if getattr(operator, "requires_contract", False) and not contract_valid:
                         last_status = "failed"
                         continue

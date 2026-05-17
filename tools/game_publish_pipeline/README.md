@@ -10,6 +10,23 @@ python3 scripts/publish_games.py --inputs /path/to/game-a /path/to/game-b
 
 `scripts/publish_games.py` delegates to `game_publish_pipeline/pipeline.py` (`build_parser` + `run_pipeline`).
 
+## Batch delta entrypoint
+
+```bash
+python3 scripts/publish_all_raw.py
+```
+
+`scripts/publish_all_raw.py` scans `games/raw`, subtracts any top-level `gamezone-*` IDs already present under `games/published/public`, writes a generated delta manifest, invokes `scripts/publish_games.py`, and always requests the built-in GCS sync step at the end.
+
+Useful flags:
+
+- `--dry-run`
+- `--limit 25`
+- `--overwrite`
+- `--sync-gcs-project jabali-prod`
+- `--sync-gcs-dry-run`
+- `--include-existing-public` to disable delta filtering and republish every raw game discovered
+
 ## Core arguments
 
 - `--inputs` (one or more source dirs)
@@ -47,6 +64,7 @@ Artifact refresh now also renders annotator dashboards at two scopes:
 
 ## Additional scripts
 
+- `scripts/publish_all_raw.py` — build a raw-vs-public delta manifest, publish only missing raw game IDs, then sync to GCS
 - `scripts/sync_to_gcs.py` — sync `games/published/public|obfuscated` to GCS
 - `scripts/refresh_app_artifacts.py` — refresh persistent app artifact snapshots
 - `scripts/validate_published_outputs.py` — validate outputs/screenshots/artifacts

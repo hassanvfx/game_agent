@@ -262,6 +262,18 @@ WORKFLOWS: dict[str, WorkflowDefinition] = {
             },
         ],
     ),
+    "creative_remix_v5": WorkflowDefinition(
+        workflow_id="creative_remix_v5",
+        run_label="creative-remix-v5",
+        nodes=[
+            {
+                "id": "remix_v5_super_operator",
+                "prompt_file": "prompts/operators_v2/00_creative_remix_v5_super_operator.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            }
+        ],
+    ),
     "remix-v4-vite": WorkflowDefinition(
         workflow_id="remix-v4-vite",
         run_label="creative-remix-v4-vite",
