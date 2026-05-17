@@ -67,6 +67,8 @@ Artifact refresh now also renders annotator dashboards at two scopes:
 - `scripts/publish_all_raw.py` — build a raw-vs-public delta manifest, publish only missing raw game IDs, then sync to GCS
 - `scripts/sync_to_gcs.py` — sync `games/published/public|obfuscated` to GCS
 - `scripts/refresh_app_artifacts.py` — refresh persistent app artifact snapshots
+  - defaults to `--reconcile-mode replace` (prunes stale keys; keeps only newest generated key set)
+  - use `--reconcile-mode merge` only when you intentionally want cumulative historical keys
 - `scripts/validate_published_outputs.py` — validate outputs/screenshots/artifacts
 - `scripts/generate_annotator_entry.py` — render annotator dashboard HTML for run/root published artifact views
 

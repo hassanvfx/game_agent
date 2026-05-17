@@ -53,6 +53,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--run-id",
         help="Optional explicit run id for runs/<run_id>. Defaults to UTC timestamp.",
     )
+    parser.add_argument(
+        "--reconcile-mode",
+        choices=("replace", "merge"),
+        default="replace",
+        help=(
+            "How to reconcile generated app artifacts with existing root artifacts. "
+            "'replace' keeps only generated keys (default), 'merge' preserves historical keys and overwrites collisions."
+        ),
+    )
 
     materialize_group = parser.add_mutually_exclusive_group()
     materialize_group.add_argument(
@@ -130,9 +139,13 @@ def merge_records(existing: dict[str, Any], updates: dict[str, Any]) -> dict[str
     return merged
 
 
-def merge_artifact(existing_path: Path, generated_path: Path) -> dict[str, Any]:
-    existing_payload = load_json_object(existing_path)
+def reconcile_artifact(existing_path: Path, generated_path: Path, reconcile_mode: str) -> dict[str, Any]:
     generated_payload = load_json_object(generated_path)
+    if reconcile_mode == "replace":
+        write_json(existing_path, generated_payload)
+        return generated_payload
+
+    existing_payload = load_json_object(existing_path)
     merged_payload = merge_records(existing_payload, generated_payload)
     write_json(existing_path, merged_payload)
     return merged_payload
@@ -158,6 +171,7 @@ def build_public_catalog(
     public_app_tags_path: Path,
     public_app_path: Path,
     approved: str | None,
+    reconcile_mode: str,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     if generated_output_root.exists():
         shutil.rmtree(generated_output_root)
@@ -178,9 +192,9 @@ def build_public_catalog(
         command.extend(["--approved", approved])
     run_command(command)
 
-    public_index = merge_artifact(public_index_path, generated_output_root / INDEX_NAME)
-    public_app_tags = merge_artifact(public_app_tags_path, generated_output_root / APP_TAGS_NAME)
-    public_app = merge_artifact(public_app_path, generated_output_root / APP_NAME)
+    public_index = reconcile_artifact(public_index_path, generated_output_root / INDEX_NAME, reconcile_mode)
+    public_app_tags = reconcile_artifact(public_app_tags_path, generated_output_root / APP_TAGS_NAME, reconcile_mode)
+    public_app = reconcile_artifact(public_app_path, generated_output_root / APP_NAME, reconcile_mode)
     return public_index, public_app_tags, public_app
 
 
@@ -219,23 +233,33 @@ def build_obfuscated_catalog(
     public_index: dict[str, Any],
     public_app_tags: dict[str, Any],
     public_app: dict[str, Any],
+    reconcile_mode: str,
 ) -> tuple[Path, Path, Path]:
     obfuscated_index_path = obfuscated_root / INDEX_NAME
     obfuscated_app_tags_path = obfuscated_root / APP_TAGS_NAME
     obfuscated_app_path = obfuscated_root / APP_NAME
 
-    write_json(
-        obfuscated_index_path,
-        merge_records(load_json_object(obfuscated_index_path), transform_obfuscated_payload(public_index)),
-    )
-    write_json(
-        obfuscated_app_tags_path,
-        merge_records(load_json_object(obfuscated_app_tags_path), transform_obfuscated_payload(public_app_tags)),
-    )
-    write_json(
-        obfuscated_app_path,
-        merge_records(load_json_object(obfuscated_app_path), transform_obfuscated_payload(public_app)),
-    )
+    transformed_index = transform_obfuscated_payload(public_index)
+    transformed_app_tags = transform_obfuscated_payload(public_app_tags)
+    transformed_app = transform_obfuscated_payload(public_app)
+
+    if reconcile_mode == "replace":
+        write_json(obfuscated_index_path, transformed_index)
+        write_json(obfuscated_app_tags_path, transformed_app_tags)
+        write_json(obfuscated_app_path, transformed_app)
+    else:
+        write_json(
+            obfuscated_index_path,
+            merge_records(load_json_object(obfuscated_index_path), transformed_index),
+        )
+        write_json(
+            obfuscated_app_tags_path,
+            merge_records(load_json_object(obfuscated_app_tags_path), transformed_app_tags),
+        )
+        write_json(
+            obfuscated_app_path,
+            merge_records(load_json_object(obfuscated_app_path), transformed_app),
+        )
     return obfuscated_index_path, obfuscated_app_tags_path, obfuscated_app_path
 
 
@@ -297,6 +321,7 @@ def main() -> None:
     print(f"[refresh] runs root: {runs_root}", flush=True)
     print(f"[refresh] run id: {run_id}", flush=True)
     print(f"[refresh] run dir: {run_dir}", flush=True)
+    print(f"[refresh] reconcile mode: {args.reconcile_mode}", flush=True)
     print("[refresh] =============================", flush=True)
 
     public_index_path = public_root / INDEX_NAME
@@ -311,12 +336,14 @@ def main() -> None:
         public_app_tags_path,
         public_app_path,
         args.approved,
+        str(args.reconcile_mode),
     )
     obfuscated_index_path, obfuscated_app_tags_path, obfuscated_app_path = build_obfuscated_catalog(
         obfuscated_root,
         public_index,
         public_app_tags,
         public_app,
+        str(args.reconcile_mode),
     )
 
     print("[refresh] [run snapshot] writing public run artifacts...", flush=True)
@@ -381,6 +408,7 @@ def main() -> None:
                 "public_app_tags": str(public_app_tags_path),
                 "public_app": str(public_app_path),
                 "approved": args.approved,
+                "reconcile_mode": str(args.reconcile_mode),
                 "obfuscated_index": str(obfuscated_index_path),
                 "obfuscated_app_tags": str(obfuscated_app_tags_path),
                 "obfuscated_app": str(obfuscated_app_path),
