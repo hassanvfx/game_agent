@@ -124,13 +124,10 @@ def main() -> None:
         game_dir.mkdir(parents=True, exist_ok=True)
         game_state = {
             "game_id": game_id,
-            "original_game_id": game.get("original_game_id"),
-            "source_entry_id": game.get("source_entry_id"),
             "display_name": game.get("display_name"),
             "source_path": game.get("source_path"),
             "source_url": game.get("source_url"),
             "match_rank": game.get("match_rank"),
-            "mechanic_name": game.get("mechanic_name"),
             "matcher_context": game.get("matcher_context"),
             "manifest_remix_prompt": game.get("remix_prompt"),
             "source_mode": args.source_mode,

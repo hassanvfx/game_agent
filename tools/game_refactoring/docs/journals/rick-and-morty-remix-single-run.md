@@ -454,6 +454,44 @@ This is the first grounded implementation in this repo that lets one workflow-dr
 
 ---
 
+### 2026-05-17 04:14 - Live v5 two-entry verification completed successfully
+
+**Achievement:**
+- Re-ran the two-entry `creative_remix_v5` manifest as a live batch instead of dry-run
+- Confirmed both games completed successfully through the real v2/v5 execution path
+- Verified final outputs were produced for both the baseline and per-game override entries
+
+**Run Metadata:**
+- `run_id`: `run_game_remixer_20260517T100436Z`
+- `run_dir`: `runs/run_game_remixer_20260517T100436Z`
+- `workflow_manifest_path`: `runs/_workflow_manifests/creative_remix_v5__jabali_rick_and_morty_vs_mario_retry_manifest.json`
+
+**Validated Prompt Resolution:**
+- Baseline entry:
+  - `game_id`: `game-c33db5bd-53ee-4637-bdba-4153f2805353-rick-baseline`
+  - effective prompt: `Rick & Morty inspired`
+  - source: `manifest`
+- Override entry:
+  - `game_id`: `game-c33db5bd-53ee-4637-bdba-4153f2805353-mario-override`
+  - effective prompt: `Mario Bros Inspired`
+  - source: `game_manifest`
+
+**Final Status:**
+- `status`: `transform_completed`
+- `games_transform_completed`: `2`
+- `games_transform_failed`: `0`
+
+**Output Locations:**
+- `runs/run_game_remixer_20260517T100436Z/output/game-c33db5bd-53ee-4637-bdba-4153f2805353-mario-override`
+- `runs/run_game_remixer_20260517T100436Z/output/game-c33db5bd-53ee-4637-bdba-4153f2805353-rick-baseline`
+
+**Why:**
+The earlier dry-run proved prompt resolution in generated artifacts. This live rerun closes the loop by confirming the same manifest baseline and per-game override behavior survives real worker execution and completes end to end.
+
+**Status:** Complete
+
+---
+
 ## ✅ Testing Checklist
 
 - [x] Workflow ID identified
