@@ -27,6 +27,43 @@ Useful flags:
 - `--sync-gcs-dry-run`
 - `--include-existing-public` to disable delta filtering and republish every raw game discovered
 
+## Detect identical public vs obfuscated files
+
+```bash
+python3 scripts/detect_identical_public_obfuscated.py --strict
+```
+
+This check compares matching relative file paths between:
+
+- `games/published/public`
+- `games/published/obfuscated`
+
+By default it scans `.html`, `.js`, and `.css` files and reports pairs that are byte-for-byte identical.
+
+Default filtering excludes non-actionable matches:
+
+- AppleDouble metadata files (`._*`)
+- `annotator.html`
+- known vendor asset domains under `assets/`:
+  - `fonts.googleapis.com`
+  - `cdn.tailwindcss.com`
+  - `unpkg.com`
+  - `cdnjs.cloudflare.com`
+
+Useful flags:
+
+- `--public-root /custom/public/root`
+- `--obfuscated-root /custom/obfuscated/root`
+- `--extensions .html,.js,.css`
+- `--report-path tmp/identical_public_obfuscated_report.json`
+- `--strict` return non-zero when identical file pairs are detected
+- `--include-appledouble`
+- `--include-annotator`
+- `--include-vendor-assets`
+- `--vendor-asset-domains fonts.googleapis.com,cdn.tailwindcss.com,unpkg.com,cdnjs.cloudflare.com`
+- `--quarentine` (alias: `--quarantine`) to auto-copy identical public files into `games/published/runs/run_<timestamp>/quarantine`
+- `--quarentine /custom/path` to copy identical public files to a custom destination
+
 ## Core arguments
 
 - `--inputs` (one or more source dirs)
@@ -70,6 +107,7 @@ Artifact refresh now also renders annotator dashboards at two scopes:
   - defaults to `--reconcile-mode replace` (prunes stale keys; keeps only newest generated key set)
   - use `--reconcile-mode merge` only when you intentionally want cumulative historical keys
 - `scripts/validate_published_outputs.py` — validate outputs/screenshots/artifacts
+- `scripts/detect_identical_public_obfuscated.py` — detect `.html/.js/.css` files that are unchanged between public and obfuscated outputs
 - `scripts/generate_annotator_entry.py` — render annotator dashboard HTML for run/root published artifact views
 
 ## Architecture boundary
