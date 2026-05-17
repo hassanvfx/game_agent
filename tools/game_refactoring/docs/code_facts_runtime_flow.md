@@ -42,7 +42,7 @@ The formal CLI is already structured to switch between two orchestration paths:
 **Evidence:**
 - `scripts/creative_refactor_cli.py`
   - `start_batch()` calls `create_run.py`
-  - resolves remix prompt from CLI args
+  - resolves remix prompt from CLI args, then falls back to manifest top-level `remix_prompt`
   - constructs a batch runner command
   - launches it with `subprocess.Popen(...)`
   - writes:
@@ -52,6 +52,8 @@ The formal CLI is already structured to switch between two orchestration paths:
 
 **Interpretation:**
 The CLI does not perform orchestration inline. It creates a run, launches a separate orchestrator process, and returns a payload pointing to run artifacts.
+
+When no CLI prompt override is supplied, the launcher can still carry a manifest-wide baseline `remix_prompt` into the run.
 
 ## Observation 3 — runtime worker execution is centralized in `execute_worker_command()`
 
@@ -105,6 +107,8 @@ The v2 batch path is:
 **Interpretation:**
 Parallelism is across games, controlled centrally by the batch runner.
 
+The v2 batch runner is also the place where effective per-game prompt resolution now occurs.
+
 ## Observation 6 — per-game operator stages run sequentially inside one game worker
 
 **Status:** Confirmed
@@ -121,6 +125,29 @@ Parallelism is across games, controlled centrally by the batch runner.
 Current concurrency model is:
 - many games in parallel
 - one ordered stage sequence per game
+
+The effective prompt used by that game worker can now differ across games in the same run.
+
+## Observation 6A — v2 prompt resolution is now per game, not only per run
+
+**Status:** Confirmed
+
+**Evidence:**
+- `scripts/create_run.py`
+  - stores top-level manifest baseline in `run_state["manifest_remix_prompt"]`
+  - stores per-game override in `game_state["manifest_remix_prompt"]`
+- `scripts/run_operator_pipeline_batch.py`
+  - resolves effective game prompt in this order:
+    - CLI prompt
+    - per-game manifest prompt
+    - top-level manifest prompt
+    - fallback
+- `scripts/run_operator_pipeline_game.py`
+  - receives the already-resolved effective prompt
+  - builds operator prompt text from that effective per-game prompt
+
+**Interpretation:**
+The v2 runtime no longer assumes one prompt for every game in the same run. Manifest-driven multi-game prompt variation is now supported without duplicating the workflow definition.
 
 ## Observation 7 — the registry/config already defines ordered operators through manifest-like JSON
 

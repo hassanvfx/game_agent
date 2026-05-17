@@ -323,6 +323,137 @@ The prior simpler-midpoint run produced a good result, but the user wants to tes
 
 ---
 
+### 2026-05-17 03:44 - Prepared two-entry retry manifest for baseline vs per-game override testing
+
+**Achievement:**
+- Created a new two-entry manifest that reuses the same last-run source replay input twice
+- Set the manifest-level baseline prompt to `Rick & Morty inspired`
+- Set a per-game override prompt on the second entry to `Mario Bros Inspired`
+
+**Files Created:**
+- `fixtures/jabali_rick_and_morty_vs_mario_retry_manifest.json`
+
+**Grounded Contract Notes:**
+- Both entries intentionally reuse the same `source_path`.
+- The entries use distinct `game_id` values so the run scaffold can create separate per-game directories under `runs/<run_id>/games/<game_id>` without collision.
+- The first entry has no per-game `remix_prompt`, so it is the baseline-inheritance case.
+- The second entry includes `remix_prompt: "Mario Bros Inspired"`, so it is the per-game override case.
+
+**Prepared Manifest Shape:**
+
+```json
+{
+  "manifest_version": "1.0.0",
+  "run_label": "jabali-rick-and-morty-vs-mario-retry",
+  "remix_prompt": "Rick & Morty inspired",
+  "games": [
+    {
+      "game_id": "game-c33db5bd-53ee-4637-bdba-4153f2805353-rick-baseline",
+      "source_path": "/Users/hassan/repos/game_agent/tools/game_downloader/runs/jabali-test-001/games/game-c33db5bd-53ee-4637-bdba-4153f2805353/replay/attempt_0001",
+      "display_name": "game-c33db5bd-53ee-4637-bdba-4153f2805353-rick-baseline"
+    },
+    {
+      "game_id": "game-c33db5bd-53ee-4637-bdba-4153f2805353-mario-override",
+      "source_path": "/Users/hassan/repos/game_agent/tools/game_downloader/runs/jabali-test-001/games/game-c33db5bd-53ee-4637-bdba-4153f2805353/replay/attempt_0001",
+      "display_name": "game-c33db5bd-53ee-4637-bdba-4153f2805353-mario-override",
+      "remix_prompt": "Mario Bros Inspired"
+    }
+  ]
+}
+```
+
+**Why:**
+This manifest gives a concrete retry fixture for validating the desired prompt-resolution precedence: manifest baseline for one game and per-game override for another, while keeping the underlying source input identical.
+
+**Status:** Complete
+
+---
+
+### 2026-05-17 03:50 - Implemented v2 manifest baseline and per-game prompt resolution for meaningful retry testing
+
+**Achievement:**
+- Wired the v2 operator-pipeline launch path to honor manifest-level `remix_prompt` as a baseline
+- Wired per-game `games[].remix_prompt` overrides into worker launch resolution
+- Updated operator prompt construction so each game uses its own effective resolved prompt rather than a shared run-level prompt
+
+**Files Changed:**
+- `scripts/game_workflow.py`
+- `scripts/create_run.py`
+- `scripts/creative_refactor_cli.py`
+- `scripts/run_operator_pipeline_batch.py`
+- `scripts/run_operator_pipeline_game.py`
+- `docs/game_workflow_cli.md`
+
+**Implementation Notes:**
+- Workflow manifest generation now preserves top-level `remix_prompt` from the source manifest.
+- Run scaffolding now stores:
+  - `run_state.manifest_remix_prompt`
+  - `game_state.manifest_remix_prompt`
+- The v2 batch runner now resolves each game prompt using this precedence:
+  1. CLI prompt
+  2. per-game manifest prompt
+  3. top-level manifest prompt
+  4. fallback behavior
+- Worker launch now passes prompt-source metadata for traceability.
+- Operator prompt generation now uses the effective game-level prompt instead of relying on shared `run_state["remix_prompt"]`.
+
+**Why:**
+Without these changes, launching the two-entry baseline-vs-override retry manifest would produce a valid run but would not actually test the intended prompt contract. The runtime previously behaved as a single shared-prompt path.
+
+**Next Steps:**
+- [ ] Launch `creative_remix_v5` in dry-run mode against `fixtures/jabali_rick_and_morty_vs_mario_retry_manifest.json`
+- [ ] Inspect the generated per-game operator prompts to confirm baseline vs override resolution
+
+**Status:** In Progress
+
+---
+
+### 2026-05-17 03:59 - Updated adjacent docs for manifest baseline and per-game prompt overrides
+
+**Achievement:**
+- Expanded `docs/game_workflow_cli.md` with a manifest-driven v5 example and clearer prompt precedence notes
+- Added grounded runtime-flow notes documenting that v2 prompt resolution is now computed per game
+- Added manual-level explanation that one v2 workflow run can carry a baseline prompt plus selected per-game overrides
+
+**Files Changed:**
+- `docs/game_workflow_cli.md`
+- `docs/code_facts_runtime_flow.md`
+- `docs/operator_pipeline_manual.md`
+
+**Why:**
+The runtime behavior had already been updated and dry-run validated, but the surrounding documentation still mostly described CLI-only prompt override behavior. These doc updates make the new manifest contract discoverable and consistent across workflow, runtime-facts, and operator-manual surfaces.
+
+**Status:** Complete
+
+---
+
+### 2026-05-17 04:01 - Finalized manifest prompt-resolution implementation, validation, and documentation for commit
+
+**Achievement:**
+- Completed the v2/v5 manifest prompt-resolution feature end to end
+- Verified with a dry-run `creative_remix_v5` launch that two games in the same run received different effective prompts
+- Brought workflow, runtime-facts, operator-manual, fixture, and journal documentation into alignment before commit
+
+**Validated Outcome:**
+- Baseline game effective prompt:
+  - `Rick & Morty inspired`
+  - source: `manifest`
+- Override game effective prompt:
+  - `Mario Bros Inspired`
+  - source: `game_manifest`
+
+**Commit Scope:**
+- runtime prompt-resolution wiring in workflow + batch + worker path
+- new retry fixture manifest for baseline vs per-game override testing
+- updated documentation covering manifest prompt precedence and scope
+
+**Why:**
+This is the first grounded implementation in this repo that lets one workflow-driven v2/v5 batch carry a manifest-wide baseline remix prompt and selectively override it per game without duplicating the workflow definition or forcing a single CLI prompt across all entries.
+
+**Status:** Complete
+
+---
+
 ## ✅ Testing Checklist
 
 - [x] Workflow ID identified

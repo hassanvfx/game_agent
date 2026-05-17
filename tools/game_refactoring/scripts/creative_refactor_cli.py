@@ -460,6 +460,16 @@ def resolve_remix_prompt_from_args(args: argparse.Namespace) -> str | None:
     return None
 
 
+def resolve_manifest_remix_prompt(manifest_path: str | Path) -> str | None:
+    manifest = load_json(Path(manifest_path).resolve())
+    value = manifest.get("remix_prompt")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("manifest field 'remix_prompt' must be a non-empty string when present")
+    return value.strip()
+
+
 def start_batch(args: argparse.Namespace) -> dict:
     create_cmd = [
         str(ROOT / "scripts" / "create_run.py"),
@@ -474,7 +484,10 @@ def start_batch(args: argparse.Namespace) -> dict:
         create_cmd.extend(["--runs-root", args.runs_root])
 
     run_dir = Path(run_python(*create_cmd))
-    remix_prompt = resolve_remix_prompt_from_args(args)
+    cli_remix_prompt = resolve_remix_prompt_from_args(args)
+    manifest_remix_prompt = resolve_manifest_remix_prompt(args.manifest)
+    remix_prompt = cli_remix_prompt or manifest_remix_prompt
+    remix_prompt_source = "cli" if cli_remix_prompt else "manifest" if manifest_remix_prompt else "fallback"
 
     batch_runner = "run_operator_pipeline_batch.py" if args.pipeline == "v2" else "run_parallel_batch.py"
     run_parallel_command = [
@@ -497,8 +510,8 @@ def start_batch(args: argparse.Namespace) -> dict:
         "--source-mode",
         args.source_mode,
     ]
-    if remix_prompt:
-        run_parallel_command.extend(["--remix-prompt", remix_prompt])
+    if cli_remix_prompt:
+        run_parallel_command.extend(["--remix-prompt", cli_remix_prompt])
     if getattr(args, "playwright_port_base", None) is not None:
         run_parallel_command.extend(["--playwright-port-base", str(args.playwright_port_base)])
     if getattr(args, "playwright_port_pool_size", None) is not None:
@@ -548,6 +561,9 @@ def start_batch(args: argparse.Namespace) -> dict:
             "source_mode": args.source_mode,
             "runs_root": str(Path(args.runs_root).resolve()) if args.runs_root else None,
             "remix_prompt_present": bool(remix_prompt),
+            "cli_remix_prompt_present": bool(cli_remix_prompt),
+            "manifest_remix_prompt_present": bool(manifest_remix_prompt),
+            "effective_batch_remix_prompt_source": remix_prompt_source,
             "playwright_port_base": getattr(args, "playwright_port_base", None),
             "playwright_port_pool_size": getattr(args, "playwright_port_pool_size", None),
             "playwright_port_lease_ttl_seconds": getattr(args, "playwright_port_lease_ttl_seconds", None),

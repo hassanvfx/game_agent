@@ -68,7 +68,7 @@ The operator must be conservative about mechanics and bold about presentation. M
 
 The active remix prompt is not a decorative label. It is the primary steering source that must propagate through every phase:
 
-```text
+```text id="k30uza"
 #PROMPT#
 ```
 
@@ -341,6 +341,7 @@ The operator must be hostile to lazy reskinning. A valid v5 result should show t
 * Use real screenshots instead of descriptive substitutes when evidence is required.
 * Keep contract outputs aligned with the actual work performed.
 * Let artifacts expose the transformation logic: what changed, why it is safe, and how it was verified.
+* For temporary original-game reference captures, use filenames ending in `_trash.png`, never `_old.png`, so they can be safely removed at the end of the run.
 
 **Required artifacts:**
 
@@ -351,6 +352,7 @@ The operator must be hostile to lazy reskinning. A valid v5 result should show t
 * Evidence artifacts are real, current, and phase-appropriate.
 * The super operator leaves an auditable trail of what was decided and validated.
 * The artifact trail proves both mechanic preservation and transformation quality.
+* Temporary original-game reference captures are clearly disposable by filename.
 
 **Failure modes prevented:**
 
@@ -358,6 +360,7 @@ The operator must be hostile to lazy reskinning. A valid v5 result should show t
 * Missing contract files
 * Narrative-only reporting without implementation evidence
 * Claims of transformation unsupported by runtime proof
+* Temporary reference captures being mistaken for preserved legacy runtime files
 
 #### Subgroup `execution_style` — Execution Style
 
@@ -892,6 +895,7 @@ If a rewritten component is mechanically safe but visually generic, under-author
 * Presentation should be meaningfully original when mechanic safety allows.
 * Every major rebuilt subsystem should be explainable in terms of the blueprint and the old mechanic truth.
 * Every major presentation subsystem should be explainable in terms of the remix premise, focal identity, and authored world.
+* Do not name temporary original-game screenshot captures with `_old.png`; use `_trash.png` instead so they can be removed at the end of the run without confusing them with preserved `_old` runtime references.
 
 ### Testing Plan Requirement
 
@@ -1794,6 +1798,8 @@ Use `#PROMPT#` as an explicit judging lens, not just a setup input.
 
 Runtime proof must validate both mechanic truth and transformation quality. A game that works but still looks like a lightly reskinned source is not a complete v5 success.
 
+Temporary original-game reference captures must use filenames ending in `_trash.png`, not `_old.png`. The `_old` suffix is reserved for preserved legacy runtime files. Screenshot captures ending in `_trash.png` are disposable and may be removed at the end of the run after the required comparison artifacts have been written.
+
 ### Catalog `remix_v5_qa_skills.json`
 
 **Skill type:** `qa`
@@ -1926,10 +1932,12 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 **Required actions:**
 
 * Capture before-state evidence when the original surface can be inspected.
+* Name temporary original-game reference captures with `_trash.png`, not `_old.png`, so they are clearly disposable and can be removed at the end of the run.
 * Capture after-state evidence for entry, live play, and reachable terminal or modal states.
 * Write a before/after comparison note tying observations to actual screenshots.
 * Judge whether transformation is visible beyond title, labels, and color.
 * Judge whether focal identity, authored world, and scene ownership are visible in the after evidence.
+* After comparison notes are written, temporary `_trash.png` original-game reference captures may be deleted if the runner cleanup step supports it.
 
 **Required artifacts:**
 
@@ -1940,6 +1948,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * The transformation is evidenced visually and operationally.
 * Comparisons describe real deltas rather than subjective hype.
 * Before/after evidence proves both mechanic continuity and identity change.
+* Temporary original-game reference captures are not confused with preserved `_old` runtime references.
 
 **Failure modes prevented:**
 
@@ -1947,6 +1956,8 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * Fake or stale screenshots
 * After-only QA with no baseline
 * Passing a cosmetic reskin as a meaningful transformation
+* Screenshot artifacts named like preserved runtime files
+* Disposable original-game captures surviving because they were not clearly marked as cleanup-safe
 
 #### remix_v5.qa.required_output_contracts — Keep final contracts aligned with actual QA
 
@@ -1959,6 +1970,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * Call out remaining non-blocking risks explicitly.
 * Include transformation-quality notes when the final identity is weaker than intended.
 * Do not overstate completion if mechanics work but authored transformation remains thin.
+* If original-game reference screenshots were captured, record whether they used `_trash.png` names and whether they were retained or removed after comparison.
 
 **Required artifacts:**
 
@@ -1969,6 +1981,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * The final report matches what was actually validated.
 * Consumers can tell what is solved versus what remains risky.
 * The contract distinguishes runtime success from creative/transformation quality.
+* Temporary reference-capture cleanup status is explicit when applicable.
 
 **Failure modes prevented:**
 
@@ -1976,6 +1989,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * Missing risk disclosure
 * Inconsistent contract output
 * Mechanically valid but visually weak output marked as fully successful
+* Ambiguous evidence artifact lifecycle
 
 #### remix_v5.qa.final_identity_judgement — Judge whether the result feels like an authored game
 
@@ -2088,6 +2102,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * Produce the named screenshot artifact in the requested viewport.
 * Fail honestly if the prerequisite state is not present.
 * Ensure the screenshot represents the current canonical surface, not stale or legacy output.
+* If the standalone screenshot is only a temporary original-game reference capture, name it with `_trash.png`, not `_old.png`.
 
 **Required artifacts:**
 
@@ -2098,6 +2113,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * The screenshot artifact is real and current.
 * Capture requests are not silently faked.
 * The capture reflects the actual transformed game state.
+* Temporary original-game reference captures are named for cleanup when applicable.
 
 **Failure modes prevented:**
 
@@ -2105,6 +2121,7 @@ Runtime proof must validate both mechanic truth and transformation quality. A ga
 * Skipping prerequisite verification
 * Incorrectly claiming capture success
 * Capturing `_old` or stale surfaces by mistake
+* Disposable original-reference captures named like preserved runtime artifacts
 
 ## Final Completion Standard
 
@@ -2137,6 +2154,8 @@ The operator is complete only when:
 * runtime/mobile QA has been performed with real evidence
 
 * before/after differences are documented when evidence is available
+
+* temporary original-game reference captures use `_trash.png`, not `_old.png`, and may be removed after comparison artifacts are written
 
 * any pre-seeded contract templates were filled in place and no `__FILL_ME__` placeholders remain
 

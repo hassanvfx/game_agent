@@ -49,6 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="gpt-5.5")
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--remix-prompt")
+    parser.add_argument("--remix-prompt-source")
     parser.add_argument("--through", default="final_code_ui_mobile_repair")
     parser.add_argument("--registry-config", default=str(ROOT / "configs" / "operator_pipeline_v2.json"))
     parser.add_argument("--playwright-port", type=int)
@@ -356,6 +357,7 @@ def build_operator_prompt_text(
     run_state: dict[str, Any],
     game_state: dict[str, Any],
     operator: OperatorDefinition,
+    effective_remix_prompt: str | None,
     attempt_number: int,
     attempt_workspace: Path,
     previous_contract_status: str | None,
@@ -367,14 +369,14 @@ def build_operator_prompt_text(
     operator_prompt = operator.prompt.read_text(encoding="utf-8")
     retry_context = build_retry_context_text(attempt_number)
     workspace_catalogs = workspace_catalogs or {}
-    raw_user_prompt = run_state.get("remix_prompt")
+    raw_user_prompt = effective_remix_prompt
     has_explicit_user_prompt = isinstance(raw_user_prompt, str) and bool(raw_user_prompt.strip())
     prompt_text = raw_user_prompt
     if not isinstance(prompt_text, str) or not prompt_text.strip():
         prompt_text = sanitize_display_name_for_prompt(
             game_state.get("display_name"),
             str(game_state["game_id"]),
-            run_state.get("remix_prompt"),
+            effective_remix_prompt,
         )
 
     prompt_template_value = raw_user_prompt.strip() if has_explicit_user_prompt else "neutral prompt"
@@ -977,6 +979,7 @@ def main() -> None:
     game_state["creative_phase"] = "operator_pipeline_running"
     game_state["creative_status"] = "running"
     game_state["remix_prompt"] = args.remix_prompt
+    game_state["effective_remix_prompt_source"] = args.remix_prompt_source
     game_state["operator_pipeline_path"] = str(pipeline_dir)
     game_state["creative_output_path"] = str(output_dir)
     game_state["assigned_playwright_port"] = args.playwright_port
@@ -1029,6 +1032,7 @@ def main() -> None:
                     run_state=run_state,
                     game_state=game_state,
                     operator=operator,
+                    effective_remix_prompt=args.remix_prompt,
                     attempt_number=attempt_number,
                     attempt_workspace=paths["workspace"].resolve(),
                     previous_contract_status=previous_contract_status,

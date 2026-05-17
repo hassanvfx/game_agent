@@ -5,6 +5,7 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,14 @@ def default_run_id() -> str:
 def write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def validate_optional_remix_prompt(value: Any, field_path: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise SystemExit(f"{field_path} must be a non-empty string when present")
+    return value.strip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,8 +70,15 @@ def main() -> None:
     if not isinstance(selected_games, list):
         raise SystemExit(f"Manifest must contain a games list: {manifest_path}")
 
-    for game in selected_games:
+    manifest_remix_prompt = validate_optional_remix_prompt(manifest.get("remix_prompt"), "manifest field 'remix_prompt'")
+
+    for index, game in enumerate(selected_games):
+        if not isinstance(game, dict):
+            raise SystemExit(f"games[{index}] must be an object in manifest: {manifest_path}")
         game_id = game.get("game_id", "<unknown>")
+        game_remix_prompt = validate_optional_remix_prompt(game.get("remix_prompt"), f"games[{index}].remix_prompt")
+        if game_remix_prompt is not None:
+            game["remix_prompt"] = game_remix_prompt
         source_path_value = game.get("source_path")
         if not isinstance(source_path_value, str) or not source_path_value.strip():
             raise SystemExit(f"Game '{game_id}' is missing a non-empty source_path in manifest: {manifest_path}")
@@ -92,6 +108,7 @@ def main() -> None:
         "games_transform_completed": 0,
         "games_transform_failed": 0,
         "source_mode": args.source_mode,
+        "manifest_remix_prompt": manifest_remix_prompt,
         "notes": [
             "Game Remixer run scaffold created.",
             "No transform execution has occurred yet.",
@@ -107,11 +124,15 @@ def main() -> None:
         game_dir.mkdir(parents=True, exist_ok=True)
         game_state = {
             "game_id": game_id,
+            "original_game_id": game.get("original_game_id"),
+            "source_entry_id": game.get("source_entry_id"),
             "display_name": game.get("display_name"),
             "source_path": game.get("source_path"),
             "source_url": game.get("source_url"),
             "match_rank": game.get("match_rank"),
+            "mechanic_name": game.get("mechanic_name"),
             "matcher_context": game.get("matcher_context"),
+            "manifest_remix_prompt": game.get("remix_prompt"),
             "source_mode": args.source_mode,
             "input_mirror_path": str(run_dir / "input" / game_id),
             "working_clone_path": str(game_dir / "working"),

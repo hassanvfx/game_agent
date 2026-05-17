@@ -196,6 +196,13 @@ def resolve_remix_prompt(args: argparse.Namespace) -> str | None:
     return None
 
 
+def normalize_optional_remix_prompt(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 def release_worker_lease(worker: ActiveWorker, trace_path: Path | None = None) -> None:
     released = release_port_lease(worker.lease_state_path, port=worker.leased_port, owner_pid=worker.lease_owner_pid)
     if not released:
@@ -218,6 +225,7 @@ def launch_worker(
     model: str,
     timeout: int,
     remix_prompt: str | None,
+    remix_prompt_source: str | None,
     registry_config: str,
     through: str,
     lease_state_path: Path,
@@ -249,6 +257,11 @@ def launch_worker(
                 if remix_prompt
                 else []
             ),
+            *(
+                ["--remix-prompt-source", remix_prompt_source]
+                if remix_prompt_source
+                else []
+            ),
             *(["--dry-run-operators"] if dry_run_operators else []),
             "--skip-run-state-update",
         ],
@@ -268,7 +281,7 @@ def launch_worker(
     if trace_path is not None:
         append_debug_trace(
             trace_path,
-            f"Launched operator pipeline v2 worker for game_id={game_id} pid={process.pid} timeout={timeout} through={through} registry_config={registry_config} remix_prompt_present={bool(remix_prompt)} dry_run_operators={dry_run_operators} playwright_port={playwright_port}",
+            f"Launched operator pipeline v2 worker for game_id={game_id} pid={process.pid} timeout={timeout} through={through} registry_config={registry_config} remix_prompt_present={bool(remix_prompt)} remix_prompt_source={remix_prompt_source or 'fallback'} dry_run_operators={dry_run_operators} playwright_port={playwright_port}",
         )
     return worker
 
@@ -293,6 +306,33 @@ def current_operator_pipeline_stage_state_path(run_dir: Path, game_id: str) -> P
 
 def current_game_state_path(run_dir: Path, game_id: str) -> Path:
     return run_dir / "games" / game_id / "game_state.json"
+
+
+def resolve_batch_baseline_remix_prompt(run_dir: Path, cli_remix_prompt: str | None) -> tuple[str | None, str]:
+    if cli_remix_prompt:
+        return cli_remix_prompt, "cli"
+    run_state = load_json(run_dir / "run_state.json")
+    manifest_remix_prompt = normalize_optional_remix_prompt(run_state.get("manifest_remix_prompt"))
+    if manifest_remix_prompt:
+        return manifest_remix_prompt, "manifest"
+    return None, "fallback"
+
+
+def resolve_effective_game_remix_prompt(run_dir: Path, game_id: str, cli_remix_prompt: str | None) -> tuple[str | None, str]:
+    if cli_remix_prompt:
+        return cli_remix_prompt, "cli"
+
+    game_state = load_json(current_game_state_path(run_dir, game_id))
+    game_manifest_prompt = normalize_optional_remix_prompt(game_state.get("manifest_remix_prompt"))
+    if game_manifest_prompt:
+        return game_manifest_prompt, "game_manifest"
+
+    run_state = load_json(run_dir / "run_state.json")
+    manifest_remix_prompt = normalize_optional_remix_prompt(run_state.get("manifest_remix_prompt"))
+    if manifest_remix_prompt:
+        return manifest_remix_prompt, "manifest"
+
+    return None, "fallback"
 
 
 def terminate_worker(process: subprocess.Popen[str], graceful_seconds: float = 10.0) -> None:
@@ -416,7 +456,7 @@ def finalize_run_status(run_dir: Path, remix_prompt: str | None) -> None:
 
 def main() -> None:
     args = parse_args()
-    remix_prompt = resolve_remix_prompt(args)
+    cli_remix_prompt = resolve_remix_prompt(args)
 
     run_dir = Path(args.run_dir).resolve() if args.run_dir else (ROOT / "runs" / args.run_id if args.run_id else None)
     if run_dir is not None and run_dir.exists():
@@ -432,11 +472,12 @@ def main() -> None:
         run_dir = Path(run_python(*create_cmd))
         trace_path = run_dir / DEBUG_TRACE_FILENAME
         append_debug_trace(trace_path, f"Created run_dir={run_dir} via create_run.py")
+    batch_remix_prompt, batch_remix_prompt_source = resolve_batch_baseline_remix_prompt(run_dir, cli_remix_prompt)
     append_debug_trace(trace_path, f"run_operator_pipeline_batch.py starting for run_dir={run_dir}")
     lease_state_path = shared_port_state_path_for_run_dir(run_dir)
     append_debug_trace(
         trace_path,
-        f"Arguments: manifest={args.manifest}, run_id={args.run_id}, run_dir={args.run_dir}, runs_root={args.runs_root}, model={args.model}, agent_timeout={args.agent_timeout}, max_concurrency={args.max_concurrency}, poll_seconds={args.poll_seconds}, stale_heartbeat_seconds={args.stale_heartbeat_seconds}, source_mode={args.source_mode}, through={args.through}, registry_config={args.registry_config}, remix_prompt_present={bool(remix_prompt)} dry_run_operators={args.dry_run_operators} dry_run_spec_adaptor={args.dry_run_spec_adaptor} playwright_port_base={args.playwright_port_base} playwright_port_pool_size={args.playwright_port_pool_size} playwright_port_lease_ttl_seconds={args.playwright_port_lease_ttl_seconds} lease_state_path={lease_state_path}",
+        f"Arguments: manifest={args.manifest}, run_id={args.run_id}, run_dir={args.run_dir}, runs_root={args.runs_root}, model={args.model}, agent_timeout={args.agent_timeout}, max_concurrency={args.max_concurrency}, poll_seconds={args.poll_seconds}, stale_heartbeat_seconds={args.stale_heartbeat_seconds}, source_mode={args.source_mode}, through={args.through}, registry_config={args.registry_config}, remix_prompt_present={bool(batch_remix_prompt)} remix_prompt_source={batch_remix_prompt_source} dry_run_operators={args.dry_run_operators} dry_run_spec_adaptor={args.dry_run_spec_adaptor} playwright_port_base={args.playwright_port_base} playwright_port_pool_size={args.playwright_port_pool_size} playwright_port_lease_ttl_seconds={args.playwright_port_lease_ttl_seconds} lease_state_path={lease_state_path}",
     )
 
     append_debug_trace(trace_path, "Starting prepare_inputs.py")
@@ -455,7 +496,7 @@ def main() -> None:
             "Ignoring deprecated --dry-run-spec-adaptor flag because spec adaptor is no longer part of the active batch path",
         )
     append_debug_trace(trace_path, "Initializing run status for parallel execution")
-    initialize_run_status(run_dir, args.max_concurrency, args.stale_heartbeat_seconds, remix_prompt)
+    initialize_run_status(run_dir, args.max_concurrency, args.stale_heartbeat_seconds, batch_remix_prompt)
     append_debug_trace(trace_path, "Run status initialized")
     run_python(str(ROOT / "scripts" / "build_dashboard.py"), "--run-dir", str(run_dir), trace_path=trace_path)
     run_python(str(ROOT / "scripts" / "write_dashboard_launcher.py"), "--run-dir", str(run_dir), trace_path=trace_path)
@@ -481,12 +522,22 @@ def main() -> None:
                 trace_path,
                 f"Acquired leased playwright port for game_id={game_id} port={port_lease.port} lease_id={port_lease.lease_id} lease_owner_pid={port_lease.owner_pid} lease_state_path={port_lease.state_path} localhost_url={port_lease.localhost_url}",
             )
+            effective_remix_prompt, effective_remix_prompt_source = resolve_effective_game_remix_prompt(
+                run_dir,
+                game_id,
+                cli_remix_prompt,
+            )
+            append_debug_trace(
+                trace_path,
+                f"Resolved effective remix prompt for game_id={game_id}: source={effective_remix_prompt_source} present={bool(effective_remix_prompt)}",
+            )
             active[game_id] = launch_worker(
                 run_dir,
                 game_id,
                 args.model,
                 args.agent_timeout,
-                remix_prompt,
+                effective_remix_prompt,
+                effective_remix_prompt_source,
                 args.registry_config,
                 args.through,
                 lease_state_path,
@@ -556,7 +607,7 @@ def main() -> None:
                     )
             run_state["status"] = "running"
             run_state["current_phase"] = "parallel_batch_running"
-            run_state["remix_prompt"] = remix_prompt
+            run_state["remix_prompt"] = batch_remix_prompt
             run_state["updated_at"] = utc_now()
             write_json(run_state_path, run_state)
             append_debug_trace(
@@ -569,7 +620,7 @@ def main() -> None:
             time.sleep(max(0.2, args.poll_seconds))
 
     append_debug_trace(trace_path, "No pending or active workers remain; finalizing run status")
-    finalize_run_status(run_dir, remix_prompt)
+    finalize_run_status(run_dir, batch_remix_prompt)
     run_python(str(ROOT / "scripts" / "build_dashboard.py"), "--run-dir", str(run_dir), trace_path=trace_path)
     append_debug_trace(trace_path, f"run_operator_pipeline_batch.py completed successfully for run_dir={run_dir}")
     print(run_dir)

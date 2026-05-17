@@ -25,7 +25,12 @@ class WorkflowDefinition:
     run_label: str
     nodes: list[dict[str, Any]]
 
-    def build_manifest(self, games: list[dict[str, Any]], source_manifest_path: Path) -> dict[str, Any]:
+    def build_manifest(
+        self,
+        games: list[dict[str, Any]],
+        source_manifest_path: Path,
+        remix_prompt: str | None = None,
+    ) -> dict[str, Any]:
         manifest = {
             "manifest_version": "2.0.0",
             "run_label": self.run_label,
@@ -36,6 +41,8 @@ class WorkflowDefinition:
                 "games_manifest_source": str(source_manifest_path),
             },
         }
+        if remix_prompt is not None:
+            manifest["remix_prompt"] = remix_prompt
         return manifest
 
 
@@ -403,7 +410,15 @@ def resolve_workflow(workflow_id: str) -> WorkflowDefinition:
         raise ValueError(f"Unknown workflow id '{workflow_id}'. Valid ids: {valid_ids}") from exc
 
 
-def resolve_games(source_manifest_path: Path) -> tuple[list[dict[str, Any]], str | None]:
+def _validate_optional_remix_prompt(value: Any, field_path: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_path} must be a non-empty string when present")
+    return value.strip()
+
+
+def resolve_manifest_inputs(source_manifest_path: Path) -> tuple[list[dict[str, Any]], str | None, str | None]:
     if not source_manifest_path.exists():
         raise FileNotFoundError(f"Games manifest source not found: {source_manifest_path}")
 
@@ -412,8 +427,16 @@ def resolve_games(source_manifest_path: Path) -> tuple[list[dict[str, Any]], str
     if not isinstance(games, list) or not games:
         raise ValueError(f"Games manifest source must contain a non-empty 'games' list: {source_manifest_path}")
 
+    for index, raw_game in enumerate(games):
+        if not isinstance(raw_game, dict):
+            raise ValueError(f"games[{index}] must be an object: {source_manifest_path}")
+        game_remix_prompt = _validate_optional_remix_prompt(raw_game.get("remix_prompt"), f"games[{index}].remix_prompt")
+        if game_remix_prompt is not None:
+            raw_game["remix_prompt"] = game_remix_prompt
+
     run_label = source_manifest.get("run_label")
-    return games, run_label if isinstance(run_label, str) and run_label.strip() else None
+    remix_prompt = _validate_optional_remix_prompt(source_manifest.get("remix_prompt"), "manifest field 'remix_prompt'")
+    return games, run_label if isinstance(run_label, str) and run_label.strip() else None, remix_prompt
 
 
 def build_generated_manifest_path(workflow_id: str, source_manifest_path: Path) -> Path:
@@ -425,9 +448,13 @@ def build_generated_manifest_path(workflow_id: str, source_manifest_path: Path) 
 def write_workflow_manifest(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
     workflow = resolve_workflow(args.id)
     source_manifest_path = Path(args.games_manifest_source).resolve()
-    games, source_run_label = resolve_games(source_manifest_path)
+    games, source_run_label, source_remix_prompt = resolve_manifest_inputs(source_manifest_path)
 
-    manifest = workflow.build_manifest(games=games, source_manifest_path=source_manifest_path)
+    manifest = workflow.build_manifest(
+        games=games,
+        source_manifest_path=source_manifest_path,
+        remix_prompt=source_remix_prompt,
+    )
     if source_run_label:
         manifest["run_label"] = f"{manifest['run_label']}-{source_run_label}"
 

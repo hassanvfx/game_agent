@@ -15,6 +15,15 @@ creative_refactor_cli.py
   -> run_single_game.py workers
 ```
 
+For workflow-driven v2 runs such as `creative_remix_v5`, the active path is:
+
+```text
+game_workflow.py
+  -> creative_refactor_cli.py start-batch
+  -> run_operator_pipeline_batch.py
+  -> run_operator_pipeline_game.py workers
+```
+
 The intended operator-pipeline structure is:
 
 ```text
@@ -106,6 +115,26 @@ game workers = many readers
 ```
 
 The operator pipeline preserves this rule. The adapted spec is treated as read-only shared input for per-game operators.
+
+### Prompt resolution in the v2 workflow path
+
+For manifest-driven v2 runs, prompt intent can come from either CLI or manifest data.
+
+Supported manifest fields:
+
+- top-level `remix_prompt`
+  - baseline prompt for the whole manifest
+- per-game `games[].remix_prompt`
+  - optional override for one game entry
+
+Effective prompt precedence for each game:
+
+1. CLI `--remix-prompt` / `--remix-prompt-file`
+2. per-game `games[].remix_prompt`
+3. top-level manifest `remix_prompt`
+4. fallback prompt behavior
+
+This means one v2 run can intentionally carry different prompt steering for different games without duplicating the workflow definition.
 
 ---
 

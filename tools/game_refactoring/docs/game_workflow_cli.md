@@ -163,10 +163,13 @@ At runtime, `scripts/game_workflow.py`:
 4. builds a generated manifest that combines:
    - the workflow's source-controlled nodes
    - the caller-provided games list
+   - optional manifest-level `remix_prompt`
 5. writes that generated manifest under:
    - `runs/_workflow_manifests/`
 6. launches the existing batch path through:
    - `python3 scripts/creative_refactor_cli.py --json start-batch ...`
+
+When using the v2 operator pipeline, prompt resolution happens per game at execution time.
 
 ## Basic usage
 
@@ -220,6 +223,41 @@ python3 scripts/game_workflow.py \
   --remix-prompt "your remix prompt here"
 ```
 
+## Creative remix v5 manifest-driven prompt example
+
+This variant does not require `--remix-prompt` on the CLI when the input manifest already carries prompt intent.
+
+Example manifest:
+
+```json
+{
+  "manifest_version": "1.0.0",
+  "run_label": "jabali-rick-and-morty-vs-mario-retry",
+  "remix_prompt": "Rick & Morty inspired",
+  "games": [
+    {
+      "game_id": "game-c33db5bd-53ee-4637-bdba-4153f2805353-rick-baseline",
+      "source_path": "/absolute/path/to/game",
+      "display_name": "game-c33db5bd-53ee-4637-bdba-4153f2805353-rick-baseline"
+    },
+    {
+      "game_id": "game-c33db5bd-53ee-4637-bdba-4153f2805353-mario-override",
+      "source_path": "/absolute/path/to/game",
+      "display_name": "game-c33db5bd-53ee-4637-bdba-4153f2805353-mario-override",
+      "remix_prompt": "Mario Bros Inspired"
+    }
+  ]
+}
+```
+
+Launch example:
+
+```bash
+python3 scripts/game_workflow.py \
+  --id creative_remix_v5 \
+  --games-manifest-source fixtures/jabali_rick_and_morty_vs_mario_retry_manifest.json
+```
+
 ## Creative remix v6 example
 
 ```bash
@@ -256,6 +294,8 @@ python3 scripts/game_workflow.py \
   --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
   --remix-prompt "your override prompt here"
 ```
+
+When provided, a CLI prompt override forces the same prompt across all games in the run and takes precedence over manifest-carried prompts.
 
 ### Prompt override file
 
@@ -333,16 +373,46 @@ Example shape:
 
 ```json
 {
+  "remix_prompt": "Optional baseline prompt for all games in the manifest.",
   "run_label": "some-input-set",
   "games": [
     {
       "game_id": "example-game-id",
       "source_path": "/absolute/path/to/game",
-      "display_name": "example-game-id"
+      "display_name": "example-game-id",
+      "remix_prompt": "Optional per-game override prompt."
     }
   ]
 }
 ```
+
+### Prompt resolution contract
+
+When using manifest-carried prompts, the effective prompt should resolve in this order:
+
+1. CLI `--remix-prompt` / `--remix-prompt-file`
+2. per-game `games[].remix_prompt`
+3. top-level manifest `remix_prompt`
+4. existing workflow fallback behavior
+
+### Scope note
+
+The manifest baseline + per-game override contract is implemented and validated on the v2 operator-pipeline path used by workflow-driven `creative_remix_v5` runs.
+
+In this model:
+
+- top-level `remix_prompt` acts as the manifest-wide baseline
+- `games[].remix_prompt` acts as an optional per-game override
+- the worker prompt text is generated from the effective per-game resolved prompt, not a single shared run-level prompt
+
+This lets one run carry multiple themed prompt variants against the same or different source games.
+
+This means a caller can supply:
+
+- a manifest-wide baseline prompt
+- an optional override for only selected games in the same run
+
+The per-game override is intended to be resolved at execution time, not by duplicating workflows.
 
 ### Important clarification
 
