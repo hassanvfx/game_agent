@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Arcade Shift Rush</title>
+    <!-- [agent-note][stage4] resolved-font: title/display -> Audiowide, HUD/UI/body -> Exo 2 from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #140f2f;
+            --bg-alt: #201647;
+            --floor-a: #261b56;
+            --floor-b: #1b133f;
+            --panel: rgba(26, 19, 57, 0.86);
+            --panel-border: rgba(123, 243, 255, 0.4);
+            --text: #f8f6ff;
+            --muted: #b0bfdc;
+            --accent: #7bf3ff;
+            --accent-strong: #58b7ff;
+            --gold: #ffd86b;
+            --coin: #7af7a3;
+            --danger: #ff6d87;
+            --shadow: rgba(4, 8, 28, 0.5);
+        }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
+            radial-gradient(circle at top, rgba(88, 183, 255, 0.2), transparent 35%),
+            linear-gradient(180deg, var(--bg) 0%, #0d0a1c 100%);
+            user-select: none; -webkit-user-select: none; font-family: 'Exo 2', system-ui, sans-serif; color: var(--text); }
+        body { position: relative; }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        .glass { background: linear-gradient(180deg, rgba(39, 27, 83, 0.92), rgba(21, 16, 49, 0.88)); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--panel-border); box-shadow: 0 12px 32px var(--shadow), inset 0 0 0 1px rgba(255,255,255,0.05); }
+        .shadow-text { text-shadow: 0 2px 0 rgba(5,8,24,0.45); }
+        .hidden { display: none !important; }
+        #game-container { position: relative; width: 100%; height: 100%; }
+        #game-container::before { content: ""; position: absolute; inset: 0; pointer-events: none; background:
+            radial-gradient(circle at 50% 18%, rgba(123,243,255,0.18), transparent 24%),
+            linear-gradient(180deg, transparent 0%, rgba(9,6,24,0.28) 100%); z-index: 1; }
+        #game-container::after { content: "🕹️"; position: absolute; left: 50%; bottom: 1.1rem; transform: translateX(-50%); font-size: 1.25rem; opacity: 0.14; filter: drop-shadow(0 0 8px rgba(123,243,255,0.3)); pointer-events: none; z-index: 2; }
+        #ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: space-between; padding: 1rem; box-sizing: border-box; }
+        #ui-layer > * { pointer-events: auto; }
+        #hud-top { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; gap: 1rem; }
+        .hud-card { padding: 0.55rem 0.95rem; border-radius: 1rem; display: flex; flex-direction: column; align-items: center; min-width: 100px; position: relative; overflow: hidden; }
+        .quest-card { padding: 0.55rem 0.95rem; border-radius: 1rem; display: flex; flex-direction: column; align-items: flex-end; max-width: 180px; position: relative; overflow: hidden; }
+        .hud-card::before, .quest-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(123,243,255,0.12), transparent 55%); pointer-events: none; }
+        .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; font-family: 'Exo 2', system-ui, sans-serif; }
+        .muted { color: var(--muted); }
+        .blue { color: var(--accent); }
+        .money-value { font-size: 1.72rem; font-weight: 700; color: var(--coin); text-shadow: 0 0 10px rgba(122,247,163,0.35), 0 2px 0 rgba(5,8,24,0.45); }
+        .quest-text { font-size: 0.98rem; font-weight: 700; color: var(--text); text-align: right; line-height: 1.1; margin: 0.25rem 0; }
+        .quest-progress { width: 100%; height: 0.5rem; background: rgba(255,255,255,0.12); border-radius: 9999px; margin-top: 0.25rem; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); }
+        #quest-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); transition: width 0.3s; box-shadow: 0 0 10px rgba(123,243,255,0.45); }
+        #notification-area { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; text-align: center; width: min(72vw, 320px); }
+        #game-over-screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5, 8, 24, 0.56); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); padding: 1rem; box-sizing: border-box; }
+        .game-over-card { padding: 1.75rem; border-radius: 1rem; text-align: center; max-width: 24rem; width: min(24rem, calc(100% - 2rem)); box-shadow: 0 25px 50px rgba(0,0,0,0.25); border: 1px solid rgba(255, 216, 107, 0.36); }
+        .game-over-title { margin: 0 0 0.5rem; font: 400 2.1rem 'Audiowide', sans-serif; color: var(--gold); letter-spacing: 0.04em; text-shadow: 0 0 16px rgba(255,216,107,0.25); }
+        .game-over-copy { margin: 0 0 1.25rem; color: #d3ddf6; font-size: 1rem; }
+        #restart-btn { width: 100%; background: linear-gradient(180deg, var(--accent-strong), #2e7ef7); color: #fff; border: 0; font: 700 1rem 'Exo 2', system-ui, sans-serif; padding: 0.95rem 1.35rem; border-radius: 0.75rem; box-shadow: 0 10px 20px rgba(34,104,241,0.34); letter-spacing: 0.08em; }
+        .feedback-gif { position: absolute; right: 0.85rem; bottom: 1rem; width: min(26vw, 92px); border-radius: 0.9rem; border: 1px solid rgba(123,243,255,0.38); box-shadow: 0 10px 20px rgba(4, 8, 28, 0.35); opacity: 0; transform: translateY(12px) scale(0.92); transition: opacity 0.22s ease, transform 0.22s ease; pointer-events: none; z-index: 55; }
+        .feedback-gif.show { opacity: 0.92; transform: translateY(0) scale(1); }
+        #success-gif { bottom: 1rem; }
+        #danger-gif { bottom: 7rem; width: min(28vw, 100px); }
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        .pop-anim { animation: pop 0.2s ease-out; }
+        @media (max-width: 520px) {
+            #ui-layer { padding: 0.75rem; }
+            #hud-top { gap: 0.65rem; }
+            .hud-card { min-width: 88px; padding: 0.5rem 0.8rem; }
+            .quest-card { max-width: 160px; padding: 0.5rem 0.8rem; }
+            .money-value { font-size: 1.45rem; }
+            .quest-text { font-size: 0.88rem; }
+            .game-over-title { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Assets Declaration -->
+<div id="assets" hidden>
+    <audio id="bgm_main" data-editable="audio" data-label="Arcade Floor Loop" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3" loop preload="auto"></audio>
+    <audio id="sfx_coin" data-editable="audio" data-label="Ticket Pickup" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3" preload="auto"></audio>
+    <audio id="sfx_upgrade" data-editable="audio" data-label="Booth Upgrade" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3" preload="auto"></audio>
+    <audio id="sfx_hit" data-editable="audio" data-label="Bandit Hit" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3" preload="auto"></audio>
+    <audio id="sfx_fail" data-editable="audio" data-label="Blocked Purchase" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3" preload="auto"></audio>
+    <audio id="sfx_start" data-editable="audio" data-label="Shift Open" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+    <img id="img_floor" data-editable="image" data-label="Floor Tile" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzhhYWGMYAEYB8RmROaABADeOQ8CXl/xfgAAAABJRU5ErkJggg==" hidden>
+</div>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "heroSpeed": { "type": "number", "label": "CEO Speed", "value": 18, "min": 10, "max": 30 },
+    "customerSpawnRate": { "type": "number", "label": "Customer Rate (ms)", "value": 2000, "min": 500, "max": 5000 },
+    "baseMoneyValue": { "type": "number", "label": "Money Value", "value": 15, "min": 5, "max": 100 },
+    "themeColor": { "type": "color", "label": "UI Color", "value": "#3b82f6" }
+}
+</script>
+
+<!-- Game Container -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <!-- HUD Top -->
+        <div id="hud-top">
+            <div class="glass hud-card">
+                <span class="label muted">TICKETS</span>
+                <span id="money-display" class="money-value">$0</span>
+            </div>
+            
+            <!-- Quest Panel -->
+            <div id="quest-panel" class="glass quest-card">
+                <span class="label blue">SHIFT GOAL</span>
+                <span id="quest-desc" class="quest-text">Loading...</span>
+                <div class="quest-progress">
+                    <div id="quest-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Notifications -->
+            <div id="notification-area">
+                <!-- Dynamic popups inserted here -->
+            </div>
+            <!-- [agent-note][stage3] resolved-gif: reward/fail feedback overlays -> catalogs/gifs.json -->
+            <img id="success-gif" class="feedback-gif" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Reward feedback animation">
+            <img id="danger-gif" class="feedback-gif" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp" alt="Danger feedback animation">
+
+        <!-- Game Over / Pause Screen (Not used in Tycoon, but kept for critical failure state) -->
+        <div id="game-over-screen" class="hidden">
+            <div class="glass game-over-card">
+                <h2 class="game-over-title">ARCADE RAID!</h2>
+                <p class="game-over-copy">The snack bandit cleared out the floor.</p>
+                <button id="restart-btn">
+                    REOPEN ARCADE
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * §0 System Invariants & Config
+ */
+const CONFIG = {
+    defs: JSON.parse(document.getElementById('game-config').textContent),
+    get(key) { return this.defs[key]?.value ?? this.defs[key]?.default; }
+};
+
+// Global State
+let canvas, ctx;
+let cw = 0, ch = 0;
+let dpr = 1;
+let gameState = 'INIT'; 
+let lastTime = 0;
+let initialized = false;
+
+// Tycoon State
+let money = 0;
+let totalEarned = 0;
+let workers = 0;
+let processingSpeed = 1.0;
+let workerCost = 150;
+let speedCost = 100;
+let upgradeTimer = 0;
+
+// Quest State
+let quest = { type: 'COLLECT', target: 100, current: 0, reward: 200, desc: "Collect 100 tickets" };
+
+// Entities
+let hero = { x: 0, y: 0, r: 24, targetX: 0, targetY: 0 };
+let customers = [];
+let moneys = [];
+let particles = [];
+let thief = null;
+let buildings = []; // { x, y, w, h, type, label, cost, level }
+
+// Audio Context
+let audioCtx;
+let audioBuffers = {};
+let audioReady = false;
+let audioStarted = false;
+let lastSfxAt = {};
+let lastFeedbackTimer = null;
+
+/**
+ * §1 Audio System (Web Audio API)
+ */
+async function initAudio() {
+    if (audioCtx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+    
+    const loadBuffer = async (id, url) => {
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            audioBuffers[id] = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn(`Failed to load audio ${id}`, e);
+        }
+    };
+
+    await Promise.all([
+        loadBuffer('coin', document.getElementById('sfx_coin').src),
+        loadBuffer('upgrade', document.getElementById('sfx_upgrade').src),
+        loadBuffer('hit', document.getElementById('sfx_hit').src),
+        loadBuffer('fail', document.getElementById('sfx_fail').src),
+        loadBuffer('start', document.getElementById('sfx_start').src)
+    ]);
+    audioReady = true;
+}
+
+function unlockAudio() {
+    if (!audioCtx) initAudio().catch(() => {});
+    if (audioCtx?.state === 'suspended') audioCtx.resume().catch?.(() => {});
+    
+    const bgm = document.getElementById('bgm_main');
+    if (bgm && bgm.paused) {
+        bgm.volume = 0.22;
+        bgm.play().catch(() => {});
+    }
+
+    if (!audioStarted) {
+        audioStarted = true;
+        playSfx('start');
+    }
+}
+
+function playSfx(type) {
+    if (!audioCtx) return;
+    const now = performance.now();
+    const cooldown = { coin: 80, upgrade: 220, hit: 180, fail: 200, start: 500 };
+    if (cooldown[type] && lastSfxAt[type] && now - lastSfxAt[type] < cooldown[type]) return;
+    lastSfxAt[type] = now;
+    
+    const synth = (freq, wave, dur, volume = 0.22) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = wave;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq * 0.55), audioCtx.currentTime + dur);
+        gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + dur);
+    };
+
+    const playBuffer = (bufferKey, volume = 0.2, playbackRate = 1) => {
+        const buffer = audioBuffers[bufferKey];
+        if (!buffer) return false;
+        const src = audioCtx.createBufferSource();
+        const gain = audioCtx.createGain();
+        src.buffer = buffer;
+        src.playbackRate.value = playbackRate;
+        gain.gain.value = volume;
+        src.connect(gain);
+        gain.connect(audioCtx.destination);
+        src.start();
+        return true;
+    };
+
+    if (type === 'coin') {
+        if (!playBuffer('coin', 0.16, 0.96 + Math.random() * 0.08)) synth(1200, 'sine', 0.1, 0.18);
+    } else if (type === 'upgrade') {
+        if (!playBuffer('upgrade', 0.22, 1)) synth(600, 'triangle', 0.5, 0.24);
+    } else if (type === 'hit') {
+        if (!playBuffer('hit', 0.2, 0.96)) synth(150, 'sawtooth', 0.2, 0.2);
+    } else if (type === 'fail') {
+        if (!playBuffer('fail', 0.15, 1)) synth(220, 'square', 0.12, 0.16);
+    } else if (type === 'start') {
+        if (!playBuffer('start', 0.18, 1)) synth(520, 'triangle', 0.18, 0.18);
+    }
+}
+
+function vibrate(style) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+            params: { style: style }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(style === 'heavy' ? 200 : 50);
+    }
+}
+
+/**
+ * §2 Lifecycle & Input
+ */
+function initGame() {
+    if (gameState === 'PLAYING') return;
+    
+    money = 0;
+    workers = 0;
+    processingSpeed = 1.0;
+    workerCost = 150;
+    speedCost = 100;
+    
+    hero.x = cw / 2;
+    hero.y = ch - 150;
+    hero.targetX = hero.x;
+    hero.targetY = hero.y;
+    
+    customers = [];
+    moneys = [];
+    particles = [];
+    thief = null;
+    
+    // Setup Buildings / Zones
+    const zoneW = cw * 0.4;
+    const zoneH = 100;
+    buildings = [
+        { id: 'counter', x: cw/2 - 60, y: ch/2 - 40, w: 120, h: 80, type: 'STATION', label: 'PRIZE HUB', color: '#fbbf24' },
+        { id: 'upgrade_speed', x: 20, y: 100, w: zoneW, h: zoneH, type: 'UPGRADE', label: 'BOOST FLOW', cost: speedCost, color: '#60a5fa' },
+        { id: 'upgrade_worker', x: cw - zoneW - 20, y: 100, w: zoneW, h: zoneH, type: 'UPGRADE', label: 'ADD CREW', cost: workerCost, color: '#34d399' }
+    ];
+    
+    generateQuest();
+    updateHUD();
+    setState('PLAYING');
+    showFeedbackGif('success-gif', 900);
+}
+
+function setState(newState) {
+    gameState = newState;
+    const gameOverScreen = document.getElementById('game-over-screen');
+    if (newState === 'PLAYING') {
+        gameOverScreen.classList.add('hidden');
+    } else if (newState === 'GAMEOVER') {
+        gameOverScreen.classList.remove('hidden');
+    }
+}
+
+function handleInput(e) {
+    unlockAudio();
+    if (gameState !== 'PLAYING') return;
+    
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    hero.targetX = Math.max(hero.r, Math.min(cw - hero.r, x));
+    hero.targetY = Math.max(hero.r, Math.min(ch - hero.r, y));
+}
+
+function bindInputHandlers() {
+    /* [agent-note][stage5] repaired: runtime-init-order | bind canvas input only after DOM nodes exist so gameplay loop can initialize */
+    canvas.addEventListener('pointerdown', (e) => {
+        if (gameState === 'GAMEOVER') return;
+        handleInput(e);
+    }, { passive: false });
+
+    canvas.addEventListener('pointermove', handleInput, { passive: false });
+
+    document.getElementById('restart-btn').addEventListener('click', () => {
+        unlockAudio();
+        setState('INIT'); // Reset state to allow initGame to run cleanly
+        initGame();
+    });
+}
+
+/**
+ * §3 Game Logic
+ */
+function generateQuest() {
+    const types = ['COLLECT', 'SERVE'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const scale = 1 + Math.floor(totalEarned / 1000);
+    
+    if (type === 'COLLECT') {
+        const amount = 100 * scale;
+        quest = { type, target: amount, current: 0, reward: amount * 0.5, desc: `Collect ${amount} tickets` };
+    } else {
+        const count = 5 * scale;
+        quest = { type, target: count, current: 0, reward: 150 * scale, desc: `Serve ${count} guests` };
+    }
+    updateQuestUI();
+}
+
+function checkQuest(type, amount) {
+    if (quest.type === type) {
+        quest.current += amount;
+        if (quest.current >= quest.target) {
+            // Quest Complete
+            money += quest.reward;
+            playSfx('upgrade');
+            vibrate('heavy');
+            showFeedbackGif('success-gif', 1200);
+            createFloatingText(`+${quest.reward} SHIFT BONUS`, cw/2, ch/2, '#fbbf24');
+            createParticles(cw/2, ch/2, '#fbbf24', 20);
+            generateQuest();
+        }
+        updateQuestUI();
+    }
+}
+
+function spawnCustomer() {
+    if (customers.length > 5 + workers) return; // Cap customers based on capacity
+    const r = 15;
+    customers.push({
+        x: cw / 2 + (Math.random() - 0.5) * 100,
+        y: ch + 50,
+        r: r,
+        state: 'WALKING_IN',
+        targetY: buildings[0].y + buildings[0].h + 30, // Queue position
+        progress: 0,
+        color: `hsl(${Math.random() * 360}, 70%, 60%)`
+    });
+}
+
+function spawnMoney(x, y, value) {
+    moneys.push({
+        x, y, value,
+        vx: (Math.random() - 0.5) * 5,
+        vy: (Math.random() - 0.5) * 5,
+        r: 10,
+        life: 1.0 // for spawn animation
+    });
+}
+
+function spawnThief() {
+    if (thief) return;
+    thief = {
+        x: Math.random() < 0.5 ? -30 : cw + 30,
+        y: Math.random() * ch,
+        r: 20,
+        state: 'STEALING',
+        fleeTimer: 0
+    };
+    createFloatingText("SNACK BANDIT!", cw/2, ch/2, '#ef4444');
+}
+
+function createParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const v = Math.random() * 4 + 2;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * v,
+            vy: Math.sin(angle) * v,
+            life: 1.0,
+            color: color,
+            size: Math.random() * 4 + 2
+        });
+    }
+}
+
+function createFloatingText(text, x, y, color) {
+    particles.push({
+        type: 'text', text, x, y, vy: -1, life: 1.5, color
+    });
+}
+
+function showFeedbackGif(id, duration = 1100) {
+    const gif = document.getElementById(id);
+    if (!gif) return;
+    gif.classList.add('show');
+    clearTimeout(lastFeedbackTimer);
+    lastFeedbackTimer = setTimeout(() => {
+        gif.classList.remove('show');
+    }, duration);
+}
+
+function update(dt) {
+    if (gameState !== 'PLAYING') return;
+    
+    const now = performance.now();
+    
+    // Hero Movement
+    const lerpSpeed = CONFIG.get('heroSpeed') * dt;
+    hero.x += (hero.targetX - hero.x) * lerpSpeed;
+    hero.y += (hero.targetY - hero.y) * lerpSpeed;
+    
+    // Spawn Systems
+    if (Math.random() < (1000 / CONFIG.get('customerSpawnRate')) * dt) spawnCustomer();
+    if (!thief && moneys.length > 5 && Math.random() < 0.001) spawnThief();
+    
+    // Update Customers
+    const counter = buildings[0];
+    const serviceSpeed = (1 + workers * 0.5) * processingSpeed;
+    
+    customers.forEach((c, i) => {
+        if (c.state === 'WALKING_IN') {
+            const dy = c.targetY - c.y;
+            c.y += Math.sign(dy) * 200 * dt; // Walk speed
+            if (Math.abs(dy) < 5) c.state = 'WAITING';
+        } else if (c.state === 'WAITING') {
+            // Check if hero is near counter or workers exist
+            const heroNear = Math.abs(hero.x - counter.x - counter.w/2) < 100 && Math.abs(hero.y - counter.y - counter.h/2) < 100;
+            if (heroNear || workers > 0) {
+                c.progress += dt * serviceSpeed;
+                if (c.progress >= 1.0) {
+                    c.state = 'LEAVING';
+                    const val = CONFIG.get('baseMoneyValue');
+                    spawnMoney(c.x, c.y, val);
+                    playSfx('upgrade');
+                    checkQuest('SERVE', 1);
+                }
+            }
+        } else if (c.state === 'LEAVING') {
+            c.y += 200 * dt;
+            if (c.y > ch + 50) customers.splice(i, 1);
+        }
+    });
+    
+    // Update Money
+    for (let i = moneys.length - 1; i >= 0; i--) {
+        const m = moneys[i];
+        m.x += m.vx; m.y += m.vy;
+        m.vx *= 0.9; m.vy *= 0.9;
+        
+        // Magnet to Hero
+        const dx = hero.x - m.x;
+        const dy = hero.y - m.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 150) {
+            m.x += dx * 5 * dt;
+            m.y += dy * 5 * dt;
+        }
+        
+        if (dist < hero.r + m.r) {
+            money += m.value;
+            totalEarned += m.value;
+            checkQuest('COLLECT', m.value);
+            moneys.splice(i, 1);
+            playSfx('coin');
+            vibrate('light');
+            createParticles(m.x, m.y, '#4ade80', 3);
+            updateHUD();
+        }
+    }
+    
+    // Update Thief
+    if (thief) {
+        if (thief.state === 'STEALING') {
+            // Find nearest money
+            let target = null;
+            let minDist = 9999;
+            moneys.forEach(m => {
+                const d = Math.hypot(m.x - thief.x, m.y - thief.y);
+                if (d < minDist) { minDist = d; target = m; }
+            });
+            
+            if (target) {
+                const angle = Math.atan2(target.y - thief.y, target.x - thief.x);
+                thief.x += Math.cos(angle) * 100 * dt;
+                thief.y += Math.sin(angle) * 100 * dt;
+                
+                if (minDist < thief.r + 10) {
+                    // Steal money
+                    const idx = moneys.indexOf(target);
+                    if (idx > -1) moneys.splice(idx, 1);
+                    createParticles(thief.x, thief.y, '#ef4444', 5);
+                }
+            } else {
+                // No money, wander
+                thief.y += Math.sin(now * 0.005) * 50 * dt;
+            }
+            
+            // Player collision
+            const pd = Math.hypot(hero.x - thief.x, hero.y - thief.y);
+            if (pd < hero.r + thief.r + 20) {
+                thief.state = 'FLEEING';
+                playSfx('hit');
+                vibrate('medium');
+                showFeedbackGif('danger-gif', 1000);
+                createFloatingText("BUSTED!", thief.x, thief.y, '#ffffff');
+            }
+        } else {
+            // Fleeing
+            thief.y -= 400 * dt;
+            if (thief.y < -50) thief = null;
+        }
+    }
+    
+    // Upgrade Logic
+    if (upgradeTimer > 0) upgradeTimer -= dt;
+    else {
+        buildings.forEach(b => {
+            if (b.type === 'UPGRADE') {
+                if (hero.x > b.x && hero.x < b.x + b.w && hero.y > b.y && hero.y < b.y + b.h) {
+                    if (money >= b.cost) {
+                        money -= b.cost;
+                        b.cost = Math.floor(b.cost * 1.5);
+                        
+                        if (b.id === 'upgrade_speed') {
+                            processingSpeed *= 1.2;
+                            createFloatingText("FLOW BOOST!", b.x + b.w/2, b.y, '#60a5fa');
+                        } else {
+                            workers++;
+                            createFloatingText("CREW ADDED!", b.x + b.w/2, b.y, '#34d399');
+                        }
+                        
+                        playSfx('upgrade');
+                        vibrate('heavy');
+                        showFeedbackGif('success-gif', 1000);
+                        createParticles(b.x + b.w/2, b.y + b.h/2, b.color, 30);
+                        upgradeTimer = 1.0; // Cooldown
+                        updateHUD();
+                    } else if (upgradeTimer <= 0) {
+                        playSfx('fail');
+                        showFeedbackGif('danger-gif', 850);
+                        upgradeTimer = 0.25;
+                    }
+                }
+            }
+        });
+    }
+    
+    // Update Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        if (p.type === 'text') {
+            p.y += p.vy * dt * 60;
+            p.life -= dt;
+            if (p.life <= 0) particles.splice(i, 1);
+        } else {
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.05;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+    }
+}
+
+function updateHUD() {
+    document.getElementById('money-display').textContent = '$' + Math.floor(money);
+    
+    // Update costs on buildings (visual only, logic handles actual cost)
+    buildings[1].cost = Math.floor(speedCost * Math.pow(1.5, Math.log2(processingSpeed))); // Approx logic sync
+    buildings[1].cost = buildings[1].cost; // Actually logic updates object directly
+    buildings[2].cost = buildings[2].cost;
+}
+
+function updateQuestUI() {
+    document.getElementById('quest-desc').textContent = quest.desc;
+    const pct = Math.min(100, (quest.current / quest.target) * 100);
+    document.getElementById('quest-bar').style.width = pct + '%';
+}
+
+/**
+ * §4 Rendering
+ */
+function drawRoundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Floor Pattern
+    ctx.fillStyle = '#f0f4f8';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.fillStyle = '#e2e8f0';
+    for(let x=0; x<cw; x+=40) {
+        for(let y=0; y<ch; y+=40) {
+            if ((x+y)%80 === 0) ctx.fillRect(x, y, 40, 40);
+        }
+    }
+
+    // Draw Buildings
+    buildings.forEach(b => {
+        // Base
+        ctx.fillStyle = b.type === 'UPGRADE' ? '#ffffff' : b.color;
+        
+        // Highlight if affordable
+        if (b.type === 'UPGRADE') {
+            if (money >= b.cost && upgradeTimer <= 0) {
+                ctx.shadowColor = b.color;
+                ctx.shadowBlur = 20;
+                ctx.strokeStyle = b.color;
+                ctx.lineWidth = 4;
+            } else {
+                ctx.strokeStyle = '#cbd5e1';
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 0;
+            }
+        } else {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(0,0,0,0.1)';
+        }
+        
+        drawRoundedRect(ctx, b.x, b.y, b.w, b.h, 15);
+        if (b.type === 'UPGRADE') ctx.stroke();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Label
+        ctx.fillStyle = '#eef7ff';
+        ctx.font = '400 14px Audiowide';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label, b.x + b.w/2, b.y + 30);
+        
+        // Cost / Info
+        if (b.type === 'UPGRADE') {
+            ctx.fillStyle = money >= b.cost ? '#7af7a3' : '#ff6d87';
+            ctx.font = '700 16px Exo 2';
+            ctx.fillText('$' + b.cost, b.x + b.w/2, b.y + 60);
+        } else {
+            // Draw Worker Icons
+            for(let i=0; i<workers; i++) {
+                ctx.fillStyle = '#34d399';
+                ctx.beginPath();
+                ctx.arc(b.x + 20 + (i%4)*25, b.y + 60, 8, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+    });
+
+    // Draw Customers
+    customers.forEach(c => {
+        ctx.fillStyle = c.color;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Progress Bar
+        if (c.state === 'WAITING' && c.progress > 0) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(c.x - 15, c.y - 25, 30, 6);
+            ctx.fillStyle = '#10b981';
+            ctx.fillRect(c.x - 15, c.y - 25, 30 * c.progress, 6);
+        }
+    });
+    
+    // Draw Thief
+    if (thief) {
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(thief.x, thief.y, thief.r, 0, Math.PI*2);
+        ctx.fill();
+        // Mask
+        ctx.fillStyle = '#000';
+        ctx.fillRect(thief.x - 15, thief.y - 5, 30, 10);
+    }
+
+    // Draw Money
+    moneys.forEach(m => {
+        ctx.fillStyle = '#10b981';
+        ctx.strokeStyle = '#065f46';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#f8f6ff';
+        ctx.font = '700 12px Exo 2';
+        ctx.textAlign = 'center';
+        ctx.fillText('$', m.x, m.y + 4);
+    });
+
+    // Draw Hero (Arcade Host)
+    ctx.fillStyle = '#3b82f6';
+    ctx.shadowColor = 'rgba(59, 130, 246, 0.5)';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(hero.x, hero.y, hero.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Tie
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(hero.x, hero.y);
+    ctx.lineTo(hero.x - 5, hero.y + 15);
+    ctx.lineTo(hero.x + 5, hero.y + 15);
+    ctx.fill();
+
+    // Draw Particles & Text
+    particles.forEach(p => {
+        if (p.type === 'text') {
+            ctx.globalAlpha = Math.min(1, p.life);
+            ctx.fillStyle = p.color;
+            ctx.font = '400 24px Audiowide';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'white';
+            ctx.shadowBlur = 4;
+            ctx.fillText(p.text, p.x, p.y);
+            ctx.shadowBlur = 0;
+        } else {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.fill();
+        }
+    });
+    ctx.globalAlpha = 1.0;
+}
+
+/**
+ * §5 Main Loop & Setup
+ */
+function loop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    
+    update(dt);
+    draw();
+    
+    requestAnimationFrame(loop);
+}
+
+const ro = new ResizeObserver(entries => {
+    const entry = entries[0];
+    const { width, height } = entry.contentRect;
+    
+    cw = width;
+    ch = height;
+    dpr = window.devicePixelRatio || 1;
+    
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    
+    ctx = canvas.getContext('2d', { alpha: false });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    if (!initialized) {
+        initialized = true;
+        initGame();
+        requestAnimationFrame(loop);
+    } else {
+        // Re-center hero if off screen
+        hero.x = Math.max(hero.r, Math.min(cw - hero.r, hero.x));
+        hero.y = Math.max(hero.r, Math.min(ch - hero.r, hero.y));
+        // Re-layout buildings
+        const zoneW = cw * 0.4;
+        buildings[0].x = cw/2 - 60; buildings[0].y = ch/2 - 40;
+        buildings[1].x = 20; buildings[1].w = zoneW;
+        buildings[2].x = cw - zoneW - 20; buildings[2].w = zoneW;
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    canvas = document.getElementById('gameCanvas');
+    bindInputHandlers();
+    ro.observe(canvas);
+});
+
+</script>
+</body>
+</html>

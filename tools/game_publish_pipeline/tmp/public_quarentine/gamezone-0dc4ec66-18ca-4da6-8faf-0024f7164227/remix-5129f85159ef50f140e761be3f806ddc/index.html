@@ -1,0 +1,1063 @@
+<![CDATA[<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Color Mission Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- [agent-note][stage4] repaired: catalog-font-remap | title: Orbitron | ui/body: Rajdhani -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        /* CSS Reset & Layout */
+        :root {
+            --bg-top: #07111f;
+            --bg-bottom: #13284c;
+            --panel-bg: rgba(8, 18, 36, 0.86);
+            --panel-strong: rgba(15, 32, 61, 0.96);
+            --panel-soft: rgba(171, 226, 255, 0.16);
+            --ui-bg: rgba(8, 18, 36, 0.88);
+            --ui-shadow: 0 14px 40px rgba(0, 0, 0, 0.34);
+            --accent: #72e6ff;
+            --accent-strong: #3cbcff;
+            --accent-warm: #ffcf5a;
+            --danger: #ff6e8d;
+            --success: #8cffb4;
+            --text-main: #eff9ff;
+            --text-soft: #bfdaf5;
+            --outline: rgba(180, 236, 255, 0.34);
+            --grid-line: rgba(70, 186, 255, 0.14);
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(114, 230, 255, 0.18), transparent 34%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            font-family: 'Rajdhani', Arial, sans-serif;
+            color: var(--text-main);
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+            background-size: 32px 32px;
+            opacity: 0.18;
+            mix-blend-mode: screen;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: auto;
+            pointer-events: none;
+            z-index: 0;
+        }
+        #game-container::before {
+            width: 42vmax;
+            height: 42vmax;
+            top: -14vmax;
+            right: -12vmax;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(114, 230, 255, 0.2), transparent 70%);
+            filter: blur(6px);
+        }
+        #game-container::after {
+            width: 30vmax;
+            height: 30vmax;
+            bottom: -10vmax;
+            left: -8vmax;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 207, 90, 0.18), transparent 72%);
+            filter: blur(8px);
+        }
+        canvas {
+            position: relative;
+            z-index: 1;
+            display: block;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.98), rgba(241, 249, 255, 0.98));
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.22),
+                0 24px 60px rgba(0,0,0,0.34);
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none; /* Let touches pass to canvas by default */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            z-index: 2;
+        }
+
+        /* Feedback overlays */
+        #status-pill {
+            position: absolute;
+            top: max(12px, env(safe-area-inset-top));
+            left: 12px;
+            z-index: 5;
+            max-width: min(72vw, 320px);
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(180, 236, 255, 0.24);
+            background: rgba(8, 18, 36, 0.84);
+            color: var(--text-main);
+            font-size: 13px;
+            line-height: 1.2;
+            letter-spacing: 0.5px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 22px rgba(0,0,0,0.2);
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        #status-pill.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #gif-hud {
+            position: absolute;
+            top: max(60px, calc(env(safe-area-inset-top) + 52px));
+            right: 10px;
+            z-index: 4;
+            width: min(28vw, 120px);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            align-items: flex-end;
+        }
+        .gif-badge {
+            width: 100%;
+            min-height: 78px;
+            padding: 6px;
+            border-radius: 18px;
+            border: 1px solid rgba(180, 236, 255, 0.22);
+            background: rgba(7, 15, 30, 0.72);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.24);
+            backdrop-filter: blur(8px);
+            opacity: 0;
+            transform: translateX(18px) scale(0.96);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        .gif-badge.show {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+        }
+        .gif-badge img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 12px;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            background: rgba(255,255,255,0.08);
+        }
+
+        /* Start Screen */
+        #start-screen {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at top, rgba(114, 230, 255, 0.2), transparent 30%),
+                rgba(5, 11, 24, 0.72);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+            pointer-events: auto;
+            z-index: 100;
+            transition: opacity 0.3s;
+        }
+        #start-panel {
+            position: relative;
+            overflow: hidden;
+            background:
+                linear-gradient(180deg, rgba(18, 35, 67, 0.96), rgba(8, 17, 35, 0.98));
+            border-radius: 28px;
+            border: 1px solid var(--outline);
+            box-shadow:
+                0 22px 60px rgba(0,0,0,0.42),
+                inset 0 0 0 1px rgba(255,255,255,0.05);
+            padding: 28px 24px;
+            width: min(420px, calc(100vw - 32px));
+            text-align: center;
+        }
+        #start-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(114, 230, 255, 0.18), transparent 24%),
+                radial-gradient(circle at 80% 12%, rgba(255, 207, 90, 0.12), transparent 20%);
+            pointer-events: none;
+        }
+        .mission-mascot {
+            position: relative;
+            width: 118px;
+            height: 118px;
+            margin: 0 auto 18px;
+            border-radius: 28px;
+            background:
+                linear-gradient(180deg, rgba(114, 230, 255, 0.18), rgba(60, 188, 255, 0.06)),
+                rgba(255,255,255,0.03);
+            border: 1px solid rgba(114, 230, 255, 0.35);
+            box-shadow:
+                0 0 0 6px rgba(114, 230, 255, 0.07),
+                0 14px 34px rgba(0,0,0,0.26);
+            display: grid;
+            place-items: center;
+        }
+        .mission-mascot::before,
+        .mission-mascot::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            background: rgba(114, 230, 255, 0.22);
+            filter: blur(0.5px);
+        }
+        .mission-mascot::before {
+            width: 74px;
+            height: 10px;
+            bottom: 18px;
+        }
+        .mission-mascot::after {
+            width: 10px;
+            height: 74px;
+        }
+        .mission-mascot-face {
+            position: relative;
+            width: 72px;
+            height: 72px;
+            border-radius: 22px;
+            background: linear-gradient(180deg, #7feaff, #43c5ff);
+            box-shadow:
+                inset 0 -8px 16px rgba(4, 34, 67, 0.22),
+                0 8px 18px rgba(67, 197, 255, 0.28);
+        }
+        .mission-mascot-face::before,
+        .mission-mascot-face::after {
+            content: "";
+            position: absolute;
+            top: 22px;
+            width: 10px;
+            height: 14px;
+            border-radius: 999px;
+            background: #08345a;
+            box-shadow: 0 0 12px rgba(255,255,255,0.35);
+            animation: mascotBlink 4.8s infinite;
+            transform-origin: center;
+        }
+        .mission-mascot-face::before { left: 18px; }
+        .mission-mascot-face::after { right: 18px; }
+        .mission-smile {
+            position: absolute;
+            left: 50%;
+            bottom: 17px;
+            width: 28px;
+            height: 14px;
+            margin-left: -14px;
+            border-bottom: 4px solid #08345a;
+            border-radius: 0 0 20px 20px;
+        }
+        @keyframes mascotBlink {
+            0%, 45%, 48%, 100% { transform: scaleY(1); opacity: 1; }
+            46%, 47% { transform: scaleY(0.15); opacity: 0.9; }
+        }
+        #start-title {
+            position: relative;
+            margin: 0 0 10px;
+            font-family: 'Orbitron', Impact, sans-serif;
+            font-size: clamp(30px, 7vw, 48px);
+            line-height: 0.95;
+            letter-spacing: 1.4px;
+            color: var(--text-main);
+            text-transform: uppercase;
+            text-shadow: 0 0 24px rgba(114, 230, 255, 0.22);
+        }
+        #start-copy {
+            position: relative;
+            margin: 0 0 18px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text-soft);
+        }
+        .launch-tags {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 0 22px;
+        }
+        .launch-tag {
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(114, 230, 255, 0.24);
+            background: rgba(114, 230, 255, 0.08);
+            color: var(--text-main);
+            font-size: 11px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+        #start-btn {
+            position: relative;
+            background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+            color: #04233e;
+            border: none;
+            padding: 15px 30px;
+            min-width: min(100%, 240px);
+            font-size: 16px;
+            border-radius: 999px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-family: 'Rajdhani', Arial, sans-serif;
+            box-shadow:
+                0 10px 24px rgba(60, 188, 255, 0.3),
+                inset 0 1px 0 rgba(255,255,255,0.4);
+            cursor: pointer;
+            transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+        }
+        #start-btn:active {
+            transform: scale(0.96);
+            filter: brightness(0.98);
+        }
+
+        /* Toolbar (The "No Menu" Interface) */
+        /* [agent-note][stage2] preserve: toolbar-layout | reason: already mobile-safe; restyled only for mission-control identity */
+        #toolbar {
+            pointer-events: auto;
+            background:
+                linear-gradient(180deg, rgba(10, 21, 40, 0.95), rgba(7, 15, 30, 0.98));
+            border-top: 1px solid rgba(180, 236, 255, 0.26);
+            box-shadow: 0 -14px 28px rgba(0,0,0,0.28);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px 12px max(15px, env(safe-area-inset-bottom));
+            transition: transform 0.3s;
+        }
+
+        /* Top Row: Tools & Size */
+        .tool-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .tools-group {
+            display: flex;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(180, 236, 255, 0.15);
+            border-radius: 14px;
+            padding: 4px;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+        }
+        
+        .tool-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            background: transparent;
+            color: var(--text-main);
+            font-size: 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s, transform 0.16s ease, box-shadow 0.16s ease;
+            font-family: 'Rajdhani', Arial, sans-serif;
+        }
+        .tool-btn.active {
+            background: linear-gradient(180deg, rgba(114, 230, 255, 0.22), rgba(60, 188, 255, 0.14));
+            box-shadow:
+                inset 0 0 0 1px rgba(180, 236, 255, 0.3),
+                0 4px 12px rgba(0,0,0,0.18);
+        }
+        .tool-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* Slider */
+        .size-control {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+            padding: 0 6px;
+            color: var(--text-soft);
+        }
+        .size-control-label {
+            flex-shrink: 0;
+            font-size: 11px;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+            color: var(--text-soft);
+            font-weight: 600;
+        }
+        input[type=range] {
+            width: 100%;
+            height: 6px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.18), rgba(114, 230, 255, 0.4));
+            border-radius: 999px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.78);
+            cursor: pointer;
+            box-shadow: 0 0 12px rgba(60, 188, 255, 0.34);
+        }
+
+        /* Bottom Row: Colors */
+        .color-row {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 4px 2px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+        }
+        .color-row::-webkit-scrollbar { display: none; }
+        
+        .color-swatch {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.88);
+            box-shadow:
+                0 2px 8px rgba(0,0,0,0.28),
+                0 0 0 1px rgba(0,0,0,0.18);
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.12s ease;
+        }
+        .color-swatch.active {
+            transform: scale(1.1);
+            box-shadow:
+                0 0 0 2px rgba(114, 230, 255, 0.55),
+                0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        /* Mute Button */
+        #mute-btn {
+            position: absolute;
+            top: max(10px, env(safe-area-inset-top));
+            right: 10px;
+            width: 42px;
+            height: 42px;
+            background: rgba(8, 18, 36, 0.82);
+            color: var(--text-main);
+            border: 1px solid rgba(180, 236, 255, 0.28);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            pointer-events: auto;
+            cursor: pointer;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.24);
+            backdrop-filter: blur(8px);
+        }
+
+        @media (max-width: 520px) {
+            #status-pill {
+                max-width: calc(100vw - 76px);
+                font-size: 12px;
+                padding: 9px 12px;
+            }
+            #gif-hud {
+                width: 90px;
+                top: max(58px, calc(env(safe-area-inset-top) + 50px));
+            }
+            .gif-badge {
+                min-height: 64px;
+                border-radius: 14px;
+            }
+            #start-panel {
+                padding: 24px 18px;
+                border-radius: 24px;
+            }
+            .mission-mascot {
+                width: 102px;
+                height: 102px;
+                margin-bottom: 16px;
+            }
+            .mission-mascot-face {
+                width: 64px;
+                height: 64px;
+            }
+            #start-copy {
+                font-size: 13px;
+            }
+            .tool-row {
+                gap: 8px;
+            }
+            .size-control-label {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="status-pill" aria-live="polite"></div>
+            <!-- [agent-note][stage3] resolved-gif: feedback badges use catalogs/gifs.json and stay off the playfield to protect controls -->
+            <div id="gif-hud" aria-hidden="true">
+                <div class="gif-badge" id="gif-success"><img src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.gif" alt="Mission success feedback"></div>
+                <div class="gif-badge" id="gif-impact"><img src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.gif" alt="Impact feedback"></div>
+            </div>
+
+            <div id="mute-btn" aria-label="Toggle audio">🔊</div>
+            
+            <div id="start-screen">
+                <div id="start-panel">
+                    <div class="mission-mascot" aria-hidden="true">
+                        <div class="mission-mascot-face">
+                            <div class="mission-smile"></div>
+                        </div>
+                    </div>
+                    <h1 id="start-title">Color Mission Control</h1>
+                    <p id="start-copy">Guide the smiling signal drone across a blank star-map and beam in fresh color trails, soft erases, or full-panel fills.</p>
+                    <div class="launch-tags" aria-hidden="true">
+                        <span class="launch-tag">Signal Sketch</span>
+                        <span class="launch-tag">Drone Erase</span>
+                        <span class="launch-tag">Flood Pulse</span>
+                    </div>
+                    <!-- [agent-note][stage1] role: future-illustration | element: start-panel | intent: give the sandbox a stronger mission-control identity -->
+                    <button id="start-btn">Launch Pad</button>
+                </div>
+            </div>
+
+            <div id="toolbar" style="display:none;">
+                <!-- Tools and Size -->
+                <div class="tool-row">
+                    <div class="tools-group">
+                        <button class="tool-btn active" data-tool="pen" title="Sketch Tool">🖊️</button>
+                        <button class="tool-btn" data-tool="eraser" title="Reset Tool">🧽</button>
+                        <button class="tool-btn" data-tool="fill" title="Flood Color">🪣</button>
+                    </div>
+                    
+                    <div class="size-control">
+                        <span class="size-control-label">Beam Size</span>
+                        <input type="range" id="size-slider" min="1" max="50" value="5">
+                    </div>
+
+                    <button class="tool-btn" id="clear-btn" title="Reset Board" style="background:rgba(255,110,141,0.16); color:#ffd5df;">🗑️</button>
+                </div>
+
+                <!-- Colors -->
+                <div class="color-row" id="color-palette">
+                    <!-- Generated via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    /**
+     * 1. CONFIGURATION & STATE
+     */
+    const COLORS = [
+        '#000000', '#FFFFFF', '#FF3B30', '#FF9500', '#FFCC00', 
+        '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55',
+        '#8E8E93', '#C69C6D', '#783F04', '#4B0082'
+    ];
+
+    const STATE = {
+        isDrawing: false,
+        tool: 'pen', // pen, eraser, fill
+        color: '#000000',
+        size: 5,
+        lastX: 0,
+        lastY: 0,
+        muted: false,
+        started: false
+    };
+
+    const UI = {
+        statusPill: document.getElementById('status-pill'),
+        gifSuccess: document.getElementById('gif-success'),
+        gifImpact: document.getElementById('gif-impact'),
+        statusTimer: null,
+        gifTimers: new Map()
+    };
+
+    /**
+     * 2. AUDIO MANAGER (Catalog-backed)
+     */
+    const AudioSys = {
+        ctx: null,
+        master: null,
+        bgmGain: null,
+        sfxGains: new Map(),
+        loopNodes: [],
+        audioCache: new Map(),
+        lastPlayedAt: new Map(),
+        lastMutedState: false,
+        library: {
+            bgm: 'https://gamezone-virid.vercel.app/assets/audios/music/gameplay_loop_01.mp3',
+            click: 'https://gamezone-virid.vercel.app/assets/audios/sfx/ui_click_01.mp3',
+            fill: 'https://gamezone-virid.vercel.app/assets/audios/sfx/success_01.mp3',
+            clear: 'https://gamezone-virid.vercel.app/assets/audios/sfx/fail_01.mp3',
+            tool: 'https://gamezone-virid.vercel.app/assets/audios/sfx/menu_open_01.mp3',
+            draw: 'https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_01.mp3'
+        },
+        async init() {
+            try {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                    this.master = this.ctx.createGain();
+                    this.master.gain.value = 0.9;
+                    this.master.connect(this.ctx.destination);
+
+                    this.bgmGain = this.ctx.createGain();
+                    this.bgmGain.gain.value = 0.18;
+                    this.bgmGain.connect(this.master);
+                }
+                if (this.ctx.state === 'suspended') {
+                    await this.ctx.resume();
+                }
+                STATE.started = true;
+                this.syncMuteState();
+                this.startLoop();
+            } catch (error) {
+                console.warn('Audio init skipped:', error);
+            }
+        },
+        syncMuteState() {
+            if (!this.master) return;
+            this.master.gain.setTargetAtTime(STATE.muted ? 0 : 0.9, this.ctx.currentTime, 0.03);
+            if (this.bgmGain) {
+                this.bgmGain.gain.setTargetAtTime(STATE.muted ? 0 : 0.18, this.ctx.currentTime, 0.06);
+            }
+        },
+        async fetchBuffer(url) {
+            if (!this.ctx) return null;
+            if (this.audioCache.has(url)) return this.audioCache.get(url);
+            try {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                const buffer = await this.ctx.decodeAudioData(arrayBuffer.slice(0));
+                this.audioCache.set(url, buffer);
+                return buffer;
+            } catch (error) {
+                console.warn('Audio load failed:', url, error);
+                this.audioCache.set(url, null);
+                return null;
+            }
+        },
+        canPlay(key, debounceMs = 80) {
+            const now = performance.now();
+            const last = this.lastPlayedAt.get(key) || 0;
+            if (now - last < debounceMs) return false;
+            this.lastPlayedAt.set(key, now);
+            return true;
+        },
+        async play(key, options = {}) {
+            if (STATE.muted || !this.ctx || !this.master) return;
+            if (!this.canPlay(key, options.debounceMs ?? 90)) return;
+
+            const url = this.library[key];
+            if (!url) return;
+            const buffer = await this.fetchBuffer(url);
+            if (!buffer) return;
+
+            try {
+                const source = this.ctx.createBufferSource();
+                source.buffer = buffer;
+
+                const gain = this.ctx.createGain();
+                gain.gain.value = options.volume ?? 0.4;
+
+                source.connect(gain);
+                gain.connect(this.master);
+                source.start();
+            } catch (error) {
+                console.warn('Audio play failed:', key, error);
+            }
+        },
+        async startLoop() {
+            if (!this.ctx || !this.bgmGain || STATE.muted || this.loopNodes.length) return;
+            const buffer = await this.fetchBuffer(this.library.bgm);
+            if (!buffer) return;
+
+            try {
+                const source = this.ctx.createBufferSource();
+                source.buffer = buffer;
+                source.loop = true;
+                source.connect(this.bgmGain);
+                source.start();
+                source.onended = () => {
+                    this.loopNodes = this.loopNodes.filter(node => node !== source);
+                };
+                this.loopNodes.push(source);
+            } catch (error) {
+                console.warn('Loop start failed:', error);
+            }
+        },
+        stopLoop() {
+            this.loopNodes.forEach(node => {
+                try { node.stop(); } catch (e) {}
+            });
+            this.loopNodes = [];
+        },
+        toggleMute() {
+            STATE.muted = !STATE.muted;
+            if (STATE.muted) {
+                this.stopLoop();
+            } else if (STATE.started) {
+                this.startLoop();
+            }
+            if (this.ctx && this.master) {
+                this.syncMuteState();
+            }
+            return STATE.muted;
+        }
+    };
+
+    function showStatus(message, tone = 'info', duration = 1400) {
+        UI.statusPill.textContent = message;
+        UI.statusPill.style.borderColor = tone === 'success'
+            ? 'rgba(140, 255, 180, 0.38)'
+            : tone === 'danger'
+                ? 'rgba(255, 110, 141, 0.42)'
+                : 'rgba(180, 236, 255, 0.24)';
+        UI.statusPill.style.color = tone === 'success'
+            ? '#e9fff1'
+            : tone === 'danger'
+                ? '#ffe5ec'
+                : 'var(--text-main)';
+        UI.statusPill.classList.add('show');
+        clearTimeout(UI.statusTimer);
+        UI.statusTimer = setTimeout(() => UI.statusPill.classList.remove('show'), duration);
+    }
+
+    function pulseGif(element, duration = 1200) {
+        if (!element) return;
+        element.classList.add('show');
+        clearTimeout(UI.gifTimers.get(element));
+        const timer = setTimeout(() => element.classList.remove('show'), duration);
+        UI.gifTimers.set(element, timer);
+    }
+
+    /**
+     * 3. DRAWING ENGINE
+     */
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Resize handling
+    function resizeCanvas() {
+        // Save current content
+        let tempCanvas;
+        if (canvas.width > 0 && canvas.height > 0) {
+            tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            tempCanvas.getContext('2d').drawImage(canvas, 0, 0);
+        }
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Restore content
+        if (tempCanvas) {
+            ctx.drawImage(tempCanvas, 0, 0);
+        } else {
+            // Initial fill
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Reset context props after resize
+        updateContext();
+    }
+
+    function updateContext() {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    }
+
+    // --- Flood Fill Algorithm (Iterative) ---
+    function floodFill(startX, startY, fillColor) {
+        // Get image data
+        const width = canvas.width;
+        const height = canvas.height;
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        // Helper to get color at index
+        const getPixelColor = (index) => {
+            return [data[index], data[index+1], data[index+2], data[index+3]]; // R,G,B,A
+        };
+
+        // Parse hex fillColor to RGBA
+        const hexToRgb = (hex) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return [r, g, b, 255];
+        };
+        const targetRGBA = hexToRgb(fillColor);
+
+        // Get start color
+        const startIndex = (Math.floor(startY) * width + Math.floor(startX)) * 4;
+        const startRGBA = getPixelColor(startIndex);
+
+        // Don't fill if color is same
+        if (startRGBA[0] === targetRGBA[0] && 
+            startRGBA[1] === targetRGBA[1] && 
+            startRGBA[2] === targetRGBA[2]) return;
+
+        const stack = [[Math.floor(startX), Math.floor(startY)]];
+
+        while (stack.length) {
+            const [x, y] = stack.pop();
+            if (x < 0 || x >= width || y < 0 || y >= height) continue;
+            const idx = (y * width + x) * 4;
+            
+            // If current pixel matches start color
+            if (data[idx] === startRGBA[0] && 
+                data[idx+1] === startRGBA[1] && 
+                data[idx+2] === startRGBA[2]) {
+                
+                // Color it
+                data[idx] = targetRGBA[0];
+                data[idx+1] = targetRGBA[1];
+                data[idx+2] = targetRGBA[2];
+                data[idx+3] = 255;
+
+                // Push neighbors
+                stack.push([x + 1, y]);
+                stack.push([x - 1, y]);
+                stack.push([x, y + 1]);
+                stack.push([x, y - 1]);
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        AudioSys.play('fill', { volume: 0.34, debounceMs: 180 });
+        showStatus('Flood pulse deployed.', 'success');
+        pulseGif(UI.gifSuccess, 1400);
+    }
+
+    // --- Input Handling ---
+    function getPos(e) {
+        if (e.touches && e.touches.length > 0) {
+            return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function startDraw(e) {
+        if (e.target.closest('#ui-layer') && !e.target.closest('canvas')) return; // Ignore UI clicks
+        
+        if (STATE.started) {
+            AudioSys.init();
+        }
+
+        STATE.isDrawing = true;
+        const pos = getPos(e);
+        STATE.lastX = pos.x;
+        STATE.lastY = pos.y;
+
+        if (STATE.tool === 'fill') {
+            floodFill(pos.x, pos.y, STATE.color);
+            STATE.isDrawing = false; // Fill is a one-time action
+        } else {
+            AudioSys.play('draw', { volume: 0.12, debounceMs: 140 });
+            // Dot for single click
+            draw(e); 
+        }
+    }
+
+    function draw(e) {
+        if (!STATE.isDrawing || STATE.tool === 'fill') return;
+        e.preventDefault(); // Stop scrolling
+
+        const pos = getPos(e);
+        
+        ctx.beginPath();
+        ctx.moveTo(STATE.lastX, STATE.lastY);
+        ctx.lineTo(pos.x, pos.y);
+        
+        ctx.lineWidth = STATE.size;
+        
+        if (STATE.tool === 'eraser') {
+            ctx.strokeStyle = '#ffffff'; // Assuming white bg
+        } else {
+            ctx.strokeStyle = STATE.color;
+        }
+
+        ctx.stroke();
+
+        STATE.lastX = pos.x;
+        STATE.lastY = pos.y;
+    }
+
+    function stopDraw() {
+        STATE.isDrawing = false;
+    }
+
+    /**
+     * 4. UI LOGIC & INIT
+     */
+    function initUI() {
+        // Generate Color Palette
+        const palette = document.getElementById('color-palette');
+        COLORS.forEach((c, i) => {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch' + (i === 0 ? ' active' : '');
+            swatch.style.backgroundColor = c;
+            swatch.onclick = () => {
+                AudioSys.play('click', { volume: 0.24, debounceMs: 90 });
+                STATE.color = c;
+                // Visual feedback
+                document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('active'));
+                swatch.classList.add('active');
+                showStatus(`Beam color locked: ${c}.`, 'info', 1000);
+                // If eraser was active, switch back to pen
+                if (STATE.tool === 'eraser') {
+                    setTool('pen');
+                }
+            };
+            palette.appendChild(swatch);
+        });
+
+        // Tools
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+            btn.onclick = () => {
+                AudioSys.play('tool', { volume: 0.28, debounceMs: 120 });
+                setTool(btn.dataset.tool);
+            };
+        });
+
+        // Slider
+        const slider = document.getElementById('size-slider');
+        slider.oninput = (e) => {
+            STATE.size = parseInt(e.target.value);
+            if (STATE.started) {
+                AudioSys.play('click', { volume: 0.16, debounceMs: 100 });
+            }
+        };
+
+        // Clear
+        document.getElementById('clear-btn').onclick = () => {
+            AudioSys.play('clear', { volume: 0.36, debounceMs: 180 });
+            if (confirm('Reset the whole board?')) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                showStatus('Board reset. Fresh sector unlocked.', 'danger', 1400);
+                pulseGif(UI.gifImpact, 1200);
+            }
+        };
+
+        // Mute
+        const muteBtn = document.getElementById('mute-btn');
+        muteBtn.onclick = async () => {
+            if (!STATE.started) {
+                await AudioSys.init();
+            }
+            const muted = AudioSys.toggleMute();
+            muteBtn.textContent = muted ? '🔇' : '🔊';
+            showStatus(muted ? 'Audio offline.' : 'Audio online.', muted ? 'danger' : 'success', 1100);
+        };
+
+        // Start
+        document.getElementById('start-btn').onclick = async () => {
+            await AudioSys.init();
+            AudioSys.play('click', { volume: 0.24, debounceMs: 80 });
+            document.getElementById('start-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('toolbar').style.display = 'flex';
+                showStatus('Mission audio synced. Draw freely.', 'success', 1500);
+                pulseGif(UI.gifSuccess, 1500);
+            }, 300);
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                AudioSys.stopLoop();
+            } else if (STATE.started && !STATE.muted) {
+                AudioSys.startLoop();
+            }
+        });
+    }
+
+    function setTool(toolName) {
+        STATE.tool = toolName;
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+        const btn = document.querySelector(`.tool-btn[data-tool="${toolName}"]`);
+        if (btn) btn.classList.add('active');
+
+        const labels = {
+            pen: 'Sketch beam armed.',
+            eraser: 'Soft erase beam armed.',
+            fill: 'Flood pulse armed.'
+        };
+        showStatus(labels[toolName] || 'Tool ready.', 'info', 1100);
+    }
+
+    // Event Listeners
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Mouse
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mouseout', stopDraw);
+    
+    // Touch
+    canvas.addEventListener('touchstart', startDraw, {passive: false});
+    canvas.addEventListener('touchmove', draw, {passive: false});
+    canvas.addEventListener('touchend', stopDraw);
+
+    // Init
+    resizeCanvas();
+    initUI();
+
+    </script>
+</body>
+</html>
+]]>

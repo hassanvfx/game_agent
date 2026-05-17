@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Cryptid Simulator: Shadow Stalker</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <script>
+        tailwind.config = {
+            corePlugins: { preflight: true },
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Orbitron', 'sans-serif'],
+                        hud: ['Press Start 2P', 'monospace'],
+                        ui: ['Orbitron', 'sans-serif']
+                    },
+                    colors: {
+                        abyss: '#05070d',
+                        mist: '#0f1626',
+                        ember: '#ff6a88',
+                        cyan: '#63f5ff',
+                        violet: '#bc8cff',
+                        slime: '#87ffb6'
+                    },
+                    boxShadow: {
+                        neon: '0 0 24px rgba(99, 245, 255, 0.24), 0 0 40px rgba(188, 140, 255, 0.18)',
+                        danger: '0 0 18px rgba(255, 106, 136, 0.35)'
+                    }
+                }
+            }
+        };
+    </script>
+    <!-- [agent-note][stage4] repaired: approved-font-catalog wiring | roles: title/ui=Orbitron hud=Press Start 2P -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #04070f;
+            --bg-bottom: #111527;
+            --panel: rgba(8, 13, 24, 0.72);
+            --panel-strong: rgba(12, 18, 34, 0.88);
+            --line: rgba(99, 245, 255, 0.28);
+            --line-strong: rgba(188, 140, 255, 0.5);
+            --text-main: #ebf7ff;
+            --text-soft: #a6b8cc;
+            --danger: #ff6a88;
+            --danger-deep: #962749;
+            --fear: #c996ff;
+            --ghost: #89fff4;
+            --gold: #ffe39b;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            background:
+                radial-gradient(circle at top, rgba(99, 245, 255, 0.08), transparent 28%),
+                radial-gradient(circle at 70% 20%, rgba(188, 140, 255, 0.12), transparent 24%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text-main);
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        #game-container,
+        canvas {
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #start-screen,
+        #game-over-screen,
+        .action-btn {
+            touch-action: manipulation;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(11, 18, 35, 0.9), rgba(6, 11, 22, 0.94));
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--line);
+            box-shadow: 0 0 24px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+
+        .chat-text {
+            text-shadow: 0 1px 0 #000;
+        }
+
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.22) 50%,
+                rgba(0,0,0,0.22)
+            );
+            background-size: 100% 4px;
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0.42;
+            mix-blend-mode: soft-light;
+        }
+
+        .vignette {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle, rgba(4, 8, 14, 0) 46%, rgba(4, 8, 14, 0.62) 78%, rgba(2, 4, 8, 0.96) 100%);
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        .fog-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9;
+            overflow: hidden;
+        }
+
+        .fog-band {
+            position: absolute;
+            left: -25%;
+            width: 70%;
+            height: 20%;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(137, 255, 244, 0.11), rgba(188, 140, 255, 0.02) 55%, rgba(0,0,0,0) 70%);
+            filter: blur(14px);
+            animation: drift 18s linear infinite;
+        }
+
+        .fog-band:nth-child(1) { top: 14%; animation-duration: 22s; }
+        .fog-band:nth-child(2) { top: 42%; animation-delay: -6s; animation-duration: 18s; }
+        .fog-band:nth-child(3) { top: 70%; animation-delay: -12s; animation-duration: 26s; }
+
+        .glitch-text {
+            font-family: 'Orbitron', sans-serif;
+            text-shadow:
+                0 0 8px rgba(99, 245, 255, 0.35),
+                0 0 18px rgba(188, 140, 255, 0.25),
+                2px 0 0 rgba(255, 106, 136, 0.24),
+                -2px 0 0 rgba(99, 245, 255, 0.24);
+            animation: glitch 1.8s infinite steps(2);
+        }
+
+        .hud-frame {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #f9fbff;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 12px rgba(137, 255, 244, 0.2);
+        }
+
+        .panel-label {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .status-chip {
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            border-radius: 999px;
+            padding: 0.15rem 0.55rem;
+            font-size: 0.72rem;
+            line-height: 1;
+        }
+
+        .action-btn {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, background-color 160ms ease;
+        }
+
+        .action-btn:hover,
+        .action-btn:focus-visible {
+            transform: translateY(-1px);
+            filter: brightness(1.05);
+        }
+
+        .action-btn:active {
+            transform: scale(0.97);
+        }
+
+        @keyframes drift {
+            0% { transform: translateX(0); opacity: 0.18; }
+            50% { opacity: 0.3; }
+            100% { transform: translateX(170%); opacity: 0.12; }
+        }
+
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-1px, 1px); }
+            40% { transform: translate(-2px, -1px); }
+            60% { transform: translate(2px, 1px); }
+            80% { transform: translate(1px, -1px); }
+        }
+
+        @media (max-width: 640px) {
+            #chat-box {
+                width: min(58vw, 14rem);
+                height: 8.75rem;
+                bottom: 1rem;
+                left: 0.75rem;
+            }
+
+            #hud {
+                top: 0.75rem;
+                left: 0.75rem;
+                right: 0.75rem;
+                max-width: calc(100vw - 1.5rem);
+            }
+
+            #start-screen .glass-panel,
+            #game-over-screen .glass-panel {
+                width: calc(100vw - 2rem);
+                max-width: 22rem;
+                padding: 1rem;
+            }
+
+            .glitch-text {
+                font-size: clamp(2.2rem, 10vw, 3.2rem);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="relative w-full h-full bg-black">
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="fog-layer" aria-hidden="true">
+            <span class="fog-band"></span>
+            <span class="fog-band"></span>
+            <span class="fog-band"></span>
+        </div>
+
+        <!-- [agent-note][stage3] resolved-gif: harvest/fail overlays -> catalogs/gifs.json -->
+        <div id="feedback-overlay" class="absolute top-4 right-4 z-30 w-[min(34vw,9rem)] sm:w-40 pointer-events-none flex flex-col items-end gap-2">
+            <img id="harvest-gif" alt="Harvest reaction" class="hidden w-full rounded-xl border border-cyan-300/35 shadow-neon opacity-0 transition-opacity duration-200" src="https://i.giphy.com/10gLW3UdTnQzdu.webp">
+            <img id="alert-gif" alt="Alert reaction" class="hidden w-full rounded-xl border border-rose-300/35 shadow-danger opacity-0 transition-opacity duration-200" src="https://i.giphy.com/3bzB1rHg6g9Cp06acA.webp">
+        </div>
+
+        <!-- Post Processing Overlays -->
+        <div class="scanlines"></div>
+        <div class="vignette"></div>
+
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 flex flex-col pointer-events-none z-20">
+
+            <!-- [agent-note][stage2] preserve: chat-box placement | reason: already keeps gameplay lane clear on mobile -->
+            <div id="chat-box" class="absolute bottom-4 left-4 w-64 h-48 overflow-hidden flex flex-col justify-end p-3 pointer-events-none opacity-95 text-[11px] glass-panel rounded-xl border border-cyan-400/20">
+                <div class="flex items-center justify-between mb-2 text-[10px] text-cyan-200/80 uppercase tracking-[0.22em]">
+                    <span class="panel-label text-[10px]">Specter Feed</span>
+                    <span class="status-chip text-cyan-100/70">Live</span>
+                </div>
+                <div id="chat-messages" class="flex flex-col gap-1 text-xs text-white/80">
+                    <!-- Messages injected via JS -->
+                </div>
+            </div>
+
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: top-left counter is already mobile-safe -->
+            <div id="hud" class="absolute top-4 left-4 hidden">
+                <div class="glass-panel hud-frame rounded-xl px-3 py-2 border border-violet-300/20 shadow-neon">
+                    <div class="text-cyan-200/80 text-[10px] mb-1 panel-label">Fear Sync</div>
+                    <div class="text-[12px] text-white">HARVEST <span id="score" class="text-violet-200">0</span></div>
+                </div>
+            </div>
+
+            <!-- Start Screen -->
+            <div id="start-screen" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-auto bg-slate-950/85 px-4">
+                <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,245,255,0.12),transparent_30%),radial-gradient(circle_at_80%_18%,rgba(255,106,136,0.12),transparent_22%)] pointer-events-none"></div>
+                <h1 class="text-[clamp(2.8rem,8vw,4.9rem)] text-cyan-100 mb-3 glitch-text tracking-[0.24em] text-center leading-[0.9]">CRYPTID<br>SIMULATOR</h1>
+                <p class="text-cyan-100/65 text-sm mb-6 font-ui tracking-[0.25em] uppercase text-center">Server: Veil-13 · Night Hunt Channel</p>
+
+                <div class="glass-panel p-6 rounded-2xl max-w-md text-center border border-cyan-300/25 shadow-neon relative overflow-hidden">
+                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent"></div>
+                    <div class="flex items-center justify-center gap-2 mb-4">
+                        <span class="status-chip text-amber-100/80">Stealth Entity</span>
+                        <span class="status-chip text-violet-100/80">Echo Predator</span>
+                    </div>
+                    <p class="text-white mb-2 text-lg font-semibold tracking-[0.2em] uppercase panel-label">Shadow Stalker</p>
+                    <p class="text-slate-300 text-base leading-snug mb-6">
+                        Drift through the blackout woods, dodge the <span class="text-amber-200 font-semibold">investigators' beams</span>,
+                        and absorb <span class="text-violet-200 font-semibold">fear sparks</span> before the signal locks onto you.
+                    </p>
+                    <div class="grid grid-cols-3 gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-200/85 mb-6">
+                        <div class="rounded-xl border border-white/10 bg-white/5 px-2 py-2">Glide</div>
+                        <div class="rounded-xl border border-white/10 bg-white/5 px-2 py-2">Hide</div>
+                        <div class="rounded-xl border border-white/10 bg-white/5 px-2 py-2">Harvest</div>
+                    </div>
+                    <button id="start-btn" class="action-btn bg-gradient-to-r from-fuchsia-700 via-rose-700 to-red-700 hover:from-fuchsia-600 hover:to-red-600 text-white py-3 px-8 rounded-xl border border-rose-300/30 shadow-danger w-full sm:w-auto">
+                        Enter the Veil
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden absolute inset-0 flex flex-col justify-center items-center pointer-events-auto bg-black/90 px-4">
+                <div class="glass-panel rounded-2xl p-6 max-w-sm w-full text-center border border-rose-300/20 shadow-danger">
+                    <div class="text-cyan-200/75 text-[11px] uppercase tracking-[0.24em] mb-2 panel-label">Containment Alert</div>
+                    <h2 class="text-[clamp(2.2rem,8vw,3.5rem)] text-rose-300 mb-3 glitch-text">EXPOSED</h2>
+                    <div class="text-base text-white mb-2 tracking-[0.2em] uppercase panel-label">Fear Harvested</div>
+                    <div class="text-3xl text-violet-200 mb-3 font-hud"><span id="finalScore">0</span></div>
+                    <div class="text-slate-400 text-sm mb-6 uppercase tracking-[0.2em]">Signal lost. Hunters closing in.</div>
+                    <button id="restart-btn" class="action-btn bg-white text-slate-950 py-3 px-8 rounded-xl hover:bg-slate-200 transition w-full">
+                        Re-emerge
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/ambience_loop_01.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3",
+                collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3",
+                warning: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3"
+            },
+            gifs: {
+                collect: "https://i.giphy.com/10gLW3UdTnQzdu.webp",
+                fail: "https://i.giphy.com/3bzB1rHg6g9Cp06acA.webp"
+            }
+        };
+
+        /** 2. AUDIO + FEEDBACK SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.started = false;
+                this.bgm = this.createAudio(ASSETS.bgm, 0.2, true);
+                this.sfx = {
+                    start: this.createAudio(ASSETS.sfx.start, 0.5),
+                    collect: this.createAudio(ASSETS.sfx.collect, 0.5),
+                    warning: this.createAudio(ASSETS.sfx.warning, 0.35),
+                    fail: this.createAudio(ASSETS.sfx.fail, 0.65)
+                };
+                this.cooldowns = new Map();
+            }
+
+            createAudio(src, volume, loop = false) {
+                const audio = new Audio(src);
+                audio.preload = 'auto';
+                audio.volume = volume;
+                audio.loop = loop;
+                audio.playsInline = true;
+                return audio;
+            }
+
+            primeFromGesture() {
+                if (this.started) return;
+                this.started = true;
+                this.enabled = true;
+                const all = [this.bgm, ...Object.values(this.sfx)];
+                all.forEach((audio) => {
+                    const resumeAt = audio.currentTime || 0;
+                    audio.muted = true;
+                    const maybePlay = audio.play();
+                    if (maybePlay && typeof maybePlay.then === 'function') {
+                        maybePlay
+                            .then(() => {
+                                audio.pause();
+                                audio.currentTime = resumeAt;
+                                audio.muted = false;
+                            })
+                            .catch(() => {
+                                audio.muted = false;
+                            });
+                    } else {
+                        audio.muted = false;
+                    }
+                });
+            }
+
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.muted = false;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM(reset = true) {
+                this.bgm.pause();
+                if (reset) this.bgm.currentTime = 0;
+            }
+
+            playSFX(key, cooldown = 0) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const now = performance.now();
+                const last = this.cooldowns.get(key) || 0;
+                if (cooldown > 0 && now - last < cooldown) return;
+                this.cooldowns.set(key, now);
+                const sound = this.sfx[key];
+                sound.currentTime = 0;
+                sound.play().catch(() => {});
+            }
+        }
+
+        class FeedbackController {
+            constructor() {
+                this.harvestGif = document.getElementById('harvest-gif');
+                this.alertGif = document.getElementById('alert-gif');
+                this.timers = new Map();
+            }
+
+            show(type, duration = 900) {
+                const node = type === 'collect' ? this.harvestGif : this.alertGif;
+                if (!node) return;
+                node.src = type === 'collect' ? ASSETS.gifs.collect : ASSETS.gifs.fail;
+                node.classList.remove('hidden', 'opacity-0');
+                node.classList.add('opacity-100');
+                clearTimeout(this.timers.get(type));
+                this.timers.set(type, setTimeout(() => {
+                    node.classList.remove('opacity-100');
+                    node.classList.add('opacity-0');
+                    setTimeout(() => node.classList.add('hidden'), 180);
+                }, duration));
+            }
+
+            reset() {
+                [this.harvestGif, this.alertGif].forEach((node) => {
+                    if (!node) return;
+                    node.classList.add('hidden', 'opacity-0');
+                    node.classList.remove('opacity-100');
+                });
+            }
+        }
+
+        const audio = new AudioController();
+        const feedback = new FeedbackController();
+
+        /** 3. GAME STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let frame = 0;
+        let gameSpeed = 3;
+
+        // Player (The Monster)
+        let player = { x: 100, y: 0, radius: 25, wobble: 0 };
+        let targetY = 0;
+
+        // Entities
+        let obstacles = []; // Flashlights
+        let collectibles = []; // Fear Orbs
+        let particles = [];
+
+        // Chat Simulation
+        const chatNames = ["SirenHeadFan", "CreepyPastaLover", "ShadowHunter", "SCP_Agent", "RolePlayKing", "NightWatcher", "TrevorStan"];
+        const chatMsgs = [
+            "Did you guys see that shadow?",
+            "*motion sensor spiked*",
+            "I think it's close...",
+            "Run!!!",
+            "Team up at the power lines!",
+            "Something blinked near the trees.",
+            "*sweeping flashlight*",
+            "Nope nope nope",
+            "That thing just ate the lights",
+            "Anyone at the old factory?"
+        ];
+        let chatInterval;
+
+        /** 4. RESIZE & INPUT */
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            player.y = height / 2;
+            targetY = height / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Mouse/Touch Input
+        function updateInput(e) {
+            if (!gameActive) return;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            targetY = clientY;
+        }
+        window.addEventListener('mousemove', updateInput);
+        window.addEventListener('touchmove', updateInput, { passive: false });
+
+        /** 5. MOCK CHAT SYSTEM */
+        function startChat() {
+            const chatBox = document.getElementById('chat-messages');
+            chatBox.innerHTML = '';
+
+            addChatMessage("SYSTEM", "Veil open. Harvest window stabilized.", "text-amber-200");
+
+            if (chatInterval) clearInterval(chatInterval);
+            chatInterval = setInterval(() => {
+                if (!gameActive) return;
+                const name = chatNames[Math.floor(Math.random() * chatNames.length)];
+                const msg = chatMsgs[Math.floor(Math.random() * chatMsgs.length)];
+                addChatMessage(name, msg, "text-cyan-200");
+            }, 3500);
+        }
+
+        function addChatMessage(name, msg, colorClass) {
+            const chatBox = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = `chat-text ${colorClass}`;
+            div.innerText = `${name}: ${msg}`;
+            chatBox.appendChild(div);
+            if (chatBox.children.length > 6) chatBox.removeChild(chatBox.firstChild);
+        }
+
+        /** 6. GAME LOGIC */
+        function initGame() {
+            score = 0;
+            gameSpeed = 4;
+            frame = 0;
+            obstacles = [];
+            collectibles = [];
+            particles = [];
+            feedback.reset();
+            player.x = width * 0.15;
+            player.y = height / 2;
+            targetY = height / 2;
+            document.getElementById('score').innerText = score;
+            startChat();
+        }
+
+        function spawnObstacle() {
+            const yPos = Math.random() * height;
+            obstacles.push({
+                x: width,
+                y: yPos,
+                width: 200,
+                height: 80,
+                speed: gameSpeed + 2,
+                type: 'beam'
+            });
+        }
+
+        function spawnCollectible() {
+            collectibles.push({
+                x: width,
+                y: Math.random() * (height - 100) + 50,
+                radius: 10,
+                speed: gameSpeed
+            });
+        }
+
+        function drawBackground(ctx) {
+            const grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0, '#030711');
+            grad.addColorStop(0.45, '#0c1322');
+            grad.addColorStop(1, '#171126');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+
+            const moon = ctx.createRadialGradient(width * 0.78, height * 0.18, 10, width * 0.78, height * 0.18, Math.min(width, height) * 0.18);
+            moon.addColorStop(0, 'rgba(137, 255, 244, 0.28)');
+            moon.addColorStop(0.35, 'rgba(137, 255, 244, 0.12)');
+            moon.addColorStop(1, 'rgba(137, 255, 244, 0)');
+            ctx.fillStyle = moon;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = '#10182b';
+            for (let i = 0; i < width + 100; i += 150) {
+                const x = (i - (frame * gameSpeed * 0.2)) % (width + 150);
+                ctx.beginPath();
+                ctx.moveTo(x, height);
+                ctx.lineTo(x + 18, height - 150);
+                ctx.lineTo(x + 32, height);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(x + 20, height - 155, 28, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#070a12';
+            for (let i = 0; i < width + 240; i += 280) {
+                const x = (i - (frame * gameSpeed * 0.8)) % (width + 280);
+                ctx.fillRect(x, height * 0.15, 22, height);
+                ctx.fillRect(x - 18, height * 0.28, 58, 8);
+                ctx.fillStyle = 'rgba(255, 106, 136, 0.12)';
+                ctx.fillRect(x - 16, height * 0.282, 54, 3);
+                ctx.fillStyle = '#070a12';
+            }
+
+            ctx.fillStyle = 'rgba(137, 255, 244, 0.04)';
+            for (let i = 0; i < 6; i++) {
+                const shimmerX = (i * width / 5 - frame * 0.6) % (width + 120);
+                ctx.beginPath();
+                ctx.arc(shimmerX, height * (0.14 + i * 0.1), 2 + (i % 3), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawPlayer() {
+            player.y += (targetY - player.y) * 0.1;
+
+            ctx.save();
+            ctx.translate(player.x, player.y);
+
+            ctx.shadowBlur = 24;
+            ctx.shadowColor = 'rgba(188, 140, 255, 0.28)';
+            ctx.fillStyle = 'rgba(8, 8, 16, 0.96)';
+            ctx.beginPath();
+            const spikes = 12;
+            for (let i = 0; i < spikes * 2; i++) {
+                const angle = (Math.PI * 2 * i) / (spikes * 2);
+                const pulse = Math.sin(frame * 0.18 + i * 0.8) * 4;
+                const drift = Math.cos(frame * 0.08 + i * 0.35) * 2;
+                const r = player.radius + pulse + drift;
+                const x = Math.cos(angle) * r;
+                const y = Math.sin(angle) * r;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(137, 255, 244, 0.14)';
+            ctx.beginPath();
+            ctx.ellipse(0, 8, 14, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(99, 245, 255, 0.34)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-3, -4, 17, Math.PI * 0.15, Math.PI * 1.15);
+            ctx.stroke();
+
+            const eyeGlow = 0.55 + Math.sin(frame * 0.12) * 0.25;
+            ctx.fillStyle = `rgba(255, 106, 136, ${eyeGlow})`;
+            ctx.beginPath();
+            ctx.ellipse(10, -5, 5, 3.5, -0.3, 0, Math.PI * 2);
+            ctx.ellipse(14, 6, 4.2, 3, 0.15, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255, 227, 155, 0.3)';
+            ctx.beginPath();
+            ctx.arc(8, -6, 1.5, 0, Math.PI * 2);
+            ctx.arc(13, 5, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            if (frame % 4 === 0) {
+                particles.push({
+                    x: player.x - 8,
+                    y: player.y + (Math.random() - 0.5) * 24,
+                    vx: -2 - Math.random() * 1.4,
+                    vy: (Math.random() - 0.5) * 0.8,
+                    life: 1.0,
+                    size: 5 + Math.random() * 4,
+                    hue: Math.random() > 0.5 ? 'violet' : 'cyan'
+                });
+            }
+        }
+
+        function drawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                const color = p.hue === 'violet'
+                    ? `rgba(188, 140, 255, ${p.life * 0.7})`
+                    : `rgba(99, 245, 255, ${p.life * 0.58})`;
+
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, Math.max(0.01, p.size * p.life), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, width, height);
+            frame++;
+            if (frame % 600 === 0) gameSpeed += 0.5;
+
+            drawBackground(ctx);
+            drawParticles();
+            drawPlayer();
+
+            if (frame % 120 === 0) spawnObstacle();
+            if (frame % 90 === 0) spawnCollectible();
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.x -= obs.speed;
+
+                if (obs.x < width * 0.7 && !obs.warned) {
+                    obs.warned = true;
+                    audio.playSFX('warning', 550);
+                }
+
+                const grad = ctx.createLinearGradient(obs.x, obs.y, obs.x + obs.width, obs.y);
+                grad.addColorStop(0, 'rgba(255, 227, 155, 0.75)');
+                grad.addColorStop(0.25, 'rgba(255, 227, 155, 0.28)');
+                grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(obs.x + obs.width, obs.y);
+                ctx.lineTo(obs.x, obs.y - obs.height / 2);
+                ctx.lineTo(obs.x, obs.y + obs.height / 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(255, 106, 136, 0.35)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(obs.x + obs.width, obs.y);
+                ctx.lineTo(obs.x, obs.y - obs.height / 2);
+                ctx.lineTo(obs.x, obs.y + obs.height / 2);
+                ctx.closePath();
+                ctx.stroke();
+
+                if (obs.x < player.x + player.radius && obs.x + obs.width > player.x) {
+                    const dy = Math.abs(player.y - obs.y);
+                    if (dy < obs.height / 2 + player.radius) {
+                        feedback.show('fail', 1400);
+                        gameOver();
+                    }
+                }
+
+                if (obs.x + obs.width < 0) obstacles.splice(i, 1);
+            }
+
+            for (let i = collectibles.length - 1; i >= 0; i--) {
+                const c = collectibles[i];
+                c.x -= c.speed;
+
+                const orbPulse = Math.sin(frame * 0.2) * 2;
+                const orbGlow = ctx.createRadialGradient(c.x, c.y, 1, c.x, c.y, 20);
+                orbGlow.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+                orbGlow.addColorStop(0.25, 'rgba(201, 150, 255, 0.95)');
+                orbGlow.addColorStop(1, 'rgba(99, 245, 255, 0)');
+
+                ctx.fillStyle = orbGlow;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.radius + 10 + orbPulse, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#d7a8ff';
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.radius + orbPulse, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.radius - 2 + orbPulse * 0.35, 0, Math.PI * 2);
+                ctx.stroke();
+
+                const dx = player.x - c.x;
+                const dy = player.y - c.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < player.radius + c.radius) {
+                    score += 10;
+                    document.getElementById('score').innerText = score;
+                    audio.playSFX('collect', 120);
+                    feedback.show('collect', 850);
+                    collectibles.splice(i, 1);
+
+                    if (Math.random() > 0.7) {
+                        addChatMessage("System", "Fear harvested +10", "text-violet-200");
+                    }
+                } else if (c.x < -50) {
+                    collectibles.splice(i, 1);
+                }
+            }
+
+            if (frame % 3 === 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.04})`;
+                const scratchX = Math.random() * width;
+                ctx.fillRect(scratchX, 0, 1.5, height);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail', 300);
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+            clearInterval(chatInterval);
+        }
+
+        /** 7. CONTROLS */
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.primeFromGesture();
+            audio.playSFX('start', 300);
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            gameLoop();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.primeFromGesture();
+            audio.playSFX('start', 300);
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playBGM();
+            gameActive = true;
+            initGame();
+            gameLoop();
+        });
+    });
+    </script>
+</body>
+</html>

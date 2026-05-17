@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
+    <title>System Override v2.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- [agent-note][stage3] resolved-font: title/ui -> Orbitron + Press Start 2P from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            bg: '#050a0f',
+                            wall: '#1a2634',
+                            wall_highlight: '#39ff14',
+                            player: '#00f3ff',
+                            enemy: '#ff0055',
+                            scared: '#ffffff',
+                            dot: '#39ff14',
+                            power: '#ffaa00',
+                            text: '#e0f2fe'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Orbitron', 'system-ui', 'sans-serif'],
+                        mono: ['Press Start 2P', 'monospace'],
+                        display: ['Orbitron', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg-deep: #040814;
+            --bg-grid: #0d1f3a;
+            --panel-core: rgba(6, 12, 22, 0.92);
+            --panel-edge: rgba(62, 244, 255, 0.6);
+            --hero-cyan: #53f4ff;
+            --hero-cyan-soft: rgba(83, 244, 255, 0.24);
+            --threat-pink: #ff4d8d;
+            --coin-lime: #8cff4f;
+            --power-gold: #ffbf47;
+            --text-main: #effcff;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(83, 244, 255, 0.12), transparent 35%),
+                linear-gradient(180deg, #07101f 0%, var(--bg-deep) 100%);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            color: var(--text-main);
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        .scanline {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+        .crt-flicker {
+            animation: flicker 0.15s infinite;
+            pointer-events: none;
+        }
+        @keyframes flicker {
+            0% { opacity: 0.97; }
+            50% { opacity: 1.0; }
+            100% { opacity: 0.98; }
+        }
+        .ui-panel {
+            background:
+                linear-gradient(180deg, rgba(11, 22, 39, 0.98), var(--panel-core)),
+                linear-gradient(135deg, rgba(83, 244, 255, 0.08), transparent 60%);
+            border: 1px solid var(--panel-edge);
+            box-shadow:
+                0 0 0 1px rgba(83, 244, 255, 0.12) inset,
+                0 16px 38px rgba(0, 0, 0, 0.42),
+                0 0 18px rgba(83, 244, 255, 0.14);
+            backdrop-filter: blur(8px);
+        }
+        .ui-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: inherit;
+            background: linear-gradient(90deg, transparent, rgba(83, 244, 255, 0.08), transparent);
+            opacity: 0.75;
+        }
+        .btn-cyber {
+            background: linear-gradient(180deg, rgba(17, 40, 71, 0.96), rgba(8, 19, 34, 0.96));
+            border: 1px solid rgba(140, 255, 79, 0.75);
+            color: #c8ffae;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+            box-shadow: 0 0 14px rgba(140, 255, 79, 0.16);
+        }
+        .btn-cyber:active {
+            background: linear-gradient(180deg, rgba(140, 255, 79, 0.95), rgba(90, 205, 39, 0.95));
+            color: #02110f;
+            transform: scale(0.98);
+        }
+        .hud-shell {
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(83, 244, 255, 0.16);
+        }
+        .display-font {
+            font-family: 'Orbitron', system-ui, sans-serif;
+        }
+        .terminal-font {
+            font-family: 'Press Start 2P', monospace;
+            letter-spacing: 0.04em;
+            line-height: 1.8;
+        }
+        .feedback-gif {
+            position: absolute;
+            width: min(28vw, 124px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 1px solid rgba(83, 244, 255, 0.45);
+            background: rgba(3, 9, 18, 0.82);
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35), 0 0 18px rgba(83, 244, 255, 0.2);
+            opacity: 0;
+            transform: scale(0.88);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+        }
+        .feedback-gif.active {
+            opacity: 0.9;
+            transform: scale(1);
+        }
+        .feedback-gif--power {
+            right: 0.75rem;
+            bottom: 6rem;
+        }
+        .feedback-gif--fail {
+            left: 0.75rem;
+            bottom: 6rem;
+        }
+        @media (max-width: 640px) {
+            .feedback-gif {
+                width: 88px;
+                bottom: 5.5rem;
+            }
+        }
+        .hero-score {
+            text-shadow: 0 0 10px rgba(83, 244, 255, 0.65);
+        }
+        .status-pill {
+            border: 1px solid rgba(255, 191, 71, 0.65);
+            box-shadow: 0 0 12px rgba(255, 191, 71, 0.18);
+        }
+        .overlay-card {
+            max-height: min(82vh, 42rem);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        /* Hide scrollbar */
+        ::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="text-cyber-text">
+
+    <!-- Game Container -->
+    <div id="game-container" class="relative w-full h-full overflow-hidden">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- CRT Effects -->
+        <div class="absolute inset-0 scanline z-10"></div>
+        <div class="absolute inset-0 crt-flicker z-10 mix-blend-overlay opacity-20 bg-green-900"></div>
+
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 z-20 pointer-events-none flex flex-col">
+            <!-- [agent-note][stage3] resolved-gif: power/fail feedback overlays -> catalogs/gifs.json -->
+            <img id="power-gif" class="feedback-gif feedback-gif--power z-20" src="https://i.giphy.com/1zmG8avB83Uvm.webp" alt="Power surge feedback" aria-hidden="true">
+            <img id="fail-gif" class="feedback-gif feedback-gif--fail z-20" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="Failure feedback" aria-hidden="true">
+            
+            
+            <!-- HUD -->
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+            <div id="hud" class="hud-shell hidden w-full flex justify-between items-center p-4 pt-safe pointer-events-auto bg-gradient-to-b from-black/85 to-transparent">
+                <div class="flex flex-col">
+                    <span class="text-xs text-cyber-wall_highlight opacity-70 tracking-[0.28em] display-font">DATA_BUFFER</span>
+                    <span id="score" class="hero-score display-font text-2xl font-bold text-cyber-player drop-shadow-[0_0_5px_rgba(0,243,255,0.8)]">0</span>
+                </div>
+                <!-- Power Status -->
+                <div id="power-indicator" class="hidden flex flex-col items-center animate-pulse">
+                    <span class="text-xs text-cyber-power font-bold">OVERRIDE ACTIVE</span>
+                    <div class="w-20 h-2 bg-gray-800 rounded mt-1 overflow-hidden">
+                        <div id="power-bar" class="h-full bg-cyber-power w-full"></div>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                     <button id="pause-btn" class="btn-cyber w-10 h-10 rounded flex items-center justify-center font-bold text-xl active:bg-cyber-wall_highlight active:text-black">II</button>
+                </div>
+            </div>
+
+            <!-- Start Screen -->
+                <div id="start-screen" class="absolute inset-0 flex items-center justify-center bg-cyber-bg/90 pointer-events-auto backdrop-blur-sm p-4 sm:p-6">
+                    <!-- [agent-note][stage4] repaired: mobile-tap-path | element: body/canvas/start-screen | action: moved touch suppression to canvas and constrained overlay card height -->
+                    <div class="overlay-card ui-panel relative overflow-hidden p-6 sm:p-8 rounded-2xl max-w-sm w-11/12 text-center flex flex-col gap-5 sm:gap-6">
+                    <div>
+                        <h1 class="display-font text-4xl font-bold text-cyber-player mb-2 tracking-tight drop-shadow-[0_0_14px_rgba(0,243,255,0.65)]">SYSTEM<br>OVERRIDE</h1>
+                        <p class="text-sm text-cyber-wall_highlight mt-2 tracking-[0.3em]">v2.1.0 [PATCHED]</p>
+                    </div>
+                    
+                    <div class="terminal-font text-left text-xs space-y-2 border border-cyber-wall/60 p-4 bg-black/40 rounded-xl shadow-[inset_0_0_18px_rgba(83,244,255,0.06)]">
+                        <p>> <span class="text-cyber-player">SWIPE</span> TO MOVE.</p>
+                        <p>> COLLECT <span class="text-cyber-dot">GREEN DATA</span> TO CLEAR THE GRID.</p>
+                        <p>> GRAB <span class="text-cyber-power">ORANGE NODES</span> TO OVERRIDE BOTS.</p>
+                        <p>> CRASH INTO OVERRIDDEN BOTS FOR BONUS POINTS.</p>
+                    </div>
+
+                    <button id="start-btn" class="btn-cyber py-4 text-xl font-bold hover:bg-cyber-wall_highlight hover:text-black">
+                        EXECUTE
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden absolute inset-0 flex items-center justify-center bg-black/90 pointer-events-auto backdrop-blur-md p-4 sm:p-6">
+                <div class="overlay-card ui-panel p-6 sm:p-8 rounded max-w-sm w-11/12 text-center flex flex-col gap-5 sm:gap-6 border-red-500 shadow-red-900/50">
+                    <h2 id="go-title" class="display-font text-4xl font-bold text-red-500 tracking-widest mb-2">TERMINATED</h2>
+                    
+                    <div class="flex flex-col gap-1">
+                        <span class="text-gray-400 text-sm">TOTAL DATA SECURED</span>
+                        <span id="finalScore" class="terminal-font text-3xl text-white">0</span>
+                    </div>
+
+                    <button id="restart-btn" class="btn-cyber py-3 border-red-500 text-red-500 hover:bg-red-500 hover:text-black">
+                        RETRY CONNECTION
+                    </button>
+                    <button id="menu-btn" class="text-xs text-gray-500 underline mt-2">RETURN TO ROOT</button>
+                </div>
+            </div>
+
+            <!-- Pause Screen -->
+            <div id="pause-screen" class="hidden absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-auto backdrop-blur-sm p-4">
+                <div class="overlay-card ui-panel p-6 rounded text-center w-64 max-w-[92vw]">
+                    <h2 class="text-2xl text-cyber-wall_highlight mb-6">PAUSED</h2>
+                    <button id="resume-btn" class="btn-cyber w-full py-3 mb-3">RESUME</button>
+                    <button id="quit-btn" class="btn-cyber w-full py-3 border-red-500 text-red-500">ABORT</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        /** 
+         * SYSTEM OVERRIDE REMAKE
+         * Features: Smooth Grid Movement, Power Ups, Mobile Optimized
+         */
+
+        // --- ASSETS & CONFIG ---
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3",
+            sfx: {
+                collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3",
+                power: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3",
+                eatGhost: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_defeat_01.mp3",
+                win: "https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3",
+                uiClick: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                pause: "https://gamezone-virid.vercel.app/assets/audios/ui/pause_01.mp3",
+                resume: "https://gamezone-virid.vercel.app/assets/audios/ui/resume_01.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3"
+            }
+        };
+
+        const COLORS = {
+            wall: '#11213d',
+            wallBorder: '#57f6ff',
+            dot: '#8cff4f',
+            power: '#ffbf47',
+            player: '#53f4ff',
+            scared: '#e0f2fe',
+            ghosts: ['#ff4d8d', '#ff7a3c', '#c07cff', '#22d7a6']
+        };
+
+        // --- AUDIO SYSTEM ---
+        const audio = {
+            bgm: new Audio(ASSETS.bgm),
+            sfx: {},
+            pools: {},
+            unlocked: false,
+            muted: false,
+            init() {
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const base = new Audio(v);
+                    base.preload = 'auto';
+                    this.sfx[k] = base;
+                    this.pools[k] = [base];
+                }
+            },
+            unlock() {
+                this.unlocked = true;
+                this.bgm.load();
+                Object.values(this.sfx).forEach(sound => sound.load());
+            },
+            playBGM() {
+                if (!this.muted && this.unlocked) this.bgm.play().catch(() => {});
+            },
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            },
+            getInstance(key) {
+                const pool = this.pools[key];
+                if (!pool) return null;
+                const available = pool.find(sound => sound.paused || sound.ended);
+                if (available) return available;
+                if (pool.length < 4) {
+                    const clone = this.sfx[key].cloneNode();
+                    clone.preload = 'auto';
+                    pool.push(clone);
+                    return clone;
+                }
+                return pool[0];
+            },
+            playSFX(key, { rate = 1, volume = 0.45, reset = true } = {}) {
+                if (this.muted || !this.unlocked || !this.sfx[key]) return;
+                const instance = this.getInstance(key);
+                if (!instance) return;
+                instance.volume = volume;
+                instance.playbackRate = rate;
+                if (reset) instance.currentTime = 0;
+                instance.play().catch(() => {});
+            }
+        };
+        audio.init();
+
+        // --- MAP DATA (13x17 Portrait) ---
+        // 0=Dot, 1=Wall, 9=Empty, 2=PowerPellet
+        // Modified to include Power Pellets in corners
+        const MAP_LAYOUT = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,2,0,0,0,0,1,0,0,0,0,2,1], // Power Pellets at (1,1) and (11,1)
+            [1,0,1,1,1,0,1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,0,1],
+            [1,1,1,1,0,1,9,1,0,1,1,1,1],
+            [9,9,9,1,0,1,9,1,0,1,9,9,9],
+            [1,1,1,1,0,1,9,1,0,1,1,1,1],
+            [1,0,0,0,0,0,1,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,0,1,1,0,1],
+            [1,0,0,1,0,0,0,0,0,1,0,0,1],
+            [1,1,0,1,0,1,1,1,0,1,0,1,1],
+            [1,2,0,0,0,1,1,1,0,0,0,2,1], // Power Pellets at (1,14) and (11,14)
+            [1,0,1,1,1,1,1,1,1,1,1,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        // --- GAME STATE ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const powerGif = document.getElementById('power-gif');
+        const failGif = document.getElementById('fail-gif');
+        
+        let state = {
+            active: false,
+            paused: false,
+            score: 0,
+            dotsLeft: 0,
+            powerActive: false,
+            powerTimer: 0,
+            powerMaxTime: 8, // seconds
+            feedbackTimers: {
+                power: 0,
+                fail: 0
+            },
+            
+            width: 0,
+            height: 0,
+            scale: 20,
+            offsetX: 0,
+            offsetY: 0,
+            lastTime: 0,
+            
+            map: [], 
+            dots: [], 
+            entities: [] 
+        };
+
+        // --- ENTITIES ---
+        class Entity {
+            constructor(x, y, type, color) {
+                this.x = x;
+                this.y = y;
+                this.startX = x;
+                this.startY = y;
+                this.type = type; // 'player' or 'ghost'
+                this.color = color;
+                this.dir = {x: 0, y: 0};
+                this.nextDir = {x: 0, y: 0};
+                this.speed = type === 'player' ? 5.0 : 3.2; // Player faster than ghosts
+                this.mode = 'chase'; // 'chase', 'scared', 'dead'
+            }
+
+            reset() {
+                this.x = this.startX;
+                this.y = this.startY;
+                this.dir = {x:0, y:0};
+                this.nextDir = {x:0, y:0};
+                this.mode = 'chase';
+            }
+        }
+
+        // --- CORE FUNCTIONS ---
+
+        function resize() {
+            state.width = canvas.width = window.innerWidth;
+            state.height = canvas.height = window.innerHeight;
+
+            const mapW = MAP_LAYOUT[0].length;
+            const mapH = MAP_LAYOUT.length;
+
+            const padX = 20;
+            const padY = 140; // Space for HUD
+
+            const scaleX = (state.width - padX) / mapW;
+            const scaleY = (state.height - padY) / mapH;
+            
+            state.scale = Math.floor(Math.min(scaleX, scaleY));
+            state.offsetX = (state.width - (mapW * state.scale)) / 2;
+            state.offsetY = (state.height - (mapH * state.scale)) / 2 + 40;
+        }
+
+        function initGame() {
+            state.score = 0;
+            state.dotsLeft = 0;
+            state.powerActive = false;
+            state.powerTimer = 0;
+            state.map = JSON.parse(JSON.stringify(MAP_LAYOUT));
+            state.dots = [];
+            state.entities = [];
+
+            // Parse Map
+            for(let y=0; y<state.map.length; y++) {
+                for(let x=0; x<state.map[y].length; x++) {
+                    const tile = state.map[y][x];
+                    if (tile === 0 || tile === 2) {
+                        state.dots.push({x, y, type: tile, active: true});
+                        if (tile === 0) state.dotsLeft++; // Only count regular dots for win condition? No, usually all.
+                        // Let's count all consumable items for win condition
+                        // But if we want it easier, maybe just the small dots? 
+                        // Classic rules: clear everything.
+                        state.dotsLeft++; // Count all
+                    }
+                }
+            }
+            // Fix dotsLeft count (it was incremented twice inside the loop logic above if I wasn't careful)
+            // Resetting and doing it cleanly:
+            state.dotsLeft = state.dots.length;
+
+            // Create Player
+            const player = new Entity(6, 12, 'player', COLORS.player);
+            state.entities.push(player);
+
+            // Create Ghosts
+            const ghostSpecs = [
+                {x: 6, y: 8, c: COLORS.ghosts[0]}, // Blinky
+                {x: 6, y: 9, c: COLORS.ghosts[1]}, // Pinky
+                {x: 1, y: 1, c: COLORS.ghosts[2]}, // Inky
+                {x: 11, y: 1, c: COLORS.ghosts[3]} // Clyde
+            ];
+
+            ghostSpecs.forEach(spec => {
+                const g = new Entity(spec.x, spec.y, 'ghost', spec.c);
+                // Initial direction
+                g.dir = Math.random() > 0.5 ? {x:1, y:0} : {x:-1, y:0};
+                state.entities.push(g);
+            });
+
+            updateUI();
+        }
+
+        function isWall(x, y) {
+            if (y < 0 || y >= state.map.length || x < 0 || x >= state.map[0].length) return true;
+            return state.map[Math.floor(y)][Math.floor(x)] === 1;
+        }
+
+        // --- ROBUST MOVEMENT ENGINE ---
+        function updateEntity(ent, dt) {
+            // Adjust speed based on mode
+            let currentSpeed = ent.speed;
+            if (ent.type === 'ghost') {
+                if (ent.mode === 'scared') currentSpeed = 2.0;
+                else if (ent.mode === 'dead') currentSpeed = 6.0;
+            }
+
+            const moveStep = currentSpeed * dt;
+            
+            // Current integer tile center
+            const tx = Math.round(ent.x);
+            const ty = Math.round(ent.y);
+
+            // Calculate next position assuming we move straight
+            const nextX = ent.x + ent.dir.x * moveStep;
+            const nextY = ent.y + ent.dir.y * moveStep;
+
+            // Check if we cross the center of the tile (tx, ty)
+            // Logic: we cross if we were on one side and are now on the other (or exactly on it)
+            // Note: This only works if we don't skip multiple tiles. With max dt capped, we are safe.
+            
+            let crossedCenter = false;
+            if (ent.dir.x !== 0) {
+                // Moving horizontally
+                if ((ent.x <= tx && nextX >= tx) || (ent.x >= tx && nextX <= tx)) crossedCenter = true;
+            } else if (ent.dir.y !== 0) {
+                // Moving vertically
+                if ((ent.y <= ty && nextY >= ty) || (ent.y >= ty && nextY <= ty)) crossedCenter = true;
+            } else {
+                // Not moving, but if we have a nextDir, we should try to start
+                if (ent.nextDir.x !== 0 || ent.nextDir.y !== 0) {
+                    // We are effectively "at center" if stopped
+                    crossedCenter = true;
+                }
+            }
+
+            if (crossedCenter) {
+                // Snap to center
+                ent.x = tx;
+                ent.y = ty;
+
+                // Attempt to turn
+                if (ent.nextDir.x !== 0 || ent.nextDir.y !== 0) {
+                    if (!isWall(tx + ent.nextDir.x, ty + ent.nextDir.y)) {
+                        ent.dir = { ...ent.nextDir };
+                        // If player, consume buffer. If ghost, AI updates nextDir constantly anyway.
+                        if (ent.type === 'player') ent.nextDir = {x:0, y:0};
+                    }
+                }
+
+                // Check if blocked in current direction
+                if (isWall(tx + ent.dir.x, ty + ent.dir.y)) {
+                    ent.dir = {x:0, y:0};
+                } else {
+                    // Continue moving remaining distance? 
+                    // For simplicity and smoothness, just move one full step from center
+                    ent.x += ent.dir.x * moveStep;
+                    ent.y += ent.dir.y * moveStep;
+                }
+
+                // Ghost AI Decision Point (at intersections)
+                if (ent.type === 'ghost') {
+                    updateGhostAI(ent, tx, ty);
+                }
+
+            } else {
+                // Just move
+                ent.x = nextX;
+                ent.y = nextY;
+            }
+
+            // Tunnel Wrapping
+            if (ent.x <= -0.5) ent.x = state.map[0].length - 0.5;
+            if (ent.x >= state.map[0].length - 0.5) ent.x = -0.5;
+        }
+
+        function updateGhostAI(ghost, gx, gy) {
+            // Available directions
+            const dirs = [
+                {x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}
+            ];
+            
+            // Filter valid moves (not walls)
+            // Also prevent reversing direction unless dead or just switched mode
+            let valid = dirs.filter(d => !isWall(gx + d.x, gy + d.y));
+            
+            // Don't reverse immediately (unless dead/scared logic overrides later)
+            const forward = valid.filter(d => d.x !== -ghost.dir.x || d.y !== -ghost.dir.y);
+            if (forward.length > 0) valid = forward;
+
+            if (valid.length === 0) {
+                // Dead end, must reverse
+                ghost.nextDir = {x: -ghost.dir.x, y: -ghost.dir.y};
+                return;
+            }
+
+            // Target Selection
+            let targetX, targetY;
+            const player = state.entities[0];
+
+            if (ghost.mode === 'dead') {
+                targetX = 6; targetY = 8; // Home
+                if (Math.abs(gx - targetX) < 1 && Math.abs(gy - targetY) < 1) {
+                    ghost.mode = 'chase'; // Respawn
+                }
+            } else if (ghost.mode === 'scared') {
+                // Random movement is often best for scared, or flee player
+                // Let's just pick random valid direction
+                ghost.nextDir = valid[Math.floor(Math.random() * valid.length)];
+                return;
+            } else {
+                // Chase
+                targetX = player.x;
+                targetY = player.y;
+            }
+
+            // Pick direction minimizing distance to target
+            valid.sort((a, b) => {
+                const distA = Math.hypot((gx + a.x) - targetX, (gy + a.y) - targetY);
+                const distB = Math.hypot((gx + b.x) - targetX, (gy + b.y) - targetY);
+                return distA - distB;
+            });
+
+            // 80% chance to pick best, 20% random (make it imperfect/easier)
+            if (Math.random() < 0.8) {
+                ghost.nextDir = valid[0];
+            } else {
+                ghost.nextDir = valid[Math.floor(Math.random() * valid.length)];
+            }
+        }
+
+        function showGif(type, duration = 1400) {
+            const target = type === 'power' ? powerGif : failGif;
+            if (!target) return;
+            state.feedbackTimers[type] = duration;
+            target.classList.add('active');
+        }
+
+        function updateFeedback(dt) {
+            for (const [type, remaining] of Object.entries(state.feedbackTimers)) {
+                if (remaining <= 0) continue;
+                state.feedbackTimers[type] = Math.max(0, remaining - dt * 1000);
+                if (state.feedbackTimers[type] === 0) {
+                    const target = type === 'power' ? powerGif : failGif;
+                    target?.classList.remove('active');
+                }
+            }
+        }
+
+        function activatePowerMode() {
+            state.powerActive = true;
+            state.powerTimer = state.powerMaxTime;
+            
+            // Scare ghosts
+            state.entities.forEach(ent => {
+                if (ent.type === 'ghost' && ent.mode !== 'dead') {
+                    ent.mode = 'scared';
+                    // Reverse direction immediately
+                    ent.dir = {x: -ent.dir.x, y: -ent.dir.y};
+                    ent.nextDir = {x: -ent.dir.x, y: -ent.dir.y}; // Queue it too
+                }
+            });
+
+            showGif('power', 1600);
+            document.getElementById('power-indicator').classList.remove('hidden');
+        }
+
+        function checkCollisions() {
+            const player = state.entities[0];
+            const px = Math.round(player.x);
+            const py = Math.round(player.y);
+
+            // Dot Collection
+            // Find dot at this integer position
+            // Since we snap to center, checking rounded pos is safe enough
+            // But checking distance is safer for "eating while moving"
+            
+            const dotIndex = state.dots.findIndex(d => d.active && Math.abs(d.x - player.x) < 0.4 && Math.abs(d.y - player.y) < 0.4);
+            
+            if (dotIndex !== -1) {
+                const dot = state.dots[dotIndex];
+                dot.active = false;
+                state.dotsLeft--;
+
+                if (dot.type === 2) {
+                    // Power Pellet
+                    state.score += 50;
+                    audio.playSFX('power', { rate: 1.08, volume: 0.5 });
+                    activatePowerMode();
+                } else {
+                    state.score += 10;
+                    audio.playSFX('collect', { rate: 0.98 + (Math.random() * 0.08), volume: 0.26 });
+                }
+                
+                updateUI();
+                
+                if (state.dotsLeft <= 0) {
+                    gameOver(true);
+                }
+            }
+
+            // Ghost Collision
+            for (let i = 1; i < state.entities.length; i++) {
+                const g = state.entities[i];
+                const dist = Math.hypot(g.x - player.x, g.y - player.y);
+                
+                if (dist < 0.6) { // Hitbox
+                    if (g.mode === 'scared') {
+                        // Eat Ghost
+                        g.mode = 'dead';
+                        state.score += 200;
+                        audio.playSFX('eatGhost', { rate: 1, volume: 0.5 });
+                        updateUI();
+                    } else if (g.mode === 'chase') {
+                        // Die
+                        gameOver(false);
+                    }
+                }
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('score').innerText = state.score.toString().padStart(5, '0');
+            
+            if (state.powerActive) {
+                const pct = (state.powerTimer / state.powerMaxTime) * 100;
+                document.getElementById('power-bar').style.width = `${pct}%`;
+            }
+        }
+
+        function draw() {
+            // Clear
+            ctx.fillStyle = '#050a0f';
+            ctx.fillRect(0, 0, state.width, state.height);
+
+            const s = state.scale;
+            const ox = state.offsetX;
+            const oy = state.offsetY;
+
+            // Draw Walls
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            for(let y=0; y<state.map.length; y++) {
+                for(let x=0; x<state.map[y].length; x++) {
+                    if (state.map[y][x] === 1) {
+                        const dx = ox + x * s;
+                        const dy = oy + y * s;
+                        const cell = s - 8;
+
+                        ctx.fillStyle = COLORS.wall;
+                        ctx.fillRect(dx + 4, dy + 4, cell, cell);
+
+                        const wallGlow = ctx.createLinearGradient(dx + 4, dy + 4, dx + s, dy + s);
+                        wallGlow.addColorStop(0, 'rgba(87, 246, 255, 0.34)');
+                        wallGlow.addColorStop(1, 'rgba(22, 53, 96, 0.9)');
+                        ctx.fillStyle = wallGlow;
+                        ctx.fillRect(dx + 5, dy + 5, cell - 2, cell - 2);
+
+                        ctx.strokeStyle = COLORS.wallBorder;
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = COLORS.wallBorder;
+                        ctx.strokeRect(dx + 6, dy + 6, cell - 4, cell - 4);
+                    }
+                }
+            }
+            ctx.shadowBlur = 0;
+
+            // Draw Dots
+            state.dots.forEach(d => {
+                if (d.active) {
+                    const dx = ox + d.x * s + s/2;
+                    const dy = oy + d.y * s + s/2;
+                    
+                    if (d.type === 2) {
+                        // Power Pellet
+                        ctx.fillStyle = COLORS.power;
+                        ctx.shadowBlur = 10;
+                        ctx.shadowColor = COLORS.power;
+                        const size = s * 0.3 + Math.sin(Date.now() / 100) * 2;
+                        ctx.beginPath();
+                        ctx.arc(dx, dy, size, 0, Math.PI*2);
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                    } else {
+                        // Normal Dot
+                        ctx.fillStyle = COLORS.dot;
+                        const size = s * 0.1;
+                        ctx.fillRect(dx - size, dy - size, size*2, size*2);
+                    }
+                }
+            });
+
+            // Draw Entities
+            state.entities.forEach(ent => {
+                const ex = ox + ent.x * s + s/2;
+                const ey = oy + ent.y * s + s/2;
+                const r = s * 0.4;
+
+                // Determine color
+                let color = ent.color;
+                let flash = false;
+                
+                if (ent.type === 'ghost') {
+                    if (ent.mode === 'scared') {
+                        color = COLORS.scared;
+                        // Flash near end
+                        if (state.powerTimer < 2 && Math.floor(Date.now() / 200) % 2 === 0) {
+                            color = ent.color; // Flash back to normal
+                        }
+                    } else if (ent.mode === 'dead') {
+                        color = '#444'; // Dark grey eyes
+                    }
+                }
+
+                ctx.fillStyle = color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = color;
+
+                if (ent.type === 'player') {
+                    const idlePulse = 0.88 + Math.sin(Date.now() / 180) * 0.08;
+                    const suitGlow = ctx.createRadialGradient(ex - r * 0.25, ey - r * 0.35, r * 0.1, ex, ey, r * 1.15);
+                    suitGlow.addColorStop(0, '#d6fdff');
+                    suitGlow.addColorStop(0.45, COLORS.player);
+                    suitGlow.addColorStop(1, '#118aa8');
+                    ctx.fillStyle = suitGlow;
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, r, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = '#dfffff';
+                    ctx.lineWidth = Math.max(1, s * 0.06);
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, r * idlePulse, Math.PI * 0.15, Math.PI * 0.85);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#05131f';
+                    ctx.beginPath();
+                    ctx.arc(ex - r * 0.2, ey - r * 0.1, r * 0.12, 0, Math.PI * 2);
+                    ctx.arc(ex + r * 0.2, ey - r * 0.1, r * 0.12, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Ghost Shape
+                    ctx.beginPath();
+                    ctx.arc(ex, ey - r*0.2, r, Math.PI, 0);
+                    ctx.lineTo(ex + r, ey + r);
+                    ctx.lineTo(ex, ey + r*0.6);
+                    ctx.lineTo(ex - r, ey + r);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Eyes
+                    if (ent.mode !== 'scared') {
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath();
+                        ctx.arc(ex - r*0.4, ey - r*0.3, r*0.3, 0, Math.PI*2);
+                        ctx.arc(ex + r*0.4, ey - r*0.3, r*0.3, 0, Math.PI*2);
+                        ctx.fill();
+                        
+                        ctx.fillStyle = '#000';
+                        // Pupils look in dir
+                        const pdx = ent.dir.x * 2;
+                        const pdy = ent.dir.y * 2;
+                        ctx.beginPath();
+                        ctx.arc(ex - r*0.4 + pdx, ey - r*0.3 + pdy, r*0.15, 0, Math.PI*2);
+                        ctx.arc(ex + r*0.4 + pdx, ey - r*0.3 + pdy, r*0.15, 0, Math.PI*2);
+                        ctx.fill();
+                    } else {
+                        // Scared face
+                        ctx.fillStyle = '#00f';
+                        ctx.beginPath();
+                        ctx.rect(ex - r*0.5, ey - r*0.2, r*0.3, r*0.1);
+                        ctx.rect(ex + r*0.2, ey - r*0.2, r*0.3, r*0.1);
+                        ctx.rect(ex - r*0.3, ey + r*0.3, r*0.6, r*0.1); // mouth
+                        ctx.fill();
+                    }
+                }
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        function loop(timestamp) {
+            if (!state.active || state.paused) {
+                state.lastTime = timestamp;
+                requestAnimationFrame(loop);
+                return;
+            }
+
+             const dt = Math.min((timestamp - state.lastTime) / 1000, 0.1); // Cap dt
+             state.lastTime = timestamp;
+ 
+             updateFeedback(dt);
+ 
+             // Power Timer
+            if (state.powerActive) {
+                state.powerTimer -= dt;
+                updateUI();
+                if (state.powerTimer <= 0) {
+                    state.powerActive = false;
+                    document.getElementById('power-indicator').classList.add('hidden');
+                    // Reset ghosts to chase
+                    state.entities.forEach(ent => {
+                        if (ent.type === 'ghost' && ent.mode === 'scared') ent.mode = 'chase';
+                    });
+                }
+            }
+
+            state.entities.forEach(ent => updateEntity(ent, dt));
+            checkCollisions();
+            draw();
+            
+            requestAnimationFrame(loop);
+        }
+
+        // --- GAME FLOW ---
+        function startGame() {
+            audio.unlock();
+            audio.playSFX('start', { volume: 0.4 });
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('power-indicator').classList.add('hidden');
+            powerGif.classList.remove('active');
+            failGif.classList.remove('active');
+            state.feedbackTimers.power = 0;
+            state.feedbackTimers.fail = 0;
+            
+            audio.playBGM();
+            state.active = true;
+            state.paused = false;
+            
+            resize();
+            initGame();
+            state.lastTime = performance.now();
+            requestAnimationFrame(loop);
+        }
+
+        function gameOver(win) {
+            state.active = false;
+            audio.stopBGM();
+            audio.playSFX(win ? 'win' : 'fail', { volume: 0.52 });
+            if (!win) showGif('fail', 2200);
+
+            const goScreen = document.getElementById('game-over-screen');
+            const title = document.getElementById('go-title');
+            const scoreEl = document.getElementById('finalScore');
+            const restartBtn = document.getElementById('restart-btn');
+
+            goScreen.classList.remove('hidden');
+            document.getElementById('hud').classList.add('hidden');
+            
+            scoreEl.innerText = state.score;
+
+            if (win) {
+                title.innerText = "GRID CLEARED";
+                title.className = "text-4xl font-bold text-cyber-wall_highlight tracking-widest mb-2";
+                goScreen.querySelector('.ui-panel').className = "ui-panel p-8 rounded max-w-sm w-11/12 text-center flex flex-col gap-6 border-cyber-wall_highlight shadow-green-900/50";
+                restartBtn.className = "btn-cyber py-3 border-cyber-wall_highlight text-cyber-wall_highlight hover:bg-cyber-wall_highlight hover:text-black";
+                restartBtn.innerText = "RUN AGAIN";
+            } else {
+                title.innerText = "TERMINATED";
+                title.className = "text-4xl font-bold text-red-500 tracking-widest mb-2";
+                goScreen.querySelector('.ui-panel').className = "ui-panel p-8 rounded max-w-sm w-11/12 text-center flex flex-col gap-6 border-red-500 shadow-red-900/50";
+                restartBtn.className = "btn-cyber py-3 border-red-500 text-red-500 hover:bg-red-500 hover:text-black";
+                restartBtn.innerText = "RETRY CONNECTION";
+            }
+        }
+
+        function togglePause() {
+            if (!state.active) return;
+            state.paused = !state.paused;
+            const screen = document.getElementById('pause-screen');
+            if (state.paused) {
+                audio.playSFX('pause', { volume: 0.35 });
+                screen.classList.remove('hidden');
+                audio.bgm.pause();
+            } else {
+                screen.classList.add('hidden');
+                audio.playSFX('resume', { volume: 0.35 });
+                audio.bgm.play().catch(()=>{});
+                state.lastTime = performance.now();
+            }
+        }
+
+        // --- INPUT HANDLING ---
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        canvas.addEventListener('touchstart', e => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault(); 
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', e => {
+            if (!state.active || state.paused) return;
+            
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+
+            if (Math.max(absDx, absDy) < 10) return; // Sensitivity
+
+            const player = state.entities[0];
+            if (absDx > absDy) {
+                player.nextDir = dx > 0 ? {x:1, y:0} : {x:-1, y:0};
+            } else {
+                player.nextDir = dy > 0 ? {x:0, y:1} : {x:0, y:-1};
+            }
+        });
+
+        // Keyboard (Debug)
+        window.addEventListener('keydown', e => {
+            if (!state.active) return;
+            const player = state.entities[0];
+            switch(e.key) {
+                case 'ArrowUp': player.nextDir = {x:0, y:-1}; break;
+                case 'ArrowDown': player.nextDir = {x:0, y:1}; break;
+                case 'ArrowLeft': player.nextDir = {x:-1, y:0}; break;
+                case 'ArrowRight': player.nextDir = {x:1, y:0}; break;
+                case 'Escape': togglePause(); break;
+            }
+        });
+
+        // --- BUTTONS ---
+        const interactiveButtons = ['start-btn', 'restart-btn', 'pause-btn', 'resume-btn', 'quit-btn', 'menu-btn'];
+        interactiveButtons.forEach(id => {
+            document.getElementById(id).addEventListener('click', () => {
+                audio.unlock();
+                audio.playSFX('uiClick', { volume: 0.22 });
+            });
+        });
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+        document.getElementById('pause-btn').addEventListener('click', togglePause);
+        document.getElementById('resume-btn').addEventListener('click', togglePause);
+        
+        document.getElementById('quit-btn').addEventListener('click', () => {
+            location.reload();
+        });
+        document.getElementById('menu-btn').addEventListener('click', () => {
+            location.reload();
+        });
+
+        window.addEventListener('resize', () => {
+            if (state.active) resize();
+        });
+
+        // Initial Setup
+        resize();
+
+    </script>
+</body>
+</html>

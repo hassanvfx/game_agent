@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Meme Arcade: Idle Core</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] repaired: font-remap | source: catalogs/fonts.json | role: display=Audiowide body=Exo 2 -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-core: #050505;
+            --bg-deep: #090712;
+            --panel-border: rgba(92, 241, 255, 0.26);
+            --panel-glow: rgba(34, 211, 238, 0.18);
+            --arcade-pink: #ff5fd2;
+            --arcade-cyan: #67e8f9;
+            --arcade-gold: #facc15;
+            --arcade-violet: #8b5cf6;
+            --arcade-white: #f7fbff;
+        }
+
+        /* Core Engine Reset */
+        html, body {
+            width: 100%; height: 100%; margin: 0; padding: 0;
+            overflow: hidden; background:
+                radial-gradient(circle at top, rgba(103, 232, 249, 0.12), transparent 28%),
+                radial-gradient(circle at bottom, rgba(255, 95, 210, 0.1), transparent 30%),
+                linear-gradient(180deg, #090712 0%, #050505 45%, #020204 100%);
+            font-family: 'Exo 2', system-ui, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+            color: var(--arcade-white);
+        }
+
+        body {
+            touch-action: manipulation;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.04), transparent 18%, transparent 82%, rgba(255,255,255,0.03)),
+                repeating-linear-gradient(180deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 4px);
+            mix-blend-mode: screen;
+            opacity: 0.35;
+            z-index: 0;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; z-index: 1; touch-action: none; }
+        .ui-layer { position: absolute; pointer-events: none; z-index: 10; width: 100%; }
+        .interactive { pointer-events: auto; }
+
+        .font-teko { font-family: 'Audiowide', sans-serif; }
+        .font-ui { font-family: 'Exo 2', system-ui, sans-serif; }
+        .text-glow { text-shadow: 0 0 10px currentColor; }
+
+        .feedback-gif {
+            position: absolute;
+            right: 1rem;
+            width: 4.75rem;
+            height: 4.75rem;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(103, 232, 249, 0.35);
+            box-shadow: 0 0 24px rgba(6, 182, 212, 0.22);
+            opacity: 0;
+            transform: scale(0.85) translateY(10px);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            z-index: 25;
+            background: rgba(5, 7, 18, 0.65);
+        }
+
+        .feedback-gif.active {
+            opacity: 0.92;
+            transform: scale(1) translateY(0);
+        }
+
+        #gif-hype {
+            top: 5.5rem;
+        }
+
+        #gif-market {
+            bottom: 6.5rem;
+        }
+        
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(12, 16, 28, 0.96), rgba(7, 9, 16, 0.98)),
+                linear-gradient(135deg, rgba(34, 211, 238, 0.08), transparent 45%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--panel-border);
+            box-shadow:
+                0 -10px 40px rgba(0,0,0,0.8),
+                0 0 24px var(--panel-glow);
+        }
+
+        .glass-modal {
+            background:
+                linear-gradient(180deg, rgba(9, 10, 18, 0.97), rgba(4, 5, 11, 0.98)),
+                radial-gradient(circle at top, rgba(103, 232, 249, 0.08), transparent 60%);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                0 0 50px rgba(0,0,0,0.9),
+                0 0 24px rgba(103, 232, 249, 0.12);
+        }
+
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .clip-path-polygon { clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%); }
+
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); }
+            50% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); }
+        }
+        .animate-pulse-red { animation: pulse-red 2s infinite; }
+
+        #upgrade-panel {
+            will-change: transform;
+            height: 85vh; 
+            bottom: 0;
+            transform: translateY(calc(100% - 70px));
+            pointer-events: none;
+        }
+        
+        .panel-transition {
+            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        #game-root::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 42%, rgba(103, 232, 249, 0.14), transparent 14rem),
+                radial-gradient(circle at 50% 42%, rgba(255, 95, 210, 0.11), transparent 20rem);
+            z-index: 2;
+        }
+
+        #score-el,
+        #shape-name,
+        #market-offer-val,
+        #btn-smasher .font-teko,
+        #btn-lazy .font-teko {
+            letter-spacing: 0.04em;
+        }
+
+        @media (max-width: 640px) {
+            #hud-layer { padding: 1rem; padding-top: 3.75rem; }
+            #score-el { font-size: 3.8rem; }
+            #upgrade-list { padding-left: 1rem; padding-right: 1rem; padding-bottom: 6.5rem; }
+            #start-btn { padding: 1rem 2.5rem; }
+            .feedback-gif {
+                right: 0.75rem;
+                width: 3.8rem;
+                height: 3.8rem;
+            }
+            #gif-hype {
+                top: 5rem;
+            }
+            #gif-market {
+                bottom: 7rem;
+            }
+        }
+    </style>
+</head>
+<body class="text-white">
+
+<!-- Audio Assets -->
+<!-- [agent-note][stage3] resolved-audio: loop/ui/collect/impact -> catalogs/audios.json -->
+<audio id="bgm" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3" loop preload="auto"></audio>
+<audio id="sfx_tap" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_01.mp3" preload="auto"></audio>
+<audio id="sfx_buy" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_alert" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3" preload="auto"></audio>
+<audio id="sfx_ui" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+<audio id="sfx_start" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_fail" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+
+<!-- Game Container -->
+<div id="game-root" class="relative w-full h-full overflow-hidden">
+    
+    <!-- Background Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- [agent-note][stage3] resolved-gif: hype + market reactions -> catalogs/gifs.json -->
+    <img id="gif-hype" class="feedback-gif" src="https://i.giphy.com/1zmG8avB83Uvm.webp" alt="Hype surge reaction" aria-hidden="true">
+    <img id="gif-market" class="feedback-gif" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Market alert reaction" aria-hidden="true">
+
+    <!-- Settings Button -->
+    <button id="btn-settings-open" class="absolute top-4 right-4 z-[60] p-3 text-cyan-500 opacity-80 hover:opacity-100 hover:scale-110 transition-all active:scale-95 interactive">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+    </button>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden absolute inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 transition-opacity duration-300 interactive">
+        <div class="w-full max-w-sm glass-modal rounded-2xl p-6 flex flex-col gap-6 transform transition-all scale-100">
+            <div class="text-center border-b border-cyan-500/30 pb-4">
+                <h2 class="font-teko text-4xl text-white tracking-widest text-glow">SYSTEM CONFIG</h2>
+                <p class="text-cyan-400/60 text-xs uppercase tracking-[0.3em]">Control Panel v1.5</p>
+            </div>
+            <div>
+                <label class="text-cyan-300 text-xs uppercase tracking-widest font-bold mb-2 block">Audio Output</label>
+                <button id="btn-toggle-audio" class="w-full py-3 bg-gray-800/80 border border-gray-600 hover:border-cyan-500 text-white font-mono rounded flex justify-between px-4 items-center transition-all active:scale-[0.98]">
+                    <span class="text-sm font-bold">MASTER VOLUME</span>
+                    <span id="audio-status" class="text-green-400 font-bold text-xs px-2 py-1 bg-green-900/30 rounded border border-green-500/30">ONLINE</span>
+                </button>
+            </div>
+            <div>
+                <label class="text-cyan-300 text-xs uppercase tracking-widest font-bold mb-2 block">Gameplay Stability</label>
+                <button id="btn-reset-game" class="w-full py-3 bg-red-900/20 border border-red-500/30 hover:bg-red-900/40 hover:border-red-500 text-red-400 font-mono rounded transition-all active:scale-[0.98] text-center">
+                    <span class="text-sm font-bold tracking-wider">SYSTEM REBOOT</span>
+                </button>
+            </div>
+            <button id="btn-close-settings" class="mt-2 w-full py-3 bg-cyan-700 hover:bg-cyan-600 text-white font-bold tracking-[0.2em] clip-path-polygon transition-all active:scale-[0.98] shadow-lg shadow-cyan-900/50">
+                RETURN
+            </button>
+        </div>
+    </div>
+
+    <!-- Top HUD -->
+    <div id="hud-layer" class="ui-layer top-0 p-6 pt-12 flex flex-col items-center pointer-events-none transition-opacity duration-1000 opacity-0">
+        <div class="text-cyan-500 text-xs tracking-[0.3em] uppercase mb-1 opacity-80">Meme Energy</div>
+        <div id="score-el" class="font-teko text-7xl text-white leading-none text-glow drop-shadow-xl transition-all">$0</div>
+        <div id="mps-el" class="text-fuchsia-400 font-mono text-sm tracking-widest mt-1 bg-fuchsia-900/30 px-3 py-1 rounded border border-fuchsia-500/30">
+            0.0 / SEC
+        </div>
+    </div>
+
+    <!-- Draggable Upgrade Menu -->
+    <div id="upgrade-panel" class="ui-layer interactive glass-panel rounded-t-3xl flex flex-col panel-transition">
+        
+        <!-- Drag Handle Area -->
+        <div id="drag-handle" class="w-full h-16 flex flex-col items-center justify-center shrink-0 cursor-grab active:cursor-grabbing touch-none relative z-20 bg-gradient-to-b from-white/5 to-transparent">
+            <div class="w-16 h-1.5 bg-gray-600 rounded-full opacity-50 mb-2"></div>
+            <div class="text-cyan-500/80 text-[10px] uppercase tracking-[0.2em] font-bold">
+                Meme Upgrades
+            </div>
+        </div>
+        
+        <!-- Scrollable List -->
+        <div id="upgrade-list" class="px-6 pb-24 overflow-y-auto hide-scroll flex flex-col gap-3 flex-1 overscroll-contain">
+            
+            <!-- Shape Evolution Upgrade -->
+            <button id="btn-shape" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-yellow-400 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0 shadow-[0_0_15px_rgba(250,204,21,0.1)]">
+                <div class="absolute inset-0 bg-gradient-to-r from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div id="shape-next-label" class="text-yellow-400 text-xs font-bold uppercase tracking-wider">Upgrade 1</div>
+                    <div id="shape-name" class="text-white font-teko text-3xl">Neon Ball</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-yellow-400 font-mono text-lg">$<span id="cost-shape">500</span></div>
+                    <div id="shape-desc" class="text-gray-400 text-[10px] uppercase font-bold">2x Value</div>
+                </div>
+            </button>
+
+            <!-- Worst Upgrade -->
+            <button id="btn-worst" class="relative group w-full bg-gray-900 hover:bg-gray-800 active:scale-[0.98] transition-all border-l-4 border-slate-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0">
+                <div class="absolute inset-0 bg-gradient-to-r from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-wider">Special Offer</div>
+                    <div class="text-slate-200 font-teko text-2xl">Cursed Boost</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-green-400 font-mono text-sm font-bold">FREE</div>
+                    <div class="text-slate-500 text-[10px] uppercase">+0.01 / SEC</div>
+                    <div class="text-slate-600 text-[9px] font-mono">Owned: <span id="val-worst">0</span></div>
+                </div>
+            </button>
+
+            <!-- Drone Upgrade -->
+            <button id="btn-drone" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-emerald-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0">
+                <div class="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-emerald-400 text-xs font-bold uppercase tracking-wider">Auto-Drone</div>
+                    <div class="text-white font-teko text-2xl"><span id="val-drone">0</span> Units</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-yellow-400 font-mono text-sm">$<span id="cost-drone">50</span></div>
+                    <div class="text-gray-500 text-[10px] uppercase">+1 Unit</div>
+                </div>
+            </button>
+
+            <!-- Swarm Upgrade -->
+            <button id="btn-swarm" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-fuchsia-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0">
+                <div class="absolute inset-0 bg-gradient-to-r from-fuchsia-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div class="relative z-10">
+                    <div class="text-fuchsia-400 text-xs font-bold uppercase tracking-wider">Swarm Deploy</div>
+                    <div class="text-white font-teko text-2xl">Buy 5x</div>
+                </div>
+                <div class="text-right relative z-10">
+                    <div class="text-yellow-400 font-mono text-sm">$<span id="cost-swarm">500</span></div>
+                    <div class="text-gray-500 text-[10px] uppercase">Bulk Order</div>
+                </div>
+            </button>
+
+            <!-- Co-Worker Upgrade -->
+            <button id="btn-coworker" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-orange-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0 shadow-[0_0_15px_rgba(249,115,22,0.1)]">
+                <div class="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-orange-400 text-xs font-bold uppercase tracking-wider">Automated Miner</div>
+                    <div class="text-white font-teko text-2xl">Co-Workers</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-yellow-400 font-mono text-sm">$<span id="cost-coworker">5,000</span></div>
+                    <div class="text-gray-500 text-[10px] uppercase">+1k / SEC</div>
+                    <div class="text-orange-500/50 text-[9px] font-mono mt-1">Units: <span id="val-coworker">0</span></div>
+                </div>
+            </button>
+
+            <!-- SMASHER UPGRADE -->
+            <button id="btn-smasher" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-slate-300 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0 shadow-[0_0_20px_rgba(203,213,225,0.15)]">
+                <div class="absolute inset-0 bg-gradient-to-r from-slate-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-slate-300 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span>Heavy Unit</span>
+                        <span class="w-2 h-2 rounded-full bg-slate-200 animate-pulse"></span>
+                    </div>
+                    <div class="text-white font-teko text-3xl">THE SMASHER</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-orange-400 font-mono text-sm">10 MINERS</div>
+                    <div class="text-slate-400 text-[10px] uppercase">+5k / SEC</div>
+                    <div class="text-slate-500 text-[9px] font-mono mt-1">Units: <span id="val-smasher">0</span></div>
+                </div>
+            </button>
+
+            <!-- Fusion Upgrade (Tier 1 -> Tier 2) -->
+            <button id="btn-fusion" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-amber-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0">
+                <div class="absolute inset-0 bg-gradient-to-r from-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-amber-400 text-xs font-bold uppercase tracking-wider">Drone Fusion</div>
+                    <div class="text-white font-teko text-2xl">Merge 3 &rarr; 1</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-amber-400 font-mono text-sm">3 Drones</div>
+                    <div class="text-gray-400 text-[10px] uppercase">Super Unit</div>
+                </div>
+            </button>
+
+            <!-- MEGA Fusion Upgrade (Tier 2 -> Tier 3) -->
+            <button id="btn-mega-fusion" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-rose-600 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0 shadow-[0_0_15px_rgba(225,29,72,0.15)]">
+                <div class="absolute inset-0 bg-gradient-to-r from-rose-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-rose-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span>Mega Fusion</span>
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                    </div>
+                    <div class="text-white font-teko text-2xl">Merge 5 &rarr; 1</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-rose-400 font-mono text-sm">5 Upgraded</div>
+                    <div class="text-gray-400 text-[10px] uppercase">Big Drone</div>
+                </div>
+            </button>
+
+            <!-- THE LAZY DUDE (NEW) -->
+            <button id="btn-lazy" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-indigo-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+                <div class="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-indigo-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span>Ultimate Unit</span>
+                        <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    </div>
+                    <div class="text-white font-teko text-3xl">THE LAZY DUDE</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-yellow-400 font-mono text-sm">$<span id="cost-lazy">1M</span></div>
+                    <div class="text-indigo-300 text-[10px] uppercase font-bold text-glow">+1B / SEC</div>
+                    <div class="text-indigo-500/50 text-[9px] font-mono mt-1">Units: <span id="val-lazy">0</span></div>
+                </div>
+            </button>
+
+            <!-- Market Section -->
+            <div id="market-active-panel" class="hidden w-full bg-red-900/20 border border-red-500/30 rounded-xl p-3 mb-2 animate-pulse-red shrink-0">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="text-red-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                        Viral Market
+                    </div>
+                    <div id="market-timer" class="text-red-300/50 font-mono text-xs">SCANNING...</div>
+                </div>
+                <div class="flex items-center justify-between bg-black/40 rounded-lg p-3">
+                    <div>
+                        <div class="text-gray-400 text-[10px] uppercase">Offer</div>
+                        <div id="market-offer-val" class="text-white font-teko text-3xl text-glow">---</div>
+                    </div>
+                    <button id="btn-sell-drone" class="px-6 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:opacity-50 text-white font-bold tracking-wider text-sm clip-path-polygon transition-all active:scale-95">
+                        SELL
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-unlock-market" class="relative group w-full bg-gray-800/50 hover:bg-gray-700/50 active:scale-[0.98] transition-all border-l-4 border-red-500 rounded-r-xl p-4 flex items-center justify-between overflow-hidden shrink-0">
+                <div class="absolute inset-0 bg-gradient-to-r from-red-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                    <div class="text-red-400 text-xs font-bold uppercase tracking-wider">Viral Market</div>
+                    <div class="text-white font-teko text-2xl">Unlock Trading Desk</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-yellow-400 font-mono text-sm">$200</div>
+                    <div class="text-gray-500 text-[10px] uppercase">Enable Sales</div>
+                </div>
+            </button>
+            
+            <div class="h-12 shrink-0"></div>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.22),_transparent_45%),linear-gradient(135deg,_rgba(99,102,241,0.18),_transparent_55%),linear-gradient(180deg,_rgba(217,70,239,0.12),_transparent)] opacity-90"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent"></div>
+        
+        <div class="relative z-10 text-center px-6">
+            <h1 class="font-teko text-6xl md:text-8xl text-transparent bg-clip-text bg-gradient-to-b from-cyan-300 to-blue-600 mb-2 drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] leading-tight">MEME ARCADE</h1>
+            <div class="h-px w-32 bg-cyan-500 mx-auto mb-4 box-shadow-[0_0_10px_cyan]"></div>
+            <p class="text-cyan-200 tracking-[0.2em] text-sm mb-12 opacity-80 uppercase">Tap the core. Farm the hype.</p>
+            
+            <button id="start-btn" class="group relative px-12 py-5 bg-cyan-600 hover:bg-cyan-500 text-white clip-path-polygon transition-all overflow-hidden">
+                <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                <span class="relative font-bold tracking-widest text-xl">GO VIRAL</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* 
+ * Game Logic Module
+ */
+
+const CONFIG = {
+    baseClickValue: 1,
+    costs: {
+        droneBase: 50,
+        swarmBase: 500,
+        coworkerBase: 5000,
+        marketUnlock: 200,
+        worst: 0,
+        lazyDudeBase: 1000000, // 1 Million
+        shapes: [500, 1900, 6000]
+    },
+    coworkerIncome: 1000,
+    smasherIncome: 5000, 
+    lazyDudeIncome: 1000000000, // 1 Billion
+    shapeMultipliers: [1, 2, 3, 5],
+    shapeNames: ["Basic Core", "Neon Ball", "Flux Triangle", "Cash Box"],
+    shapeLabels: ["Start", "Upgrade 1", "Upgrade 2", "Last Upgrade"],
+    colors: {
+        core: '#06b6d4',
+        ball: '#22d3ee',
+        triangle: '#d946ef',
+        box: '#facc15',
+        drone: '#10b981',      
+        superDrone: '#f59e0b', 
+        megaDrone: '#e11d48',  
+        coworker: '#f97316',   
+        smasher: '#cbd5e1',    
+        lazyDude: '#6366f1',   // Indigo
+        laser: '#d946ef',
+        superLaser: '#f59e0b',
+        megaLaser: '#fb7185',
+        bg: '#050505'
+    }
+};
+
+const state = {
+    money: 0,
+    peakMoney: 0,
+    coreLevel: 0,
+    drones: [], 
+    coworkers: 0,
+    smashers: 0,
+    lazyDudes: 0,
+    baseDroneEfficiency: 2,
+    
+    counts: {
+        drones: 0,
+        swarms: 0
+    },
+    
+    worstCount: 0,
+    worstTimer: 0,
+    smasherTimer: 0,
+    lazyDudeTimer: 0,
+
+    market: {
+        unlocked: false,
+        active: false,
+        timer: 3.0,
+        offer: 0,
+        cooldown: 0
+    },
+
+    isPlaying: false,
+    isSettingsOpen: false,
+    muted: false,
+    
+    lastTime: 0,
+    
+    camera: {
+        zoom: 0.1,
+        targetZoom: 1.0,
+        x: 0, y: 0, shake: 0
+    }
+};
+
+const audio = {
+    ctx: null,
+    bgm: document.getElementById('bgm'),
+    sfx: {
+        tap: document.getElementById('sfx_tap'),
+        buy: document.getElementById('sfx_buy'),
+        alert: document.getElementById('sfx_alert'),
+        ui: document.getElementById('sfx_ui'),
+        start: document.getElementById('sfx_start'),
+        fail: document.getElementById('sfx_fail')
+    },
+    
+    init() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+        this.bgm.volume = 0.2;
+    },
+
+    toggleMute() {
+        state.muted = !state.muted;
+        if (state.muted) {
+            this.stopBGM();
+        } else if (state.isPlaying) {
+            this.startBGM();
+        }
+        return state.muted;
+    },
+
+    play(key, pitchVar = 0, volume = 0.4) {
+        if (!this.ctx || state.muted) return;
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+        }
+
+        const sound = this.sfx[key];
+        if (sound) {
+            const clone = sound.cloneNode();
+            clone.volume = volume;
+            if (pitchVar > 0) {
+                clone.playbackRate = 1.0 + (Math.random() * pitchVar - (pitchVar / 2));
+            }
+            clone.play().catch(() => {});
+        }
+    },
+
+    startBGM() {
+        if (!state.muted) {
+            this.bgm.currentTime = this.bgm.currentTime || 0;
+            this.bgm.play().catch(() => {});
+        }
+    },
+
+    stopBGM() {
+        this.bgm.pause();
+    }
+};
+
+const feedback = {
+    timers: {},
+    trigger(id, duration = 1100) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add('active');
+        clearTimeout(this.timers[id]);
+        this.timers[id] = setTimeout(() => {
+            el.classList.remove('active');
+        }, duration);
+    }
+};
+
+// --- Game Logic ---
+function getCost(type) {
+    if (type === 'drone') return Math.floor(CONFIG.costs.droneBase * Math.pow(1.15, state.counts.drones));
+    if (type === 'swarm') return Math.floor(CONFIG.costs.swarmBase * Math.pow(1.5, state.counts.swarms));
+    if (type === 'coworker') return Math.floor(CONFIG.costs.coworkerBase * Math.pow(1.15, state.coworkers));
+    if (type === 'lazy') return Math.floor(CONFIG.costs.lazyDudeBase * Math.pow(1.5, state.lazyDudes));
+    if (type === 'worst') return 0;
+    if (type === 'shape') {
+        if (state.coreLevel >= 3) return Infinity;
+        return CONFIG.costs.shapes[state.coreLevel];
+    }
+    return 0;
+}
+
+function getClickValue() {
+    return CONFIG.baseClickValue * CONFIG.shapeMultipliers[state.coreLevel];
+}
+
+function addMoney(amount, sourceX, sourceY, color) {
+    state.money += amount;
+    state.peakMoney = Math.max(state.peakMoney, state.money);
+    if (sourceX !== undefined && sourceY !== undefined) {
+        spawnFloater(`+$${formatNumber(amount)}`, sourceX, sourceY, color || '#fbbf24');
+    }
+    updateUI();
+}
+
+function formatNumber(num) {
+    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return Math.floor(num).toLocaleString();
+}
+
+function buyUpgrade(type) {
+    if (type === 'unlock-market') {
+        if (state.money >= CONFIG.costs.marketUnlock) {
+            state.money -= CONFIG.costs.marketUnlock;
+            state.market.unlocked = true;
+            audio.play('buy', 0.05, 0.4);
+            audio.play('ui', 0, 0.22);
+            feedback.trigger('gif-market');
+            document.getElementById('btn-unlock-market').style.display = 'none';
+            document.getElementById('market-active-panel').classList.remove('hidden');
+            updateUI();
+        } else {
+            audio.play('fail', 0, 0.28);
+        }
+        return;
+    }
+
+    if (type === 'fusion') {
+        const normalDrones = state.drones.filter(d => d.tier === 1);
+        if (normalDrones.length >= 3) {
+            let removedCount = 0;
+            state.drones = state.drones.filter(d => {
+                if (d.tier === 1 && removedCount < 3) {
+                    removedCount++;
+                    return false;
+                }
+                return true;
+            });
+            addDrone(2);
+            audio.play('buy', 0.5); 
+            spawnParticles(0, 0, 40, CONFIG.colors.superDrone);
+            updateUI();
+        }
+        return;
+    }
+
+    if (type === 'mega-fusion') {
+        const superDrones = state.drones.filter(d => d.tier === 2);
+        if (superDrones.length >= 5) {
+            let removedCount = 0;
+            state.drones = state.drones.filter(d => {
+                if (d.tier === 2 && removedCount < 5) {
+                    removedCount++;
+                    return false;
+                }
+                return true;
+            });
+            addDrone(3);
+            audio.play('buy', 0.2); 
+            state.camera.shake = 15;
+            spawnParticles(0, 0, 80, CONFIG.colors.megaDrone);
+            updateUI();
+        }
+        return;
+    }
+
+    if (type === 'smasher') {
+        if (state.coworkers >= 10) {
+            state.coworkers -= 10;
+            state.smashers++;
+            audio.play('buy', 0.1); 
+            state.camera.shake = 10;
+            spawnParticles(0, 0, 60, CONFIG.colors.smasher);
+            updateUI();
+        }
+        return;
+    }
+
+    const cost = getCost(type);
+    if (state.money >= cost && cost !== Infinity) {
+        state.money -= cost;
+        audio.play('buy', 0.08, 0.38);
+        
+        if (type === 'shape') {
+            feedback.trigger('gif-hype');
+            state.coreLevel++;
+            spawnParticles(0, 0, 50, getShapeColor(state.coreLevel));
+            state.camera.shake = 20;
+        } else if (type === 'drone') {
+            addDrone(1);
+            state.counts.drones++;
+        } else if (type === 'swarm') {
+            for(let i=0; i<5; i++) {
+                setTimeout(() => addDrone(1), i * 50);
+            }
+            state.counts.drones += 5;
+            state.counts.swarms++;
+        } else if (type === 'coworker') {
+            state.coworkers++;
+            spawnParticles(0, 0, 30, CONFIG.colors.coworker);
+        } else if (type === 'lazy') {
+            state.lazyDudes++;
+            spawnParticles(0, 0, 100, CONFIG.colors.lazyDude);
+            state.camera.shake = 5;
+        } else if (type === 'worst') {
+            state.worstCount++;
+            spawnParticles(0, 0, 5, '#64748b');
+        }
+        updateUI();
+    } else if (cost !== Infinity) {
+        audio.play('fail', 0, 0.28);
+    }
+}
+
+function sellDrone() {
+    if (!state.market.active || state.drones.length === 0) return;
+    state.drones.sort((a, b) => a.tier - b.tier); // Sell cheapest first
+    state.drones.shift();
+    addMoney(state.market.offer, 0, 50, '#ef4444');
+    audio.play('buy', 1.5);
+    spawnParticles(0, 0, 20, '#ef4444');
+    state.market.active = false;
+    state.market.timer = 8.0;
+    state.market.offer = 0;
+    updateUI();
+}
+
+function addDrone(tier = 1) {
+    let distance = 140 + Math.random() * 40;
+    let speed = 0.5 + Math.random() * 0.5;
+
+    if (tier === 2) {
+        speed *= 2;
+    } else if (tier === 3) {
+        distance = 220 + Math.random() * 20; 
+        speed = 0.8; 
+    }
+
+    state.drones.push({
+        tier: tier,
+        angle: Math.random() * Math.PI * 2,
+        distance: distance,
+        speed: speed,
+        lastFire: 0
+    });
+}
+
+function updateMarket(dt) {
+    if (!state.market.unlocked) return;
+    if (!state.market.active) {
+        state.market.timer -= dt;
+        if (state.market.timer <= 0) {
+            state.market.active = true;
+            state.market.offer = Math.floor(Math.random() * 91) + 10;
+            audio.play('alert', 0.04, 0.32);
+            feedback.trigger('gif-market');
+            updateUI();
+        }
+    }
+}
+
+function getShapeColor(level) {
+    if (level === 1) return CONFIG.colors.ball;
+    if (level === 2) return CONFIG.colors.triangle;
+    if (level === 3) return CONFIG.colors.box;
+    return CONFIG.colors.core;
+}
+
+// --- Rendering ---
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let particles = [];
+let floaters = [];
+let lasers = [];
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function spawnParticles(x, y, count, color) {
+    for(let i=0; i<count; i++) {
+        particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+function spawnFloater(text, x, y, color) {
+    floaters.push({
+        text, x, y,
+        vy: -3,
+        life: 1.0,
+        color: color
+    });
+}
+
+const core = {
+    pulse: 0,
+    scale: 1,
+    rotation: 0,
+    hit() {
+        this.scale = 0.92;
+        this.pulse = 1.0;
+        state.camera.shake = 5;
+        spawnParticles(0, 0, 15, getShapeColor(state.coreLevel));
+    },
+    update(dt) {
+        this.scale += (1 - this.scale) * 12 * dt;
+        this.rotation += dt * 0.3;
+        this.pulse = Math.max(0, this.pulse - dt * 3);
+    },
+    draw(ctx) {
+        const size = 65 * this.scale;
+        const level = state.coreLevel;
+        const color = getShapeColor(level);
+        
+        ctx.save();
+        ctx.shadowBlur = 20 * (0.5 + this.pulse);
+        ctx.shadowColor = color;
+        ctx.fillStyle = color;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+
+        if (level === 0 || level === 1) {
+            ctx.beginPath();
+            ctx.arc(0, 0, size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${level===0?'6, 182, 212':'34, 211, 238'}, ${0.2 + this.pulse * 0.3})`;
+            ctx.fill();
+            ctx.stroke();
+            
+            if (level === 1) {
+                ctx.beginPath();
+                ctx.arc(0, 0, size * 0.6, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.stroke();
+            }
+        } 
+        else if (level === 2) {
+            ctx.beginPath();
+            const r = size * 1.2;
+            ctx.rotate(this.rotation); 
+            for (let i = 0; i < 3; i++) {
+                const angle = (i * 2 * Math.PI / 3) - Math.PI / 2;
+                const x = r * Math.cos(angle);
+                const y = r * Math.sin(angle);
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = `rgba(217, 70, 239, ${0.2 + this.pulse * 0.3})`;
+            ctx.fill();
+            ctx.stroke();
+        } 
+        else if (level === 3) {
+            const s = size * 1.1;
+            ctx.rotate(this.rotation * 0.5);
+            ctx.fillStyle = `rgba(250, 204, 21, ${0.2 + this.pulse * 0.3})`;
+            ctx.fillRect(-s, -s, s*2, s*2);
+            ctx.strokeRect(-s, -s, s*2, s*2);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${s}px Audiowide`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowBlur = 0;
+            ctx.fillText('$', 0, 2);
+        }
+
+        ctx.restore();
+    }
+};
+
+function loop(now) {
+    const dt = Math.min((now - state.lastTime) / 1000, 0.1);
+    state.lastTime = now;
+
+    if (state.isPlaying) {
+        updateMarket(dt);
+        
+        // Co-Worker Income
+        if (state.coworkers > 0) {
+            addMoney(state.coworkers * CONFIG.coworkerIncome * dt);
+        }
+
+        // Lazy Dude Income
+        if (state.lazyDudes > 0) {
+            addMoney(state.lazyDudes * CONFIG.lazyDudeIncome * dt);
+            
+            // Spawn random 'Z' particles occasionally
+            state.lazyDudeTimer += dt;
+            if (state.lazyDudeTimer > 2.0 / Math.max(1, Math.sqrt(state.lazyDudes))) {
+                state.lazyDudeTimer = 0;
+                // Just visual fluff
+            }
+        }
+        
+        // Smasher Logic (Discrete Smashes)
+        if (state.smashers > 0) {
+            state.smasherTimer += dt;
+            if (state.smasherTimer >= 1.0) {
+                state.smasherTimer = 0;
+                const totalIncome = state.smashers * CONFIG.smasherIncome;
+                addMoney(totalIncome, 0, -50, CONFIG.colors.smasher);
+                state.camera.shake += Math.min(10, state.smashers * 2);
+                audio.play('tap', 0.5); 
+                core.pulse = 0.5;
+            }
+        }
+
+        // Worst Upgrade Income
+        if (state.worstCount > 0) {
+            state.worstTimer += dt;
+            if (state.worstTimer >= 0.1) {
+                const income = state.worstCount * 0.01 * state.worstTimer;
+                addMoney(income); 
+                state.worstTimer = 0;
+            }
+        }
+        
+        if (state.camera.shake > 0) {
+            state.camera.shake -= dt * 30;
+            if (state.camera.shake < 0) state.camera.shake = 0;
+        }
+
+        ctx.fillStyle = CONFIG.colors.bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2 - 50;
+        const shakeX = (Math.random() - 0.5) * state.camera.shake;
+        const shakeY = (Math.random() - 0.5) * state.camera.shake;
+        
+        ctx.translate(cx + shakeX, cy + shakeY);
+        ctx.scale(state.camera.zoom, state.camera.zoom);
+        
+        // Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1 / state.camera.zoom;
+        const gridSize = 100;
+        const offset = (now / 20) % gridSize;
+        const gridRange = 2000; 
+        ctx.beginPath();
+        for(let x=-gridRange; x<=gridRange; x+=gridSize) {
+            ctx.moveTo(x, -gridRange); ctx.lineTo(x, gridRange);
+        }
+        for(let y=-gridRange + offset; y<=gridRange; y+=gridSize) {
+            ctx.moveTo(-gridRange, y); ctx.lineTo(gridRange, y);
+        }
+        ctx.stroke();
+
+        core.update(dt);
+        core.draw(ctx);
+
+        // Lazy Dudes (Outer Orbit)
+        if (state.lazyDudes > 0) {
+            const time = now / 1000;
+            const orbitRadius = 350;
+            const speed = 0.1; // Very slow
+            
+            ctx.fillStyle = CONFIG.colors.lazyDude;
+            ctx.shadowColor = CONFIG.colors.lazyDude;
+            ctx.shadowBlur = 10;
+            
+            // Draw up to 20 visually to save perf, but imply more
+            const drawCount = Math.min(state.lazyDudes, 20);
+            
+            for (let i = 0; i < drawCount; i++) {
+                const angle = (i / drawCount) * Math.PI * 2 + time * speed;
+                const lx = Math.cos(angle) * orbitRadius;
+                const ly = Math.sin(angle) * orbitRadius;
+                
+                ctx.save();
+                ctx.translate(lx, ly);
+                // Rotate to face core but slightly reclined
+                ctx.rotate(angle + Math.PI/2);
+                
+                // Draw L-shape (Lounge Chair)
+                ctx.fillRect(-10, -10, 20, 8); // Seat
+                ctx.fillRect(-10, -20, 8, 20); // Back
+                
+                // Occasional Z particle
+                if (Math.random() < 0.02) {
+                    spawnFloater('Z', lx, ly - 20, '#a5b4fc');
+                }
+                
+                ctx.restore();
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        // Co-Worker Miners
+        if (state.coworkers > 0) {
+            const time = now / 1000;
+            const digSpeed = 5;
+            const coreRadius = 75;
+            
+            ctx.fillStyle = CONFIG.colors.coworker;
+            
+            for (let i = 0; i < state.coworkers; i++) {
+                const angle = (i / state.coworkers) * Math.PI * 2 + time * 0.2;
+                const digOffset = Math.abs(Math.sin(time * digSpeed + i)) * 15;
+                const r = coreRadius + 10 + digOffset;
+                
+                const mx = Math.cos(angle) * r;
+                const my = Math.sin(angle) * r;
+                
+                ctx.save();
+                ctx.translate(mx, my);
+                ctx.rotate(angle + Math.PI / 2);
+                ctx.beginPath();
+                ctx.moveTo(0, 10);
+                ctx.lineTo(-6, -6);
+                ctx.lineTo(6, -6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Smashers
+        if (state.smashers > 0) {
+            const smasherRadius = 115;
+            const cycle = state.smasherTimer; 
+            
+            let armAngle = -Math.PI / 4; 
+            if (cycle < 0.8) {
+                const p = cycle / 0.8;
+                armAngle = -Math.PI / 2 + (Math.PI/4 * p); 
+            } else if (cycle < 0.9) {
+                const p = (cycle - 0.8) / 0.1;
+                armAngle = -Math.PI / 4 + (Math.PI * 0.8 * p); 
+            } else {
+                armAngle = -Math.PI / 4 + Math.PI * 0.8;
+            }
+
+            ctx.fillStyle = CONFIG.colors.smasher;
+            ctx.strokeStyle = '#94a3b8';
+
+            for (let i = 0; i < state.smashers; i++) {
+                const angle = (i / state.smashers) * Math.PI * 2;
+                const sx = Math.cos(angle) * smasherRadius;
+                const sy = Math.sin(angle) * smasherRadius;
+
+                ctx.save();
+                ctx.translate(sx, sy);
+                ctx.rotate(angle + Math.PI/2);
+
+                ctx.fillRect(-6, -6, 12, 12);
+                ctx.beginPath();
+                ctx.arc(0, -10, 5, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.translate(4, -4);
+                ctx.rotate(armAngle);
+                
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, -25);
+                ctx.stroke();
+
+                ctx.fillStyle = '#64748b'; 
+                ctx.fillRect(-8, -30, 16, 10);
+
+                ctx.restore();
+            }
+        }
+
+        // Drones
+        state.drones.forEach(d => {
+            const isSuper = d.tier === 2;
+            const isMega = d.tier === 3;
+            
+            d.angle += d.speed * dt;
+            const dx = Math.cos(d.angle) * d.distance;
+            const dy = Math.sin(d.angle) * d.distance;
+
+            let size = 3;
+            let color = CONFIG.colors.drone;
+            
+            if (isSuper) {
+                size = 5;
+                color = CONFIG.colors.superDrone;
+            } else if (isMega) {
+                size = 8;
+                color = CONFIG.colors.megaDrone;
+            }
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            
+            if (isMega) {
+                for (let i = 0; i < 6; i++) {
+                    const angle = d.angle * 2 + (i * Math.PI / 3);
+                    const hx = dx + size * Math.cos(angle);
+                    const hy = dy + size * Math.sin(angle);
+                    i === 0 ? ctx.moveTo(hx, hy) : ctx.lineTo(hx, hy);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            } else {
+                ctx.arc(dx, dy, size, 0, Math.PI*2);
+                ctx.fill();
+            }
+            
+            if (isSuper) {
+                ctx.strokeStyle = `rgba(245, 158, 11, ${0.3 + Math.sin(now/200)*0.2})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(dx, dy, 8, 0, Math.PI*2);
+                ctx.stroke();
+            }
+
+            // Firing Logic
+            let cooldown = 1.0;
+            let moneyMult = 1;
+            
+            if (isSuper) {
+                cooldown = 0.5;
+                moneyMult = 2;
+            } else if (isMega) {
+                cooldown = 0.25; 
+                moneyMult = 8; 
+            }
+            
+            if (now/1000 - d.lastFire > cooldown) {
+                d.lastFire = now/1000;
+                
+                let laserColor = CONFIG.colors.laser;
+                let laserWidth = 1;
+                
+                if (isSuper) {
+                    laserColor = CONFIG.colors.superLaser;
+                    laserWidth = 2;
+                } else if (isMega) {
+                    laserColor = CONFIG.colors.megaLaser;
+                    laserWidth = 4;
+                }
+
+                lasers.push({ 
+                    sx: dx, sy: dy, ex: 0, ey: 0, 
+                    life: 0.15, 
+                    color: laserColor,
+                    width: laserWidth
+                });
+                addMoney(state.baseDroneEfficiency * moneyMult);
+            }
+        });
+
+        lasers = lasers.filter(l => {
+            l.life -= dt;
+            if (l.life > 0) {
+                ctx.strokeStyle = l.color;
+                ctx.lineWidth = l.width;
+                ctx.beginPath();
+                ctx.moveTo(l.sx, l.sy);
+                ctx.lineTo(l.ex, l.ey);
+                ctx.stroke();
+                return true;
+            }
+            return false;
+        });
+
+        particles = particles.filter(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= dt * 1.5;
+            if (p.life > 0) {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, 3, 3);
+                return true;
+            }
+            return false;
+        });
+        ctx.globalAlpha = 1;
+
+        ctx.font = 'bold 24px Audiowide';
+        ctx.textAlign = 'center';
+        floaters = floaters.filter(f => {
+            f.y += f.vy;
+            f.life -= dt;
+            if (f.life > 0) {
+                ctx.fillStyle = f.color;
+                ctx.globalAlpha = f.life;
+                ctx.save();
+                ctx.translate(f.x, f.y);
+                const textScale = Math.max(1, 1/state.camera.zoom); 
+                ctx.scale(textScale, textScale);
+                ctx.fillText(f.text, 0, 0);
+                ctx.restore();
+                return true;
+            }
+            return false;
+        });
+        ctx.globalAlpha = 1;
+        
+        ctx.restore();
+    }
+    requestAnimationFrame(loop);
+}
+
+// --- UI Updates ---
+function updateUI() {
+    document.getElementById('score-el').innerText = `$${formatNumber(state.money)}`;
+    
+    let mps = 0;
+    // Drone income
+    state.drones.forEach(d => {
+        let shotsPerSec = 1.0;
+        let valPerShot = state.baseDroneEfficiency;
+        
+        if (d.tier === 2) {
+            shotsPerSec = 2.0;
+            valPerShot *= 2;
+        } else if (d.tier === 3) {
+            shotsPerSec = 4.0;
+            valPerShot *= 8;
+        }
+        
+        mps += shotsPerSec * valPerShot;
+    });
+    // Worst upgrade income
+    mps += state.worstCount * 0.01;
+    // Co-Worker income
+    mps += state.coworkers * CONFIG.coworkerIncome;
+    // Smasher income
+    mps += state.smashers * CONFIG.smasherIncome;
+    // Lazy Dude income
+    mps += state.lazyDudes * CONFIG.lazyDudeIncome;
+    
+    document.getElementById('mps-el').innerText = `${formatNumber(mps)} / SEC`;
+
+    const shapeBtn = document.getElementById('btn-shape');
+    if (state.coreLevel < 3) {
+        const nextLevel = state.coreLevel + 1;
+        const cost = CONFIG.costs.shapes[state.coreLevel];
+        const name = CONFIG.shapeNames[nextLevel];
+        const label = CONFIG.shapeLabels[nextLevel];
+        const mult = CONFIG.shapeMultipliers[nextLevel];
+        
+        document.getElementById('shape-next-label').innerText = label;
+        document.getElementById('shape-name').innerText = name;
+        document.getElementById('cost-shape').innerText = formatNumber(cost);
+        document.getElementById('shape-desc').innerText = `${mult}x Value`;
+        
+        if (state.money >= cost) {
+            shapeBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            shapeBtn.classList.add('cursor-pointer');
+        } else {
+            shapeBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            shapeBtn.classList.remove('cursor-pointer');
+        }
+        shapeBtn.style.display = 'flex';
+    } else {
+        shapeBtn.style.display = 'none';
+    }
+
+    const updates = [
+        { id: 'drone', type: 'drone', valId: 'val-drone', costId: 'cost-drone', val: state.drones.length },
+        { id: 'swarm', type: 'swarm', valId: null, costId: 'cost-swarm', val: null },
+        { id: 'coworker', type: 'coworker', valId: 'val-coworker', costId: 'cost-coworker', val: state.coworkers },
+        { id: 'lazy', type: 'lazy', valId: 'val-lazy', costId: 'cost-lazy', val: state.lazyDudes }
+    ];
+
+    updates.forEach(u => {
+        const cost = getCost(u.type);
+        const btn = document.getElementById(`btn-${u.id}`);
+        if (u.valId) document.getElementById(u.valId).innerText = u.val;
+        document.getElementById(u.costId).innerText = formatNumber(cost);
+        
+        if (state.money >= cost) {
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.classList.add('cursor-pointer');
+        } else {
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.classList.remove('cursor-pointer');
+        }
+    });
+
+    document.getElementById('val-worst').innerText = state.worstCount;
+    const worstBtn = document.getElementById('btn-worst');
+    worstBtn.classList.add('cursor-pointer');
+    worstBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+    // Smasher Logic
+    const smasherBtn = document.getElementById('btn-smasher');
+    document.getElementById('val-smasher').innerText = state.smashers;
+    if (state.coworkers >= 10) {
+        smasherBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        smasherBtn.classList.add('cursor-pointer');
+    } else {
+        smasherBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        smasherBtn.classList.remove('cursor-pointer');
+    }
+
+    // Fusion Logic
+    const fusionBtn = document.getElementById('btn-fusion');
+    const normalDroneCount = state.drones.filter(d => d.tier === 1).length;
+    if (normalDroneCount >= 3) {
+        fusionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        fusionBtn.classList.add('cursor-pointer');
+    } else {
+        fusionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        fusionBtn.classList.remove('cursor-pointer');
+    }
+
+    // Mega Fusion Logic
+    const megaFusionBtn = document.getElementById('btn-mega-fusion');
+    const superDroneCount = state.drones.filter(d => d.tier === 2).length;
+    if (superDroneCount >= 5) {
+        megaFusionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        megaFusionBtn.classList.add('cursor-pointer');
+    } else {
+        megaFusionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        megaFusionBtn.classList.remove('cursor-pointer');
+    }
+
+    const unlockMarketBtn = document.getElementById('btn-unlock-market');
+    if (!state.market.unlocked) {
+        if (state.money >= CONFIG.costs.marketUnlock) {
+            unlockMarketBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            unlockMarketBtn.classList.add('cursor-pointer');
+        } else {
+            unlockMarketBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            unlockMarketBtn.classList.remove('cursor-pointer');
+        }
+    }
+
+    if (state.market.unlocked) {
+        const timerEl = document.getElementById('market-timer');
+        const offerEl = document.getElementById('market-offer-val');
+        const sellBtn = document.getElementById('btn-sell-drone');
+
+        if (state.market.active) {
+            timerEl.innerText = "CUSTOMER WAITING";
+            timerEl.classList.add('text-red-400');
+            offerEl.innerText = `$${formatNumber(state.market.offer)}`;
+            
+            if (state.drones.length > 0) {
+                sellBtn.disabled = false;
+                sellBtn.innerText = "SELL DRONE";
+            } else {
+                sellBtn.disabled = true;
+                sellBtn.innerText = "NO DRONES";
+            }
+        } else {
+            timerEl.innerText = "SCANNING...";
+            timerEl.classList.remove('text-red-400');
+            offerEl.innerText = "---";
+            sellBtn.disabled = true;
+            sellBtn.innerText = "WAITING...";
+        }
+    }
+}
+
+// --- Drag & Inputs ---
+const drag = {
+    active: false,
+    startY: 0,
+    startTrans: 0,
+    currentTrans: 0,
+    snapPoints: { collapsed: 0, mid: 0, expanded: 0 },
+    panelHeight: 0,
+    headerHeight: 70
+};
+
+function initDrag() {
+    const panel = document.getElementById('upgrade-panel');
+    const handle = document.getElementById('drag-handle');
+    
+    const updateDims = () => {
+        drag.panelHeight = panel.offsetHeight;
+        drag.snapPoints.collapsed = drag.panelHeight - drag.headerHeight;
+        drag.snapPoints.mid = drag.panelHeight * 0.5;
+        drag.snapPoints.expanded = 0;
+        
+        if (!state.isPlaying) {
+            drag.currentTrans = drag.snapPoints.collapsed;
+            panel.style.transform = `translateY(${drag.currentTrans}px)`;
+        }
+    };
+    
+    window.addEventListener('resize', updateDims);
+    updateDims();
+
+    handle.addEventListener('touchstart', (e) => {
+        if (state.isSettingsOpen) return;
+        drag.active = true;
+        drag.startY = e.touches[0].clientY;
+        drag.startTrans = drag.currentTrans;
+        panel.classList.remove('panel-transition');
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!drag.active) return;
+        e.preventDefault();
+        const deltaY = e.touches[0].clientY - drag.startY;
+        let newTrans = drag.startTrans + deltaY;
+        if (newTrans < drag.snapPoints.expanded) newTrans = drag.snapPoints.expanded - (drag.snapPoints.expanded - newTrans) * 0.2;
+        else if (newTrans > drag.snapPoints.collapsed) newTrans = drag.snapPoints.collapsed + (newTrans - drag.snapPoints.collapsed) * 0.2;
+        drag.currentTrans = newTrans;
+        panel.style.transform = `translateY(${newTrans}px)`;
+    }, { passive: false });
+
+    window.addEventListener('touchend', () => {
+        if (!drag.active) return;
+        drag.active = false;
+        panel.classList.add('panel-transition');
+        const curr = drag.currentTrans;
+        const snaps = [drag.snapPoints.expanded, drag.snapPoints.mid, drag.snapPoints.collapsed];
+        const closest = snaps.reduce((prev, currPoint) => (Math.abs(currPoint - curr) < Math.abs(prev - curr) ? currPoint : prev));
+        drag.currentTrans = closest;
+        panel.style.transform = `translateY(${closest}px)`;
+    });
+}
+
+function initInputs() {
+    canvas.addEventListener('pointerdown', (e) => {
+        if (!state.isPlaying || state.isSettingsOpen) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2 - 50;
+        const worldX = (screenX - cx) / state.camera.zoom;
+        const worldY = (screenY - cy) / state.camera.zoom;
+        const dist = Math.sqrt(worldX*worldX + worldY*worldY);
+        
+        if (dist < 120) {
+            core.hit();
+            audio.play('tap', 0.2);
+            addMoney(getClickValue(), worldX, worldY, getShapeColor(state.coreLevel));
+        }
+    });
+
+    // Game Buttons
+    [
+        'btn-shape',
+        'btn-worst',
+        'btn-drone',
+        'btn-swarm',
+        'btn-coworker',
+        'btn-smasher',
+        'btn-lazy',
+        'btn-fusion',
+        'btn-mega-fusion',
+        'btn-unlock-market',
+        'btn-sell-drone',
+        'btn-settings-open',
+        'btn-close-settings',
+        'btn-toggle-audio',
+        'btn-reset-game',
+        'start-btn'
+    ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', () => audio.play('ui', 0.03, 0.18));
+    });
+
+    document.getElementById('btn-shape').addEventListener('click', () => buyUpgrade('shape'));
+    document.getElementById('btn-worst').addEventListener('click', () => buyUpgrade('worst'));
+    document.getElementById('btn-drone').addEventListener('click', () => buyUpgrade('drone'));
+    document.getElementById('btn-swarm').addEventListener('click', () => buyUpgrade('swarm'));
+    document.getElementById('btn-coworker').addEventListener('click', () => buyUpgrade('coworker'));
+    document.getElementById('btn-smasher').addEventListener('click', () => buyUpgrade('smasher'));
+    document.getElementById('btn-lazy').addEventListener('click', () => buyUpgrade('lazy'));
+    document.getElementById('btn-fusion').addEventListener('click', () => buyUpgrade('fusion'));
+    document.getElementById('btn-mega-fusion').addEventListener('click', () => buyUpgrade('mega-fusion'));
+    document.getElementById('btn-unlock-market').addEventListener('click', () => buyUpgrade('unlock-market'));
+    document.getElementById('btn-sell-drone').addEventListener('click', sellDrone);
+
+    // Settings Logic
+    const settingsModal = document.getElementById('settings-modal');
+    
+    document.getElementById('btn-settings-open').addEventListener('click', () => {
+        state.isSettingsOpen = true;
+        settingsModal.classList.remove('hidden');
+        settingsModal.classList.remove('opacity-0');
+    });
+
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+        state.isSettingsOpen = false;
+        settingsModal.classList.add('hidden');
+    });
+
+    document.getElementById('btn-toggle-audio').addEventListener('click', () => {
+        const isMuted = audio.toggleMute();
+        const statusEl = document.getElementById('audio-status');
+        if (isMuted) {
+            statusEl.innerText = "OFFLINE";
+            statusEl.classList.replace('text-green-400', 'text-red-400');
+            statusEl.classList.replace('bg-green-900/30', 'bg-red-900/30');
+            statusEl.classList.replace('border-green-500/30', 'border-red-500/30');
+        } else {
+            statusEl.innerText = "ONLINE";
+            statusEl.classList.replace('text-red-400', 'text-green-400');
+            statusEl.classList.replace('bg-red-900/30', 'bg-green-900/30');
+            statusEl.classList.replace('border-red-500/30', 'border-green-500/30');
+        }
+    });
+
+    document.getElementById('btn-reset-game').addEventListener('click', () => {
+        if(confirm("WARNING: COMPLETE SYSTEM RESET. ALL PROGRESS WILL BE LOST.")) {
+            location.reload();
+        }
+    });
+
+    // Start Game
+    // [agent-note][stage4] repaired: mobile-cta-actionability | avoid click-only start path on touch devices
+    const startBtn = document.getElementById('start-btn');
+    const startGame = () => {
+        if (state.isPlaying) return;
+        document.getElementById('start-screen').style.opacity = '0';
+        startBtn.disabled = true;
+        setTimeout(() => document.getElementById('start-screen').style.display = 'none', 500);
+        
+        state.isPlaying = true;
+        audio.init();
+        audio.play('start', 0, 0.28);
+        audio.startBGM();
+        feedback.trigger('gif-hype');
+        updateUI();
+        
+        let startTime = null;
+        const duration = 1500;
+        const startZoom = state.camera.zoom;
+        const endZoom = 1.0;
+        
+        function animateZoom(time) {
+            if (!startTime) startTime = time;
+            const progress = Math.min((time - startTime) / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 3);
+            state.camera.zoom = startZoom + (endZoom - startZoom) * ease;
+            if (progress < 1) requestAnimationFrame(animateZoom);
+            else document.getElementById('hud-layer').classList.remove('opacity-0');
+        }
+        requestAnimationFrame(animateZoom);
+        
+         const panel = document.getElementById('upgrade-panel');
+         const collapsedY = panel.offsetHeight - 70;
+         drag.currentTrans = collapsedY;
+         panel.style.transform = `translateY(${collapsedY}px)`;
+         panel.style.pointerEvents = 'auto';
+    };
+
+    startBtn.addEventListener('click', startGame);
+    startBtn.addEventListener('pointerup', (e) => {
+        if (e.pointerType !== 'mouse') startGame();
+    });
+}
+
+window.onload = () => {
+    initInputs();
+    initDrag();
+    requestAnimationFrame(loop);
+};
+</script>
+</body>
+</html>

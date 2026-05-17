@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Neon Courier</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-blue: #4ef5ff;
+            --neon-pink: #ff4d9e;
+            --neon-gold: #ffd76a;
+            --bg-dark: #050510;
+            --bg-deeper: #03030a;
+            --panel: rgba(9, 12, 30, 0.84);
+            --panel-strong: rgba(15, 22, 48, 0.95);
+            --text-main: #eef8ff;
+            --text-dim: #8ca1c7;
+            --lane-glow: rgba(78, 245, 255, 0.2);
+        }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background:
+            radial-gradient(circle at top, rgba(78,245,255,0.08), transparent 34%),
+            radial-gradient(circle at 50% 120%, rgba(255,77,158,0.12), transparent 32%),
+            linear-gradient(180deg, #090b19 0%, var(--bg-dark) 50%, var(--bg-deeper) 100%);
+            touch-action: manipulation; user-select: none; -webkit-user-select: none; font-family: 'Exo 2', system-ui, sans-serif; color: var(--text-main); }
+        body { position: relative; }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(transparent 0 96%, rgba(255,255,255,0.03) 96% 100%),
+                linear-gradient(90deg, rgba(78,245,255,0.03), transparent 22%, transparent 78%, rgba(255,77,158,0.03));
+            background-size: 100% 4px, 100% 100%;
+            mix-blend-mode: screen;
+            opacity: 0.5;
+        }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        button { font-family: 'Exo 2', system-ui, sans-serif; cursor: pointer; touch-action: manipulation; }
+        #game-container, #start-screen, #shop-modal, #prestige-modal, #hud, #joystick, #feedback-layer { position: absolute; }
+        #game-container { inset: 0; width: 100%; height: 100%; }
+        #game-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 68%, rgba(78,245,255,0.08), transparent 28%),
+                linear-gradient(180deg, transparent 0%, rgba(6, 12, 26, 0.18) 62%, rgba(255, 77, 158, 0.08) 100%);
+        }
+        #hud, #start-screen, #shop-modal, #prestige-modal { inset: 0; }
+        #hud { display: flex; flex-direction: column; justify-content: space-between; padding: 1rem; pointer-events: none; }
+        #hud:not(.hidden) { display: flex; }
+        #joystick { z-index: 30; pointer-events: none; transform: translate(-50%, -50%); }
+        #feedback-layer {
+            inset: 0;
+            pointer-events: none;
+            z-index: 25;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 1rem;
+            gap: 1rem;
+        }
+        .pointer-events-auto { pointer-events: auto; }
+        .text-center { text-align: center; }
+        .title-font { font-family: 'Orbitron', 'Exo 2', system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+        .ui-font { font-family: 'Exo 2', system-ui, sans-serif; }
+        .glass {
+            background: linear-gradient(180deg, rgba(16, 22, 48, 0.92), rgba(8, 10, 24, 0.84));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(78, 245, 255, 0.18);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03) inset,
+                0 12px 30px rgba(0, 0, 0, 0.45),
+                0 0 24px rgba(78, 245, 255, 0.12);
+        }
+
+        /* UI Utilities */
+        .neon-text { text-shadow: 0 0 8px currentColor; }
+        .neon-box { box-shadow: 0 0 15px currentColor; border: 1px solid currentColor; }
+        .hidden { display: none !important; }
+        .btn-press { transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease; }
+        .btn-press:active { transform: scale(0.95); opacity: 0.8; filter: brightness(1.08); }
+        .hud-panel {
+            border-radius: 18px;
+            padding: 0.75rem 0.9rem;
+            background: linear-gradient(180deg, rgba(7, 14, 28, 0.82), rgba(6, 8, 20, 0.7));
+            border: 1px solid rgba(78, 245, 255, 0.16);
+            box-shadow: 0 0 22px rgba(0, 0, 0, 0.3);
+        }
+        .hud-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.22rem 0.5rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-dim);
+            letter-spacing: 0.12em;
+        }
+        .modal-shell { max-height: 90vh; }
+        .modal-scroll { overflow-y: auto; padding-bottom: 1rem; }
+        .modal-actions { position: sticky; bottom: 0; padding-top: 0.75rem; background: linear-gradient(180deg, rgba(0,0,0,0), rgba(5,5,16,0.95) 35%); }
+        .route-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border-radius: 999px;
+            padding: 0.3rem 0.7rem;
+            background: rgba(255, 77, 158, 0.14);
+            border: 1px solid rgba(255, 77, 158, 0.25);
+            color: #ffc3de;
+            font-size: 0.75rem;
+            letter-spacing: 0.12em;
+        }
+        .feedback-card {
+            width: min(26vw, 120px);
+            min-width: 84px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(4, 8, 18, 0.64);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(-8px) scale(0.94);
+            transition: opacity 180ms ease, transform 180ms ease;
+            box-shadow: 0 14px 34px rgba(0,0,0,0.4);
+        }
+        .feedback-card.active {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-card img {
+            display: block;
+            width: 100%;
+            height: 76px;
+            object-fit: cover;
+        }
+        .feedback-card figcaption {
+            padding: 0.35rem 0.45rem 0.45rem;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            color: #d7e8ff;
+            background: linear-gradient(180deg, rgba(16, 22, 48, 0.88), rgba(7, 10, 24, 0.96));
+        }
+        .feedback-card.left { align-self: flex-start; }
+        .feedback-card.right { align-self: flex-start; }
+        .speed-warning {
+            animation: pulse-warning 0.5s ease;
+        }
+
+        /* Animations */
+        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; text-shadow: 0 0 20px currentColor; } 100% { opacity: 0.8; } }
+        @keyframes pulse-warning {
+            0% { filter: brightness(1); transform: scale(1); }
+            50% { filter: brightness(1.5); transform: scale(1.06); }
+            100% { filter: brightness(1); transform: scale(1); }
+        }
+        .animate-pulse-fast { animation: pulse 1.5s infinite; }
+
+        /* Custom Scroll for Shop */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        @media (max-width: 640px) {
+            #feedback-layer {
+                padding: 0.75rem;
+                gap: 0.5rem;
+            }
+            .feedback-card {
+                width: 27vw;
+                min-width: 72px;
+            }
+            .feedback-card img {
+                height: 58px;
+            }
+        }
+    </style>
+</head>
+<body class="text-white ui-font">
+
+    <!-- [agent-note][stage4] repaired: mobile-tap-safety | scope: body/buttons keep native taps, canvas keeps gesture suppression -->
+    <!-- [agent-note][stage4] resolved-font: title -> Orbitron | ui/body -> Exo 2 | source: catalogs/fonts.json -->
+    <!-- [agent-note][stage3] resolved-audio: loop/ui/success/blocked -> catalogs/audios.json -->
+    <!-- [agent-note][stage3] resolved-gif: boost + prestige reactions -> catalogs/gifs.json -->
+    <!-- Audio -->
+    <audio id="bgm" loop preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3"></audio>
+    <audio id="sfx-ui-click" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3"></audio>
+    <audio id="sfx-menu-open" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3"></audio>
+    <audio id="sfx-menu-close" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3"></audio>
+    <audio id="sfx-success" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3"></audio>
+    <audio id="sfx-blocked" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3"></audio>
+    <audio id="sfx-bonus" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3"></audio>
+    <audio id="sfx-powerup" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3"></audio>
+    <audio id="sfx-start" preload="auto" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3"></audio>
+
+    <!-- Game Container -->
+    <div id="game-container" class="relative w-full h-full">
+        <canvas id="world"></canvas>
+
+        <div id="feedback-layer" aria-hidden="true">
+            <figure id="gif-boost" class="feedback-card left">
+                <img src="https://i.giphy.com/09YpqSjkbY8DrZXgQz.webp" alt="Boost reaction">
+                <figcaption class="title-font">BOOST</figcaption>
+            </figure>
+            <figure id="gif-prestige" class="feedback-card right">
+                <img src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Relaunch reaction">
+                <figcaption class="title-font">RELAUNCH</figcaption>
+            </figure>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 hidden">
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+            <!-- Top Stats -->
+            <div class="flex justify-between items-start w-full gap-3">
+                <div class="flex flex-col hud-panel">
+                    <span class="hud-chip text-xs tracking-widest title-font">COURIER SPEED</span>
+                    <span id="speed-display" class="text-3xl text-cyan-300 neon-text font-bold title-font">0 km/h</span>
+                    <span class="text-xs text-slate-400 mt-1">SCANS: <span id="steps-display" class="text-white">0</span></span>
+                </div>
+                <div class="flex flex-col items-end hud-panel">
+                    <span class="hud-chip text-xs tracking-widest title-font">ROUTE CLEARED</span>
+                    <span id="dist-display" class="text-4xl text-pink-400 neon-text font-bold title-font">0 m</span>
+                    <div id="goal-bar" class="w-24 h-1.5 bg-slate-900/90 mt-2 rounded overflow-hidden border border-pink-500/20">
+                        <div id="goal-progress" class="h-full bg-pink-500 w-0 transition-all duration-300"></div>
+                    </div>
+                    <span class="text-[10px] text-slate-500">TARGET: 1B KM</span>
+                </div>
+            </div>
+
+            <!-- Bottom Controls Area -->
+            <div class="pointer-events-auto flex flex-col gap-4 w-full items-center mb-8">
+                <!-- Shop & Prestige Buttons -->
+                <div class="flex gap-4 w-full justify-center">
+                    <button id="btn-shop" class="glass px-6 py-2 rounded text-xl text-cyan-300 border-cyan-800 border btn-press title-font">
+                        BOOST LAB
+                    </button>
+                    <button id="btn-prestige" class="hidden glass px-6 py-2 rounded text-xl text-yellow-400 border-yellow-600 border btn-press neon-text title-font">
+                        RELAUNCH
+                    </button>
+                </div>
+
+                <!-- Joystick Zone Hint -->
+                <div class="route-badge animate-pulse-fast mt-2 title-font">
+                    <span>⚡</span>
+                    <span>DRAG TO DELIVER</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-6 text-center">
+            <div class="glass max-w-md w-full rounded-[2rem] px-6 py-8">
+                <div class="route-badge mb-4 title-font">◆ LIVE GRID DISPATCH ◆</div>
+                <h1 class="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 via-cyan-300 to-blue-600 neon-text mb-3 title-font">NEON<br>COURIER</h1>
+                <p class="text-slate-300 text-lg mb-8 tracking-widest uppercase">Guide the courier core with your thumb.<br>Clear a 1 Billion KM route.</p>
+                <button id="btn-start" class="px-12 py-4 bg-cyan-400 text-slate-950 font-bold text-3xl rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.6)] btn-press title-font">
+                    START DELIVERY
+                </button>
+            </div>
+        </div>
+
+        <!-- Shop Modal -->
+        <div id="shop-modal" class="absolute inset-0 z-40 bg-black/95 flex flex-col p-6 hidden transition-opacity duration-300 modal-shell">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-4xl text-cyan-400 neon-text title-font">BOOST LAB</h2>
+                <button id="btn-close-shop" class="text-2xl text-gray-400 p-2 title-font">✕</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-4 modal-scroll">
+                <!-- Currency Display -->
+                <div class="text-center mb-4">
+                    <span class="text-sm text-gray-400 title-font">ROUTE CREDIT</span>
+                    <div id="shop-currency" class="text-3xl text-pink-500 font-bold title-font">0 km</div>
+                </div>
+
+                <!-- Upgrade 1: Additive -->
+                <div class="glass p-4 rounded border-l-4 border-green-400 flex justify-between items-center">
+                    <div>
+                        <div class="text-xl text-green-400 title-font">+5 THRUST / SCAN</div>
+                        <div class="text-xs text-gray-400">Adds steady courier speed per scan</div>
+                        <div class="text-sm text-white mt-1">Lvl: <span id="lvl-add">0</span></div>
+                    </div>
+                    <button id="buy-add" class="px-4 py-2 bg-gray-800 rounded border border-gray-600 active:bg-green-900 transition-colors title-font">
+                        <span id="cost-add" class="text-lg font-bold">100 m</span>
+                    </button>
+                </div>
+
+                <!-- Upgrade 2: Multiplicative -->
+                <div class="glass p-4 rounded border-l-4 border-blue-400 flex justify-between items-center">
+                    <div>
+                        <div class="text-xl text-blue-400 title-font">x5 THRUST / SCAN</div>
+                        <div class="text-xs text-gray-400">Multiplies route speed gain</div>
+                        <div class="text-sm text-white mt-1">Lvl: <span id="lvl-mult">0</span></div>
+                    </div>
+                    <button id="buy-mult" class="px-4 py-2 bg-gray-800 rounded border border-gray-600 active:bg-blue-900 transition-colors title-font">
+                        <span id="cost-mult" class="text-lg font-bold">1.0 km</span>
+                    </button>
+                </div>
+
+                <!-- Upgrade 3: Exponential -->
+                <div class="glass p-4 rounded border-l-4 border-purple-500 flex justify-between items-center">
+                    <div>
+                        <div class="text-xl text-purple-500 title-font">^5 THRUST / SCAN</div>
+                        <div class="text-xs text-gray-400">Overclocks each delivery burst</div>
+                        <div class="text-sm text-white mt-1">Lvl: <span id="lvl-pow">0</span></div>
+                    </div>
+                    <button id="buy-pow" class="px-4 py-2 bg-gray-800 rounded border border-gray-600 active:bg-purple-900 transition-colors title-font">
+                        <span id="cost-pow" class="text-lg font-bold">10 km</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prestige Modal -->
+        <div id="prestige-modal" class="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-8 hidden text-center modal-shell">
+            <div class="glass max-w-md w-full rounded-[2rem] p-6">
+                <div class="route-badge mb-4 title-font">⬢ ROUTE OVERRIDE ⬢</div>
+                <h2 class="text-5xl text-yellow-300 neon-text mb-2 title-font">RELAUNCH</h2>
+                <p class="text-slate-300 mb-6">Reset scans and boosts.<br>Gain a permanent route multiplier.</p>
+                <div class="text-6xl font-bold text-white mb-8 title-font" id="prestige-gain">+100%</div>
+                <div class="flex gap-4 modal-actions justify-center">
+                    <button id="btn-cancel-prestige" class="px-6 py-3 border border-gray-600 rounded-xl text-gray-400 title-font">STANDBY</button>
+                    <button id="btn-confirm-prestige" class="px-8 py-3 bg-yellow-400 text-slate-950 font-bold rounded-xl shadow-[0_0_20px_rgba(234,179,8,0.5)] title-font">CONFIRM RELAUNCH</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Joystick Visual -->
+        <div id="joystick" class="absolute hidden w-20 h-20 rounded-full border-2 border-white/30 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 z-30">
+            <div id="joystick-knob" class="absolute top-1/2 left-1/2 w-8 h-8 bg-cyan-400/80 rounded-full transform -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_#00F0FF]"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Game State & Logic ---
+        const Game = {
+            state: {
+                playing: false,
+                steps: 0,
+                distance: 0,
+                speed: 0,
+                prestigeMult: 1,
+                upgrades: {
+                    add: 0,
+                    mult: 0,
+                    pow: 0
+                },
+                lastTime: 0,
+                audioReady: false,
+                milestoneIndex: 0
+            },
+            config: {
+                baseSpeed: 5,
+                fov: 800,
+                camHeight: 150,
+                milestoneStep: 1000,
+                costs: {
+                    add: { base: 100, scale: 2.5 },
+                    mult: { base: 2500, scale: 4 },
+                    pow: { base: 50000, scale: 10 }
+                }
+            },
+            input: {
+                active: false,
+                origin: { x: 0, y: 0 },
+                current: { x: 0, y: 0 },
+                vector: { x: 0, y: 0 }
+            }
+        };
+
+        const audioManager = {
+            pools: {},
+            ensureReady() {
+                if (Game.state.audioReady) return;
+                Game.state.audioReady = true;
+                this.configureLoop();
+            },
+            configureLoop() {
+                const bgm = document.getElementById('bgm');
+                bgm.volume = 0.2;
+                bgm.loop = true;
+            },
+            playLoop() {
+                if (!Game.state.audioReady) return;
+                const bgm = document.getElementById('bgm');
+                bgm.currentTime = bgm.currentTime || 0;
+                bgm.play().catch(() => {});
+            },
+            pauseLoop() {
+                const bgm = document.getElementById('bgm');
+                bgm.pause();
+            },
+            play(id, opts = {}) {
+                if (!Game.state.audioReady) return;
+                const base = document.getElementById(id);
+                if (!base) return;
+                const volume = opts.volume ?? 0.5;
+
+                if (!this.pools[id]) {
+                    this.pools[id] = [base];
+                }
+
+                let audio = this.pools[id].find((item) => item.paused || item.ended);
+                if (!audio) {
+                    audio = base.cloneNode(true);
+                    this.pools[id].push(audio);
+                }
+
+                audio.volume = volume;
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            }
+        };
+
+        const feedback = {
+            timers: {},
+            show(id, duration = 1400) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.add('active');
+                clearTimeout(this.timers[id]);
+                this.timers[id] = setTimeout(() => {
+                    el.classList.remove('active');
+                }, duration);
+            },
+            pulseSpeed() {
+                const speed = document.getElementById('speed-display');
+                speed.classList.remove('speed-warning');
+                void speed.offsetWidth;
+                speed.classList.add('speed-warning');
+                setTimeout(() => speed.classList.remove('speed-warning'), 500);
+            }
+        };
+
+        // --- Utils ---
+        const formatNum = (num) => {
+            if (num < 1000) return Math.floor(num);
+            if (num < 1000000) return (num / 1000).toFixed(1) + 'k';
+            if (num < 1000000000) return (num / 1000000).toFixed(2) + 'M';
+            return (num / 1000000000).toFixed(2) + 'B';
+        };
+
+        const formatDist = (meters) => {
+            if (meters < 1000) return Math.floor(meters) + ' m';
+            return formatNum(meters / 1000) + ' km';
+        };
+
+        const getCost = (type) => {
+            const lvl = Game.state.upgrades[type];
+            const cfg = Game.config.costs[type];
+            return cfg.base * Math.pow(cfg.scale, lvl);
+        };
+
+        const updateMilestoneFX = () => {
+            const milestoneIndex = Math.floor(Game.state.steps / Game.config.milestoneStep);
+            if (milestoneIndex > Game.state.milestoneIndex) {
+                Game.state.milestoneIndex = milestoneIndex;
+                audioManager.play('sfx-bonus', { volume: 0.45 });
+                feedback.show('gif-boost', 1200);
+                feedback.pulseSpeed();
+            }
+        };
+
+        // --- Core Mechanics ---
+        const calculateSpeed = () => {
+            const u = Game.state.upgrades;
+            const steps = Game.state.steps;
+
+            let stepFactor = 1 + (u.add * 5);
+            let multiplier = Math.pow(5, u.mult);
+            let exponent = 1 + (u.pow * 0.15);
+
+            let rawSpeed = Game.config.baseSpeed + (Math.pow(steps, exponent) * stepFactor * multiplier * 0.1);
+
+            return rawSpeed * Game.state.prestigeMult;
+        };
+
+        const attemptBuy = (type) => {
+            const cost = getCost(type);
+            audioManager.play('sfx-ui-click', { volume: 0.35 });
+
+            if (Game.state.distance >= cost) {
+                Game.state.distance -= cost;
+                Game.state.upgrades[type]++;
+                updateShopUI();
+                saveGame();
+
+                if (type === 'add') {
+                    audioManager.play('sfx-success', { volume: 0.5 });
+                } else if (type === 'mult') {
+                    audioManager.play('sfx-bonus', { volume: 0.5 });
+                } else {
+                    audioManager.play('sfx-powerup', { volume: 0.55 });
+                    feedback.show('gif-boost', 1400);
+                }
+            } else {
+                audioManager.play('sfx-blocked', { volume: 0.4 });
+                feedback.pulseSpeed();
+            }
+        };
+
+        const prestige = () => {
+            if (Game.state.distance < 100000) return;
+
+            const bonus = Math.max(1, Math.log10(Game.state.distance / 10000));
+            Game.state.prestigeMult += bonus;
+
+            Game.state.distance = 0;
+            Game.state.steps = 0;
+            Game.state.speed = 0;
+            Game.state.milestoneIndex = 0;
+            Game.state.upgrades = { add: 0, mult: 0, pow: 0 };
+
+            audioManager.play('sfx-powerup', { volume: 0.55 });
+            feedback.show('gif-prestige', 1800);
+            closePrestige();
+            updateShopUI();
+            saveGame();
+        };
+
+        // --- Engine & Rendering ---
+        const canvas = document.getElementById('world');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        let camZ = 0;
+        let camX = 0;
+
+        const resize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
+        window.addEventListener('resize', resize);
+        resize();
+
+        const project = (x, y, z) => {
+            const scale = Game.config.fov / (z - camZ);
+            const cx = (x - camX) * scale + canvas.width / 2;
+            const cy = (y - Game.config.camHeight) * scale + canvas.height / 2;
+            return { x: cx, y: cy, scale: scale, visible: z > camZ };
+        };
+
+        const render = () => {
+            ctx.fillStyle = '#050510';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const horizonY = canvas.height / 2;
+            const grad = ctx.createLinearGradient(0, 0, 0, horizonY);
+            grad.addColorStop(0, '#000');
+            grad.addColorStop(1, '#1a1a2e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, horizonY);
+
+            const gridSize = 200;
+
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+
+            for (let i = -10; i <= 10; i++) {
+                const wx = Math.floor(camX / gridSize) * gridSize + (i * gridSize);
+                const p1 = project(wx, 0, camZ + 10);
+                const p2 = project(wx, 0, camZ + 4000);
+
+                if (p1.visible && p2.visible) {
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.stroke();
+                }
+            }
+
+            for (let i = 0; i < 20; i++) {
+                const wz = Math.floor(camZ / gridSize) * gridSize + (i * gridSize);
+                if (wz < camZ + 10) continue;
+
+                const p1 = project(camX - 2000, 0, wz);
+                const p2 = project(camX + 2000, 0, wz);
+
+                if (p1.visible) {
+                    const dist = wz - camZ;
+                    const alpha = Math.max(0, 1 - dist / 3000);
+                    ctx.strokeStyle = `rgba(0, 240, 255, ${alpha * 0.5})`;
+
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.stroke();
+                }
+            }
+
+            const playerZ = camZ + 300;
+            const bob = Math.sin(Date.now() / 150) * 10;
+            const pCenter = project(camX, -50 + bob, playerZ);
+
+            if (pCenter.visible) {
+                const size = 60 * pCenter.scale;
+                ctx.save();
+                ctx.translate(pCenter.x, pCenter.y);
+
+                ctx.shadowColor = Game.state.speed > 1000 ? '#FF0055' : '#00F0FF';
+                ctx.shadowBlur = 20 + Math.min(20, Game.state.speed / 100);
+
+                ctx.fillStyle = '#FFF';
+                ctx.fillRect(-size / 2, -size / 2, size, size);
+
+                if (Game.state.speed > 50) {
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillStyle = ctx.shadowColor;
+                    for (let i = 1; i < 4; i++) {
+                        ctx.fillRect(-size / 2, -size / 2 + (i * 10 * pCenter.scale), size, size);
+                    }
+                }
+
+                ctx.restore();
+            }
+        };
+
+        const update = (dt) => {
+            if (!Game.state.playing) return;
+
+            if (Game.input.active) {
+                Game.state.steps += 10 * dt;
+
+                const targetSpeed = calculateSpeed();
+                Game.state.speed += (targetSpeed - Game.state.speed) * 5 * dt;
+
+                const moveDist = Game.state.speed * dt;
+                camZ += moveDist;
+                Game.state.distance += moveDist;
+
+                camX += Game.input.vector.x * 200 * dt;
+                if (camX > 800) camX = 800;
+                if (camX < -800) camX = -800;
+            } else {
+                Game.state.speed *= 0.9;
+                if (Game.state.speed < 1) Game.state.speed = 0;
+                camZ += Game.state.speed * dt;
+                Game.state.distance += Game.state.speed * dt;
+            }
+
+            updateMilestoneFX();
+
+            document.getElementById('speed-display').innerText = formatDist(Game.state.speed * 3.6) + '/h';
+            document.getElementById('dist-display').innerText = formatDist(Game.state.distance);
+            document.getElementById('steps-display').innerText = Math.floor(Game.state.steps);
+
+            const goal = 1000000000000;
+            const pct = Math.min(100, (Game.state.distance / goal) * 100);
+            document.getElementById('goal-progress').style.width = pct + '%';
+
+            if (Game.state.distance > 100000) {
+                document.getElementById('btn-prestige').classList.remove('hidden');
+            }
+
+            if (!document.getElementById('shop-modal').classList.contains('hidden')) {
+                updateShopUI();
+            }
+        };
+
+        const loop = (t) => {
+            const dt = Math.min((t - Game.state.lastTime) / 1000, 0.1);
+            Game.state.lastTime = t;
+            update(dt);
+            render();
+            requestAnimationFrame(loop);
+        };
+
+        // --- Input Handling ---
+        const handleStart = (e) => {
+            if (!Game.state.playing) return;
+            if (e.target.closest('button') || e.target.closest('#shop-modal') || e.target.closest('#prestige-modal')) return;
+
+            e.preventDefault();
+            Game.input.active = true;
+            const t = e.touches ? e.touches[0] : e;
+            Game.input.origin = { x: t.clientX, y: t.clientY };
+            Game.input.current = { x: t.clientX, y: t.clientY };
+
+            const j = document.getElementById('joystick');
+            j.style.display = 'block';
+            j.style.left = t.clientX + 'px';
+            j.style.top = t.clientY + 'px';
+            document.getElementById('joystick-knob').style.transform = 'translate(-50%, -50%)';
+        };
+
+        const handleMove = (e) => {
+            if (!Game.input.active) return;
+            e.preventDefault();
+            const t = e.touches ? e.touches[0] : e;
+            Game.input.current = { x: t.clientX, y: t.clientY };
+
+            const dx = Game.input.current.x - Game.input.origin.x;
+            const dy = Game.input.current.y - Game.input.origin.y;
+
+            const maxDist = 40;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const clampedDist = Math.min(dist, maxDist);
+
+            const angle = Math.atan2(dy, dx);
+            const kx = Math.cos(angle) * clampedDist;
+            const ky = Math.sin(angle) * clampedDist;
+
+            document.getElementById('joystick-knob').style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+
+            Game.input.vector.x = kx / maxDist;
+        };
+
+        const handleEnd = () => {
+            Game.input.active = false;
+            document.getElementById('joystick').style.display = 'none';
+        };
+
+        // --- UI & Shop Logic ---
+        const updateShopUI = () => {
+            document.getElementById('shop-currency').innerText = formatDist(Game.state.distance);
+
+            document.getElementById('lvl-add').innerText = Game.state.upgrades.add;
+            document.getElementById('cost-add').innerText = formatDist(getCost('add'));
+
+            document.getElementById('lvl-mult').innerText = Game.state.upgrades.mult;
+            document.getElementById('cost-mult').innerText = formatDist(getCost('mult'));
+
+            document.getElementById('lvl-pow').innerText = Game.state.upgrades.pow;
+            document.getElementById('cost-pow').innerText = formatDist(getCost('pow'));
+
+            const check = (type, btnId) => {
+                const btn = document.getElementById(btnId);
+                if (Game.state.distance >= getCost(type)) {
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    btn.classList.add('active:scale-95');
+                } else {
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                    btn.classList.remove('active:scale-95');
+                }
+            };
+            check('add', 'buy-add');
+            check('mult', 'buy-mult');
+            check('pow', 'buy-pow');
+        };
+
+        const openShop = () => {
+            document.getElementById('shop-modal').classList.remove('hidden');
+            audioManager.play('sfx-menu-open', { volume: 0.4 });
+            updateShopUI();
+        };
+        const closeShop = () => {
+            document.getElementById('shop-modal').classList.add('hidden');
+            audioManager.play('sfx-menu-close', { volume: 0.35 });
+        };
+
+        const openPrestige = () => {
+            document.getElementById('prestige-modal').classList.remove('hidden');
+            const bonus = Math.max(1, Math.log10(Game.state.distance / 10000));
+            document.getElementById('prestige-gain').innerText = `+${Math.floor(bonus * 100)}%`;
+            audioManager.play('sfx-menu-open', { volume: 0.4 });
+            feedback.show('gif-prestige', 1500);
+        };
+        const closePrestige = () => {
+            document.getElementById('prestige-modal').classList.add('hidden');
+            audioManager.play('sfx-menu-close', { volume: 0.35 });
+        };
+
+        // --- Save System ---
+        const saveGame = () => {
+            const data = {
+                steps: Game.state.steps,
+                distance: Game.state.distance,
+                upgrades: Game.state.upgrades,
+                prestigeMult: Game.state.prestigeMult,
+                milestoneIndex: Game.state.milestoneIndex
+            };
+            localStorage.setItem('infinityStrideSave', JSON.stringify(data));
+        };
+
+        const loadGame = () => {
+            const saved = localStorage.getItem('infinityStrideSave');
+            if (saved) {
+                const data = JSON.parse(saved);
+                Game.state.steps = data.steps || 0;
+                Game.state.distance = data.distance || 0;
+                Game.state.upgrades = data.upgrades || { add: 0, mult: 0, pow: 0 };
+                Game.state.prestigeMult = data.prestigeMult || 1;
+                Game.state.milestoneIndex = data.milestoneIndex || 0;
+            }
+        };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGame();
+
+            const c = document.getElementById('game-container');
+            c.addEventListener('mousedown', handleStart);
+            c.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleEnd);
+            c.addEventListener('touchstart', handleStart, { passive: false });
+            c.addEventListener('touchmove', handleMove, { passive: false });
+            window.addEventListener('touchend', handleEnd);
+
+            document.getElementById('btn-start').addEventListener('click', () => {
+                audioManager.ensureReady();
+                audioManager.play('sfx-start', { volume: 0.5 });
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('hud').classList.remove('hidden');
+                audioManager.playLoop();
+                Game.state.playing = true;
+                Game.state.lastTime = performance.now();
+                requestAnimationFrame(loop);
+            });
+
+            document.getElementById('btn-shop').addEventListener('click', openShop);
+            document.getElementById('btn-close-shop').addEventListener('click', closeShop);
+
+            document.getElementById('buy-add').addEventListener('click', () => attemptBuy('add'));
+            document.getElementById('buy-mult').addEventListener('click', () => attemptBuy('mult'));
+            document.getElementById('buy-pow').addEventListener('click', () => attemptBuy('pow'));
+
+            document.getElementById('btn-prestige').addEventListener('click', openPrestige);
+            document.getElementById('btn-cancel-prestige').addEventListener('click', closePrestige);
+            document.getElementById('btn-confirm-prestige').addEventListener('click', prestige);
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    audioManager.pauseLoop();
+                } else if (Game.state.playing) {
+                    audioManager.playLoop();
+                }
+            });
+
+            setInterval(saveGame, 5000);
+        });
+
+    </script>
+</body>
+</html>

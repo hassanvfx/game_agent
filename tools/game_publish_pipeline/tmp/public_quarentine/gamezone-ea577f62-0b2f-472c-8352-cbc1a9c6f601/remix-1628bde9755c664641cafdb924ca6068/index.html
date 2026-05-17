@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>No Dumb's Sky: Deep Space</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] remapped-font: display/hud -> Orbitron, ui/body -> Rajdhani from catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --hud-color: #7cf7ff;
+            --hud-color-deep: #1ee2ff;
+            --warn-color: #ff5f88;
+            --panel-bg: rgba(5, 14, 34, 0.76);
+            --panel-border: rgba(124, 247, 255, 0.34);
+            --panel-glow: rgba(28, 220, 255, 0.18);
+            --title-color: #ebfdff;
+            --accent-gold: #ffd36c;
+            --ship-core: #a8f6ff;
+            --ship-edge: #43b8ff;
+            --ship-flare: rgba(98, 229, 255, 0.75);
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(31, 94, 163, 0.2), transparent 36%),
+                radial-gradient(circle at bottom, rgba(130, 42, 168, 0.18), transparent 42%),
+                linear-gradient(180deg, #02040a 0%, #040919 45%, #02050e 100%);
+            color: var(--hud-color);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+        body::before {
+            background:
+                radial-gradient(circle at 50% 22%, rgba(124, 247, 255, 0.12), transparent 0 18%),
+                radial-gradient(circle at 18% 78%, rgba(255, 211, 108, 0.08), transparent 0 14%),
+                radial-gradient(circle at 82% 20%, rgba(155, 98, 255, 0.08), transparent 0 12%);
+            opacity: 0.95;
+        }
+        body::after {
+            background-image: linear-gradient(180deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.01) 50%, rgba(0,0,0,0.14) 100%);
+            mix-blend-mode: screen;
+            opacity: 0.32;
+        }
+        canvas { display: block; position: relative; z-index: 0; }
+        .glass {
+            background:
+                linear-gradient(180deg, rgba(20, 37, 74, 0.75), rgba(5, 14, 34, 0.86)),
+                var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                0 0 18px var(--panel-glow),
+                0 14px 24px rgba(0, 0, 0, 0.28);
+        }
+        .hud-text {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 6px rgba(124, 247, 255, 0.7), 0 0 18px rgba(30, 226, 255, 0.3);
+        }
+        .scan-line {
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, rgba(124, 247, 255, 0.9), transparent);
+            position: absolute;
+            animation: scan 3s linear infinite;
+            pointer-events: none;
+            z-index: 5;
+            box-shadow: 0 0 14px rgba(124, 247, 255, 0.55);
+        }
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+        .blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes titlePulse {
+            0%, 100% { transform: translateY(0); text-shadow: 0 0 10px rgba(124,247,255,0.75), 0 0 28px rgba(124,247,255,0.28); }
+            50% { transform: translateY(-2px); text-shadow: 0 0 16px rgba(255,255,255,0.95), 0 0 36px rgba(124,247,255,0.42); }
+        }
+        @keyframes shipFloat {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-10px) scale(1.03); }
+        }
+        @keyframes shipGlow {
+            0%, 100% { opacity: 0.35; transform: scale(0.95); }
+            50% { opacity: 0.85; transform: scale(1.08); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.8); }
+        ::-webkit-scrollbar-thumb { background: var(--hud-color); border-radius: 2px; }
+
+        /* Button Press Effects */
+        .btn-press:active { transform: scale(0.95); background: rgba(0, 255, 204, 0.2); }
+        .btn-press { transition: all 0.1s ease; }
+
+        .ship-emblem {
+            position: relative;
+            width: clamp(132px, 34vw, 180px);
+            height: clamp(132px, 34vw, 180px);
+            margin-bottom: 1.25rem;
+            animation: shipFloat 3s ease-in-out infinite;
+            filter: drop-shadow(0 0 24px rgba(80, 215, 255, 0.35));
+        }
+        .ship-emblem::before,
+        .ship-emblem::after {
+            content: "";
+            position: absolute;
+            inset: 50%;
+            border-radius: 999px;
+            transform: translate(-50%, -50%);
+        }
+        .ship-emblem::before {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(124, 247, 255, 0.2) 0%, rgba(124, 247, 255, 0.08) 38%, transparent 70%);
+            animation: shipGlow 2.4s ease-in-out infinite;
+        }
+        .ship-emblem::after {
+            width: 76%;
+            height: 76%;
+            border: 1px solid rgba(124, 247, 255, 0.24);
+            box-shadow: 0 0 22px rgba(124, 247, 255, 0.12);
+        }
+        .ship-emblem svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .title-stack {
+            position: relative;
+            margin-bottom: 1.25rem;
+        }
+        .title-stack h1 {
+            animation: titlePulse 3s ease-in-out infinite;
+        }
+        .star-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 999px;
+            border: 1px solid rgba(124,247,255,0.22);
+            background: rgba(6, 18, 40, 0.72);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 18px rgba(124,247,255,0.12);
+            font-size: 0.72rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+        }
+        .scan-panel {
+            box-shadow:
+                0 0 0 1px rgba(124,247,255,0.12),
+                0 0 24px rgba(124,247,255,0.14),
+                0 12px 28px rgba(0,0,0,0.34);
+        }
+        .side-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 80px;
+            height: 160px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 18px;
+            z-index: 20;
+            overflow: hidden;
+        }
+        .side-btn::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent 45%, rgba(255,255,255,0.05));
+            pointer-events: none;
+        }
+        .hud-tag {
+            font-size: 10px;
+            letter-spacing: 0.34em;
+            text-transform: uppercase;
+            opacity: 0.72;
+        }
+        .modal-shell {
+            max-height: 90vh;
+        }
+        #game-container {
+            touch-action: none;
+        }
+        .modal-scroll {
+            overflow-y: auto;
+        }
+        @media (max-width: 640px) {
+            #hud-layer {
+                padding: max(0.85rem, env(safe-area-inset-top)) 0.85rem max(1.6rem, env(safe-area-inset-bottom) + 0.75rem);
+            }
+            #start-screen {
+                padding:
+                    max(1rem, env(safe-area-inset-top))
+                    1rem
+                    max(1.25rem, env(safe-area-inset-bottom) + 0.5rem);
+            }
+            #start-btn {
+                width: min(100%, 20rem);
+            }
+            .side-btn {
+                width: 66px;
+                height: 132px;
+                border-radius: 16px;
+            }
+            .ship-emblem {
+                width: min(40vw, 158px);
+                height: min(40vw, 158px);
+                margin-bottom: 0.85rem;
+            }
+            .title-stack h1 {
+                font-size: 3.4rem;
+                line-height: 0.94;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "flightSpeed": { "type": "number", "label": "Cruising Speed", "value": 150 },
+    "hudColor": { "type": "color", "label": "HUD Color", "value": "#00ffcc" },
+    "starDensity": { "type": "number", "label": "Star Density", "value": 300 }
+}
+</script>
+
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/scan/save/gravity -> catalogs/audios.json -->
+<audio id="bgm_space" src="https://gamezone-virid.vercel.app/assets/audios/music/music_loop_01.mp3" preload="auto" loop></audio>
+<audio id="sfx_save" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3" preload="auto"></audio>
+<audio id="sfx_warp" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3" preload="auto"></audio>
+<audio id="sfx_scan" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_menu_open" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+<audio id="sfx_menu_close" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3" preload="auto"></audio>
+<audio id="sfx_warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+
+<!-- UI Layer -->
+<div id="game-container" class="relative w-full h-full">
+    <canvas id="gameCanvas" class="absolute inset-0 z-0"></canvas>
+    <div class="scan-line"></div>
+    <!-- [agent-note][stage3] resolved-gif: scan/warp feedback overlays -> catalogs/gifs.json -->
+    <div id="feedback-overlay" class="absolute inset-0 pointer-events-none z-20 hidden flex items-center justify-center p-6">
+        <div class="glass rounded-2xl px-3 py-3 max-w-[46vw] sm:max-w-xs">
+            <img id="feedback-gif" src="" alt="" class="hidden w-32 h-32 sm:w-40 sm:h-40 object-cover rounded-xl border border-cyan-200/20">
+            <div id="feedback-label" class="mt-2 text-center text-[10px] tracking-[0.35em] text-cyan-200 uppercase"></div>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud-layer" class="absolute inset-0 pointer-events-none z-10 hidden flex flex-col justify-between p-4 pb-8">
+        <!-- Top Bar -->
+        <div class="flex justify-between items-start w-full relative">
+            <div class="glass px-4 py-2 rounded-br-xl border-l-4 border-[var(--hud-color)]">
+                <div class="text-[10px] opacity-70 tracking-wider">SECTOR</div>
+                <div id="sector-name" class="hud-text text-xl">ALPHA-01</div>
+            </div>
+
+            <!-- Exit Galaxy Button -->
+            <button id="btn-exit" class="pointer-events-auto glass px-4 py-1 rounded border border-red-900/50 hover:bg-red-900/30 active:scale-95 transition flex flex-col items-center">
+                <span class="text-[10px] text-red-400 font-bold tracking-widest">EXIT</span>
+                <span class="text-xs text-red-300">GALAXY</span>
+            </button>
+
+            <div class="glass px-4 py-2 rounded-bl-xl border-r-4 border-[var(--hud-color)] text-right">
+                <div class="text-[10px] opacity-70 tracking-wider">VELOCITY</div>
+                <div id="speed-display" class="hud-text text-xl">12,500 kps</div>
+            </div>
+        </div>
+
+        <!-- Center Reticle -->
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 flex items-center justify-center opacity-40">
+            <svg width="100%" height="100%" viewBox="0 0 100 100">
+                <path d="M 30 20 L 20 20 L 20 30" stroke="currentColor" stroke-width="1" fill="none" />
+                <path d="M 70 20 L 80 20 L 80 30" stroke="currentColor" stroke-width="1" fill="none" />
+                <path d="M 30 80 L 20 80 L 20 70" stroke="currentColor" stroke-width="1" fill="none" />
+                <path d="M 70 80 L 80 80 L 80 70" stroke="currentColor" stroke-width="1" fill="none" />
+                <circle cx="50" cy="50" r="1.5" fill="currentColor" />
+            </svg>
+        </div>
+
+        <!-- Gravity Warning -->
+        <div id="gravity-warning" class="absolute top-1/3 left-1/2 transform -translate-x-1/2 text-red-500 font-bold tracking-widest hidden blink text-center w-full">
+            <div class="text-3xl hud-text">GRAVITY WELL</div>
+            <div class="text-xs">CORRECTING TRAJECTORY...</div>
+        </div>
+
+        <!-- Scan Info Box -->
+        <div id="scan-info" class="scan-panel absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-16 w-64 glass p-4 rounded hidden text-center pointer-events-auto">
+            <div id="scan-status" class="text-xs uppercase tracking-widest mb-2 blink text-[var(--hud-color)]">Analyzing Signal...</div>
+            <div class="w-full h-1 bg-gray-800 rounded overflow-hidden mb-2">
+                <div id="scan-bar" class="h-full bg-[var(--hud-color)] w-0"></div>
+            </div>
+            <div id="scan-result" class="hidden">
+                <h3 id="planet-name" class="hud-text text-2xl text-white mb-1">PLANET X</h3>
+                <p id="planet-desc" class="text-xs text-gray-300 leading-tight mb-3">Gas Giant • Toxic</p>
+                <button id="btn-save" class="w-full bg-[var(--hud-color)] text-black font-bold text-sm py-2 rounded hover:bg-white transition">ADD TO DATABASE</button>
+            </div>
+        </div>
+
+        <!-- Side Controls (Brake/Accel) -->
+        <button id="btn-brake" class="pointer-events-auto side-btn left-2 glass border-l-4 border-blue-500 btn-press">
+            <span class="text-blue-400 text-xs font-bold rotate-90 mb-2">BRAKE</span>
+            <span class="text-2xl text-blue-300">▼</span>
+        </button>
+        
+        <button id="btn-accel" class="pointer-events-auto side-btn right-2 glass border-r-4 border-orange-500 btn-press">
+            <span class="text-2xl text-orange-300 mb-2">▲</span>
+            <span class="text-orange-400 text-xs font-bold rotate-90">BOOST</span>
+        </button>
+
+        <!-- Bottom Controls -->
+        <div class="flex justify-between items-end w-full pointer-events-auto mt-auto">
+            <button id="btn-encyclopedia" class="glass px-5 py-3 rounded-tr-xl border-l-4 border-yellow-500 hover:bg-yellow-500/20 active:scale-95 transition">
+                <div class="text-[10px] text-yellow-500 tracking-wider">DATABASE</div>
+                <div class="hud-text text-xl">ARCHIVE</div>
+            </button>
+            
+            <button id="btn-warp" class="glass px-5 py-3 rounded-tl-xl border-r-4 border-red-500 hover:bg-red-500/20 active:scale-95 transition group">
+                <div class="text-[10px] text-red-500 group-hover:text-red-300 tracking-wider">HYPERDRIVE</div>
+                <div class="hud-text text-xl">WARP</div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95">
+        <div class="ship-emblem" aria-hidden="true">
+            <svg viewBox="0 0 200 200" role="presentation">
+                <defs>
+                    <linearGradient id="shipCoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#ebfdff" />
+                        <stop offset="45%" stop-color="#8ef8ff" />
+                        <stop offset="100%" stop-color="#3d86ff" />
+                    </linearGradient>
+                    <linearGradient id="shipWingGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+                        <stop offset="0%" stop-color="#173b7d" />
+                        <stop offset="100%" stop-color="#53dfff" />
+                    </linearGradient>
+                </defs>
+                <path d="M100 22 L128 82 L100 176 L72 82 Z" fill="url(#shipCoreGradient)" stroke="rgba(255,255,255,0.72)" stroke-width="3" />
+                <path d="M72 84 L24 112 L72 126 L90 104 Z" fill="url(#shipWingGradient)" opacity="0.95" />
+                <path d="M128 84 L176 112 L128 126 L110 104 Z" fill="url(#shipWingGradient)" opacity="0.95" />
+                <circle cx="100" cy="86" r="11" fill="#071326" stroke="#9ef7ff" stroke-width="3" />
+                <path d="M92 142 L108 142 L100 162 Z" fill="#ffd36c" opacity="0.92" />
+            </svg>
+        </div>
+        <div class="title-stack relative mb-8">
+            <h1 class="hud-text text-7xl text-center leading-none text-transparent bg-clip-text bg-gradient-to-b from-white to-[var(--hud-color)]">NO DUMB'S<br>SKY</h1>
+            <div class="absolute -bottom-4 w-full text-center text-[var(--hud-color)] tracking-[0.5em] text-xs opacity-80">DEEP SPACE SCAN</div>
+        </div>
+        <div class="star-chip mb-5">✦ STAR RUNNER // SCAN READY</div>
+        <div class="text-gray-400 text-sm mb-12 text-center max-w-xs leading-relaxed space-y-2">
+            <p>Drag to steer.</p>
+            <p>Left Side: <span class="text-blue-400">BRAKE / SCAN</span></p>
+            <p>Right Side: <span class="text-orange-400">BOOST</span></p>
+            <p class="text-xs opacity-50 mt-4">Discover Planets, Ion Stars, Pulsars & Galaxies.</p>
+        </div>
+        <button id="start-btn" class="px-10 py-4 bg-[var(--hud-color)] text-black font-bold text-xl rounded clip-path-polygon hover:scale-105 transition shadow-[0_0_30px_rgba(0,255,204,0.4)]">
+            LAUNCH SHIP
+        </button>
+    </div>
+
+    <!-- Encyclopedia Modal -->
+    <div id="encyclopedia-modal" class="modal-shell absolute inset-0 z-40 bg-black/95 hidden flex flex-col p-4">
+        <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-4 mt-2">
+            <h2 class="hud-text text-3xl text-white">GALACTIC ARCHIVE</h2>
+            <button id="btn-close-db" class="text-gray-400 hover:text-white text-2xl px-2">✕</button>
+        </div>
+        <div id="db-list" class="modal-scroll flex-1 overflow-y-auto grid grid-cols-1 gap-3 pb-20 content-start">
+            <div id="db-empty" class="text-center text-gray-600 mt-20 italic">Database empty.<br>Scan objects to record data.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- Configuration & Utils ---
+window.gameConfigDefs = JSON.parse(document.getElementById('game-config').textContent);
+window.gameConfig = {};
+Object.keys(window.gameConfigDefs).forEach(k => window.gameConfig[k] = window.gameConfigDefs[k].value);
+
+function updateTheme() {
+    document.documentElement.style.setProperty('--hud-color', window.gameConfig.hudColor);
+    document.body.style.color = window.gameConfig.hudColor;
+}
+
+// Audio System
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const sounds = {
+    bgm: document.getElementById('bgm_space'),
+    save: document.getElementById('sfx_save'),
+    warp: document.getElementById('sfx_warp'),
+    scan: document.getElementById('sfx_scan'),
+    menuOpen: document.getElementById('sfx_menu_open'),
+    menuClose: document.getElementById('sfx_menu_close'),
+    warning: document.getElementById('sfx_warning')
+};
+
+const feedbackOverlay = document.getElementById('feedback-overlay');
+const feedbackGif = document.getElementById('feedback-gif');
+const feedbackLabel = document.getElementById('feedback-label');
+const feedbackMedia = {
+    scan: {
+        label: 'Signal Locked',
+        webp: 'https://i.giphy.com/1qXINH0qhhsNDiu0T5.webp'
+    },
+    warp: {
+        label: 'Warp Burst',
+        webp: 'https://i.giphy.com/PoGkJRiJ0Q7HgB8XTt.webp'
+    }
+};
+let feedbackTimer = null;
+let warningCooldown = 0;
+
+function flashFeedback(type, duration = 1200) {
+    const media = feedbackMedia[type];
+    if (!media || !feedbackOverlay || !feedbackGif || !feedbackLabel) return;
+    feedbackLabel.textContent = media.label;
+    feedbackGif.src = media.webp;
+    feedbackGif.alt = media.label;
+    feedbackGif.classList.remove('hidden');
+    feedbackOverlay.classList.remove('hidden');
+    clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+        feedbackOverlay.classList.add('hidden');
+        feedbackGif.classList.add('hidden');
+        feedbackGif.removeAttribute('src');
+    }, duration);
+}
+
+function stopLoopAudio() {
+    const bgm = sounds.bgm;
+    if (!bgm) return;
+    bgm.pause();
+    bgm.currentTime = 0;
+}
+
+const playSound = (id) => {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const el = sounds[id];
+    if (el) {
+        el.currentTime = 0;
+        el.play().catch(() => playSynth(id));
+    } else {
+        playSynth(id);
+    }
+};
+
+const playSynth = (type) => {
+    if (audioCtx.state === 'suspended') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    const now = audioCtx.currentTime;
+    if (type === 'scan') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start();
+        osc.stop(now + 0.1);
+    } else if (type === 'menu') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.linearRampToValueAtTime(720, now + 0.06);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start();
+        osc.stop(now + 0.08);
+    } else if (type === 'gravity') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(50, now);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start();
+        osc.stop(now + 0.2);
+    }
+};
+
+// --- Game State ---
+const state = {
+    active: false,
+    warping: false,
+    warpTime: 0,
+    camera: { x: 0, y: 0 },
+    targetCamera: { x: 0, y: 0 },
+    objects: [],
+    stars: [],
+    discoveries: [],
+    scanning: null,
+    scanProgress: 0,
+    sectorSeed: Math.random(),
+    lastTime: 0,
+    speedMultiplier: 1.0, 
+    gravityShake: 0
+};
+
+const SECTOR_COLORS = [
+    ['#000000', '#1a0b2e'], // Void Purple
+    ['#050505', '#001a1a'], // Deep Teal
+    ['#0a0000', '#2e0b0b'], // Red Nebula
+    ['#00001a', '#0b0b2e'], // Blue Depth
+    ['#000000', '#1a1a00']  // Toxic Yellow
+];
+let currentPalette = SECTOR_COLORS[0];
+
+// --- Procedural Generation ---
+function generateSector() {
+    state.sectorSeed = Math.random();
+    const palIdx = Math.floor(Math.random() * SECTOR_COLORS.length);
+    currentPalette = SECTOR_COLORS[palIdx];
+    document.getElementById('sector-name').innerText = `SECTOR ${Math.floor(Math.random()*900)+100}-${String.fromCharCode(65+Math.floor(Math.random()*26))}`;
+    
+    state.objects = [];
+    // Initial spawn
+    for(let i=0; i<6; i++) spawnObject(2000 + i * 1500);
+}
+
+function spawnObject(zStart) {
+    const types = ['planet', 'planet', 'star', 'ion', 'pulsar', 'galaxy', 'blackhole'];
+    // Weighted selection
+    const r = Math.random();
+    let type = 'planet';
+    if (r > 0.95) type = 'blackhole';
+    else if (r > 0.88) type = 'galaxy';
+    else if (r > 0.80) type = 'pulsar';
+    else if (r > 0.70) type = 'ion';
+    else if (r > 0.50) type = 'star';
+    
+    const spread = 3000;
+    const x = (Math.random() - 0.5) * spread * 4;
+    const y = (Math.random() - 0.5) * spread * 2;
+    const z = zStart || (6000 + Math.random() * 2000);
+    
+    let size = 200;
+    if (type === 'blackhole') size = 300;
+    else if (type === 'galaxy') size = 800; // Large visual
+    else if (type === 'pulsar') size = 120;
+    else if (type === 'ion') size = 180;
+    else size = 150 + Math.random() * 400;
+
+    const hue = Math.floor(Math.random() * 360);
+    
+    state.objects.push({
+        x, y, z, size, type, hue,
+        name: generateName(type),
+        scanned: false,
+        id: Math.random().toString(36).substr(2, 9),
+        desc: generateDesc(type),
+        rings: type === 'planet' && Math.random() > 0.7,
+        rotationOffset: Math.random() * Math.PI * 2
+    });
+}
+
+function generateName(type) {
+    const prefixes = ['Kepler', 'Gliese', 'Proxima', 'Trappist', 'Vega', 'Sirius', 'Alpha', 'Omicron'];
+    const suffixes = ['b', 'c', 'Prime', 'Major', 'Minor', 'X', 'IX', 'IV', 'Zero'];
+    
+    if (type === 'galaxy') return `NGC-${Math.floor(Math.random()*9000)}`;
+    if (type === 'pulsar') return `PSR J${Math.floor(Math.random()*2000)}+${Math.floor(Math.random()*99)}`;
+    if (type === 'ion') return `ION-${Math.floor(Math.random()*999)}`;
+    
+    return `${prefixes[Math.floor(Math.random()*prefixes.length)]}-${Math.floor(Math.random()*100)} ${suffixes[Math.floor(Math.random()*suffixes.length)]}`;
+}
+
+function generateDesc(type) {
+    if (type === 'galaxy') return "Spiral Galaxy • Billions of Stars";
+    if (type === 'pulsar') return "Neutron Star • Rapid Rotation";
+    if (type === 'ion') return "Ionized Giant • High Energy Output";
+    if (type === 'star') return "Class " + "OBAFGKM"[Math.floor(Math.random()*7)] + " Main Sequence";
+    if (type === 'blackhole') return "Singularity • Infinite Density";
+    
+    const biomes = ['Toxic', 'Frozen', 'Arid', 'Oceanic', 'Verdant', 'Volcanic', 'Barren', 'Radioactive'];
+    return `${biomes[Math.floor(Math.random()*biomes.length)]} World • Gravity ${Math.random().toFixed(2)}g`;
+}
+
+// --- Rendering ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    initStars();
+}
+
+function initStars() {
+    state.stars = [];
+    for(let i=0; i<window.gameConfig.starDensity; i++) {
+        state.stars.push({
+            x: (Math.random() - 0.5) * window.innerWidth * 2,
+            y: (Math.random() - 0.5) * window.innerHeight * 2,
+            z: Math.random() * 2000
+        });
+    }
+}
+
+// Helper: Draw a celestial body
+function drawBody(ctx, obj, x, y, radius) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    if (obj.type === 'galaxy') {
+        // Galaxy Spiral
+        ctx.rotate(obj.rotationOffset + Date.now() * 0.0001);
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = `hsl(${obj.hue}, 60%, 50%)`;
+        
+        for(let i=0; i<2; i++) { // 2 arms
+            ctx.beginPath();
+            ctx.rotate(Math.PI);
+            for(let j=0; j<20; j++) {
+                const angle = j * 0.5;
+                const r = j * (radius * 0.08);
+                const px = Math.cos(angle) * r;
+                const py = Math.sin(angle) * r;
+                ctx.fillStyle = `hsla(${obj.hue}, 70%, 70%, ${1 - j/20})`;
+                ctx.beginPath();
+                ctx.arc(px, py, radius * 0.05 + j, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        // Core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.15, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    else if (obj.type === 'pulsar') {
+        // Pulsar Beams
+        const time = Date.now() * 0.02;
+        ctx.rotate(time);
+        
+        ctx.fillStyle = `hsl(${obj.hue}, 100%, 80%)`;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.3, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Beams
+        ctx.fillStyle = `hsla(${obj.hue}, 100%, 50%, 0.5)`;
+        ctx.beginPath();
+        ctx.moveTo(-radius*0.1, 0);
+        ctx.lineTo(radius*0.1, 0);
+        ctx.lineTo(0, -radius * 3); // Long beam
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.moveTo(-radius*0.1, 0);
+        ctx.lineTo(radius*0.1, 0);
+        ctx.lineTo(0, radius * 3);
+        ctx.fill();
+    }
+    else if (obj.type === 'ion') {
+        // Ion Star (Electric Blue/Cyan)
+        const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.1;
+        
+        const grd = ctx.createRadialGradient(0, 0, radius*0.3, 0, 0, radius*1.5 * pulse);
+        grd.addColorStop(0, '#e0ffff');
+        grd.addColorStop(0.5, '#00ffff');
+        grd.addColorStop(1, 'rgba(0, 255, 255, 0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius*1.5 * pulse, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius*0.6, 0, Math.PI*2);
+        ctx.fill();
+    }
+    else if (obj.type === 'star') {
+        const grd = ctx.createRadialGradient(0, 0, radius*0.2, 0, 0, radius*1.5);
+        grd.addColorStop(0, `hsl(${obj.hue}, 100%, 90%)`);
+        grd.addColorStop(1, `hsla(${obj.hue}, 100%, 50%, 0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius*1.5, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius*0.8, 0, Math.PI*2);
+        ctx.fill();
+    } 
+    else if (obj.type === 'blackhole') {
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = radius * 0.1;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI*2);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius*2.2, radius*0.6, 0.2, 0, Math.PI*2);
+        ctx.strokeStyle = `hsl(${obj.hue}, 80%, 60%)`;
+        ctx.lineWidth = radius * 0.15;
+        ctx.stroke();
+    } 
+    else {
+        // Planet
+        const grd = ctx.createRadialGradient(-radius*0.3, -radius*0.3, radius*0.1, 0, 0, radius);
+        grd.addColorStop(0, `hsl(${obj.hue}, 60%, 60%)`);
+        grd.addColorStop(1, `hsl(${obj.hue}, 80%, 20%)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.strokeStyle = `hsla(${obj.hue}, 60%, 80%, 0.3)`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        if (obj.rings) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.ellipse(0, 0, radius*2.0, radius*0.5, -0.2, 0, Math.PI*2);
+            ctx.strokeStyle = `hsla(${obj.hue}, 40%, 70%, 0.6)`;
+            ctx.lineWidth = radius * 0.3;
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 1.5, 4.7); 
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+function generateThumbnail(obj) {
+    const tCanvas = document.createElement('canvas');
+    tCanvas.width = 128;
+    tCanvas.height = 128;
+    const tCtx = tCanvas.getContext('2d');
+    tCtx.clearRect(0,0,128,128);
+    drawBody(tCtx, obj, 64, 64, 40);
+    return tCanvas.toDataURL();
+}
+
+// --- Game Loop ---
+function loop(timestamp) {
+    if (!state.active) return;
+    
+    const dt = Math.min((timestamp - state.lastTime) / 1000, 0.1);
+    state.lastTime = timestamp;
+    
+    update(dt);
+    draw();
+    
+    requestAnimationFrame(loop);
+}
+
+function update(dt) {
+    warningCooldown = Math.max(0, warningCooldown - dt);
+    // Apply Speed
+    let baseSpeed = window.gameConfig.flightSpeed;
+    if (state.warping) baseSpeed *= 50; 
+    const currentSpeed = baseSpeed * state.speedMultiplier;
+
+    if (Math.random() > 0.8) {
+        document.getElementById('speed-display').innerText = Math.floor(currentSpeed * 100).toLocaleString() + " kps";
+    }
+
+    // Camera Smoothing
+    state.camera.x += (state.targetCamera.x - state.camera.x) * 5 * dt;
+    state.camera.y += (state.targetCamera.y - state.camera.y) * 5 * dt;
+
+    // Warp Sequence
+    if (state.warping) {
+        state.warpTime += dt;
+        if (state.warpTime > 2.0) {
+            state.warping = false;
+            generateSector();
+            state.camera.x = 0; state.camera.y = 0;
+            state.targetCamera.x = 0; state.targetCamera.y = 0;
+        }
+    }
+
+    // Stars
+    state.stars.forEach(star => {
+        star.z -= currentSpeed * 10 * dt;
+        if (star.z <= 0) {
+            star.z = 2000;
+            star.x = (Math.random() - 0.5) * window.innerWidth * 2 + state.camera.x;
+            star.y = (Math.random() - 0.5) * window.innerHeight * 2 + state.camera.y;
+        }
+    });
+
+    // Objects & Gravity
+    state.objects.sort((a, b) => b.z - a.z);
+    
+    let objectInSights = null;
+    let gravityEffect = 0;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const gravityWarning = document.getElementById('gravity-warning');
+
+    for (let i = state.objects.length - 1; i >= 0; i--) {
+        const obj = state.objects[i];
+        obj.z -= currentSpeed * dt;
+        
+        // Gravity Logic
+        if (obj.type === 'blackhole' && obj.z < 3000 && obj.z > 100) {
+            const dx = obj.x - state.camera.x;
+            const dy = obj.y - state.camera.y;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist < 1500) {
+                const pullStrength = (1 - dist/1500) * (5000 / (obj.z + 100));
+                state.camera.x += dx * pullStrength * dt * 2;
+                state.camera.y += dy * pullStrength * dt * 2;
+                gravityEffect = Math.max(gravityEffect, pullStrength);
+                if (pullStrength > 0.5 && Math.random() > 0.9) playSynth('gravity');
+                if (pullStrength > 0.72 && warningCooldown <= 0) {
+                    playSound('warning');
+                    warningCooldown = 1.2;
+                }
+            }
+        }
+
+        if (obj.z < 10) {
+            state.objects.splice(i, 1);
+            spawnObject();
+            continue;
+        }
+
+        // Raycast for Scan
+        const scale = 500 / obj.z;
+        const screenX = cx + (obj.x - state.camera.x) * scale;
+        const screenY = cy + (obj.y - state.camera.y) * scale;
+        const radius = obj.size * scale;
+        
+        const distToCenter = Math.hypot(screenX - cx, screenY - cy);
+        // Galaxy hit box slightly larger
+        const hitRadius = obj.type === 'galaxy' ? radius * 0.8 : radius;
+        
+        if (distToCenter < hitRadius && obj.z < 2500 && !state.warping) {
+            objectInSights = obj;
+        }
+    }
+
+    // Gravity UI
+    state.gravityShake = gravityEffect * 5;
+    if (gravityEffect > 0.5) gravityWarning.classList.remove('hidden');
+    else gravityWarning.classList.add('hidden');
+
+    // Scan UI Logic
+    const scanUI = document.getElementById('scan-info');
+    const scanBar = document.getElementById('scan-bar');
+    const scanStatus = document.getElementById('scan-status');
+    const scanResult = document.getElementById('scan-result');
+    const btnSave = document.getElementById('btn-save');
+
+    if (objectInSights && !objectInSights.scanned) {
+        if (state.scanning !== objectInSights) {
+            state.scanning = objectInSights;
+            state.scanProgress = 0;
+            scanUI.classList.remove('hidden');
+            scanResult.classList.add('hidden');
+            scanStatus.classList.remove('hidden');
+            playSound('scan');
+        }
+        
+        state.scanProgress += dt * 0.8;
+        scanBar.style.width = Math.min(100, state.scanProgress * 100) + '%';
+        
+        if (state.scanProgress >= 1) {
+            objectInSights.scanned = true;
+            scanStatus.classList.add('hidden');
+            scanResult.classList.remove('hidden');
+            document.getElementById('planet-name').innerText = objectInSights.name;
+            document.getElementById('planet-desc').innerText = objectInSights.desc;
+            
+            btnSave.onclick = (e) => {
+                e.stopPropagation();
+                saveDiscovery(objectInSights);
+                scanUI.classList.add('hidden');
+                state.scanning = null;
+            };
+        }
+    } else {
+        if (state.scanning && !state.scanning.scanned) {
+            state.scanning = null;
+            state.scanProgress = 0;
+            scanUI.classList.add('hidden');
+        }
+    }
+}
+
+function draw() {
+    const shakeX = (Math.random() - 0.5) * state.gravityShake;
+    const shakeY = (Math.random() - 0.5) * state.gravityShake;
+    
+    if (state.warping) {
+        const t = state.warpTime / 2.0;
+        const c = Math.floor(t * 255);
+        ctx.fillStyle = `rgb(${c},${c},${c})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(shakeX + (Math.random()-0.5)*20, shakeY + (Math.random()-0.5)*20);
+    } else {
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, currentPalette[0]);
+        grad.addColorStop(1, currentPalette[1]);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(shakeX, shakeY);
+    }
+
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const fov = state.warping ? 300 : 500;
+
+    // Stars
+    ctx.fillStyle = '#fff';
+    state.stars.forEach(star => {
+        const scale = fov / star.z;
+        const x = cx + (star.x - state.camera.x * 0.1) * scale;
+        const y = cy + (star.y - state.camera.y * 0.1) * scale;
+        
+        if (state.warping) {
+            ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, scale)})`;
+            ctx.lineWidth = 2 * scale;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(cx + (x-cx)*1.2, cy + (y-cy)*1.2);
+            ctx.stroke();
+        } else {
+            const size = Math.max(0.5, 2 * scale);
+            ctx.globalAlpha = Math.min(1, scale * 2);
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+    ctx.globalAlpha = 1;
+
+    // Objects
+    if (!state.warping) {
+        state.objects.forEach(obj => {
+            const scale = fov / obj.z;
+            const x = cx + (obj.x - state.camera.x) * scale;
+            const y = cy + (obj.y - state.camera.y) * scale;
+            const r = Math.max(0, obj.size * scale);
+            
+            if (r < 0.5) return;
+
+            drawBody(ctx, obj, x, y, r);
+            
+            // Selection Bracket
+            if (state.scanning === obj) {
+                ctx.strokeStyle = window.gameConfig.hudColor;
+                ctx.lineWidth = 2;
+                const br = r + 15;
+                const len = br * 0.4;
+                
+                ctx.beginPath();
+                ctx.moveTo(-br + x, -br + len + y); ctx.lineTo(-br + x, -br + y); ctx.lineTo(-br + len + x, -br + y);
+                ctx.moveTo(br - len + x, -br + y); ctx.lineTo(br + x, -br + y); ctx.lineTo(br + x, -br + len + y);
+                ctx.moveTo(br + x, br - len + y); ctx.lineTo(br + x, br + y); ctx.lineTo(br - len + x, br + y);
+                ctx.moveTo(br - len + x, br + y); ctx.lineTo(-br + x, br + y); ctx.lineTo(-br + x, br - len + y);
+                ctx.stroke();
+            }
+        });
+    }
+
+    ctx.restore();
+}
+
+function saveDiscovery(obj) {
+    if (state.discoveries.some(d => d.id === obj.id)) return;
+    state.discoveries.push(obj);
+    playSound('save');
+    flashFeedback('scan');
+    
+    const thumbUrl = generateThumbnail(obj);
+    
+    const el = document.createElement('div');
+    el.className = 'glass p-3 rounded border border-gray-800 flex items-center gap-3';
+    el.innerHTML = `
+        <img src="${thumbUrl}" class="w-16 h-16 object-contain bg-black/50 rounded-full border border-gray-700">
+        <div class="flex-1">
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-white font-bold text-lg leading-none">${obj.name}</span>
+                <span class="text-[10px] bg-gray-800 px-1 rounded text-gray-400 uppercase">${obj.type}</span>
+            </div>
+            <div class="text-xs text-[var(--hud-color)] leading-tight mb-1">${obj.desc}</div>
+            <div class="text-[9px] text-gray-500 font-mono">ID: ${obj.id}</div>
+        </div>
+    `;
+    
+    const list = document.getElementById('db-list');
+    const empty = document.getElementById('db-empty');
+    if (empty) empty.style.display = 'none';
+    list.insertBefore(el, list.firstChild);
+}
+
+// --- Input Handling ---
+let pointerDown = false;
+let lastPointerX = 0;
+let lastPointerY = 0;
+
+// Steering
+const gameContainer = document.getElementById('game-container');
+gameContainer.addEventListener('pointerdown', e => {
+    if (!state.active) return;
+    // Ignore if touching buttons or modal actions
+    if (e.target.closest('button')) return;
+
+    pointerDown = true;
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}, { passive: false });
+
+gameContainer.addEventListener('pointermove', e => {
+    if (!state.active || !pointerDown) return;
+    const dx = e.clientX - lastPointerX;
+    const dy = e.clientY - lastPointerY;
+
+    state.targetCamera.x -= dx * 2.5;
+    state.targetCamera.y -= dy * 2.5;
+
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+}, { passive: false });
+
+const endPointer = () => { pointerDown = false; };
+gameContainer.addEventListener('pointerup', endPointer);
+gameContainer.addEventListener('pointercancel', endPointer);
+gameContainer.addEventListener('pointerleave', endPointer);
+
+// Side Controls
+const btnBrake = document.getElementById('btn-brake');
+const btnAccel = document.getElementById('btn-accel');
+const setSpeed = (mult) => { state.speedMultiplier = mult; };
+
+btnBrake.addEventListener('touchstart', (e) => { e.preventDefault(); setSpeed(0.1); });
+btnBrake.addEventListener('touchend', (e) => { e.preventDefault(); setSpeed(1.0); });
+btnBrake.addEventListener('mousedown', () => setSpeed(0.1));
+btnBrake.addEventListener('mouseup', () => setSpeed(1.0));
+
+btnAccel.addEventListener('touchstart', (e) => { e.preventDefault(); setSpeed(4.0); });
+btnAccel.addEventListener('touchend', (e) => { e.preventDefault(); setSpeed(1.0); });
+btnAccel.addEventListener('mousedown', () => setSpeed(4.0));
+btnAccel.addEventListener('mouseup', () => setSpeed(1.0));
+
+// UI Buttons
+document.addEventListener('DOMContentLoaded', () => {
+    updateTheme();
+    resize();
+    window.addEventListener('resize', resize);
+    
+    document.getElementById('start-btn').addEventListener('click', () => {
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('hud-layer').classList.remove('hidden');
+        state.active = true;
+        state.lastTime = performance.now();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        sounds.bgm.volume = 0.22;
+        sounds.bgm.play().catch(() => {});
+        playSound('menuOpen');
+        initStars();
+        generateSector();
+        loop(performance.now());
+    });
+    
+    document.getElementById('btn-warp').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.warping) return;
+        state.warping = true;
+        state.warpTime = 0;
+        playSound('warp');
+        flashFeedback('warp', 1400);
+        document.getElementById('scan-info').classList.add('hidden');
+        state.scanning = null;
+    });
+
+    document.getElementById('btn-exit').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.active = false;
+        document.getElementById('hud-layer').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+        // Reset state slightly for next run
+        state.speedMultiplier = 1.0;
+        state.scanning = null;
+        document.getElementById('scan-info').classList.add('hidden');
+        stopLoopAudio();
+    });
+    
+    const modal = document.getElementById('encyclopedia-modal');
+    document.getElementById('btn-encyclopedia').addEventListener('click', (e) => {
+        e.stopPropagation();
+        modal.classList.remove('hidden');
+        state.active = false;
+        sounds.bgm?.pause();
+        playSound('menuOpen');
+    });
+    
+    document.getElementById('btn-close-db').addEventListener('click', (e) => {
+        e.stopPropagation();
+        modal.classList.add('hidden');
+        state.active = true;
+        if (sounds.bgm) sounds.bgm.play().catch(() => {});
+        playSound('menuClose');
+        state.lastTime = performance.now();
+        requestAnimationFrame(loop);
+    });
+});
+</script>
+</body>
+</html>

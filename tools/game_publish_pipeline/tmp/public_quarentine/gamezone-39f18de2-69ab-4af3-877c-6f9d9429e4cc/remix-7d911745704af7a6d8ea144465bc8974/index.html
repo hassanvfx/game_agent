@@ -1,0 +1,1803 @@
+<![CDATA[
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Neon Drift: Data Run</title>
+    <!-- [agent-note][stage4] catalog-fonts: title/ui/hud remain mapped to approved catalogs/fonts.json entries -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+    <style>
+        :root {
+            --bg: #050510;
+            --bg-deep: #09091b;
+            --panel: rgba(9, 14, 32, 0.78);
+            --panel-strong: rgba(10, 16, 36, 0.92);
+            --line: rgba(168, 241, 255, 0.24);
+            --white-soft: rgba(255, 255, 255, 0.72);
+            --muted: #7f8aa8;
+            --cyan: #00f3ff;
+            --magenta: #ff4fd8;
+            --lime: #6dffbe;
+            --amber: #fbbf24;
+            --red: #ff4d6d;
+            --shadow: 0 0 18px rgba(0, 243, 255, 0.14), 0 18px 45px rgba(0, 0, 0, 0.4);
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(0, 243, 255, 0.11), transparent 36%),
+                radial-gradient(circle at 80% 20%, rgba(255, 79, 216, 0.14), transparent 30%),
+                linear-gradient(180deg, #0b1021 0%, var(--bg) 58%, #020207 100%);
+            color: #fff;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: "Rajdhani", system-ui, sans-serif;
+        }
+
+        button {
+            font: inherit;
+            color: inherit;
+            border: 0;
+            background: none;
+            cursor: pointer;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.08s ease;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .text-white { color: #fff; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-gray-500 { color: #6b7280; }
+        .text-gray-600 { color: #4b5563; }
+        .text-neon-cyan { color: var(--cyan); }
+        .text-neon-magenta { color: var(--magenta); }
+        .text-neon-lime { color: var(--lime); }
+        .text-neon-amber { color: var(--amber); }
+        .text-red-200 { color: #fecdd3; }
+        .text-red-500 { color: var(--red); }
+
+        .font-ui { font-family: "Rajdhani", system-ui, sans-serif; }
+        .font-display { font-family: "Orbitron", "Rajdhani", sans-serif; }
+        .font-mono { font-family: "Press Start 2P", monospace; }
+
+        #game-root {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(0, 243, 255, 0.08), transparent 36%),
+                linear-gradient(180deg, rgba(12, 18, 34, 0.65), rgba(5, 5, 16, 0.96));
+        }
+
+        #game-root::before,
+        #game-root::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        #game-root::before {
+            background:
+                linear-gradient(90deg, transparent 0 15%, rgba(0, 243, 255, 0.08) 50%, transparent 85%),
+                repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 88px);
+            opacity: 0.45;
+        }
+
+        #game-root::after {
+            background:
+                radial-gradient(circle at center, transparent 45%, rgba(0,0,0,0.28) 100%);
+            z-index: 1;
+        }
+
+        #world {
+            position: relative;
+            z-index: 0;
+        }
+
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background:
+                linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.12) 50%, rgba(0,0,0,0.12)),
+                linear-gradient(180deg, rgba(0, 243, 255, 0.04), transparent 35%, rgba(255, 79, 216, 0.04));
+            background-size: 100% 4px, 100% 100%;
+            mix-blend-mode: screen;
+            opacity: 0.8;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+            padding:
+                max(12px, env(safe-area-inset-top))
+                max(12px, env(safe-area-inset-right))
+                max(12px, env(safe-area-inset-bottom))
+                max(12px, env(safe-area-inset-left));
+        }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(14, 21, 42, 0.92), rgba(5, 9, 21, 0.84));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: var(--shadow);
+        }
+
+        .panel-chip {
+            border-radius: 16px;
+            padding: 10px 14px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-chip::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.07), transparent 55%);
+            pointer-events: none;
+        }
+
+        .text-glow {
+            text-shadow: 0 0 8px currentColor, 0 0 18px rgba(255,255,255,0.12);
+        }
+
+        .btn-action,
+        .btn-ghost,
+        .garage-arrow,
+        .paint-btn,
+        .hud-button {
+            transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+        }
+
+        .btn-action:active,
+        .btn-ghost:active,
+        .garage-arrow:active,
+        .paint-btn:active,
+        .hud-button:active {
+            transform: scale(0.96);
+            filter: brightness(1.14);
+        }
+
+        .btn-action {
+            position: relative;
+            overflow: hidden;
+            pointer-events: auto;
+            width: 100%;
+            border-radius: 18px;
+            padding: 15px 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .btn-primary {
+            color: #071018;
+            background: linear-gradient(135deg, #8cf9ff, var(--cyan));
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.28), inset 0 1px 0 rgba(255,255,255,0.45);
+        }
+
+        .btn-secondary {
+            color: var(--magenta);
+            border: 2px solid rgba(255, 79, 216, 0.75);
+            background: linear-gradient(180deg, rgba(255, 79, 216, 0.12), rgba(255, 79, 216, 0.03));
+            box-shadow: 0 0 16px rgba(255, 79, 216, 0.18);
+        }
+
+        .btn-amber {
+            color: #160f00;
+            background: linear-gradient(135deg, #ffd36b, var(--amber));
+            box-shadow: 0 0 18px rgba(251,191,36,0.28);
+        }
+
+        .btn-light {
+            color: #06080f;
+            background: linear-gradient(180deg, #ffffff, #dbeafe);
+            box-shadow: 0 10px 22px rgba(255,255,255,0.1);
+        }
+
+        .btn-ghost {
+            pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 12px;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.04);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .btn-ghost:hover,
+        .hud-button:hover,
+        .garage-arrow:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .screen-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+        }
+
+        .center-screen {
+            align-items: center;
+            justify-content: center;
+        }
+
+        .backdrop-dark {
+            background: rgba(0, 0, 0, 0.72);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .start-shell {
+            width: 100%;
+            max-width: 400px;
+            padding: 24px 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+        }
+
+        .brand-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(3, 8, 22, 0.72);
+            color: var(--cyan);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.28em;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.15);
+        }
+
+        .hero-card {
+            width: 100%;
+            padding: 24px 18px 18px;
+            border-radius: 26px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 15%, rgba(0, 243, 255, 0.14), transparent 25%),
+                radial-gradient(circle at 80% 25%, rgba(255, 79, 216, 0.18), transparent 26%),
+                linear-gradient(180deg, rgba(255,255,255,0.06), transparent 32%);
+            pointer-events: none;
+        }
+
+        .hero-character {
+            position: relative;
+            margin: 0 auto 16px;
+            width: min(58vw, 220px);
+            height: min(42vw, 160px);
+            min-width: 168px;
+            min-height: 120px;
+            filter: drop-shadow(0 0 18px rgba(0, 243, 255, 0.28));
+        }
+
+        .hero-character .lane-glow {
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            bottom: 6px;
+            height: 18px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(0, 243, 255, 0.34), rgba(0, 243, 255, 0.04) 62%, transparent 75%);
+            filter: blur(4px);
+        }
+
+        .hero-character .car-silhouette {
+            position: absolute;
+            inset: 10% 18% 18%;
+            border-radius: 38% 38% 28% 28% / 28% 28% 44% 44%;
+            background:
+                linear-gradient(180deg, #8ef6ff 0%, var(--cyan) 42%, #006f95 100%);
+            transform: perspective(220px) rotateX(58deg);
+            box-shadow:
+                0 0 22px rgba(0, 243, 255, 0.55),
+                inset 0 -10px 16px rgba(1, 27, 48, 0.55),
+                inset 0 8px 12px rgba(255,255,255,0.24);
+        }
+
+        .hero-character .car-silhouette::before,
+        .hero-character .car-silhouette::after {
+            content: "";
+            position: absolute;
+            top: 62%;
+            width: 18%;
+            height: 12%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ff4f6d, #ffd1d9);
+            box-shadow: 0 0 12px rgba(255, 77, 109, 0.75);
+        }
+
+        .hero-character .car-silhouette::before { left: 10%; }
+        .hero-character .car-silhouette::after { right: 10%; }
+
+        .hero-character .canopy {
+            position: absolute;
+            left: 31%;
+            right: 31%;
+            top: 18%;
+            height: 34%;
+            border-radius: 42% 42% 24% 24%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.68), rgba(76, 119, 170, 0.1));
+            border: 1px solid rgba(255,255,255,0.34);
+            transform: perspective(220px) rotateX(58deg);
+        }
+
+        .hero-character .wisp {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.84);
+            box-shadow: 0 0 10px currentColor;
+            animation: sparkFloat 2.2s ease-in-out infinite;
+        }
+
+        .hero-character .wisp.cyan {
+            left: 12%;
+            top: 26%;
+            color: var(--cyan);
+        }
+
+        .hero-character .wisp.magenta {
+            right: 14%;
+            top: 16%;
+            color: var(--magenta);
+            animation-delay: 0.55s;
+        }
+
+        .hero-character .wisp.lime {
+            right: 22%;
+            bottom: 22%;
+            color: var(--lime);
+            animation-delay: 1s;
+        }
+
+        .title-lockup {
+            position: relative;
+            text-align: center;
+        }
+
+        .title-lockup h1 {
+            margin: 0;
+            line-height: 0.95;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .title-lockup .topline {
+            display: block;
+            font-family: "Orbitron", sans-serif;
+            font-size: clamp(30px, 10vw, 46px);
+            color: var(--cyan);
+            text-shadow: 0 0 16px rgba(0,243,255,0.34);
+        }
+
+        .title-lockup .headline {
+            display: block;
+            margin-top: 5px;
+            font-family: "Orbitron", sans-serif;
+            font-size: clamp(36px, 12vw, 56px);
+            color: #fff;
+            text-shadow: 0 0 22px rgba(255,255,255,0.16), 0 0 18px rgba(255,79,216,0.22);
+        }
+
+        .subtitle {
+            margin-top: 10px;
+            color: var(--lime);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.42em;
+            font-weight: 600;
+        }
+
+        .feature-row {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .feature-pill {
+            min-width: 0;
+            padding: 12px 10px;
+            border-radius: 16px;
+            text-align: center;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .feature-pill .label {
+            display: block;
+            color: var(--muted);
+            font-size: 9px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .feature-pill .value {
+            font-family: "Rajdhani", system-ui, sans-serif;
+            font-size: 10px;
+            line-height: 1.4;
+            color: #fff;
+        }
+
+        .control-row {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            margin-top: 2px;
+        }
+
+        .version-note {
+            color: rgba(255,255,255,0.34);
+            font-size: 11px;
+        }
+
+        #hud {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            padding: 4px;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .hud-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .hud-card {
+            min-width: 92px;
+            border-radius: 18px;
+            padding: 10px 14px;
+            border-left: 4px solid var(--cyan);
+        }
+
+        .hud-label {
+            color: #94a3b8;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.24em;
+            margin-bottom: 4px;
+        }
+
+        .hud-score {
+            font-size: clamp(20px, 5vw, 28px);
+            line-height: 1.1;
+        }
+
+        .hud-button {
+            pointer-events: auto;
+            padding: 9px 12px;
+            border-radius: 12px;
+            background: rgba(7, 10, 26, 0.82);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--magenta);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+
+        .weather-badge {
+            padding: 7px 10px;
+            border-radius: 12px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(0,0,0,0.42);
+            color: #9ca3af;
+        }
+
+        .weather-badge.storm {
+            background: rgba(127, 29, 29, 0.52);
+            color: #fecdd3;
+            box-shadow: 0 0 16px rgba(255, 77, 109, 0.18);
+        }
+
+        .hud-bottom {
+            width: 100%;
+            max-width: 430px;
+            margin: auto auto 8px;
+        }
+
+        .meter-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 4px 5px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+        }
+
+        .meter-shell {
+            height: 16px;
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(3, 6, 17, 0.9);
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.45);
+        }
+
+        .meter-bar {
+            height: 100%;
+            width: 0;
+            border-radius: inherit;
+            background:
+                linear-gradient(90deg, var(--lime), var(--cyan) 55%, #d0fdff);
+            box-shadow: 0 0 12px rgba(0, 243, 255, 0.26);
+            transition: width 0.075s linear;
+        }
+
+        .redline-marker {
+            position: absolute;
+            right: 10%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: rgba(255, 77, 109, 0.58);
+            box-shadow: 0 0 8px rgba(255, 77, 109, 0.38);
+        }
+
+        #screen-garage {
+            z-index: 30;
+            background:
+                radial-gradient(circle at 50% 12%, rgba(0, 243, 255, 0.08), transparent 28%),
+                linear-gradient(180deg, rgba(6, 10, 24, 0.9), rgba(5,5,16,0.96));
+        }
+
+        .garage-header {
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, rgba(0,0,0,0.8), transparent);
+            z-index: 1;
+        }
+
+        .garage-header h2 {
+            margin: 0;
+            font-family: "Orbitron", sans-serif;
+            font-size: clamp(24px, 6vw, 30px);
+            color: var(--amber);
+            text-shadow: 0 0 16px rgba(251,191,36,0.18);
+            letter-spacing: 0.08em;
+        }
+
+        .garage-stage {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .garage-arrow-wrap {
+            position: absolute;
+            inset-inline: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+
+        .garage-arrow {
+            pointer-events: auto;
+            width: 48px;
+            height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: rgba(0,0,0,0.42);
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .garage-arrow span {
+            transform: translateY(-1px);
+        }
+
+        .garage-copy {
+            position: absolute;
+            left: 50%;
+            bottom: 18px;
+            transform: translateX(-50%);
+            width: min(100%, 440px);
+            text-align: center;
+            pointer-events: none;
+            padding: 0 20px;
+        }
+
+        .garage-copy h3 {
+            margin: 0;
+            font-family: "Orbitron", sans-serif;
+            font-size: clamp(32px, 10vw, 44px);
+            color: #fff;
+            text-shadow: 0 0 18px rgba(255,255,255,0.2);
+            letter-spacing: 0.1em;
+        }
+
+        .garage-copy p {
+            margin: 8px 0 0;
+            color: var(--cyan);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.26em;
+            font-weight: 600;
+        }
+
+        .garage-footer {
+            margin: 14px;
+            padding: 16px;
+            border-radius: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .stats-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stat-label {
+            width: 44px;
+            color: #94a3b8;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+
+        .stat-track {
+            flex: 1;
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .stat-fill {
+            height: 100%;
+            border-radius: inherit;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .paint-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            flex-wrap: wrap;
+        }
+
+        .paint-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            border: 2px solid transparent;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+            pointer-events: auto;
+        }
+
+        .paint-btn.is-selected {
+            border-color: #fff;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.1), 0 0 15px currentColor;
+        }
+
+        #screen-gameover {
+            z-index: 40;
+            background: rgba(0,0,0,0.88);
+        }
+
+        .gameover-card {
+            width: min(90%, 380px);
+            padding: 28px 22px;
+            border-radius: 24px;
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+            border-top: 4px solid var(--red);
+        }
+
+        .gameover-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,77,109,0.14), transparent 40%);
+            pointer-events: none;
+        }
+
+        .pulse-fast {
+            animation: pulseFast 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .gameover-card h2 {
+            position: relative;
+            z-index: 1;
+            margin: 0 0 8px;
+            font-family: "Orbitron", sans-serif;
+            font-size: clamp(34px, 10vw, 50px);
+            color: var(--red);
+            text-shadow: 0 0 18px rgba(255,77,109,0.25);
+            letter-spacing: 0.04em;
+        }
+
+        .score-wrap {
+            position: relative;
+            z-index: 1;
+            margin: 22px 0;
+        }
+
+        .score-wrap p {
+            margin: 0 0 8px;
+        }
+
+        .score-caption {
+            color: #9ca3af;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+        }
+
+        .score-number {
+            font-size: clamp(28px, 8vw, 40px);
+            line-height: 1.3;
+        }
+
+        .action-stack {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: 14px;
+            bottom: 14px;
+            width: clamp(70px, 20vw, 108px);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.14);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            pointer-events: none;
+            z-index: 18;
+            background: rgba(4, 7, 18, 0.78);
+        }
+
+        .feedback-gif.is-visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.fail {
+            right: auto;
+            left: 14px;
+            top: 14px;
+            bottom: auto;
+            width: clamp(64px, 18vw, 92px);
+        }
+
+        .menu-link {
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            padding: 10px 0 0;
+        }
+
+        @keyframes pulseFast {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes sparkFloat {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.22; }
+            50% { transform: translateY(-10px) scale(1.2); opacity: 0.9; }
+        }
+
+        @media (max-width: 520px) {
+            .start-shell {
+                gap: 18px;
+                padding: 18px 14px;
+            }
+
+            .hero-card {
+                padding: 20px 14px 16px;
+            }
+
+            .feature-row {
+                gap: 8px;
+            }
+
+            .feature-pill {
+                padding: 10px 8px;
+            }
+
+            .feature-pill .value {
+                font-size: 9px;
+            }
+
+            .btn-action {
+                padding: 14px 14px;
+                font-size: 15px;
+            }
+
+            .hud-card {
+                padding: 9px 12px;
+            }
+
+            .hud-bottom {
+                max-width: none;
+                margin-bottom: 4px;
+            }
+
+            .garage-footer {
+                margin: 10px;
+                padding: 14px;
+                gap: 14px;
+            }
+
+            .garage-copy h3 {
+                font-size: clamp(28px, 11vw, 36px);
+            }
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <div id="game-root">
+        <canvas id="world"></canvas>
+        <div class="scanlines" aria-hidden="true"></div>
+
+            <div id="ui-layer">
+                <!-- [agent-note][stage3] resolved-gif: collect/crash overlays -> catalogs/gifs.json -->
+                <img id="feedback-gif-win" class="feedback-gif" src="https://i.giphy.com/443DE4MxVGnbM8vCi6.webp" alt="Reward reaction" decoding="async" loading="lazy" aria-hidden="true">
+                <img id="feedback-gif-fail" class="feedback-gif fail" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="Crash reaction" decoding="async" loading="lazy" aria-hidden="true">
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe, restyled without moving controls -->
+            <div id="hud" class="hidden">
+                <div class="hud-top">
+                    <div class="glass-panel panel-chip hud-card">
+                        <div class="hud-label">Data</div>
+                        <div id="score-val" class="hud-score text-neon-cyan text-glow font-mono">0</div>
+                    </div>
+
+                    <div class="hud-stack">
+                        <button id="btn-cam" class="hud-button">View: Chase</button>
+                        <div id="weather-badge" class="weather-badge">Clear Sky</div>
+                    </div>
+                </div>
+
+                <div class="hud-bottom">
+                    <div class="meter-head">
+                        <span class="text-neon-lime">Signal</span>
+                        <span id="speed-val">0 KM/H</span>
+                    </div>
+                    <div class="meter-shell">
+                        <div id="speed-bar" class="meter-bar"></div>
+                        <div class="redline-marker" aria-hidden="true"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="screen-start" class="screen-overlay center-screen backdrop-dark">
+                <div class="start-shell">
+                    <div class="brand-badge font-ui">Neon Relay / Courier Build</div>
+
+                    <div class="hero-card glass-panel">
+                        <div class="hero-character" aria-hidden="true">
+                            <div class="lane-glow"></div>
+                            <div class="car-silhouette"></div>
+                            <div class="canopy"></div>
+                            <span class="wisp cyan"></span>
+                            <span class="wisp magenta"></span>
+                            <span class="wisp lime"></span>
+                        </div>
+
+                        <div class="title-lockup">
+                            <h1>
+                                <span class="topline">Neon</span>
+                                <span class="headline">Data Run</span>
+                            </h1>
+                            <div class="subtitle">Traffic Courier</div>
+                        </div>
+
+                        <div class="feature-row" aria-hidden="true" style="margin-top: 18px;">
+                            <div class="feature-pill">
+                                <span class="label">Frame</span>
+                                <span class="value">SYNC</span>
+                            </div>
+                            <div class="feature-pill">
+                                <span class="label">Route</span>
+                                <span class="value">GRID</span>
+                            </div>
+                            <div class="feature-pill">
+                                <span class="label">Glow</span>
+                                <span class="value">LIVE</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+                        <button id="btn-play" class="btn-action btn-primary">Start Run</button>
+                        <button id="btn-garage" class="btn-action btn-secondary">Loadout</button>
+                    </div>
+
+                    <div class="control-row">
+                        <button id="btn-mute" class="btn-ghost">Audio: ON</button>
+                        <div class="version-note">v2.1.0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="screen-garage" class="hidden screen-overlay">
+                <div class="garage-header">
+                    <h2>Loadout</h2>
+                    <button id="btn-garage-back" class="btn-ghost">Back</button>
+                </div>
+
+                <div class="garage-stage">
+                    <div class="garage-arrow-wrap">
+                        <button id="btn-prev-car" class="garage-arrow"><span><</span></button>
+                        <button id="btn-next-car" class="garage-arrow"><span>></span></button>
+                    </div>
+
+                    <div class="garage-copy">
+                        <h3 id="garage-car-name">VIPER</h3>
+                        <p id="garage-car-class">Courier Frame</p>
+                    </div>
+                </div>
+
+                <div class="glass-panel garage-footer">
+                    <div class="stats-group">
+                        <div class="stat-row">
+                            <span class="stat-label">SPD</span>
+                            <div class="stat-track">
+                                <div id="stat-spd" class="stat-fill" style="width: 50%; background: var(--cyan); color: var(--cyan);"></div>
+                            </div>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">HND</span>
+                            <div class="stat-track">
+                                <div id="stat-hnd" class="stat-fill" style="width: 50%; background: var(--magenta); color: var(--magenta);"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="paint-row">
+                        <button class="paint-btn" style="background:#00f3ff;color:#00f3ff;" data-c="#00f3ff" aria-label="Cyan paint"></button>
+                        <button class="paint-btn" style="background:#ff00ff;color:#ff00ff;" data-c="#ff00ff" aria-label="Magenta paint"></button>
+                        <button class="paint-btn" style="background:#fbbf24;color:#fbbf24;" data-c="#fbbf24" aria-label="Amber paint"></button>
+                        <button class="paint-btn" style="background:#ffffff;color:#ffffff;" data-c="#ffffff" aria-label="White paint"></button>
+                        <button class="paint-btn" style="background:#ff0033;color:#ff0033;" data-c="#ff0033" aria-label="Crimson paint"></button>
+                    </div>
+
+                    <button id="btn-select" class="btn-action btn-amber">Deploy Frame</button>
+                </div>
+            </div>
+
+            <div id="screen-gameover" class="hidden screen-overlay center-screen backdrop-dark">
+                <div class="glass-panel gameover-card">
+                    <div class="pulse-fast" style="position:absolute; inset:0; background:rgba(255,77,109,0.08); pointer-events:none;"></div>
+
+                    <h2>Signal Lost</h2>
+                    <div class="score-wrap">
+                        <p class="score-caption">Recovered Data</p>
+                        <p id="final-score" class="score-number text-glow font-mono">0</p>
+                    </div>
+
+                    <div class="action-stack">
+                        <button id="btn-retry" class="btn-action btn-light">Reroute</button>
+                        <button id="btn-menu" class="menu-link">Command Deck</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* --- CONSTANTS & CONFIG --- */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+            start: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3",
+            uiClick: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+            collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+            warning: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3",
+            crash: "https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3",
+            gameOver: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3"
+        };
+
+        const CARS = [
+            { id: 'viper', name: 'SPARROW', class: 'Fast Courier', width: 0.12, stats: { spd: 70, hnd: 60 }, style: 0 },
+            { id: 'titan', name: 'BULWARK', class: 'Armored Hauler', width: 0.16, stats: { spd: 40, hnd: 40 }, style: 1 },
+            { id: 'spectre', name: 'PHASE', class: 'Prototype Relay', width: 0.11, stats: { spd: 90, hnd: 30 }, style: 2 },
+            { id: 'eclipse', name: 'PULSE', class: 'Agile Router', width: 0.13, stats: { spd: 65, hnd: 75 }, style: 3 },
+            { id: 'phantom', name: 'GHOST', class: 'Silent Link', width: 0.12, stats: { spd: 80, hnd: 80 }, style: 4 }
+        ];
+
+        const CAMS = [
+            { name: 'CHASE', dist: 2.5, minS: 0.05, yOff: 0.85 },
+            { name: 'GRID', dist: 1.8, minS: 0.1, yOff: 0.8 },
+            { name: 'LINK', dist: 1.2, minS: 0.2, yOff: 0.9 }
+        ];
+
+        const WEATHER = {
+            "CLEAR SKY": { color: '#00f3ff', fog: 0, rain: 0 },
+            "STATIC RAIN": { color: '#4a5568', fog: 0.4, rain: 0.7 },
+            "SIGNAL STORM": { color: '#2d3748', fog: 0.7, rain: 1.0, lightning: true }
+        };
+
+        /* --- GAME STATE --- */
+        const State = {
+            screen: 'start',
+            active: false,
+            frame: 0,
+            w: 0, h: 0,
+            score: 0,
+            speed: 0,
+            baseSpeed: 0.005,
+            camIdx: 0,
+
+            player: {
+                x: 0.5,
+                targetX: 0.5,
+                carIdx: 0,
+                color: '#00f3ff'
+            },
+
+            env: {
+                weather: 'CLEAR SKY',
+                timer: 0,
+                rainIntensity: 0,
+                flash: 0,
+                particles: []
+            },
+
+            entities: [],
+            audio: { on: true, unlocked: false, pools: {} },
+            feedback: { gifTimer: null }
+        };
+
+        /* --- AUDIO SYSTEM --- */
+        const AudioSys = {
+            bgm: new Audio(ASSETS.bgm),
+            buffers: {},
+            sfxConfig: {
+                start: { url: ASSETS.start, volume: 0.42 },
+                uiClick: { url: ASSETS.uiClick, volume: 0.3 },
+                collect: { url: ASSETS.collect, volume: 0.36 },
+                warning: { url: ASSETS.warning, volume: 0.28 },
+                crash: { url: ASSETS.crash, volume: 0.5 },
+                gameOver: { url: ASSETS.gameOver, volume: 0.55 }
+            },
+
+            init() {
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+
+                Object.entries(this.sfxConfig).forEach(([key, config]) => {
+                    this.buffers[key] = new Audio(config.url);
+                    this.buffers[key].volume = config.volume;
+                    this.buffers[key].preload = 'auto';
+                    State.audio.pools[key] = [];
+                });
+            },
+
+            unlock() {
+                State.audio.unlocked = true;
+            },
+
+            playBGM() {
+                if (!State.audio.on || !State.audio.unlocked) return;
+                this.bgm.play().catch(() => {});
+            },
+
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            },
+
+            play(name) {
+                if (!State.audio.on || !State.audio.unlocked) return;
+                const template = this.buffers[name];
+                const pool = State.audio.pools[name];
+                if (!template || !pool) return;
+
+                let sound = pool.find((entry) => entry.paused || entry.ended);
+                if (!sound) {
+                    sound = template.cloneNode();
+                    sound.volume = template.volume;
+                    pool.push(sound);
+                }
+
+                sound.currentTime = 0;
+                sound.play().catch(() => {});
+            },
+
+            toggle() {
+                State.audio.on = !State.audio.on;
+                if (!State.audio.on) this.stopBGM();
+                else if (State.active) this.playBGM();
+                return State.audio.on;
+            }
+        };
+        AudioSys.init();
+
+        function showFeedbackGif(kind) {
+            const winGif = document.getElementById('feedback-gif-win');
+            const failGif = document.getElementById('feedback-gif-fail');
+            const activeGif = kind === 'fail' ? failGif : winGif;
+            const inactiveGif = kind === 'fail' ? winGif : failGif;
+
+            inactiveGif.classList.remove('is-visible');
+            activeGif.classList.add('is-visible');
+
+            clearTimeout(State.feedback.gifTimer);
+            State.feedback.gifTimer = setTimeout(() => {
+                activeGif.classList.remove('is-visible');
+            }, kind === 'fail' ? 1500 : 1100);
+        }
+
+        function safeInteractAudio() {
+            AudioSys.unlock();
+            if (State.active) AudioSys.playBGM();
+        }
+
+        /* --- RENDER ENGINE --- */
+        const canvas = document.getElementById('world');
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        function resize() {
+            State.w = canvas.width = window.innerWidth;
+            State.h = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function project(x, y, w, h) {
+            const cam = CAMS[State.camIdx];
+            const safeY = Math.max(0, y);
+            const z = Math.pow(safeY, cam.dist);
+            const scale = cam.minS + (1 - cam.minS) * z;
+            const cx = State.w / 2;
+            const screenX = cx + (x - 0.5) * State.w * scale * 1.5;
+            const screenY = z * State.h;
+
+            return {
+                x: screenX,
+                y: screenY,
+                w: w * scale,
+                h: h * scale,
+                s: scale,
+                z: z
+            };
+        }
+
+        function drawCar(ctx, p, color, style, isPlayer) {
+            const { x, y, w, h, s } = p;
+            const cx = x;
+            const cy = y;
+            const hw = w / 2;
+            const hh = h / 2;
+
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + hh - 2 * s, hw * 0.9, hw * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const bodyColor = isPlayer ? color : ['#4f6b8b', '#6f5aa6', '#2c4e67', '#6a708f', '#58506b'][style % 5];
+            const highlight = isPlayer ? '#dffcff' : '#d9def2';
+
+            ctx.fillStyle = bodyColor;
+            if (isPlayer) {
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 15 * s;
+            }
+
+            ctx.beginPath();
+            if (style === 0) {
+                ctx.moveTo(cx - hw * 0.8, cy - hh * 0.8);
+                ctx.lineTo(cx + hw * 0.8, cy - hh * 0.8);
+                ctx.lineTo(cx + hw, cy + hh);
+                ctx.lineTo(cx - hw, cy + hh);
+            } else if (style === 1) {
+                ctx.rect(cx - hw * 0.9, cy - hh * 0.9, w * 0.9, h * 1.8);
+            } else if (style === 2) {
+                ctx.moveTo(cx, cy - hh);
+                ctx.lineTo(cx + hw * 0.4, cy - hh * 0.5);
+                ctx.lineTo(cx + hw, cy + hh);
+                ctx.lineTo(cx - hw, cy + hh);
+                ctx.lineTo(cx - hw * 0.4, cy - hh * 0.5);
+            } else {
+                ctx.moveTo(cx - hw * 0.7, cy - hh);
+                ctx.lineTo(cx + hw * 0.7, cy - hh);
+                ctx.lineTo(cx + hw * 0.9, cy + hh);
+                ctx.lineTo(cx - hw * 0.9, cy + hh);
+            }
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            ctx.beginPath();
+            ctx.moveTo(cx - hw * 0.55, cy - hh * 0.76);
+            ctx.lineTo(cx + hw * 0.28, cy - hh * 0.76);
+            ctx.lineTo(cx + hw * 0.18, cy - hh * 0.25);
+            ctx.lineTo(cx - hw * 0.45, cy - hh * 0.25);
+            ctx.fill();
+
+            ctx.fillStyle = '#08111c';
+            ctx.beginPath();
+            ctx.moveTo(cx - hw * 0.5, cy - hh * 0.4);
+            ctx.lineTo(cx + hw * 0.5, cy - hh * 0.4);
+            ctx.lineTo(cx + hw * 0.6, cy + hh * 0.2);
+            ctx.lineTo(cx - hw * 0.6, cy + hh * 0.2);
+            ctx.fill();
+
+            ctx.fillStyle = highlight;
+            ctx.globalAlpha = 0.24;
+            ctx.fillRect(cx - hw * 0.68, cy - hh * 0.54, hw * 1.36, h * 0.12);
+            ctx.globalAlpha = 1;
+
+            if (isPlayer) {
+                ctx.fillStyle = '#ff0033';
+                ctx.shadowColor = '#ff0033';
+                ctx.shadowBlur = 10 * s;
+                ctx.fillRect(cx - hw * 0.7, cy + hh - 4 * s, hw * 0.4, 4 * s);
+                ctx.fillRect(cx + hw * 0.3, cy + hh - 4 * s, hw * 0.4, 4 * s);
+
+                ctx.fillStyle = 'rgba(255,255,255,0.88)';
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 12 * s;
+                ctx.fillRect(cx - hw * 0.1, cy - hh * 0.9, hw * 0.2, hh * 0.22);
+            } else {
+                ctx.fillStyle = '#ff6b7f';
+                ctx.fillRect(cx - hw * 0.7, cy + hh - 3 * s, hw * 0.3, 3 * s);
+                ctx.fillRect(cx + hw * 0.4, cy + hh - 3 * s, hw * 0.3, 3 * s);
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function drawWorld() {
+            const bg = ctx.createLinearGradient(0, 0, 0, State.h);
+            bg.addColorStop(0, State.env.flash > 0 ? '#1b223d' : '#081127');
+            bg.addColorStop(0.45, '#080d1d');
+            bg.addColorStop(1, '#020207');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, State.w, State.h);
+
+            const skyline = ctx.createLinearGradient(0, 0, 0, State.h * 0.42);
+            skyline.addColorStop(0, 'rgba(0,243,255,0.16)');
+            skyline.addColorStop(1, 'rgba(0,243,255,0)');
+            ctx.fillStyle = skyline;
+            ctx.fillRect(0, 0, State.w, State.h * 0.42);
+
+            if (State.env.flash > 0) State.env.flash *= 0.8;
+
+            ctx.lineWidth = 1;
+
+            const lanes = 4;
+            for (let i = 0; i <= lanes; i++) {
+                const lx = i / lanes;
+                const pStart = project(lx, 0, 0, 0);
+                const pEnd = project(lx, 1.2, 0, 0);
+                const laneGlow = ctx.createLinearGradient(pStart.x, pStart.y, pEnd.x, pEnd.y);
+                laneGlow.addColorStop(0, 'rgba(0, 243, 255, 0.12)');
+                laneGlow.addColorStop(1, 'rgba(0, 243, 255, 0.34)');
+                ctx.strokeStyle = laneGlow;
+                ctx.beginPath();
+                ctx.moveTo(pStart.x, pStart.y);
+                ctx.lineTo(pEnd.x, pEnd.y);
+                ctx.stroke();
+            }
+
+            const speedOffset = (State.score * 0.1) % 1;
+            for (let i = 0; i < 15; i++) {
+                let ly = (i + speedOffset) / 15;
+                if (ly > 1) ly -= 1;
+
+                const pLeft = project(0, ly, 0, 0);
+                const pRight = project(1, ly, 0, 0);
+
+                ctx.strokeStyle = `rgba(0, 243, 255, ${0.06 + ly * 0.34})`;
+                ctx.beginPath();
+                ctx.moveTo(pLeft.x, pLeft.y);
+                ctx.lineTo(pRight.x, pRight.y);
+                ctx.stroke();
+            }
+
+            for (let i = 0; i < 9; i++) {
+                const x = ((i + 1) / 10) * State.w;
+                const h = State.h * (0.06 + (i % 4) * 0.03);
+                ctx.fillStyle = `rgba(${i % 2 ? '255,79,216' : '0,243,255'}, 0.08)`;
+                ctx.fillRect(x, State.h * 0.16 - h, 2, h);
+            }
+        }
+
+        function drawEntities() {
+            State.entities.sort((a, b) => a.y - b.y);
+
+            State.entities.forEach(e => {
+                const p = project(e.x, e.y, e.w, e.h);
+
+                if (e.type === 'coin') {
+                    const spin = Math.sin(State.frame * 0.1) * 0.2;
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.shadowColor = '#fbbf24';
+                    ctx.shadowBlur = 15;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y - 10 * p.s, (e.w / 2) * p.s * (1 + spin), 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    ctx.fillStyle = '#fff8dd';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y - 10 * p.s, (e.w / 4) * p.s, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+                    ctx.lineWidth = Math.max(1, 1.5 * p.s);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y - 10 * p.s, (e.w / 2.8) * p.s, Math.PI * 0.1, Math.PI * 0.9);
+                    ctx.stroke();
+                } else {
+                    drawCar(ctx, p, e.color, e.style, false);
+                }
+            });
+        }
+
+        function drawPlayer() {
+            const car = CARS[State.player.carIdx];
+            const cam = CAMS[State.camIdx];
+            const pProj = project(State.player.x, cam.yOff, 100 * car.width * 5, 180 * car.width * 5);
+            drawCar(ctx, pProj, State.player.color, car.style, true);
+        }
+
+        function drawWeather() {
+            const w = WEATHER[State.env.weather];
+            if (State.env.rainIntensity > 0) {
+                ctx.strokeStyle = `rgba(200, 220, 255, ${State.env.rainIntensity * 0.5})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+
+                const wind = (0.5 - State.player.x) * 20;
+
+                State.env.particles.forEach(p => {
+                    ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(p.x + wind, p.y + p.len);
+                });
+                ctx.stroke();
+            }
+
+            if (w.fog > 0) {
+                const grad = ctx.createLinearGradient(0, 0, 0, State.h * 0.5);
+                grad.addColorStop(0, `rgba(${w.color === '#2d3748' ? '45,55,72' : '74,85,104'}, ${w.fog})`);
+                grad.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, State.w, State.h);
+            }
+        }
+
+        /* --- GAME LOGIC --- */
+        function initGame() {
+            State.score = 0;
+            State.speed = State.baseSpeed;
+            State.entities = [];
+            State.player.x = 0.5;
+            State.player.targetX = 0.5;
+            State.env.weather = 'CLEAR SKY';
+            State.env.timer = 0;
+            State.env.rainIntensity = 0;
+            State.env.flash = 0;
+
+            State.env.particles = [];
+            for (let i = 0; i < 100; i++) {
+                State.env.particles.push({
+                    x: Math.random() * State.w,
+                    y: Math.random() * State.h,
+                    speed: 20 + Math.random() * 20,
+                    len: 10 + Math.random() * 20
+                });
+            }
+
+            updateWeatherBadge();
+            updateUI();
+        }
+
+        function updateWeatherBadge() {
+            const badge = document.getElementById('weather-badge');
+            badge.innerText = State.env.weather;
+            badge.className = `weather-badge${State.env.weather === 'SIGNAL STORM' ? ' storm pulse-fast' : ''}`;
+        }
+
+        function updateUI() {
+            document.getElementById('score-val').innerText = Math.floor(State.score);
+            const kmh = Math.floor(State.speed * 20000);
+            document.getElementById('speed-val').innerText = kmh + " KM/H";
+            document.getElementById('speed-bar').style.width = Math.min(100, (kmh / 400) * 100) + '%';
+        }
+
+        function spawn() {
+            const laneCount = 4;
+            const laneW = 1 / laneCount;
+            const lane = Math.floor(Math.random() * laneCount);
+            const x = (lane * laneW) + (laneW / 2);
+
+            const tooClose = State.entities.some(e => e.y < 0.2 && Math.abs(e.x - x) < 0.1);
+            if (tooClose) return;
+
+            if (Math.random() < 0.3) {
+                State.entities.push({ type: 'coin', x, y: 0, w: 30, h: 30 });
+            } else {
+                State.entities.push({
+                    type: 'obs',
+                    x, y: 0, w: 90, h: 160,
+                    style: Math.floor(Math.random() * 5),
+                    color: '#555',
+                    speedMod: Math.random() * 0.002
+                });
+            }
+        }
+
+        function update() {
+            State.frame++;
+
+            const carStats = CARS[State.player.carIdx].stats;
+            const maxSpeed = State.baseSpeed * (1 + (carStats.spd / 100) * 2);
+            if (State.speed < maxSpeed) State.speed += 0.000005;
+
+            State.score += State.speed * 1000;
+
+            const handling = 0.05 + (carStats.hnd / 100) * 0.1;
+            const grip = State.env.rainIntensity > 0.5 ? 0.6 : 1.0;
+
+            const dx = State.player.targetX - State.player.x;
+            State.player.x += dx * handling * grip;
+            State.player.x = Math.max(0.05, Math.min(0.95, State.player.x));
+
+            State.env.timer++;
+            if (State.env.timer > 1000) {
+                State.env.timer = 0;
+                const types = Object.keys(WEATHER);
+                const currIdx = types.indexOf(State.env.weather);
+                State.env.weather = types[(currIdx + 1) % types.length];
+                updateWeatherBadge();
+            }
+
+            const targetRain = WEATHER[State.env.weather].rain;
+            if (State.env.rainIntensity < targetRain) State.env.rainIntensity += 0.005;
+            else if (State.env.rainIntensity > targetRain) State.env.rainIntensity -= 0.005;
+
+            if (State.env.weather === 'SIGNAL STORM' && Math.random() < 0.01) State.env.flash = 1.0;
+
+            if (State.env.rainIntensity > 0.01) {
+                State.env.particles.forEach(p => {
+                    p.y += p.speed;
+                    if (p.y > State.h) {
+                        p.y = -50;
+                        p.x = Math.random() * State.w;
+                    }
+                });
+            }
+
+            if (Math.random() < State.speed * 8) spawn();
+
+            for (let i = State.entities.length - 1; i >= 0; i--) {
+                const e = State.entities[i];
+                e.y += State.speed;
+                if (e.type === 'obs') e.y -= e.speedMod;
+
+                if (e.y > 1.5) {
+                    State.entities.splice(i, 1);
+                    continue;
+                }
+
+                const cam = CAMS[State.camIdx];
+                const pY = cam.yOff;
+
+                if (Math.abs(e.y - pY) < 0.05) {
+                    if (Math.abs(e.x - State.player.x) < 0.08) {
+                        if (e.type === 'coin') {
+                            State.score += 500;
+                            AudioSys.play('collect');
+                            showFeedbackGif('win');
+                            State.entities.splice(i, 1);
+                        } else {
+                            gameOver();
+                        }
+                    }
+                }
+            }
+
+            if (State.frame % 5 === 0) {
+                updateUI();
+            }
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+
+            if (State.active) {
+                update();
+                drawWorld();
+                drawEntities();
+                drawPlayer();
+                drawWeather();
+            } else if (State.screen === 'garage') {
+                ctx.fillStyle = '#080b15';
+                ctx.fillRect(0, 0, State.w, State.h);
+
+                ctx.strokeStyle = 'rgba(0,243,255,0.12)';
+                ctx.beginPath();
+                for (let i = 0; i < State.h; i += 40) {
+                    ctx.moveTo(0, i);
+                    ctx.lineTo(State.w, i);
+                }
+                for (let i = 0; i < State.w; i += 40) {
+                    ctx.moveTo(i, 0);
+                    ctx.lineTo(i, State.h);
+                }
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(255,79,216,0.08)';
+                ctx.fillRect(0, State.h * 0.55, State.w, State.h * 0.45);
+
+                const car = CARS[State.player.carIdx];
+                const p = { x: State.w / 2, y: State.h / 2, w: State.w * 0.4, h: State.w * 0.7, s: 1.5 };
+                drawCar(ctx, p, State.player.color, car.style, true);
+            }
+        }
+
+        function gameOver() {
+            State.active = false;
+            State.screen = 'gameover';
+            AudioSys.stopBGM();
+            AudioSys.play('crash');
+            AudioSys.play('gameOver');
+            showFeedbackGif('fail');
+
+            canvas.style.transform = 'translate(5px, 5px)';
+            setTimeout(() => canvas.style.transform = 'none', 50);
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('screen-gameover').classList.remove('hidden');
+            document.getElementById('final-score').innerText = Math.floor(State.score);
+        }
+
+        /* --- INPUTS --- */
+        function handleInput(e) {
+            if (!State.active) return;
+            e.preventDefault();
+
+            let cx;
+            if (e.touches && e.touches[0]) cx = e.touches[0].clientX;
+            else if (e.buttons === 1) cx = e.clientX;
+            else return;
+
+            State.player.targetX = cx / State.w;
+        }
+
+        function isGameplayPointerTarget(target) {
+            return target === canvas || target === document.getElementById('game-root');
+        }
+
+        // [agent-note][stage4] repaired: mobile-start-actionability | action: scoped touch suppression to gameplay surface so menu taps still emit click
+        canvas.addEventListener('touchstart', (e) => {
+            safeInteractAudio();
+            handleInput(e);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', handleInput, { passive: false });
+        window.addEventListener('mousedown', (e) => {
+            safeInteractAudio();
+            if (isGameplayPointerTarget(e.target)) handleInput(e);
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (isGameplayPointerTarget(e.target)) handleInput(e);
+        });
+
+        /* --- UI HANDLERS --- */
+        const UI = {
+            start: document.getElementById('screen-start'),
+            garage: document.getElementById('screen-garage'),
+            gameover: document.getElementById('screen-gameover'),
+            hud: document.getElementById('hud')
+        };
+
+        function updateGarageInfo() {
+            const c = CARS[State.player.carIdx];
+            document.getElementById('garage-car-name').innerText = c.name;
+            document.getElementById('garage-car-class').innerText = c.class;
+            document.getElementById('stat-spd').style.width = c.stats.spd + '%';
+            document.getElementById('stat-hnd').style.width = c.stats.hnd + '%';
+
+            document.querySelectorAll('.paint-btn').forEach(b => {
+                b.classList.toggle('is-selected', b.dataset.c === State.player.color);
+            });
+        }
+
+        document.getElementById('btn-play').onclick = () => {
+            safeInteractAudio();
+            AudioSys.play('start');
+            UI.start.classList.add('hidden');
+            UI.hud.classList.remove('hidden');
+            UI.gameover.classList.add('hidden');
+            State.screen = 'game';
+            State.active = true;
+            AudioSys.playBGM();
+            initGame();
+        };
+
+        document.getElementById('btn-garage').onclick = () => {
+            safeInteractAudio();
+            AudioSys.play('uiClick');
+            UI.start.classList.add('hidden');
+            UI.garage.classList.remove('hidden');
+            State.screen = 'garage';
+            updateGarageInfo();
+        };
+
+        document.getElementById('btn-garage-back').onclick = () => {
+            AudioSys.play('uiClick');
+            UI.garage.classList.add('hidden');
+            UI.start.classList.remove('hidden');
+            State.screen = 'start';
+        };
+
+        document.getElementById('btn-select').onclick = () => {
+            AudioSys.play('uiClick');
+            UI.garage.classList.add('hidden');
+            UI.start.classList.remove('hidden');
+            State.screen = 'start';
+        };
+
+        document.getElementById('btn-prev-car').onclick = () => {
+            AudioSys.play('uiClick');
+            State.player.carIdx = (State.player.carIdx - 1 + CARS.length) % CARS.length;
+            updateGarageInfo();
+        };
+
+        document.getElementById('btn-next-car').onclick = () => {
+            AudioSys.play('uiClick');
+            State.player.carIdx = (State.player.carIdx + 1) % CARS.length;
+            updateGarageInfo();
+        };
+
+        document.querySelectorAll('.paint-btn').forEach(btn => {
+            btn.onclick = () => {
+                AudioSys.play('uiClick');
+                State.player.color = btn.dataset.c;
+                updateGarageInfo();
+            };
+        });
+
+        document.getElementById('btn-retry').onclick = () => {
+            safeInteractAudio();
+            AudioSys.play('start');
+            UI.gameover.classList.add('hidden');
+            UI.hud.classList.remove('hidden');
+            State.active = true;
+            State.screen = 'game';
+            AudioSys.playBGM();
+            initGame();
+        };
+
+        document.getElementById('btn-menu').onclick = () => {
+            AudioSys.play('uiClick');
+            UI.gameover.classList.add('hidden');
+            UI.start.classList.remove('hidden');
+            State.screen = 'start';
+        };
+
+        document.getElementById('btn-mute').onclick = (e) => {
+            safeInteractAudio();
+            const on = AudioSys.toggle();
+            e.target.innerText = `Audio: ${on ? 'ON' : 'OFF'}`;
+            e.target.style.color = on ? '#ffffff' : '#94a3b8';
+        };
+
+        document.getElementById('btn-cam').onclick = (e) => {
+            AudioSys.play('warning');
+            State.camIdx = (State.camIdx + 1) % CAMS.length;
+            e.target.innerText = `View: ${CAMS[State.camIdx].name}`;
+        };
+
+        updateGarageInfo();
+        updateWeatherBadge();
+        loop();
+    </script>
+</body>
+</html>
+]]>

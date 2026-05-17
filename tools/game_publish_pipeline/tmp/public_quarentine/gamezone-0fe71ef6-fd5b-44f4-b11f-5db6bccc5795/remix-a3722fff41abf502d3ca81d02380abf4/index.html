@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Signal Sweep</title>
+    <!-- [agent-note][stage4] resolved-font: title/display=Orbitron body/hud=Rajdhani via catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap">
+    <style>
+        :root {
+            --theme-color: #56d8ff;
+            --bg-top: #07111f;
+            --bg-bottom: #140f2d;
+            --hud-text: #d8f3ff;
+            --panel-bg: linear-gradient(180deg, rgba(15, 25, 48, 0.82), rgba(10, 14, 30, 0.9));
+            --panel-border: rgba(120, 226, 255, 0.34);
+            --panel-shadow: 0 18px 40px rgba(3, 8, 24, 0.45);
+            --ink-soft: #9fbad4;
+            --warning: #ff9658;
+            --danger: #ff5f8f;
+            --good: #8affb6;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(86, 216, 255, 0.22), transparent 30%),
+                radial-gradient(circle at 20% 20%, rgba(141, 92, 255, 0.18), transparent 32%),
+                linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+            color: #fff;
+            font-family: "Rajdhani", system-ui, sans-serif;
+        }
+
+        body {
+            user-select: none;
+            position: relative;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::before {
+            background:
+                radial-gradient(circle at 50% 120%, rgba(86, 216, 255, 0.14), transparent 30%),
+                repeating-linear-gradient(
+                    180deg,
+                    rgba(255, 255, 255, 0.03) 0,
+                    rgba(255, 255, 255, 0.03) 1px,
+                    transparent 1px,
+                    transparent 6px
+                );
+            opacity: 0.65;
+        }
+
+        body::after {
+            background:
+                radial-gradient(circle at 15% 18%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1px),
+                radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px),
+                radial-gradient(circle at 65% 72%, rgba(255, 255, 255, 0.09) 0 1px, transparent 1px);
+            background-size: 180px 180px, 220px 220px, 260px 260px;
+            opacity: 0.7;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        button {
+            border: 0;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .hidden { display: none !important; }
+
+        .glass {
+            background: var(--panel-bg);
+            backdrop-filter: blur(14px);
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--panel-shadow);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        #game-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(180deg, rgba(5, 10, 23, 0.08) 0%, rgba(5, 10, 23, 0.22) 100%),
+                radial-gradient(circle at center, transparent 45%, rgba(2, 6, 23, 0.36) 100%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        #hud {
+            position: absolute;
+            top: 0.85rem;
+            left: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            max-width: min(46vw, 12rem);
+        }
+
+        .hud-score {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            font-family: "Rajdhani", system-ui, sans-serif;
+            font-size: clamp(0.8rem, 2.6vw, 1.05rem);
+            font-weight: 700;
+            color: var(--hud-text);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, rgba(9, 19, 39, 0.78), rgba(9, 19, 39, 0.58));
+            border: 1px solid rgba(122, 231, 255, 0.35);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 10px 18px rgba(0, 0, 0, 0.22);
+        }
+
+        .hud-score::before {
+            content: "◉";
+            color: var(--theme-color);
+            text-shadow: 0 0 12px rgba(86, 216, 255, 0.75);
+        }
+
+        .meter-shell {
+            width: 8.35rem;
+            height: 1rem;
+            padding: 0.12rem;
+            background: rgba(3, 10, 23, 0.72);
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid rgba(120, 226, 255, 0.28);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+        }
+
+        #clarity-bar {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ffe45e, #ffbf47);
+            transition: width 0.3s ease, background 0.3s ease;
+            box-shadow: 0 0 14px rgba(255, 203, 89, 0.45);
+        }
+
+        .panel {
+            position: relative;
+            width: min(92vw, 34rem);
+            padding: 1.55rem 1.2rem 1.35rem;
+            border-radius: 1.5rem;
+            text-align: center;
+            pointer-events: auto;
+            transform: translateZ(0);
+            overflow: hidden;
+        }
+
+        .panel::before,
+        .panel::after {
+            content: "";
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .panel::before {
+            inset: 0;
+            background:
+                radial-gradient(circle at top, rgba(122, 231, 255, 0.16), transparent 38%),
+                linear-gradient(135deg, rgba(255,255,255,0.08), transparent 40%);
+        }
+
+        .panel::after {
+            inset: auto -15% -40% auto;
+            width: 10rem;
+            height: 10rem;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(122, 231, 255, 0.22), transparent 70%);
+            filter: blur(8px);
+        }
+
+        #start-screen { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+
+        #start-screen:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 44px rgba(3, 8, 24, 0.5);
+        }
+
+        .hero-badge {
+            width: 4.8rem;
+            height: 4.8rem;
+            margin: 0 auto 0.9rem;
+            border-radius: 1.35rem;
+            display: grid;
+            place-items: center;
+            font-size: 2.2rem;
+            background:
+                radial-gradient(circle at 35% 30%, #ffffff 0 12%, #c7f5ff 13% 24%, transparent 25%),
+                linear-gradient(180deg, rgba(86, 216, 255, 0.34), rgba(141, 92, 255, 0.26));
+            border: 1px solid rgba(142, 233, 255, 0.42);
+            box-shadow:
+                0 0 0 0.3rem rgba(86, 216, 255, 0.08),
+                0 16px 30px rgba(0, 0, 0, 0.28),
+                inset 0 -6px 14px rgba(6, 10, 24, 0.28);
+            animation: dronePulse 2.4s ease-in-out infinite;
+        }
+
+        .title {
+            margin: 0 0 0.45rem;
+            font-family: "Orbitron", "Rajdhani", system-ui, sans-serif;
+            font-size: clamp(2rem, 7vw, 3.55rem);
+            color: #eefbff;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-shadow: 0 0 24px rgba(86, 216, 255, 0.34);
+        }
+
+        .subtitle,
+        .results-copy {
+            margin: 0 0 1.2rem;
+            color: var(--ink-soft);
+            font-size: clamp(0.98rem, 3vw, 1.14rem);
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            max-width: 22rem;
+            margin-inline: auto;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .action-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            min-width: min(15rem, 78vw);
+            padding: 0.85rem 1.4rem;
+            border-radius: 999px;
+            font-family: "Orbitron", "Rajdhani", system-ui, sans-serif;
+            font-size: clamp(0.92rem, 3vw, 1.05rem);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+            transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .action-btn::before {
+            content: "";
+            width: 0.65rem;
+            height: 0.65rem;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.9;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .action-btn:active { transform: scale(0.96); }
+
+        #start-btn {
+            background: linear-gradient(180deg, var(--theme-color), #2694ff);
+            color: #031220;
+        }
+
+        #restart-btn {
+            background: linear-gradient(180deg, #7ce8ff, #4f8fff);
+            color: #041424;
+        }
+
+        #start-btn:hover,
+        #restart-btn:hover {
+            filter: brightness(1.08);
+            box-shadow: 0 14px 28px rgba(28, 134, 255, 0.3);
+        }
+
+        .game-over-title {
+            margin: 0 0 0.8rem;
+            font-family: "Orbitron", "Rajdhani", system-ui, sans-serif;
+            font-size: clamp(1.8rem, 6vw, 2.8rem);
+            color: #eefbff;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .score-value {
+            font-family: "Audiowide", "Exo 2", system-ui, sans-serif;
+            color: #ffffff;
+        }
+
+        .status-strip {
+            display: inline-flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 0 0 1rem;
+        }
+
+        .status-pill {
+            padding: 0.32rem 0.68rem;
+            border-radius: 999px;
+            border: 1px solid rgba(122, 231, 255, 0.25);
+            background: rgba(255, 255, 255, 0.05);
+            color: #d9f6ff;
+            font-size: 0.88rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.68; }
+        }
+
+        @keyframes dronePulse {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-4px) scale(1.03); }
+        }
+
+        @media (max-width: 600px) {
+            #ui-layer {
+                padding: 0.8rem;
+            }
+
+            #hud {
+                top: 0.7rem;
+                left: 0.7rem;
+                gap: 0.35rem;
+            }
+
+            .meter-shell {
+                width: 7rem;
+                height: 0.9rem;
+            }
+
+            .panel {
+                padding: 1.3rem 1rem 1.2rem;
+                width: min(92vw, 30rem);
+            }
+
+            .hero-badge {
+                width: 4.1rem;
+                height: 4.1rem;
+                margin-bottom: 0.75rem;
+                font-size: 1.9rem;
+            }
+
+            .status-strip {
+                margin-bottom: 0.85rem;
+            }
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: clamp(0.65rem, 2vw, 1rem);
+            bottom: clamp(0.75rem, 2.8vh, 1.15rem);
+            width: min(28vw, 5.6rem);
+            border-radius: 1rem;
+            border: 1px solid rgba(122, 231, 255, 0.34);
+            box-shadow: 0 14px 26px rgba(0, 0, 0, 0.22);
+            opacity: 0;
+            transform: translateY(0.5rem) scale(0.94);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: none;
+            z-index: 35;
+            object-fit: cover;
+            background: rgba(5, 10, 23, 0.55);
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.88;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.fail {
+            left: auto;
+            right: clamp(0.65rem, 2vw, 1rem);
+            bottom: clamp(6.5rem, 18vh, 7.5rem);
+            width: min(30vw, 6rem);
+        }
+
+        @media (max-width: 600px) {
+            .feedback-gif {
+                width: min(26vw, 4.6rem);
+                bottom: clamp(0.75rem, 2.2vh, 0.95rem);
+            }
+
+            .feedback-gif.fail {
+                bottom: clamp(5.8rem, 15vh, 6.4rem);
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Asset Declaration -->
+<div id="assets" style="display: none;">
+    <img id="asset_hero" data-editable="image" data-label="Signal Drone" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iMzUlIiBjeT0iMzAlIiByPSI3MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZmZmZmYiLz48c3RvcCBvZmZzZXQ9IjQ1JSIgc3RvcC1jb2xvcj0iIzc4ZTdmZiIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzMyNzVmZiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxlbGxpcHNlIGN4PSI0OCIgY3k9IjU2IiByeD0iMzQiIHJ5PSIyNiIgZmlsbD0iIzA4MTUyNiIvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iNDgiIHI9IjI4IiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iNDgiIGN5PSI0OCIgcj0iMTYiIGZpbGw9IiNlZmZiZmYiLz48Y2lyY2xlIGN4PSI0MiIgY3k9IjQyIiByPSI1IiBmaWxsPSIjZmZmZmZmIi8+PHBhdGggZD0iTTI0IDQ4SDEwTDIyIDM2IiBmaWxsPSIjN2NlOGZmIiBvcGFjaXR5PSIwLjciLz48cGF0aCBkPSJNNzIgNDhIODZMNzQgMzYiIGZpbGw9IiM3Y2U4ZmYiIG9wYWNpdHk9IjAuNyIvPjxwYXRoIGQ9Ik0zNiA3Nkw0OCA2OEw2MCA3NiIgc3Ryb2tlPSIjN2NlOGZmIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==" hidden>
+    <img id="asset_cloud" data-editable="image" data-label="Static Burst" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJzIiBjeD0iNTAlIiBjeT0iNTAlIiByPSI3MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZmFiYzQiLz48c3RvcCBvZmZzZXQ9IjQ1JSIgc3RvcC1jb2xvcj0iIzczODBhMCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzJjMzQ0NiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxwYXRoIGQ9Ik0zMiAxNkg2NEw4MCAzMkw2NCA4MEgzMkwxNiAzMloiIGZpbGw9InVybCgjcykiLz48cGF0aCBkPSJNMjggMjhMNjggNjgiIHN0cm9rZT0iI2Y4ZmFmYyIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNiIvPjxwYXRoIGQ9Ik02OCAyOEwyOCA2OCIgc3Ryb2tlPSIjZjhmYWZjIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC42Ii8+PC9zdmc+" hidden>
+
+    <audio id="bgm_main" data-editable="audio" data-label="BGM Arcade Sweep" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="auto" loop></audio>
+    <audio id="sfx_collect" data-editable="audio" data-label="SFX Signal Lock" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+    <audio id="sfx_hit" data-editable="audio" data-label="SFX Static Hit" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3" preload="auto"></audio>
+    <audio id="sfx_start" data-editable="audio" data-label="SFX Start Sweep" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+    <audio id="sfx_warning" data-editable="audio" data-label="SFX Low Signal Warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3" preload="auto"></audio>
+    <audio id="sfx_gameover" data-editable="audio" data-label="SFX Signal Lost" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3" preload="auto"></audio>
+</div>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "heroSpeed": { "type": "number", "label": "Drone Response", "value": 0.15, "min": 0.01, "max": 1.0 },
+    "spawnRate": { "type": "number", "label": "Signal Traffic", "value": 60, "min": 20, "max": 120 },
+    "themeColor": { "type": "color", "label": "Theme Color", "value": "#56d8ff" },
+    "gameTitle": { "type": "text", "label": "Game Title", "value": "Signal Sweep" }
+}
+</script>
+
+<!-- UI Layers -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <!-- [agent-note][stage3] resolved-gif: collect/fail feedback overlays from catalogs/gifs.json -->
+    <img id="collect-gif" class="feedback-gif" src="https://i.giphy.com/Y1AWZiOfbIajeMQmAy.webp" alt="" aria-hidden="true" decoding="async" loading="lazy">
+    <img id="fail-gif" class="feedback-gif fail" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="" aria-hidden="true" decoding="async" loading="lazy">
+
+    <div id="ui-layer">
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div class="hud-score">Signal <span id="score">0</span>%</div>
+            <div class="meter-shell">
+                <div id="clarity-bar" style="width: 100%"></div>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="glass panel">
+            <div class="hero-badge" aria-hidden="true">🛸</div>
+            <h1 id="ui-title" class="title">Signal Sweep</h1>
+            <div class="status-strip" aria-hidden="true">
+                <span class="status-pill">Drone Core</span>
+                <span class="status-pill">Clean Pings</span>
+                <span class="status-pill">Static Storm</span>
+            </div>
+            <p class="subtitle">Guide the scout drone through the interference field. Catch clean pings, dodge the static storm.</p>
+            <button id="start-btn" class="action-btn">
+                Tune In
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden glass panel">
+            <div class="hero-badge" aria-hidden="true">⚠️</div>
+            <h2 class="game-over-title">Signal Lost</h2>
+            <div class="results-copy">Signal Restored: <span id="finalScore" class="score-value">0</span>%</div>
+            <button id="restart-btn" class="action-btn">
+                Retune
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Global State ---
+    let canvas, ctx;
+    let lastTime = 0;
+    let isPlaying = false;
+    let isGameOver = false;
+    let score = 0; // Represents signal restored
+    let health = 100; // Signal strength
+    let lowHealthWarningPlayed = false;
+    let gifTimers = {};
+
+    // Physics & Entities
+    let hero = { x: 0, y: 0, radius: 24, targetX: 0, targetY: 0, pulse: 0 };
+    let thoughts = []; // Falling pings and static
+    let particles = [];
+    let bgOffset = 0;
+
+    // Config
+    let gameConfig = {};
+    const thoughtsList = [
+        "Clear ping",
+        "Route locked",
+        "Sync stable",
+        "Link secure",
+        "Signal up",
+        "Channel open",
+        "Sweep clean",
+        "Target found"
+    ];
+
+    // --- Audio System ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const sounds = {};
+    const soundCooldowns = new Map();
+
+    function initAudio() {
+        const load = (id, fallback) => {
+            const el = document.getElementById(id);
+            if (el) {
+                sounds[id] = { type: 'element', el: el };
+            } else {
+                sounds[id] = { type: 'synth', fallback: fallback };
+            }
+        };
+        load('bgm_main', 'none');
+        load('sfx_collect', 'beep');
+        load('sfx_hit', 'explosion');
+        load('sfx_start', 'beep');
+        load('sfx_warning', 'beep');
+        load('sfx_gameover', 'explosion');
+    }
+
+    function playSound(id, options = {}) {
+        const s = sounds[id];
+        if (!s) return;
+        const now = performance.now();
+        const cooldown = options.cooldown ?? 0;
+        if (cooldown > 0) {
+            const lastPlayed = soundCooldowns.get(id) ?? -Infinity;
+            if (now - lastPlayed < cooldown) return;
+            soundCooldowns.set(id, now);
+        }
+
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+
+        if (s.type === 'element') {
+            if (id.includes('bgm')) {
+                s.el.volume = options.volume ?? 0.22;
+                if (s.el.paused) {
+                    s.el.play().catch(() => {});
+                }
+            } else {
+                s.el.volume = options.volume ?? 0.45;
+                s.el.currentTime = 0;
+                s.el.play().catch(() => playSynth(s.fallback));
+            }
+        } else {
+            playSynth(s.fallback);
+        }
+    }
+
+    function playSynth(type) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'beep') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        } else if (type === 'explosion') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+    }
+
+    function stopLoop(id) {
+        const s = sounds[id];
+        if (!s || s.type !== 'element') return;
+        s.el.pause();
+        s.el.currentTime = 0;
+    }
+
+    function showGif(id, duration = 950) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add('visible');
+        clearTimeout(gifTimers[id]);
+        gifTimers[id] = setTimeout(() => {
+            el.classList.remove('visible');
+        }, duration);
+    }
+
+    // --- Config System ---
+    function loadConfig() {
+        const el = document.getElementById('game-config');
+        if (el) {
+            try {
+                const defs = JSON.parse(el.textContent);
+                window.gameConfigDefs = defs;
+                for (const key in defs) {
+                    gameConfig[key] = defs[key].value;
+                }
+                // Apply immediate visual changes
+                document.getElementById('ui-title').textContent = gameConfig.gameTitle;
+                document.documentElement.style.setProperty('--theme-color', gameConfig.themeColor);
+            } catch (e) {
+                console.error("Config parse error", e);
+            }
+        }
+    }
+
+    window.updateGameConfig = (key, val) => {
+        if (gameConfig.hasOwnProperty(key)) {
+            gameConfig[key] = val;
+            if (key === 'gameTitle') document.getElementById('ui-title').textContent = val;
+            if (key === 'themeColor') {
+                document.documentElement.style.setProperty('--theme-color', val);
+            }
+        }
+    };
+
+    // --- Game Logic ---
+    function initGame() {
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d', { alpha: false });
+
+        resize();
+        window.addEventListener('resize', resize);
+
+        // Input
+        canvas.addEventListener('pointerdown', handleInput, { passive: false });
+        canvas.addEventListener('pointermove', handleInput, { passive: false });
+        canvas.addEventListener('pointerup', endInput, { passive: false });
+        canvas.addEventListener('pointercancel', endInput, { passive: false });
+
+        // UI Bindings
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+
+        initAudio();
+        loadConfig();
+
+        hero.x = canvas.width / 2;
+        hero.y = canvas.height * 0.8;
+        hero.targetX = hero.x;
+        hero.targetY = hero.y;
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // Re-center drone if needed on resize
+        if (!isPlaying) {
+            hero.x = rect.width / 2;
+            hero.y = rect.height * 0.8;
+            hero.targetX = hero.x;
+            hero.targetY = hero.y;
+        }
+    }
+
+    function handleInput(e) {
+        e.preventDefault();
+        if (!isPlaying) return;
+        const rect = canvas.getBoundingClientRect();
+        hero.targetX = e.clientX - rect.left;
+        hero.targetY = e.clientY - rect.top;
+
+        // Unlock audio on first interaction
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function endInput(e) {
+        e.preventDefault();
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+
+        score = 0;
+        health = 100;
+        isPlaying = true;
+        isGameOver = false;
+        lowHealthWarningPlayed = false;
+        thoughts = [];
+        particles = [];
+
+        const rect = canvas.getBoundingClientRect();
+        hero.x = rect.width / 2;
+        hero.y = rect.height * 0.8;
+        hero.targetX = hero.x;
+        hero.targetY = hero.y;
+
+        playSound('sfx_start', { volume: 0.42, cooldown: 180 });
+        playSound('bgm_main', { volume: 0.2 });
+        updateHUD();
+    }
+
+    function gameOver() {
+        isPlaying = false;
+        isGameOver = true;
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('finalScore').textContent = Math.floor(score);
+        playSound('sfx_gameover', { volume: 0.5, cooldown: 300 });
+        showGif('fail-gif', 1500);
+        stopLoop('bgm_main');
+    }
+
+    function spawnThought(dt) {
+        if (Math.random() < (1 / gameConfig.spawnRate)) {
+            const rect = canvas.getBoundingClientRect();
+            const isBad = Math.random() < 0.3;
+            const text = isBad ? "" : thoughtsList[Math.floor(Math.random() * thoughtsList.length)];
+
+            thoughts.push({
+                x: Math.random() * (rect.width - 40) + 20,
+                y: -50,
+                speed: Math.random() * 100 + 50,
+                text: text,
+                isBad: isBad,
+                radius: isBad ? 20 : 30,
+                angle: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 2
+            });
+        }
+    }
+
+    function createParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 200,
+                vy: (Math.random() - 0.5) * 200,
+                life: 1.0,
+                color: color
+            });
+        }
+    }
+
+    function update(dt) {
+        if (!isPlaying) return;
+
+        hero.pulse += dt * 2.4;
+
+        // Drone Movement (Smooth follow)
+        const dx = hero.targetX - hero.x;
+        const dy = hero.targetY - hero.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 1) {
+            const speed = gameConfig.heroSpeed * 60;
+            const step = Math.min(dist, speed * dt * 10);
+            hero.x += (dx / dist) * step;
+            hero.y += (dy / dist) * step;
+        }
+
+        spawnThought(dt);
+
+        const rect = canvas.getBoundingClientRect();
+        for (let i = thoughts.length - 1; i >= 0; i--) {
+            let t = thoughts[i];
+            t.y += t.speed * dt;
+            t.angle += t.rotSpeed * dt;
+
+            const distH = Math.hypot(t.x - hero.x, t.y - hero.y);
+            if (distH < t.radius + hero.radius) {
+                if (t.isBad) {
+                    health -= 20;
+                    playSound('sfx_hit', { volume: 0.48, cooldown: 100 });
+                    showGif('fail-gif', 900);
+                    createParticles(t.x, t.y, '#7380a0', 10);
+                } else {
+                    score += 10;
+                    health = Math.min(100, health + 10);
+                    playSound('sfx_collect', { volume: 0.42, cooldown: 70 });
+                    showGif('collect-gif', 850);
+                    createParticles(t.x, t.y, '#8afff5', 15);
+                    particles.push({
+                        x: t.x,
+                        y: t.y,
+                        vx: 0,
+                        vy: -50,
+                        life: 2.0,
+                        text: t.text,
+                        color: '#e7feff',
+                        isText: true
+                    });
+                }
+                thoughts.splice(i, 1);
+                updateHUD();
+                continue;
+            }
+
+            if (t.y > rect.height + 50) {
+                thoughts.splice(i, 1);
+            }
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.life -= dt;
+            if (!p.isText) {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+            } else {
+                p.y += p.vy * dt;
+            }
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        health -= 2 * dt;
+        if (health <= 25 && !lowHealthWarningPlayed) {
+            lowHealthWarningPlayed = true;
+            playSound('sfx_warning', { volume: 0.36, cooldown: 800 });
+        } else if (health > 30) {
+            lowHealthWarningPlayed = false;
+        }
+
+        if (health <= 0) {
+            health = 0;
+            gameOver();
+        }
+        updateHUD();
+    }
+
+    function updateHUD() {
+        document.getElementById('score').textContent = Math.floor(score);
+        document.getElementById('clarity-bar').style.width = Math.max(0, health) + '%';
+        const bar = document.getElementById('clarity-bar');
+        if (health > 50) bar.style.background = 'linear-gradient(90deg, #ffe45e, #ffbf47)';
+        else if (health > 20) bar.style.background = 'linear-gradient(90deg, #ffbf5f, #ff7b55)';
+        else bar.style.background = 'linear-gradient(90deg, #ff7797, #ff4f67)';
+    }
+
+    function drawBackground(rect) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, rect.height);
+        gradient.addColorStop(0, '#081221');
+        gradient.addColorStop(0.45, '#101634');
+        gradient.addColorStop(1, '#180f2f');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, rect.width, rect.height);
+
+        bgOffset += 20 * 0.016;
+
+        for (let i = 0; i < 6; i++) {
+            const x = ((i * 180) + bgOffset) % (rect.width + 220) - 110;
+            const y = (i * 96) % rect.height;
+            const glow = ctx.createRadialGradient(x, y, 4, x, y, 90);
+            glow.addColorStop(0, 'rgba(122, 231, 255, 0.24)');
+            glow.addColorStop(1, 'rgba(122, 231, 255, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(x, y, 90, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(122, 231, 255, 0.08)';
+        ctx.lineWidth = 1;
+        for (let y = 24; y < rect.height; y += 34) {
+            ctx.beginPath();
+            ctx.moveTo(0, y + Math.sin((bgOffset + y) * 0.02) * 5);
+            ctx.lineTo(rect.width, y + Math.sin((bgOffset + y) * 0.02) * 5);
+            ctx.stroke();
+        }
+    }
+
+    function drawHero() {
+        const heroImg = document.getElementById('asset_hero');
+        const bob = Math.sin(hero.pulse) * 2.6;
+        const haloRadius = hero.radius * 1.65 + Math.sin(hero.pulse * 1.4) * 2;
+
+        ctx.save();
+        ctx.globalAlpha = 0.42;
+        const halo = ctx.createRadialGradient(hero.x, hero.y + bob, 8, hero.x, hero.y + bob, haloRadius);
+        halo.addColorStop(0, 'rgba(122, 231, 255, 0.55)');
+        halo.addColorStop(1, 'rgba(122, 231, 255, 0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(hero.x, hero.y + bob, haloRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+            ctx.drawImage(heroImg, hero.x - hero.radius, hero.y - hero.radius + bob, hero.radius * 2, hero.radius * 2);
+        } else {
+            ctx.shadowBlur = 24;
+            ctx.shadowColor = gameConfig.themeColor;
+            ctx.beginPath();
+            ctx.arc(hero.x, hero.y + bob, hero.radius, 0, Math.PI * 2);
+            ctx.fillStyle = gameConfig.themeColor;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(hero.x, hero.y + bob, hero.radius * 0.58, 0, Math.PI * 2);
+            ctx.fillStyle = '#eefcff';
+            ctx.fill();
+        }
+    }
+
+    function drawThought(t) {
+        if (t.isBad) {
+            const cloudImg = document.getElementById('asset_cloud');
+            ctx.save();
+            ctx.translate(t.x, t.y);
+            ctx.rotate(t.angle);
+            if (cloudImg && cloudImg.complete && cloudImg.naturalWidth > 0) {
+                ctx.drawImage(cloudImg, -t.radius, -t.radius, t.radius * 2, t.radius * 2);
+            } else {
+                ctx.beginPath();
+                ctx.arc(0, 0, t.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#546e7a';
+                ctx.fill();
+            }
+            ctx.restore();
+            return;
+        }
+
+        const width = t.text.length * 8 + 26;
+        const x = t.x - width / 2;
+        const y = t.y - 16;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, 32, 16);
+        const pingFill = ctx.createLinearGradient(x, y, x, y + 32);
+        pingFill.addColorStop(0, 'rgba(231, 254, 255, 0.96)');
+        pingFill.addColorStop(1, 'rgba(180, 243, 255, 0.88)');
+        ctx.fillStyle = pingFill;
+        ctx.fill();
+        ctx.strokeStyle = gameConfig.themeColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#0d2340';
+        ctx.font = '600 16px "Rajdhani"';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(t.text, t.x, t.y);
+        ctx.restore();
+    }
+
+    function drawParticles() {
+        particles.forEach(p => {
+            ctx.globalAlpha = Math.max(0, p.life);
+            if (p.isText) {
+                ctx.font = '700 18px "Orbitron"';
+                ctx.fillStyle = p.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(p.text, p.x, p.y);
+            } else {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+        });
+    }
+
+    function draw() {
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        drawBackground(rect);
+        drawHero();
+
+        thoughts.forEach(drawThought);
+        drawParticles();
+    }
+
+    function gameLoop(timestamp) {
+        try {
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+            lastTime = timestamp;
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        } catch (e) {
+            console.error("Game Loop Error:", e);
+        }
+    }
+
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.beginPath();
+            this.moveTo(x + r, y);
+            this.arcTo(x + w, y, x + w, y + h, r);
+            this.arcTo(x + w, y + h, x, y + h, r);
+            this.arcTo(x, y + h, x, y, r);
+            this.arcTo(x, y, x + w, y, r);
+            this.closePath();
+            return this;
+        };
+    }
+
+    initGame();
+});
+</script>
+</body>
+</html>

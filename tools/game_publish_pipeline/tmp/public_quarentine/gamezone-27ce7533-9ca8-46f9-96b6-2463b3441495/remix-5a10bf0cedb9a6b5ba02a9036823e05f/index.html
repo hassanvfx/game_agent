@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Portal Sweep: Rick & Morty Signal Grid</title>
+    <!-- [agent-note][stage3] resolved-font: title/ui -> Orbitron + Exo 2 from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #04110f;
+            --bg-mid: #082521;
+            --bg-soft: #123b33;
+            --panel: rgba(5, 18, 19, 0.84);
+            --panel-border: rgba(57, 255, 136, 0.32);
+            --panel-glow: rgba(57, 255, 136, 0.18);
+            --text-main: #e7f7ff;
+            --text-soft: #a7cfc1;
+            --accent: #39ff88;
+            --accent-strong: #b9ff4a;
+            --warning: #ff6b9a;
+            --grid-line: rgba(98, 218, 255, 0.14);
+            --tile-fill: rgba(7, 24, 25, 0.78);
+            --tile-stroke: rgba(57, 255, 136, 0.18);
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: var(--bg-deep); font-family: 'Exo 2', system-ui, sans-serif; }
+        body { color: var(--text-main); background:
+            radial-gradient(circle at 50% 18%, rgba(57, 255, 136, 0.18), transparent 28%),
+            radial-gradient(circle at 16% 12%, rgba(155, 92, 255, 0.13), transparent 18%),
+            linear-gradient(180deg, #04110f 0%, #082521 55%, #041612 100%); }
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+        body::before {
+            opacity: 0.18;
+            background:
+                repeating-linear-gradient(0deg, transparent 0 10px, rgba(98, 218, 255, 0.11) 11px, transparent 12px),
+                repeating-linear-gradient(90deg, transparent 0 42px, rgba(57, 255, 136, 0.08) 43px, transparent 44px);
+            mix-blend-mode: screen;
+        }
+        body::after {
+            opacity: 0.42;
+            background:
+                radial-gradient(circle at 8% 88%, rgba(155, 92, 255, 0.18), transparent 18%),
+                radial-gradient(circle at 92% 84%, rgba(57, 255, 136, 0.16), transparent 20%);
+        }
+        #game-container { position: relative; width: 100%; height: 100%; user-select: none; z-index: 2; }
+        canvas { display: block; touch-action: none; width: 100%; height: 100%; }
+        #ui-layer { position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: space-between; padding: 1rem; pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        .hidden { display: none !important; }
+        .absolute { position: absolute; }
+        .inset-0 { inset: 0; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-wrap { flex-wrap: wrap; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .items-center { align-items: center; }
+        .w-full { width: 100%; }
+        .max-w-md { max-width: 28rem; }
+        .max-w-sm { max-width: 24rem; }
+        .mx-auto { margin-left: auto; margin-right: auto; }
+        .mx-4 { margin-left: 1rem; margin-right: 1rem; }
+        .mt-8 { margin-top: 2rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-6 { margin-bottom: 1.5rem; }
+        .p-4 { padding: 1rem; }
+        .p-8 { padding: 2rem; }
+        .gap-2 { gap: 0.5rem; }
+        .text-center { text-align: center; }
+        .text-xl { font-size: 1.25rem; }
+        .text-3xl { font-size: 1.875rem; }
+        .text-sm { font-size: 0.875rem; }
+        .font-black { font-weight: 700; }
+        .font-bold { font-weight: 700; }
+        .rounded-full { border-radius: 9999px; }
+        .shadow-md { box-shadow: 0 4px 10px rgba(0,0,0,0.18); }
+        .transform { transform: scale(1); }
+        .transition-transform { transition: transform 0.2s ease; }
+        .scale-95 { transform: scale(0.95); }
+        .select-none { user-select: none; }
+        .text-white { color: #fff; }
+        
+        .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+        .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+
+        /* [agent-note][stage2] visual-intent: signal-ops neon radar panels | scope: menus,hud */
+        .paper-panel {
+            background:
+                radial-gradient(circle at 8% 0%, rgba(57, 255, 136, 0.15), transparent 34%),
+                radial-gradient(circle at 92% 20%, rgba(98, 218, 255, 0.12), transparent 30%),
+                linear-gradient(180deg, rgba(6, 31, 29, 0.94), rgba(4, 13, 18, 0.91)),
+                radial-gradient(circle at top, rgba(57, 255, 136, 0.1), transparent 44%);
+            border-radius: 18px;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.02) inset,
+                0 12px 32px rgba(0,0,0,0.28),
+                0 0 18px var(--panel-glow);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+        .paper-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, transparent 0 48%, rgba(57, 255, 136, 0.08) 50%, transparent 52% 100%),
+                linear-gradient(180deg, rgba(255,255,255,0.08), transparent 40%),
+                repeating-linear-gradient(90deg, transparent 0 18px, rgba(98, 218, 255, 0.045) 19px, transparent 21px);
+            pointer-events: none;
+        }
+        .paper-panel::after {
+            content: "C-137";
+            position: absolute;
+            right: 0.7rem;
+            bottom: 0.45rem;
+            color: rgba(185, 255, 74, 0.16);
+            font: 700 0.7rem/1 'Orbitron', system-ui, sans-serif;
+            letter-spacing: 0.2em;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(57, 255, 136, 0.26);
+        }
+        .word-badge {
+            transition: transform 0.2s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+            padding: 0.3rem 0.7rem 0.3rem 1.05rem;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-main);
+            background: rgba(11, 25, 46, 0.72);
+            border: 1px solid rgba(125, 232, 255, 0.24);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+        }
+        .word-badge::before {
+            content: "";
+            position: absolute;
+            left: 0.45rem;
+            top: 50%;
+            width: 0.36rem;
+            height: 0.36rem;
+            border-radius: 999px;
+            border: 1px solid rgba(98, 218, 255, 0.65);
+            transform: translateY(-50%);
+            box-shadow: 0 0 8px rgba(98, 218, 255, 0.3);
+        }
+        .word-badge.found {
+            background: linear-gradient(135deg, rgba(57, 255, 136, 0.9), rgba(185, 255, 74, 0.92));
+            color: #04150d;
+            text-decoration: line-through;
+            opacity: 0.82;
+            border-color: rgba(255,255,255,0.18);
+            box-shadow: 0 0 14px rgba(57, 255, 136, 0.34);
+        }
+        .word-badge.found::before {
+            background: #04150d;
+            border-color: rgba(4, 21, 13, 0.35);
+            box-shadow: 0 0 10px rgba(4, 21, 13, 0.2);
+        }
+        .hud-title {
+            color: var(--text-main);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            text-shadow: 0 0 16px rgba(57, 255, 136, 0.34);
+        }
+        .hud-meta {
+            color: var(--accent-strong);
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            max-width: 46%;
+            text-align: right;
+            line-height: 1.25;
+        }
+        .instruction-copy {
+            margin-top: 0.35rem;
+            color: var(--text-soft);
+            font-size: 0.84rem;
+            line-height: 1.35;
+            letter-spacing: 0.05em;
+        }
+        .overlay-screen {
+            background: rgba(4, 9, 18, 0.68);
+            backdrop-filter: blur(10px);
+            padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+        }
+        .panel-copy { color: var(--text-soft); line-height: 1.5; font-size: 1rem; }
+        .primary-button {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 20% 15%, rgba(255,255,255,0.58), transparent 22%),
+                linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #041520;
+            border: 0;
+            cursor: pointer;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            box-shadow: 0 10px 24px rgba(98, 218, 255, 0.28), 0 0 0 1px rgba(255,255,255,0.3) inset;
+            touch-action: manipulation;
+        }
+        .primary-button::after {
+            content: "";
+            position: absolute;
+            inset: -80% -20%;
+            background: conic-gradient(from 0deg, transparent, rgba(255,255,255,0.28), transparent 32%);
+            animation: buttonPortalSpin 4.8s linear infinite;
+            pointer-events: none;
+        }
+        .primary-button:active { transform: scale(0.95); }
+        @keyframes buttonPortalSpin {
+            to { transform: rotate(1turn); }
+        }
+        .signal-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-bottom: 0.5rem;
+            padding: 0.28rem 0.65rem;
+            border-radius: 999px;
+            border: 1px solid rgba(155, 255, 222, 0.18);
+                background: rgba(57, 255, 136, 0.08);
+            color: var(--accent-strong);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+        .signal-tag::before {
+            content: "◉";
+            color: var(--accent);
+            text-shadow: 0 0 12px rgba(98, 218, 255, 0.55);
+        }
+        .hud-scanline {
+            position: absolute;
+            inset: 0;
+                background: linear-gradient(180deg, transparent, rgba(57, 255, 136, 0.08), transparent);
+            animation: sweepScan 3.2s linear infinite;
+            pointer-events: none;
+            opacity: 0.65;
+        }
+        @keyframes sweepScan {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        @media (max-width: 600px) {
+            #ui-layer { padding: 0.75rem; }
+            #hud { margin-top: 0.5rem; padding: 0.85rem; }
+            .text-xl { font-size: 1.08rem; }
+            .text-3xl { font-size: 1.65rem; }
+            .hud-meta { max-width: 48%; font-size: 0.68rem; }
+            .instruction-copy { font-size: 0.76rem; }
+            .word-badge { font-size: 0.8rem; padding: 0.26rem 0.55rem 0.26rem 0.92rem; }
+            .panel-copy { font-size: 0.92rem; }
+        }
+        .feedback-stack {
+            position: absolute;
+            right: 1rem;
+            bottom: max(1rem, env(safe-area-inset-bottom));
+            z-index: 55;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.55rem;
+            pointer-events: none;
+        }
+        .feedback-burst {
+            width: min(26vw, 108px);
+            max-width: 108px;
+            border-radius: 16px;
+            border: 1px solid rgba(155, 255, 222, 0.2);
+            background: rgba(6, 14, 28, 0.72);
+            box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+            opacity: 0;
+            transform: translateY(12px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            object-fit: cover;
+        }
+        .feedback-burst.visible {
+            opacity: 0.95;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-caption {
+            min-width: 7.5rem;
+            max-width: min(48vw, 13rem);
+            padding: 0.5rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(7, 18, 34, 0.84);
+            border: 1px solid rgba(125, 232, 255, 0.18);
+            color: var(--accent-strong);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.24);
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        .feedback-caption.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        @media (max-width: 600px) {
+            .feedback-stack {
+                right: 0.75rem;
+                bottom: max(0.75rem, env(safe-area-inset-bottom));
+            }
+            .feedback-burst {
+                width: min(30vw, 92px);
+                max-width: 92px;
+            }
+            .feedback-caption {
+                max-width: 10rem;
+                font-size: 0.66rem;
+            }
+        }
+    </style>
+    <script id="game-config" type="application/x-game-config">
+    {
+        "gridSize": { "type": "number", "label": "Grid Size", "value": 7, "min": 5, "max": 10 },
+        "themeColor": { "type": "color", "label": "Theme Color", "value": "#8BA888" },
+        "accentColor": { "type": "color", "label": "Accent Color", "value": "#E0C9A3" }
+    }
+    </script>
+</head>
+<body>
+    <div id="game-container" class="select-none">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer" class="absolute inset-0 z-50 flex flex-col justify-between p-4">
+            
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+            <!-- HUD -->
+            <div id="hud" class="w-full max-w-md mx-auto mt-8 paper-panel p-4 pointer-events-auto">
+                <div class="hud-scanline" aria-hidden="true"></div>
+                <div class="signal-tag">Garage Portal Net Online</div>
+                <div class="flex justify-between items-center mb-2">
+                    <h1 class="text-xl font-black hud-title">Portal Sweep</h1>
+                    <span id="level-display" class="text-sm font-bold hud-meta">Sector 1</span>
+                </div>
+                <p class="instruction-copy">Drag a straight scan-line across the matrix to lock every portal call sign.</p>
+                <div id="word-list" class="flex flex-wrap gap-2">
+                    <!-- Words injected here -->
+                </div>
+            </div>
+
+            <!-- [agent-note][stage3] resolved-gif: fail/win feedback -> catalogs/gifs.json | caution: keep-gif-off-playfield -->
+            <div class="feedback-stack" aria-live="polite">
+                <img id="fail-gif" class="feedback-burst" src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp" alt="Signal scramble reaction" />
+                <img id="win-gif" class="feedback-burst" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Sector clear celebration" />
+                <div id="feedback-caption" class="feedback-caption">Signal online</div>
+            </div>
+
+            <!-- Game Over / Level Complete -->
+            <div id="game-over-screen" class="hidden absolute inset-0 flex items-center justify-center overlay-screen pointer-events-auto">
+                <div id="game-over-panel" class="paper-panel p-8 text-center max-w-sm w-full mx-4 transform transition-transform scale-95">
+                    <div class="signal-tag">Portal Transmission Stable</div>
+                    <h2 id="result-title" class="text-3xl font-black hud-title mb-2">Dimension Stabilized</h2>
+                    <p id="result-copy" class="panel-copy mb-6">Every call sign is locked in. Rick says the next portal sector is only mostly dangerous.</p>
+                    <button id="restart-btn" class="primary-button w-full py-3 px-6 font-bold rounded-full shadow-md transition-transform">
+                        Scan Next Sector
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Assets -->
+    <!-- [agent-note][stage3] resolved-audio: loop/ui/fail/collect/win -> catalogs/audios.json -->
+    <audio id="bgm_main" data-editable="audio" data-label="Background Music" src="https://gamezone-virid.vercel.app/assets/audios/bgm/scifi_bgm_01.mp3" preload="auto" loop></audio>
+    <audio id="sfx_scan" src="https://gamezone-virid.vercel.app/assets/audios/sfx/scifi_character_01.mp3" preload="auto"></audio>
+    <audio id="sfx_collect" src="https://gamezone-virid.vercel.app/assets/audios/sfx/scifi_item_01.mp3" preload="auto"></audio>
+    <audio id="sfx_fail" src="https://gamezone-virid.vercel.app/assets/audios/sfx/scifi_enemy_01.mp3" preload="auto"></audio>
+    <audio id="sfx_win" src="https://gamezone-virid.vercel.app/assets/audios/sfx/scifi_item_02.mp3" preload="auto"></audio>
+
+    <script>
+        // --- System & Config ---
+        let gameConfig = {};
+        try {
+            const configScript = document.getElementById('game-config').textContent;
+            const defs = JSON.parse(configScript);
+            for (let key in defs) gameConfig[key] = defs[key].value;
+        } catch (e) {
+            gameConfig = { gridSize: 7, themeColor: '#8BA888', accentColor: '#E0C9A3' };
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        let cw = 0, ch = 0;
+        let dpr = window.devicePixelRatio || 1;
+        let initialized = false;
+        let gameState = 'STARTING'; // STARTING, PLAYING, GAMEOVER
+        let lastTime = 0;
+
+        // --- Audio System ---
+        let audioCtx = null;
+        let audioUnlocked = false;
+        const bgm = document.getElementById('bgm_main');
+        const audioElements = {
+            scan: document.getElementById('sfx_scan'),
+            success: document.getElementById('sfx_collect'),
+            fail: document.getElementById('sfx_fail'),
+            win: document.getElementById('sfx_win')
+        };
+        const audioState = {
+            lastScanAt: 0,
+            feedbackTimer: null
+        };
+
+        function primeAudioElement(audio, volume) {
+            if (!audio) return;
+            audio.volume = volume;
+            audio.preload = 'auto';
+            audio.load();
+        }
+
+        function initAudio() {
+            if (audioUnlocked) return;
+            try {
+                window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                audioCtx.resume().catch(() => {});
+                bgm.volume = 0.2;
+                bgm.play().catch(() => {});
+                primeAudioElement(audioElements.scan, 0.4);
+                primeAudioElement(audioElements.success, 0.55);
+                primeAudioElement(audioElements.fail, 0.45);
+                primeAudioElement(audioElements.win, 0.55);
+                audioUnlocked = true;
+            } catch (e) { console.warn("Audio init failed", e); }
+        }
+
+        function playSfx(type) {
+            if (!audioUnlocked) return;
+            const audio = audioElements[type];
+            if (!audio) return;
+            try {
+                if (type === 'scan') {
+                    const now = performance.now();
+                    if (now - audioState.lastScanAt < 80) return;
+                    audioState.lastScanAt = now;
+                }
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            } catch (e) {}
+        }
+
+        function vibrate(style = 'light') {
+            try {
+                window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+                    action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+                    params: { style: style }
+                });
+            } catch (e) {}
+        }
+
+        // --- Game Logic & State ---
+        const WORD_BANK = [
+            "RICK", "MORTY", "PORTAL", "GARAGE", "CITADEL", "PLUMBUS", "SQUANCH", "JERRY",
+            "SUMMER", "BETH", "UNITY", "FLASK", "LASER", "BLIPS", "CRONEN", "DOOFUS",
+            "WUBBA", "BURP", "GROMF", "RICKS", "SMITH", "MESEEK", "TOXIN", "VORTEX"
+        ];
+        const SECTOR_THEMES = [
+            "Garage Portal Calibration",
+            "Cronenberg Backwash",
+            "Citadel Frequency Jam",
+            "Blips and Chitz Overload",
+            "Council of Ricks Final Lock"
+        ];
+        
+        let level = 1;
+        let grid = [];
+        let targetWords = [];
+        let foundWords = [];
+        
+        // Grid rendering metrics
+        let cellSize = 0;
+        let gridOffsetX = 0;
+        let gridOffsetY = 0;
+
+        // Interaction state
+        let isDragging = false;
+        let dragStartCell = null;
+        let dragCurrentCell = null;
+        let selectedCells = [];
+        
+        // Visual effects
+        let particles = [];
+        let shakeTime = 0;
+        let bgLeaves = [];
+        const failGif = document.getElementById('fail-gif');
+        const winGif = document.getElementById('win-gif');
+        const feedbackCaption = document.getElementById('feedback-caption');
+
+        function showFeedback(type, text) {
+            const activeGif = type === 'win' ? winGif : failGif;
+            const idleGif = type === 'win' ? failGif : winGif;
+            clearTimeout(audioState.feedbackTimer);
+            idleGif.classList.remove('visible');
+            activeGif.classList.add('visible');
+            feedbackCaption.textContent = text;
+            feedbackCaption.classList.add('visible');
+            audioState.feedbackTimer = setTimeout(() => {
+                activeGif.classList.remove('visible');
+                feedbackCaption.classList.remove('visible');
+            }, type === 'win' ? 2200 : 1400);
+        }
+
+        function setState(newState) {
+            gameState = newState;
+            const goScreen = document.getElementById('game-over-screen');
+            const goPanel = document.getElementById('game-over-panel');
+            
+            if (gameState === 'GAMEOVER') {
+                goScreen.classList.remove('hidden');
+                setTimeout(() => goPanel.classList.remove('scale-95'), 50);
+            } else {
+                goScreen.classList.add('hidden');
+                goPanel.classList.add('scale-95');
+                winGif.classList.remove('visible');
+                failGif.classList.remove('visible');
+                feedbackCaption.classList.remove('visible');
+            }
+        }
+
+        function generateGrid() {
+            const size = gameConfig.gridSize;
+            grid = Array(size).fill(null).map(() => Array(size).fill(''));
+            targetWords = [];
+            foundWords = [];
+            
+            // Pick words based on level
+            const numWords = Math.min(3 + Math.floor(level / 2), 6);
+            let availableWords = [...WORD_BANK].sort(() => 0.5 - Math.random());
+            
+            for (let i = 0; i < numWords && availableWords.length > 0; i++) {
+                let word = availableWords.pop();
+                if (placeWord(word, size)) {
+                    targetWords.push({ word: word, found: false });
+                }
+            }
+
+            // Fill remaining with random letters
+            const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (grid[r][c] === '') {
+                        grid[r][c] = letters.charAt(Math.floor(Math.random() * letters.length));
+                    }
+                }
+            }
+
+            updateHUD();
+        }
+
+        function placeWord(word, size) {
+            const dirs = [[1, 0], [0, 1], [1, 1]]; // Easy mode: Right, Down, Diagonal-Down-Right
+            let placed = false;
+            let attempts = 0;
+            
+            while (!placed && attempts < 50) {
+                attempts++;
+                let dir = dirs[Math.floor(Math.random() * dirs.length)];
+                let r = Math.floor(Math.random() * size);
+                let c = Math.floor(Math.random() * size);
+                
+                let endR = r + dir[1] * (word.length - 1);
+                let endC = c + dir[0] * (word.length - 1);
+                
+                if (endR >= 0 && endR < size && endC >= 0 && endC < size) {
+                    let canPlace = true;
+                    for (let i = 0; i < word.length; i++) {
+                        let cr = r + dir[1] * i;
+                        let cc = c + dir[0] * i;
+                        if (grid[cr][cc] !== '' && grid[cr][cc] !== word[i]) {
+                            canPlace = false;
+                            break;
+                        }
+                    }
+                    
+                    if (canPlace) {
+                        for (let i = 0; i < word.length; i++) {
+                            grid[r + dir[1] * i][c + dir[0] * i] = word[i];
+                        }
+                        placed = true;
+                    }
+                }
+            }
+            return placed;
+        }
+
+        function updateHUD() {
+            const sectorName = SECTOR_THEMES[Math.min(level - 1, SECTOR_THEMES.length - 1)];
+            const levelDisplay = document.getElementById('level-display');
+            levelDisplay.innerText = `S${level} · ${sectorName}`;
+            levelDisplay.title = `Sector ${level}: ${sectorName}`;
+            const list = document.getElementById('word-list');
+            list.innerHTML = '';
+            targetWords.forEach(tw => {
+                const span = document.createElement('span');
+                span.className = `word-badge ${tw.found ? 'found' : ''}`;
+                span.innerText = tw.word;
+                list.appendChild(span);
+            });
+        }
+
+        function spawnParticles(cells) {
+            cells.forEach(cell => {
+                const cx = gridOffsetX + cell.c * cellSize + cellSize/2;
+                const cy = gridOffsetY + cell.r * cellSize + cellSize/2;
+                for(let i=0; i<3; i++) {
+                    particles.push({
+                        x: cx, y: cy,
+                        vx: (Math.random() - 0.5) * 100,
+                        vy: (Math.random() - 0.5) * 100 - 50,
+                        life: 1.0,
+                        size: Math.random() * 6 + 4,
+                        rot: Math.random() * Math.PI * 2,
+                        rotSpeed: (Math.random() - 0.5) * 5
+                    });
+                }
+            });
+        }
+
+        function initBackgroundLeaves() {
+            bgLeaves = [];
+            for(let i=0; i<24; i++) {
+                bgLeaves.push({
+                    x: Math.random() * cw,
+                    y: Math.random() * ch,
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: -8 - Math.random() * 18,
+                    size: 8 + Math.random() * 24,
+                    rot: Math.random() * Math.PI * 2,
+                    rotSpeed: (Math.random() - 0.5) * 1.2,
+                    alpha: 0.08 + Math.random() * 0.18
+                });
+            }
+        }
+
+        function updateMetrics() {
+            const size = gameConfig.gridSize;
+            // Leave space for HUD at top (approx 150px) and margin at bottom
+            const availWidth = cw * 0.9;
+            const availHeight = ch - 200; 
+            cellSize = Math.min(availWidth / size, availHeight / size, 60);
+            gridOffsetX = (cw - (cellSize * size)) / 2;
+            gridOffsetY = 160 + (availHeight - (cellSize * size)) / 2;
+        }
+
+        function initGame() {
+            generateGrid();
+            updateMetrics();
+            initBackgroundLeaves();
+            setState('PLAYING');
+            if(bgm.paused) bgm.play().catch(()=>{});
+        }
+
+        function restartGame() {
+            level++;
+            initGame();
+        }
+
+        // --- Input Handling ---
+        function getCellFromPos(x, y) {
+            if (x < gridOffsetX || y < gridOffsetY) return null;
+            const c = Math.floor((x - gridOffsetX) / cellSize);
+            const r = Math.floor((y - gridOffsetY) / cellSize);
+            if (c >= 0 && c < gameConfig.gridSize && r >= 0 && r < gameConfig.gridSize) {
+                return {r, c};
+            }
+            return null;
+        }
+
+        function calculateLine(start, end) {
+            let cells = [];
+            let dr = end.r - start.r;
+            let dc = end.c - start.c;
+            
+            // Check if valid line (horizontal, vertical, diagonal)
+            if (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) {
+                let steps = Math.max(Math.abs(dr), Math.abs(dc));
+                let stepR = dr === 0 ? 0 : dr / steps;
+                let stepC = dc === 0 ? 0 : dc / steps;
+                
+                for (let i = 0; i <= steps; i++) {
+                    cells.push({r: start.r + stepR * i, c: start.c + stepC * i});
+                }
+            } else {
+                // Not a straight line, just select current
+                cells.push(end);
+            }
+            return cells;
+        }
+
+        function handlePointerDown(x, y) {
+            const cell = getCellFromPos(x, y);
+            if (cell) {
+                isDragging = true;
+                dragStartCell = cell;
+                dragCurrentCell = cell;
+                selectedCells = [cell];
+                playSfx('scan');
+                vibrate('light');
+            }
+        }
+
+        function handlePointerMove(x, y) {
+            if (!isDragging) return;
+            const cell = getCellFromPos(x, y);
+            if (cell && (cell.r !== dragCurrentCell.r || cell.c !== dragCurrentCell.c)) {
+                dragCurrentCell = cell;
+                selectedCells = calculateLine(dragStartCell, dragCurrentCell);
+                playSfx('scan'); // Soft scan tick on move
+            }
+        }
+
+        function handlePointerUp() {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            if (selectedCells.length > 1) {
+                // Build string
+                let wordStr = selectedCells.map(c => grid[c.r][c.c]).join('');
+                let revWordStr = wordStr.split('').reverse().join('');
+                
+                let found = false;
+                for (let tw of targetWords) {
+                    if (!tw.found && (tw.word === wordStr || tw.word === revWordStr)) {
+                        tw.found = true;
+                        foundWords.push(selectedCells);
+                        updateHUD();
+                        playSfx('success');
+                        showFeedback('win', `Call sign ${tw.word} locked`);
+                        vibrate('medium');
+                        spawnParticles(selectedCells);
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    playSfx('fail');
+                    showFeedback('fail', 'Signal mismatch');
+                    vibrate('light');
+                    shakeTime = 0.3; // Shake effect
+                }
+            }
+            selectedCells = [];
+
+            // Check win
+            if (targetWords.every(tw => tw.found)) {
+                setTimeout(() => {
+                    playSfx('win');
+                    showFeedback('win', 'Sector clear');
+                    vibrate('heavy');
+                    setState('GAMEOVER');
+                }, 500);
+            }
+        }
+
+        function handleGlobalInput(e) {
+            initAudio();
+            if (e.type === 'click' && e.target.id === 'restart-btn') {
+                restartGame();
+                return;
+            }
+            
+            if (gameState !== 'PLAYING') return;
+            
+            // Prevent default scrolling on canvas
+            if(e.target === canvas) e.preventDefault();
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (!isFinite(x) || !isFinite(y)) return;
+
+            if (e.type === 'pointerdown') handlePointerDown(x, y);
+            else if (e.type === 'pointermove') handlePointerMove(x, y);
+            else if (e.type === 'pointerup' || e.type === 'pointercancel') handlePointerUp();
+        }
+
+        window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+        window.addEventListener('pointermove', handleGlobalInput, { passive: false });
+        window.addEventListener('pointerup', handleGlobalInput, { passive: false });
+        window.addEventListener('pointercancel', handleGlobalInput, { passive: false });
+        window.addEventListener('blur', () => { try { bgm.pause(); } catch (e) {} });
+        document.addEventListener('visibilitychange', () => {
+            try {
+                if (document.hidden) bgm.pause();
+                else if (audioUnlocked && gameState === 'PLAYING') bgm.play().catch(() => {});
+            } catch (e) {}
+        });
+        document.getElementById('restart-btn').addEventListener('click', handleGlobalInput);
+
+        // --- Rendering ---
+        function drawLeaf(x, y, size, rot, alpha, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rot);
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = Math.max(1.2, size * 0.12);
+            ctx.beginPath();
+            // Procedural portal-goo mote: preserves the old lightweight helper footprint.
+            ctx.ellipse(0, 0, size * 0.55, size * 0.32, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(size * 0.14, -size * 0.04, size * 0.13, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawPill(cells, color, alpha) {
+            if(cells.length === 0) return;
+            ctx.fillStyle = color;
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = cellSize * 0.18;
+            
+            if(cells.length === 1) {
+                const cx = gridOffsetX + cells[0].c * cellSize + cellSize/2;
+                const cy = gridOffsetY + cells[0].r * cellSize + cellSize/2;
+                ctx.beginPath();
+                ctx.arc(cx, cy, cellSize * 0.4, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                return;
+            }
+
+            const start = cells[0];
+            const end = cells[cells.length-1];
+            const sx = gridOffsetX + start.c * cellSize + cellSize/2;
+            const sy = gridOffsetY + start.r * cellSize + cellSize/2;
+            const ex = gridOffsetX + end.c * cellSize + cellSize/2;
+            const ey = gridOffsetY + end.r * cellSize + cellSize/2;
+            
+            const dx = ex - sx;
+            const dy = ey - sy;
+            const angle = Math.atan2(dy, dx);
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const r = Math.max(0, cellSize * 0.4);
+
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.arc(0, 0, r, Math.PI/2, Math.PI*1.5);
+            ctx.lineTo(dist, -r);
+            ctx.arc(dist, 0, r, -Math.PI/2, Math.PI/2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+            ctx.shadowBlur = 0;
+        }
+
+        function drawMiniCrewIcons(timestamp) {
+            const baseX = Math.max(28, gridOffsetX - 48);
+            const baseY = Math.max(118, gridOffsetY - 32);
+            const bob = Math.sin(timestamp * 0.002) * 2;
+            ctx.save();
+            ctx.globalAlpha = 0.82;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Rick: spiky cyan hair, pale face, lab coat triangle, safely outside grid.
+            ctx.translate(baseX, baseY + bob);
+            ctx.strokeStyle = 'rgba(98, 218, 255, 0.85)';
+            ctx.fillStyle = 'rgba(98, 218, 255, 0.28)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < 7; i++) {
+                const a = -Math.PI * 0.92 + i * Math.PI / 3.2;
+                const radius = i % 2 ? 12 : 20;
+                const x = Math.cos(a) * radius;
+                const y = Math.sin(a) * radius;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(231, 247, 255, 0.72)';
+            ctx.beginPath();
+            ctx.ellipse(0, 4, 11, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(231, 247, 255, 0.28)';
+            ctx.beginPath();
+            ctx.moveTo(-12, 18);
+            ctx.lineTo(0, 36);
+            ctx.lineTo(12, 18);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            // Morty: small worried yellow signal dot on opposite side.
+            ctx.save();
+            ctx.translate(Math.min(cw - 30, gridOffsetX + gameConfig.gridSize * cellSize + 48), baseY + 12 - bob);
+            ctx.globalAlpha = 0.78;
+            ctx.strokeStyle = 'rgba(255, 209, 102, 0.7)';
+            ctx.fillStyle = 'rgba(255, 209, 102, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(4, 17, 15, 0.82)';
+            ctx.beginPath();
+            ctx.arc(-4, -2, 1.8, 0, Math.PI * 2);
+            ctx.arc(5, -2, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 107, 154, 0.62)';
+            ctx.beginPath();
+            ctx.arc(0, 5, 4, Math.PI * 1.08, Math.PI * 1.92);
+            ctx.stroke();
+            ctx.globalAlpha = 0.32;
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, 20 + i * 8 + Math.sin(timestamp * 0.002 + i) * 1.5, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawCitadelSilhouette(timestamp, motifIndex) {
+            const horizon = ch * 0.77;
+            ctx.save();
+            ctx.globalAlpha = 0.22 + Math.min(motifIndex, 4) * 0.025;
+            ctx.fillStyle = motifIndex >= 2 ? 'rgba(98, 218, 255, 0.26)' : 'rgba(57, 255, 136, 0.14)';
+            for (let i = 0; i < 7; i++) {
+                const x = (cw * (0.08 + i * 0.14)) + Math.sin(timestamp * 0.00035 + i) * 3;
+                const h = 34 + (i % 3) * 18 + motifIndex * 5;
+                ctx.beginPath();
+                ctx.roundRect(x, horizon - h, 18 + (i % 2) * 8, h, 6);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + 9, horizon - h, 14 + (i % 2) * 5, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(57, 255, 136, 0.34)';
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawPortalGunOutline() {
+            ctx.save();
+            ctx.globalAlpha = 0.2;
+            ctx.strokeStyle = 'rgba(185, 255, 74, 0.72)';
+            ctx.lineWidth = 2;
+            ctx.translate(cw * 0.08, ch * 0.56);
+            ctx.beginPath();
+            ctx.roundRect(0, 0, 48, 22, 8);
+            ctx.moveTo(48, 11);
+            ctx.lineTo(70, 6);
+            ctx.lineTo(70, 16);
+            ctx.lineTo(48, 11);
+            ctx.moveTo(16, 22);
+            ctx.lineTo(8, 46);
+            ctx.lineTo(22, 46);
+            ctx.lineTo(28, 22);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(10, 11, 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawPortalBackground(timestamp, dt) {
+            const motifIndex = Math.min(level - 1, 4);
+            const portalPulse = 0.5 + Math.sin(timestamp * 0.0012) * 0.5;
+
+            ctx.fillStyle = '#04110f';
+            ctx.fillRect(0, 0, cw, ch);
+            
+            const grad = ctx.createRadialGradient(cw/2, ch*0.32, 0, cw/2, ch/2, cw);
+            grad.addColorStop(0, motifIndex === 1 ? 'rgba(48, 52, 62, 0.98)' : 'rgba(22, 74, 54, 0.98)');
+            grad.addColorStop(0.45, motifIndex >= 3 ? 'rgba(16, 35, 55, 0.98)' : 'rgba(8, 37, 33, 0.98)');
+            grad.addColorStop(1, 'rgba(4, 17, 15, 1)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, cw, ch);
+
+            ctx.save();
+            ctx.translate(cw * 0.5, ch * 0.49);
+            const portalRadius = Math.min(cw, ch) * (0.31 + portalPulse * 0.018);
+            for (let i = 0; i < 5; i++) {
+                ctx.globalAlpha = 0.08 + i * 0.025 + portalPulse * 0.03;
+                ctx.strokeStyle = i % 2 ? 'rgba(98, 218, 255, 0.7)' : 'rgba(57, 255, 136, 0.82)';
+                if (motifIndex === 1 && i % 2 === 0) ctx.strokeStyle = 'rgba(155, 92, 255, 0.72)';
+                if (motifIndex >= 3 && i === 3) ctx.strokeStyle = 'rgba(255, 107, 154, 0.56)';
+                ctx.lineWidth = Math.max(2, Math.min(cw, ch) * (0.004 + i * 0.002));
+                ctx.beginPath();
+                ctx.arc(0, 0, portalRadius - i * 20, timestamp * (0.00018 + i * 0.00008), Math.PI * (1.18 + i * 0.18) + timestamp * (0.00018 + i * 0.00008));
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 0.09;
+            ctx.fillStyle = 'rgba(57, 255, 136, 0.9)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, portalRadius * (motifIndex === 1 ? 1.18 : 1), portalRadius * (motifIndex === 1 ? 0.74 : 0.92), Math.sin(timestamp * 0.0005) * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            const beamY = (timestamp * 0.035) % (ch + 180) - 90;
+            const beam = ctx.createLinearGradient(0, beamY - 50, 0, beamY + 50);
+            beam.addColorStop(0, 'rgba(98, 218, 255, 0)');
+            beam.addColorStop(0.5, 'rgba(57, 255, 136, 0.09)');
+            beam.addColorStop(1, 'rgba(155, 92, 255, 0)');
+            ctx.fillStyle = beam;
+            ctx.fillRect(0, 0, cw, ch);
+
+            drawCitadelSilhouette(timestamp, motifIndex);
+            drawPortalGunOutline();
+
+            ctx.save();
+            ctx.globalAlpha = 0.16 + motifIndex * 0.02;
+            ctx.fillStyle = motifIndex >= 3 ? 'rgba(255, 107, 154, 0.7)' : 'rgba(185, 255, 74, 0.7)';
+            ctx.font = `700 ${Math.max(12, Math.min(18, cw * 0.035))}px "Orbitron"`;
+            ctx.fillText('C-137', cw * 0.78, ch * 0.26);
+            ctx.fillText(motifIndex >= 3 ? 'BLIPS' : 'WUBBA', cw * 0.08, ch * 0.31);
+            ctx.restore();
+
+            // Update & draw portal-goo motes outside the central letter matrix.
+            bgLeaves.forEach(l => {
+                l.x += l.vx * dt;
+                l.y += l.vy * dt;
+                l.rot += l.rotSpeed * dt;
+                if(l.y < -l.size) {
+                    l.y = ch + l.size;
+                    l.x = Math.random() * cw;
+                }
+                const color = motifIndex === 1 ? 'rgba(155, 92, 255, 0.78)' : 'rgba(57, 255, 136, 0.8)';
+                drawLeaf(l.x, l.y, l.size, l.rot, l.alpha, color);
+            });
+
+            drawMiniCrewIcons(timestamp);
+            ctx.globalAlpha = 1.0;
+        }
+
+        function gameLoop(timestamp) {
+            requestAnimationFrame(gameLoop);
+            if (!initialized) return;
+
+            let dt = (timestamp - lastTime) / 1000;
+            if (dt > 0.1) dt = 0.1;
+            lastTime = timestamp;
+
+            try {
+                // Background: authored procedural portal-scanner scene, not a static stock image.
+                drawPortalBackground(timestamp, dt);
+
+                ctx.globalAlpha = 1.0;
+
+                // Shake effect
+                let curOffsetX = gridOffsetX;
+                if (shakeTime > 0) {
+                    shakeTime -= dt;
+                    curOffsetX += Math.sin(shakeTime * 50) * 5;
+                }
+
+                // Draw Grid Background (Rick garage scanner matrix)
+                const size = gameConfig.gridSize;
+                const gridW = size * cellSize;
+                const gridH = size * cellSize;
+                
+                const panelGrad = ctx.createLinearGradient(0, gridOffsetY - 10, 0, gridOffsetY + gridH + 10);
+                panelGrad.addColorStop(0, 'rgba(7, 31, 30, 0.94)');
+                panelGrad.addColorStop(1, 'rgba(4, 14, 18, 0.94)');
+                ctx.fillStyle = panelGrad;
+                ctx.shadowColor = 'rgba(98, 218, 255, 0.12)';
+                ctx.shadowBlur = 18;
+                ctx.shadowOffsetY = 8;
+                ctx.beginPath();
+                ctx.roundRect(curOffsetX - 10, gridOffsetY - 10, gridW + 20, gridH + 20, 18);
+                ctx.fill();
+                ctx.shadowColor = 'transparent';
+
+                ctx.strokeStyle = 'rgba(125, 232, 255, 0.22)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(curOffsetX - 10, gridOffsetY - 10, gridW + 20, gridH + 20, 18);
+                ctx.stroke();
+                ctx.strokeStyle = 'rgba(57, 255, 136, 0.18)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 8]);
+                ctx.beginPath();
+                ctx.roundRect(curOffsetX - 18, gridOffsetY - 18, gridW + 36, gridH + 36, 24);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Draw Found Words
+                foundWords.forEach(wordCells => {
+                    drawPill(wordCells, '#39ff88', 0.36);
+                });
+
+                // Draw Current Drag
+                if (isDragging && selectedCells.length > 0) {
+                    drawPill(selectedCells, '#b9ff4a', 0.54);
+                }
+
+                // Draw Letters
+                ctx.globalAlpha = 1.0;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = `700 ${cellSize * 0.5}px "Exo 2"`;
+
+                for (let r = 0; r < size; r++) {
+                    for (let c = 0; c < size; c++) {
+                        const cx = curOffsetX + c * cellSize + cellSize/2;
+                        const cy = gridOffsetY + r * cellSize + cellSize/2;
+                        
+                        // Subtle tile background
+                        const tileGrad = ctx.createLinearGradient(0, cy - cellSize*0.4, 0, cy + cellSize*0.4);
+                        tileGrad.addColorStop(0, 'rgba(8, 38, 35, 0.97)');
+                        tileGrad.addColorStop(1, 'rgba(5, 18, 22, 0.97)');
+                        ctx.fillStyle = tileGrad;
+                        ctx.beginPath();
+                        ctx.roundRect(cx - cellSize*0.4, cy - cellSize*0.4, cellSize*0.8, cellSize*0.8, 10);
+                        ctx.fill();
+
+                        ctx.strokeStyle = 'rgba(98, 218, 255, 0.16)';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#e7f7ff';
+                        ctx.shadowColor = 'rgba(98, 218, 255, 0.2)';
+                        ctx.shadowBlur = 10;
+                        ctx.fillText(grid[r][c], cx, cy + 2); // slight optical adjustment
+                        ctx.shadowBlur = 0;
+                    }
+                }
+
+                // Update & Draw Particles
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    let p = particles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.rot += p.rotSpeed * dt;
+                    p.life -= dt * 1.5;
+                    
+                    if (p.life <= 0 || !isFinite(p.x) || !isFinite(p.y)) {
+                        particles.splice(i, 1);
+                    } else {
+                        drawLeaf(p.x, p.y, p.size, p.rot, p.life, 'rgba(57, 255, 136, 0.9)');
+                    }
+                }
+                ctx.globalAlpha = 1.0;
+
+            } catch (e) {
+                console.error("Loop error isolated:", e);
+            }
+        }
+
+        // --- Initialization ---
+        const ro = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const cr = entry.contentRect;
+                cw = cr.width;
+                ch = cr.height;
+                
+                canvas.width = cw * dpr;
+                canvas.height = ch * dpr;
+                canvas.style.width = cw + 'px';
+                canvas.style.height = ch + 'px';
+                
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                
+                if (!initialized && cw > 0 && ch > 0) {
+                    initialized = true;
+                    initGame();
+                } else if (initialized) {
+                    updateMetrics();
+                    initBackgroundLeaves();
+                }
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            ro.observe(canvas);
+            requestAnimationFrame(gameLoop);
+        });
+
+    </script>
+</body>
+</html>

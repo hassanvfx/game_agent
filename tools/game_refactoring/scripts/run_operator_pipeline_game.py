@@ -82,6 +82,34 @@ def copy_workspace(source: Path, destination: Path, replace: bool = False) -> No
     )
 
 
+def artifacts_post_step_clean(workspace: Path) -> dict[str, list[str]]:
+    """Delete explicit `_trash` lifecycle surfaces before promoting a successful stage workspace.
+
+    Deletion contract:
+    - files matching `*_trash.*`
+    - directories matching `*_trash`
+    """
+    removed_files: list[str] = []
+    removed_dirs: list[str] = []
+
+    for candidate in sorted(workspace.rglob("*_trash.*")):
+        if not candidate.is_file():
+            continue
+        candidate.unlink(missing_ok=True)
+        removed_files.append(str(candidate.relative_to(workspace)))
+
+    for candidate in sorted(workspace.rglob("*_trash"), reverse=True):
+        if not candidate.is_dir():
+            continue
+        shutil.rmtree(candidate)
+        removed_dirs.append(str(candidate.relative_to(workspace)))
+
+    return {
+        "removed_trash_files": removed_files,
+        "removed_trash_dirs": removed_dirs,
+    }
+
+
 def attempt_paths(game_dir: Path, operator: OperatorDefinition, attempt_number: int) -> dict[str, Path]:
     attempt_root = game_dir / "operator_pipeline" / operator.stage_slug / f"attempt_{attempt_number:02d}"
     return {
@@ -1219,6 +1247,18 @@ def main() -> None:
                         last_status = "failed"
                         continue
                     previous_contract_status = contract_status
+                    trash_cleanup = artifacts_post_step_clean(paths["workspace"].resolve())
+
+                    def mark_post_step_cleanup(payload: dict[str, Any]) -> None:
+                        payload["artifacts_post_step_clean"] = trash_cleanup
+                        payload["updated_at"] = utc_now()
+
+                    update_json_file(paths["operator_stage_state"], mark_post_step_cleanup)
+
+                    def mark_post_step_cleanup_result(payload: dict[str, Any]) -> None:
+                        payload["artifacts_post_step_clean"] = trash_cleanup
+
+                    update_json_file(paths["operator_result"], mark_post_step_cleanup_result)
                     copy_workspace(paths["workspace"], current_workspace, replace=True)
                     completed_stage_slugs.append(operator.stage_slug)
                     stage_completed = True

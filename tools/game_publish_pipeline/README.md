@@ -63,6 +63,26 @@ Useful flags:
 - `--vendor-asset-domains fonts.googleapis.com,cdn.tailwindcss.com,unpkg.com,cdnjs.cloudflare.com`
 - `--quarentine` (alias: `--quarantine`) to auto-copy identical public files into `games/published/runs/run_<timestamp>/quarantine`
 - `--quarentine /custom/path` to copy identical public files to a custom destination
+- `--delete-affected-gamezones` to remove affected `gamezone-*` folders from raw/public/obfuscated
+- `--delete-dry-run` to preview cleanup delete targets
+- cleanup delete automatically runs post-steps by default:
+  - refresh app artifacts (`refresh_app_artifacts.py`)
+  - materialize root artifact view (`materialize_artifact_view.py`)
+  - strict validation (`validate_published_outputs.py --strict`)
+- `--skip-post-cleanup` to disable auto post-steps
+- `--post-cleanup-manifest /path/to/artifacts_manifest.json` to override latest-run manifest auto-discovery
+- `--post-cleanup-run-id run_cleanup_...` to set run id for post-step outputs
+- `--post-cleanup-collection-slug vatsal_app_alpha`
+- `--post-cleanup-annotator-html-name annotator.html`
+
+Example full cleanup + automatic post-steps:
+
+```bash
+python3 scripts/detect_identical_public_obfuscated.py \
+  --delete-affected-gamezones \
+  --list-affected-gamezones \
+  --report-path tmp/identical_public_obfuscated_report.json
+```
 
 ## Core arguments
 

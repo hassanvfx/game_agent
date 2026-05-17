@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Puppy Treat Dash</title>
+    <!-- [agent-note][stage3] resolved-font: title -> Bangers | ui -> Rajdhani via catalogs/fonts.json -->
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sky-top: #8dd7ff;
+            --sky-bottom: #f5e8ff;
+            --meadow: #78d66f;
+            --panel-top: rgba(84, 37, 121, 0.8);
+            --panel-bottom: rgba(28, 17, 66, 0.9);
+            --panel-border: rgba(255, 255, 255, 0.34);
+            --panel-glow: rgba(115, 255, 226, 0.28);
+            --ui-accent: #73ffe2;
+            --ui-accent-strong: #ffdd63;
+            --treat-gold: #fff0a8;
+            --mud-dark: #4f2d22;
+            --text-main: #fffdf8;
+            --text-soft: rgba(255, 253, 248, 0.82);
+            --shadow-deep: rgba(21, 14, 44, 0.42);
+        }
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(255,255,255,0.35), transparent 28%),
+                linear-gradient(180deg, var(--sky-top) 0%, #9ce8ff 28%, #d8e8ff 62%, var(--sky-bottom) 100%);
+            color: var(--text-main);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        .glass-panel {
+            position: relative;
+            background:
+                linear-gradient(180deg, var(--panel-top), var(--panel-bottom));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 2px solid var(--panel-border);
+            box-shadow:
+                0 10px 30px var(--shadow-deep),
+                0 0 0 1px rgba(255,255,255,0.06) inset,
+                0 0 24px var(--panel-glow);
+        }
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255,255,255,0.18), transparent 45%);
+            pointer-events: none;
+        }
+        h1, h2, button {
+            font-family: 'Bangers', cursive;
+            letter-spacing: 0.04em;
+        }
+        p, #score, #finalScore, .hero-badge, .status-pill, .score-pop {
+            font-family: 'Rajdhani', system-ui, sans-serif;
+        }
+        button {
+            text-shadow: 0 2px 0 rgba(0,0,0,0.18);
+            box-shadow: 0 8px 0 rgba(0,0,0,0.18), 0 10px 18px rgba(0,0,0,0.22);
+        }
+        .wiggle { animation: wiggle 2s linear infinite; }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.9rem;
+            border-radius: 999px;
+            background: rgba(115, 255, 226, 0.14);
+            border: 1px solid rgba(115, 255, 226, 0.4);
+            color: var(--text-main);
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            box-shadow: 0 0 18px rgba(115, 255, 226, 0.14);
+        }
+        .sparkle-row {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            border-radius: inherit;
+        }
+        .sparkle-row span {
+            position: absolute;
+            width: 0.4rem;
+            height: 0.4rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.8);
+            animation: sparkleFloat 2.4s ease-in-out infinite;
+            box-shadow: 0 0 8px rgba(255,255,255,0.5);
+        }
+        .sparkle-row span:nth-child(1) { left: 14%; top: 68%; }
+        .sparkle-row span:nth-child(2) { left: 50%; top: 18%; animation-delay: 0.45s; }
+        .sparkle-row span:nth-child(3) { left: 79%; top: 60%; animation-delay: 0.9s; }
+        .hud-chip {
+            position: relative;
+            overflow: hidden;
+        }
+        .hud-chip::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            transform: translateX(-100%);
+            animation: hudShine 2.6s linear infinite;
+        }
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .score-pop,
+        .status-pill {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+        }
+        .score-pop {
+            bottom: 25%;
+            min-width: 8rem;
+            padding: 0.55rem 1rem;
+            border-radius: 999px;
+            background: rgba(255, 221, 99, 0.88);
+            color: #5b3a00;
+            font-size: 1.2rem;
+            font-weight: 700;
+            box-shadow: 0 10px 18px rgba(91, 58, 0, 0.24);
+        }
+        .status-pill {
+            top: 1.1rem;
+            right: 1rem;
+            left: auto;
+            transform: translateY(-8px);
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            background: rgba(54, 23, 74, 0.82);
+            border: 1px solid rgba(255,255,255,0.22);
+            color: #fff9ef;
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .score-pop.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-18px);
+        }
+        .status-pill.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .reaction-gif {
+            position: absolute;
+            width: min(28vw, 8.5rem);
+            max-width: 8.5rem;
+            border-radius: 1.1rem;
+            border: 2px solid rgba(255,255,255,0.4);
+            box-shadow: 0 12px 24px rgba(27, 16, 55, 0.28);
+            object-fit: cover;
+            background: rgba(255,255,255,0.08);
+            opacity: 0;
+            transform: scale(0.82);
+            transition: opacity 220ms ease, transform 220ms ease;
+            pointer-events: none;
+        }
+        .reaction-gif.visible {
+            opacity: 0.94;
+            transform: scale(1);
+        }
+        #collect-gif {
+            left: 1rem;
+            bottom: 1rem;
+        }
+        #fail-gif {
+            right: 1rem;
+            bottom: 1rem;
+        }
+        @keyframes wiggle { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+        @keyframes sparkleFloat {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.2; }
+            50% { transform: translateY(-10px) scale(1.2); opacity: 0.9; }
+        }
+        @keyframes hudShine {
+            100% { transform: translateX(100%); }
+        }
+        @media (max-width: 640px) {
+            #start-screen, #game-over-screen {
+                padding: 1.5rem;
+                max-width: min(92vw, 22rem);
+                border-radius: 1.5rem;
+            }
+            #hud {
+                top: 1rem;
+                left: 1rem;
+            }
+            .reaction-gif {
+                width: min(30vw, 6.5rem);
+                max-width: 6.5rem;
+                bottom: 0.8rem;
+            }
+            .status-pill {
+                right: 0.8rem;
+                top: 0.8rem;
+                font-size: 0.82rem;
+            }
+            .score-pop {
+                bottom: 28%;
+                font-size: 1rem;
+                min-width: 6.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="relative group w-full h-full">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
+
+            <!-- Start Screen -->
+            <div id="start-screen" class="glass-panel p-10 rounded-3xl text-center pointer-events-auto hover:scale-105 transition duration-300 max-w-sm mx-4">
+                <div class="sparkle-row" aria-hidden="true"><span></span><span></span><span></span></div>
+                <div class="hero-badge mb-4">⭐ star pup sprint</div>
+                <div class="text-6xl mb-4 wiggle">🐶</div>
+                <h1 class="text-5xl font-bold text-white mb-2 drop-shadow-[0_4px_4px_rgba(0,0,0,0.25)]">PUPPY TREAT DASH</h1>
+                <p class="text-white/90 text-xl mb-8 font-semibold drop-shadow-md">Guide the sparkle-snouted pup into flying treats and away from muddy splats.</p>
+                <button id="start-btn" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 text-xl font-bold py-4 px-10 rounded-full shadow-lg transform transition active:scale-95 border-b-4 border-yellow-600">START RUN</button>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden glass-panel p-10 rounded-3xl text-center pointer-events-auto max-w-sm mx-4">
+                <div class="sparkle-row" aria-hidden="true"><span></span><span></span><span></span></div>
+                <div class="text-6xl mb-4">🚿</div>
+                <h2 class="text-4xl font-bold text-white mb-2 drop-shadow-md">MUD SPLASH!</h2>
+                <p class="text-white/90 mb-6">That puddle ended your treat run.</p>
+                <div class="bg-white/20 rounded-xl p-4 mb-8 border border-white/30">
+                    <div class="text-sm text-white uppercase tracking-wider">Treats</div>
+                    <div class="text-5xl font-bold text-white drop-shadow-md"><span id="finalScore">0</span></div>
+                </div>
+                <button id="restart-btn" class="bg-green-500 hover:bg-green-400 text-white text-xl font-bold py-4 px-10 rounded-full shadow-lg transform transition active:scale-95 border-b-4 border-green-700">RUN AGAIN</button>
+            </div>
+
+            <!-- HUD -->
+            <div id="hud" class="absolute top-6 left-6 hidden pointer-events-none">
+                <div class="glass-panel hud-chip px-6 py-2 rounded-full flex items-center gap-3">
+                    <span class="text-2xl">🦴</span>
+                    <span id="score" class="text-3xl font-bold text-white drop-shadow-md">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="feedback-layer" aria-hidden="true">
+            <!-- [agent-note][stage3] resolved-gif: collect/fail feedback overlays -> catalogs/gifs.json -->
+            <img id="collect-gif" class="reaction-gif" src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp" alt="">
+            <img id="fail-gif" class="reaction-gif" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp" alt="">
+            <div id="score-pop" class="score-pop">+10 treat!</div>
+            <div id="status-pill" class="status-pill">Good pup combo!</div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: 'https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3',
+            sfx: {
+                collect: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3',
+                dodge: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3',
+                fail: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3',
+                start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3'
+            }
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.unlocked = false;
+                this.audioEnabled = !['127.0.0.1', 'localhost'].includes(window.location.hostname);
+                this.bgm = this.audioEnabled ? this.createAudio(ASSETS.bgm, { loop: true, volume: 0.2 }) : null;
+                this.sfx = this.audioEnabled
+                    ? Object.fromEntries(
+                        Object.entries(ASSETS.sfx).map(([key, src]) => [key, this.createAudio(src, { preload: 'auto', volume: 0.72 })])
+                    )
+                    : {};
+                this.lastPlayedAt = new Map();
+            }
+
+            createAudio(src, options = {}) {
+                const audio = new Audio(src);
+                audio.preload = options.preload ?? 'auto';
+                audio.loop = options.loop ?? false;
+                audio.volume = options.volume ?? 0.7;
+                audio.crossOrigin = 'anonymous';
+                audio.addEventListener('error', () => {
+                    this.audioEnabled = false;
+                    if (this.bgm) {
+                        this.bgm.pause();
+                    }
+                }, { once: true });
+                return audio;
+            }
+
+            unlock() {
+                if (this.unlocked || !this.audioEnabled) return;
+                this.unlocked = true;
+                this.bgm?.load();
+                Object.values(this.sfx).forEach((sound) => sound.load());
+            }
+
+            playBGM() {
+                if (!this.audioEnabled || !this.bgm) return;
+                this.unlock();
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM() {
+                if (!this.bgm) return;
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            playSFX(key, { debounce = 0, volume } = {}) {
+                if (!this.audioEnabled) return;
+                const sound = this.sfx[key];
+                if (!sound) return;
+                const now = performance.now();
+                const last = this.lastPlayedAt.get(key) ?? -Infinity;
+                if (now - last < debounce) return;
+                this.lastPlayedAt.set(key, now);
+
+                const clone = sound.cloneNode();
+                clone.volume = volume ?? sound.volume;
+                clone.play().catch(() => {});
+            }
+        }
+
+        const audio = new AudioController();
+
+        /** 3. GAME STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreNode = document.getElementById('score');
+        const finalScoreNode = document.getElementById('finalScore');
+        const scorePop = document.getElementById('score-pop');
+        const statusPill = document.getElementById('status-pill');
+        const collectGif = document.getElementById('collect-gif');
+        const failGif = document.getElementById('fail-gif');
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let frameCount = 0;
+        let difficulty = 1;
+        let dodgeTicker = 0;
+        let scorePopTimer = null;
+        let statusTimer = null;
+        let collectGifTimer = null;
+        let failGifTimer = null;
+
+        // Player State
+        let player = {
+            x: 0,
+            y: 0,
+            radius: 30,
+            targetX: 0,
+            color: '#f6b474',
+            earColor: '#7a4b30',
+            scarfColor: '#73ffe2',
+            blushColor: '#ff8eb7'
+        };
+
+        // Entities
+        let items = [];
+        let clouds = [];
+
+        // Resize Handler
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            player.y = height - 80;
+            player.targetX = width / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Input Handling
+        function handleInput(e) {
+            if (!gameActive) return;
+            if (e.cancelable) e.preventDefault();
+            let clientX;
+            if (e.touches && e.touches.length) {
+                clientX = e.touches[0].clientX;
+            } else {
+                clientX = e.clientX;
+            }
+            player.targetX = clientX;
+        }
+        window.addEventListener('mousemove', handleInput);
+        // [agent-note][stage4] repaired: mobile-start-action | element: #start-btn/#restart-btn | action: scoped touch suppression to canvas so UI taps still produce click
+        canvas.addEventListener('touchmove', handleInput, { passive: false });
+        canvas.addEventListener('touchstart', handleInput, { passive: false });
+
+        function showScorePop(text) {
+            scorePop.textContent = text;
+            scorePop.classList.add('visible');
+            clearTimeout(scorePopTimer);
+            scorePopTimer = setTimeout(() => scorePop.classList.remove('visible'), 650);
+        }
+
+        function showStatus(text) {
+            statusPill.textContent = text;
+            statusPill.classList.add('visible');
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => statusPill.classList.remove('visible'), 900);
+        }
+
+        function pulseGif(node, timerRefName, duration = 1100) {
+            node.classList.add('visible');
+            clearTimeout(window[timerRefName]);
+            window[timerRefName] = setTimeout(() => node.classList.remove('visible'), duration);
+        }
+
+        /** 4. PARALLAX & VISUALS */
+        function initClouds() {
+            clouds = [];
+            for (let i = 0; i < 5; i++) {
+                clouds.push({
+                    x: Math.random() * width,
+                    y: Math.random() * (height / 2),
+                    size: 30 + Math.random() * 50,
+                    speed: 0.5 + Math.random() * 1
+                });
+            }
+        }
+
+        function drawBackground() {
+            const grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0, '#86d9ff');
+            grad.addColorStop(0.55, '#caefff');
+            grad.addColorStop(1, '#f6e6ff');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+
+            const sunGlow = ctx.createRadialGradient(width * 0.78, height * 0.18, 20, width * 0.78, height * 0.18, width * 0.18);
+            sunGlow.addColorStop(0, 'rgba(255, 248, 178, 0.9)');
+            sunGlow.addColorStop(0.45, 'rgba(255, 214, 113, 0.42)');
+            sunGlow.addColorStop(1, 'rgba(255, 214, 113, 0)');
+            ctx.fillStyle = sunGlow;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                ctx.arc(width * (0.12 + i * 0.22), height * (0.16 + (i % 2) * 0.03), 10 + i * 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#86d56f';
+            ctx.beginPath();
+            ctx.ellipse(width / 2, height + 8, width, 108, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#65c45b';
+            ctx.beginPath();
+            ctx.ellipse(width * 0.3, height + 16, width * 0.75, 84, 0, 0, Math.PI * 2);
+            ctx.ellipse(width * 0.78, height + 24, width * 0.56, 72, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            clouds.forEach(cloud => {
+                cloud.x += cloud.speed;
+                if (cloud.x > width + cloud.size) cloud.x = -cloud.size;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size * 0.7, cloud.y - cloud.size * 0.2, cloud.size * 0.8, 0, Math.PI * 2);
+                ctx.arc(cloud.x - cloud.size * 0.7, cloud.y - cloud.size * 0.2, cloud.size * 0.8, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = 'rgba(255,255,255,0.34)';
+                ctx.beginPath();
+                ctx.arc(cloud.x - cloud.size * 0.1, cloud.y - cloud.size * 0.35, cloud.size * 0.28, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawPlayer() {
+            player.x += (player.targetX - player.x) * 0.15;
+
+            if (player.x < player.radius) player.x = player.radius;
+            if (player.x > width - player.radius) player.x = width - player.radius;
+
+            const x = player.x;
+            const y = player.y;
+            const r = player.radius;
+            const bounce = Math.sin(frameCount * 0.18) * 1.5;
+            const earFlop = Math.sin(frameCount * 0.12) * 0.16;
+
+            ctx.save();
+
+            const glow = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.9);
+            glow.addColorStop(0, 'rgba(115,255,226,0.22)');
+            glow.addColorStop(1, 'rgba(115,255,226,0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(x, y + 4, r * 1.85, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(56, 35, 21, 0.18)';
+            ctx.beginPath();
+            ctx.ellipse(x, y + r + 12, r * 0.95, r * 0.32, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = player.earColor;
+            ctx.beginPath();
+            ctx.ellipse(x - r * 0.76, y - r * 0.78 + bounce * 0.25, r * 0.42, r * 0.84, -0.52 + earFlop, 0, Math.PI * 2);
+            ctx.ellipse(x + r * 0.76, y - r * 0.78 + bounce * 0.25, r * 0.42, r * 0.84, 0.52 - earFlop, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#d78661';
+            ctx.beginPath();
+            ctx.ellipse(x - r * 0.75, y - r * 0.74 + bounce * 0.25, r * 0.16, r * 0.5, -0.5 + earFlop, 0, Math.PI * 2);
+            ctx.ellipse(x + r * 0.75, y - r * 0.74 + bounce * 0.25, r * 0.16, r * 0.5, 0.5 - earFlop, 0, Math.PI * 2);
+            ctx.fill();
+
+            const furGrad = ctx.createRadialGradient(x - r * 0.2, y - r * 0.35, r * 0.15, x, y, r * 1.1);
+            furGrad.addColorStop(0, '#ffd49d');
+            furGrad.addColorStop(0.72, player.color);
+            furGrad.addColorStop(1, '#d88758');
+            ctx.fillStyle = furGrad;
+            ctx.beginPath();
+            ctx.arc(x, y + bounce, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(123, 78, 48, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y + bounce, r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = player.scarfColor;
+            ctx.beginPath();
+            ctx.ellipse(x, y + r * 0.55 + bounce, r * 0.62, r * 0.22, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(x - r * 0.08, y + r * 0.56 + bounce, r * 0.16, r * 0.46);
+
+            ctx.fillStyle = '#2c201f';
+            ctx.beginPath();
+            ctx.arc(x - r * 0.28, y - r * 0.18 + bounce, r * 0.14, 0, Math.PI * 2);
+            ctx.arc(x + r * 0.28, y - r * 0.18 + bounce, r * 0.14, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(x - r * 0.33, y - r * 0.23 + bounce, r * 0.045, 0, Math.PI * 2);
+            ctx.arc(x + r * 0.23, y - r * 0.23 + bounce, r * 0.045, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = player.blushColor;
+            ctx.globalAlpha = 0.55;
+            ctx.beginPath();
+            ctx.ellipse(x - r * 0.5, y + r * 0.12 + bounce, r * 0.15, r * 0.1, 0, 0, Math.PI * 2);
+            ctx.ellipse(x + r * 0.5, y + r * 0.12 + bounce, r * 0.15, r * 0.1, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.fillStyle = '#fff7e0';
+            ctx.beginPath();
+            ctx.ellipse(x, y + r * 0.3 + bounce, r * 0.42, r * 0.32, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#2c201f';
+            ctx.beginPath();
+            ctx.arc(x, y + r * 0.18 + bounce, r * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#2c201f';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.arc(x, y + r * 0.34 + bounce, r * 0.2, 0.2, Math.PI - 0.2, false);
+            ctx.stroke();
+
+            if (frameCount % 60 < 30) {
+                ctx.fillStyle = '#ff6ea8';
+                ctx.beginPath();
+                ctx.arc(x, y + r * 0.52 + bounce, r * 0.13, 0, Math.PI, false);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#ffdd63';
+            ctx.beginPath();
+            ctx.moveTo(x + r * 0.55, y - r * 0.62 + bounce);
+            ctx.lineTo(x + r * 0.68, y - r * 0.28 + bounce);
+            ctx.lineTo(x + r * 0.34, y - r * 0.4 + bounce);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawBone(x, y, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(frameCount * 0.05);
+
+            const halo = ctx.createRadialGradient(0, 0, 1, 0, 0, size * 1.4);
+            halo.addColorStop(0, 'rgba(255, 240, 168, 0.42)');
+            halo.addColorStop(1, 'rgba(255, 240, 168, 0)');
+            ctx.fillStyle = halo;
+            ctx.beginPath();
+            ctx.arc(0, 0, size * 1.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            const w = size;
+            const h = size / 3;
+            const boneGrad = ctx.createLinearGradient(-w / 2, -h, w / 2, h);
+            boneGrad.addColorStop(0, '#fffdf7');
+            boneGrad.addColorStop(1, '#ffe89d');
+            ctx.fillStyle = boneGrad;
+            ctx.strokeStyle = '#d5b86e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.rect(-w / 2, -h / 2, w, h);
+            ctx.arc(-w / 2, -h / 2, h, 0, Math.PI * 2);
+            ctx.arc(-w / 2, h / 2, h, 0, Math.PI * 2);
+            ctx.arc(w / 2, -h / 2, h, 0, Math.PI * 2);
+            ctx.arc(w / 2, h / 2, h, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.beginPath();
+            ctx.ellipse(0, -h * 0.7, w * 0.24, h * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawMud(x, y, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.fillStyle = 'rgba(79,45,34,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(0, size * 0.8, size * 1.15, size * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const mudGrad = ctx.createRadialGradient(-size * 0.2, -size * 0.2, 1, 0, 0, size * 1.4);
+            mudGrad.addColorStop(0, '#83604c');
+            mudGrad.addColorStop(1, '#4f2d22');
+            ctx.fillStyle = mudGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, size, 0, Math.PI * 2);
+            for (let i = 0; i < 5; i++) {
+                ctx.arc(Math.cos(i) * size * 0.7, Math.sin(i) * size * 0.7, size * 0.4, 0, Math.PI * 2);
+            }
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.beginPath();
+            ctx.ellipse(-size * 0.2, -size * 0.25, size * 0.35, size * 0.18, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        /** 5. GAME LOGIC */
+        function initGame() {
+            score = 0;
+            difficulty = 1;
+            frameCount = 0;
+            dodgeTicker = 0;
+            items = [];
+            player.x = width / 2;
+            player.targetX = width / 2;
+            scoreNode.innerText = score;
+            finalScoreNode.innerText = score;
+            scorePop.classList.remove('visible');
+            statusPill.classList.remove('visible');
+            collectGif.classList.remove('visible');
+            failGif.classList.remove('visible');
+            initClouds();
+        }
+
+        function spawnItem() {
+            const isBad = Math.random() > 0.7;
+            const size = 20 + Math.random() * 10;
+            items.push({
+                x: Math.random() * (width - 40) + 20,
+                y: -50,
+                type: isBad ? 'bad' : 'good',
+                speed: (3 + Math.random() * 3) * difficulty,
+                size,
+                active: true,
+                warned: false
+            });
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            frameCount++;
+            dodgeTicker++;
+            ctx.clearRect(0, 0, width, height);
+
+            drawBackground();
+
+            if (frameCount % Math.max(18, Math.floor(60 / difficulty)) === 0) {
+                spawnItem();
+            }
+            if (frameCount % 600 === 0) {
+                difficulty += 0.1;
+            }
+
+            for (let i = items.length - 1; i >= 0; i--) {
+                const item = items[i];
+                item.y += item.speed;
+
+                if (item.type === 'good') {
+                    drawBone(item.x, item.y, item.size);
+                } else {
+                    drawMud(item.x, item.y, item.size);
+                }
+
+                const dx = player.x - item.x;
+                const dy = player.y - item.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < player.radius + item.size && item.active) {
+                    item.active = false;
+
+                    if (item.type === 'good') {
+                        score += 10;
+                        scoreNode.innerText = score;
+                        audio.playSFX('collect', { debounce: 90, volume: 0.62 });
+                        showScorePop('+10 treat!');
+                        showStatus(score >= 50 ? 'Treat streak!' : 'Good pup combo!');
+                        pulseGif(collectGif, 'collectGifTimer', 950);
+                        items.splice(i, 1);
+                    } else {
+                        gameOver();
+                        return;
+                    }
+                } else if (item.type === 'bad' && !item.warned && item.y > height * 0.68) {
+                    item.warned = true;
+                    audio.playSFX('dodge', { debounce: 280, volume: 0.34 });
+                } else if (item.y > height + 50) {
+                    items.splice(i, 1);
+                }
+            }
+
+            drawPlayer();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail', { debounce: 300 });
+            showStatus('Mud wipeout!');
+            pulseGif(failGif, 'failGifTimer', 1500);
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            finalScoreNode.innerText = score;
+        }
+
+        /** 6. CONTROLS */
+        function startRound() {
+            audio.unlock();
+            audio.playSFX('start', { debounce: 300, volume: 0.55 });
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            showStatus('Catch the treats!');
+            gameLoop();
+        }
+
+        document.getElementById('start-btn').addEventListener('click', startRound);
+        document.getElementById('restart-btn').addEventListener('click', startRound);
+    });
+    </script>
+</body>
+</html>

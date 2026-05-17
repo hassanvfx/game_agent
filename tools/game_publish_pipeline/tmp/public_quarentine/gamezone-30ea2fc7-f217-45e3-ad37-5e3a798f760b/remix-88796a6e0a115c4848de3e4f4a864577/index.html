@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Z-Zone: Neon Outbreak</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] repaired: font-remap | action: replaced mirrored font asset with catalog-backed Orbitron and Rajdhani URLs -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap">
+    <style>
+        :root {
+            --neon-cyan: #00f3ff;
+            --neon-green: #65ff9a;
+            --neon-red: #ff4f7a;
+            --neon-yellow: #ffe45e;
+            --bg-dark: #050505;
+            --bg-deep: #030712;
+            --bg-panel: rgba(7, 17, 33, 0.84);
+            --line-glow: rgba(0, 243, 255, 0.35);
+            --text-main: #eefbff;
+            --text-muted: #94a3b8;
+            --title-font: 'Orbitron', sans-serif;
+            --ui-font: 'Rajdhani', sans-serif;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            touch-action: none; 
+            background:
+                radial-gradient(circle at top, rgba(0, 243, 255, 0.08), transparent 35%),
+                radial-gradient(circle at bottom, rgba(255, 79, 122, 0.1), transparent 30%),
+                linear-gradient(180deg, var(--bg-deep), var(--bg-dark)); 
+            font-family: var(--ui-font);
+            color: var(--text-main);
+            user-select: none;
+            -webkit-user-select: none;
+            overscroll-behavior: none;
+        }
+
+        #game-container {
+            width: 100%;
+            height: 100vh;
+            height: 100svh;
+            height: 100dvh;
+        }
+
+        button {
+            touch-action: manipulation;
+        }
+
+        canvas { 
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+        }
+
+        /* UI Styles */
+        .font-tech { 
+            font-family: var(--title-font);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .text-glow { text-shadow: 0 0 10px currentColor; }
+        
+        .hud-panel {
+            background: linear-gradient(180deg, rgba(9, 20, 38, 0.9), var(--bg-panel));
+            border: 1px solid var(--line-glow);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.05) inset,
+                0 0 20px rgba(0, 243, 255, 0.12);
+            backdrop-filter: blur(6px);
+        }
+
+        .bar-container {
+            background: rgba(0,0,0,0.8);
+            height: 8px;
+            width: 100%;
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .bar-fill { 
+            height: 100%; 
+            transition: width 0.2s; 
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        /* Joystick */
+        .joystick-zone {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 2px dashed rgba(0, 243, 255, 0.3);
+            background:
+                radial-gradient(circle, rgba(0,243,255,0.16) 0%, rgba(0,0,0,0) 70%),
+                radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 55%);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 20;
+        }
+        .joystick-zone.active { opacity: 1; }
+        .joystick-knob {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(187, 252, 255, 0.8), rgba(0, 243, 255, 0.45));
+            box-shadow:
+                0 0 0 2px rgba(255,255,255,0.12) inset,
+                0 0 18px var(--neon-cyan);
+        }
+
+        /* Floating Text */
+        .float-text {
+            position: absolute;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+            font-weight: 900;
+            font-size: 1.5rem;
+            text-shadow: 0 0 5px black;
+            font-family: var(--title-font);
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { transform: translateY(-10px) scale(1.2); opacity: 1; }
+            100% { transform: translateY(-60px) scale(1); opacity: 0; }
+        }
+
+        /* Scanlines & Vignette */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            background: 
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.9);
+        }
+        
+        /* Screens */
+        .screen-bg {
+            background:
+                radial-gradient(circle at center, rgba(12, 24, 38, 0.94), rgba(0, 0, 0, 0.98)),
+                linear-gradient(180deg, rgba(0, 243, 255, 0.04), transparent 24%);
+            backdrop-filter: blur(10px);
+        }
+
+        .hero-emblem {
+            width: min(34vw, 10rem);
+            aspect-ratio: 1;
+            border-radius: 28%;
+            margin-bottom: 1rem;
+            display: grid;
+            place-items: center;
+            background:
+                radial-gradient(circle at 35% 30%, rgba(255,255,255,0.95), rgba(255,255,255,0.08) 20%, transparent 22%),
+                radial-gradient(circle at 50% 50%, rgba(0,243,255,0.26), transparent 58%),
+                linear-gradient(135deg, rgba(0,243,255,0.25), rgba(255,79,122,0.2));
+            border: 1px solid rgba(255,255,255,0.15);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.08) inset,
+                0 0 32px rgba(0,243,255,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-emblem::before,
+        .hero-emblem::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+        }
+
+        .hero-emblem::before {
+            width: 58%;
+            height: 58%;
+            border: 2px solid rgba(0,243,255,0.65);
+            box-shadow: 0 0 18px rgba(0,243,255,0.28);
+        }
+
+        .hero-emblem::after {
+            width: 12%;
+            height: 12%;
+            background: var(--neon-red);
+            top: 24%;
+            right: 23%;
+            box-shadow: 0 0 12px rgba(255,79,122,0.7);
+        }
+
+        .hero-emblem span {
+            font-size: clamp(2rem, 8vw, 3.5rem);
+            filter: drop-shadow(0 0 12px rgba(0,243,255,0.45));
+        }
+
+        .legend-card {
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.05) inset,
+                0 0 24px rgba(0,0,0,0.18);
+        }
+
+        .status-chip {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-chip::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent);
+            transform: translateX(-100%);
+            animation: statusSweep 3.6s linear infinite;
+        }
+
+        @keyframes statusSweep {
+            to { transform: translateX(100%); }
+        }
+
+        .feedback-gif {
+            position: absolute;
+            width: min(34vw, 8rem);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(2, 6, 23, 0.72);
+            box-shadow: 0 0 24px rgba(0, 243, 255, 0.18);
+            opacity: 0;
+            transform: translateY(12px) scale(0.92);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            pointer-events: none;
+            z-index: 35;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.hit-gif {
+            left: 1rem;
+            bottom: 5.5rem;
+        }
+
+        .feedback-gif.victory-gif {
+            right: 1rem;
+            top: 5.5rem;
+        }
+
+        @media (max-width: 640px) {
+            .feedback-gif {
+                width: min(30vw, 5.5rem);
+            }
+
+            .feedback-gif.hit-gif {
+                bottom: 6.25rem;
+            }
+
+            .feedback-gif.victory-gif {
+                top: 6.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container" class="relative w-full h-full overflow-hidden">
+        <canvas id="gameCanvas"></canvas>
+        <div class="overlay"></div>
+        <div id="floating-text-layer" class="absolute inset-0 pointer-events-none overflow-hidden z-30"></div>
+        <!-- [agent-note][stage3] resolved-gif: hit/victory feedback -> catalogs/gifs.json -->
+        <img id="hit-gif" class="feedback-gif hit-gif" alt="combat impact feedback">
+        <img id="victory-gif" class="feedback-gif victory-gif" alt="victory reaction feedback">
+
+        <!-- HUD -->
+        <div id="hud" class="absolute inset-0 pointer-events-none hidden flex flex-col justify-between p-4 safe-area-inset z-40">
+            <!-- Top Status -->
+            <div class="flex justify-between items-start w-full">
+                <div class="hud-panel p-3 rounded-br-xl rounded-tl-xl w-40 flex flex-col gap-1">
+                    <div class="flex justify-between text-white font-tech text-sm">
+                        <span>INTEGRITY</span>
+                        <span id="hp-val" class="text-green-400">100%</span>
+                    </div>
+                    <div class="bar-container border border-green-900">
+                        <div id="hp-bar" class="bar-fill bg-green-500 text-green-500" style="width: 100%"></div>
+                    </div>
+                    <div class="bar-container border border-blue-900 mt-1">
+                        <div id="shield-bar" class="bar-fill bg-blue-500 text-blue-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="text-right">
+                    <div class="text-red-500 font-tech text-3xl text-glow tracking-tighter" id="score-display">0</div>
+                    <div class="text-gray-400 text-xs font-bold tracking-widest">HOSTILES NEUTRALIZED</div>
+                    <div class="text-xs text-gray-600 mt-1">OBJ: 150</div>
+                </div>
+            </div>
+
+            <!-- Boss Bar -->
+            <div id="boss-hud" class="absolute top-24 left-1/2 -translate-x-1/2 w-3/4 max-w-md hidden transition-opacity duration-500">
+                <div class="text-center text-red-500 font-tech text-lg animate-pulse mb-1 text-glow">⚠ OMEGA THREAT ⚠</div>
+                <div class="bar-container h-3 border border-red-500/50 shadow-[0_0_10px_rgba(255,0,0,0.5)]">
+                    <div id="boss-hp-bar" class="bar-fill bg-red-600 text-red-600" style="width: 100%"></div>
+                </div>
+            </div>
+
+            <!-- Drone Indicator -->
+            <div id="drone-status" class="absolute bottom-24 right-4 hidden">
+                <div class="flex items-center gap-2 hud-panel px-3 py-1 rounded-full status-chip">
+                    <div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                    <span class="text-yellow-400 font-tech text-xs">DRONE ONLINE</span>
+                </div>
+            </div>
+
+            <!-- Hint -->
+            <div class="text-center text-white/20 text-xs font-tech mb-6 tracking-[0.3em]">
+                TACTICAL CONTROL SYSTEM ACTIVE
+            </div>
+        </div>
+
+        <!-- Joystick Visual -->
+        <div id="joystick-ui" class="joystick-zone">
+            <div class="joystick-knob"></div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 flex flex-col items-center justify-center z-50 screen-bg p-6 text-center">
+            <div class="hero-emblem" aria-hidden="true"><span>🛡️</span></div>
+            <h1 class="text-6xl text-cyan-300 font-tech mb-2 text-glow tracking-tighter">Z-ZONE</h1>
+            <h2 class="text-2xl text-white mb-8 tracking-[0.5em] font-light uppercase border-b border-cyan-500/30 pb-2">Neon Outbreak</h2>
+            
+            <div class="grid grid-cols-2 gap-3 text-left text-sm text-slate-200 mb-8 bg-slate-950/50 p-6 rounded-xl border border-cyan-500/20 w-full max-w-sm legend-card">
+                <div class="flex items-center gap-3"><div class="w-2 h-2 bg-green-500 shadow-[0_0_8px_#22c55e]"></div> Repair Kit</div>
+                <div class="flex items-center gap-3"><div class="w-2 h-2 bg-blue-500 shadow-[0_0_8px_#3b82f6]"></div> Energy Shield</div>
+                <div class="flex items-center gap-3"><div class="w-2 h-2 bg-red-500 shadow-[0_0_8px_#ef4444]"></div> Overclock</div>
+                <div class="flex items-center gap-3"><div class="w-2 h-2 bg-yellow-500 shadow-[0_0_8px_#eab308]"></div> Support Drone</div>
+            </div>
+
+            <p class="text-red-300 mb-8 font-bold animate-pulse font-tech text-sm">SURVIVE 150 HOSTILES TO DRAW OUT THE OMEGA THREAT</p>
+
+            <button id="start-btn" class="bg-gradient-to-r from-red-600 to-red-800 text-white font-tech font-bold py-4 px-12 rounded shadow-[0_0_30px_rgba(220,38,38,0.4)] uppercase tracking-widest text-xl transition transform active:scale-95 border border-red-400">
+                Initialize
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="absolute inset-0 flex flex-col items-center justify-center z-50 hidden screen-bg p-6 text-center">
+            <h1 class="text-6xl text-red-600 font-tech mb-2 text-glow">CRITICAL FAILURE</h1>
+            <p class="text-gray-400 mb-6 font-mono text-sm">ZONE OVERRUN</p>
+            <div class="text-5xl text-white font-bold mb-8 font-tech"><span id="final-kills">0</span> <span class="text-xl text-gray-500">HOSTILES</span></div>
+            <button id="restart-btn" class="bg-white text-black font-tech font-bold py-3 px-10 rounded shadow-[0_0_20px_rgba(255,255,255,0.5)] uppercase tracking-wider active:scale-95">
+                Reboot System
+            </button>
+        </div>
+
+        <!-- Victory Screen -->
+        <div id="victory-screen" class="absolute inset-0 flex flex-col items-center justify-center z-50 hidden screen-bg p-6 text-center">
+            <h1 class="text-5xl text-yellow-400 font-tech mb-4 text-glow">ZONE SECURED</h1>
+            <p class="text-gray-300 mb-8 max-w-xs">Omega threat has been neutralized. Area is clear for extraction.</p>
+            <div class="text-2xl text-white font-bold mb-8 font-tech border px-6 py-2 border-yellow-500/50 rounded bg-yellow-500/10">MISSION COMPLETE</div>
+            <button id="victory-btn" class="bg-yellow-500 hover:bg-yellow-400 text-black font-tech font-bold py-3 px-12 rounded shadow-[0_0_30px_rgba(234,179,8,0.6)] uppercase tracking-wider active:scale-95">
+                Next Mission
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        /* 
+         * Z-ZONE: NEON OUTBREAK
+         * Single File Implementation
+         */
+
+        // --- Configuration ---
+        const CONFIG = {
+            worldSize: 2000,
+            bossTrigger: 150,
+            playerSpeed: 7,
+            baseZombieSpeed: 2.5,
+            spawnRate: 50, // frames
+            maxZombies: 60,
+            colors: {
+                bg: '#050505',
+                grid: '#111',
+                player: '#00f3ff', // Cyan
+                zombie: '#0aff0a', // Green
+                boss: '#ff003c',   // Red
+                bullet: '#fcee0a', // Yellow
+                obstacle: '#0f172a'
+            }
+        };
+
+        // --- Audio System ---
+        const ASSETS = {
+            // [agent-note][stage3] resolved-audio: gameplay/ui loop and sfx -> catalogs/audios.json
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3",
+            victoryLoop: "https://gamezone-virid.vercel.app/assets/audios/music/victory_loop_01.mp3",
+            defeatLoop: "https://gamezone-virid.vercel.app/assets/audios/music/defeat_loop_01.mp3",
+            gifs: {
+                hit: "https://i.giphy.com/1AjEBGWggGXh9onllB.webp",
+                victory: "https://i.giphy.com/DOZGL2rx0qJAFu0Zx6.webp"
+            },
+            sfx: { 
+                shoot: "https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3",
+                enemyHit: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3",
+                damage: "https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3",
+                pickup: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+                powerup: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3",
+                bossWarn: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                uiClick: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                victory: "https://gamezone-virid.vercel.app/assets/audios/music/victory_loop_01.mp3",
+                defeat: "https://gamezone-virid.vercel.app/assets/audios/music/defeat_loop_01.mp3"
+            }
+        };
+
+        class AudioController {
+            constructor() {
+                this.music = {
+                    gameplay: new Audio(ASSETS.bgm),
+                    victory: new Audio(ASSETS.victoryLoop),
+                    defeat: new Audio(ASSETS.defeatLoop)
+                };
+                Object.values(this.music).forEach(track => {
+                    track.loop = true;
+                    track.preload = 'auto';
+                    track.volume = 0.3;
+                });
+                this.music.gameplay.volume = 0.28;
+                this.music.victory.volume = 0.24;
+                this.music.defeat.volume = 0.22;
+                this.currentLoop = null;
+                this.sfx = {};
+                this.enabled = true;
+                this.started = false;
+                this.lastPlayed = {};
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const sample = new Audio(v);
+                    sample.preload = 'auto';
+                    this.sfx[k] = sample;
+                }
+            }
+            unlock() {
+                this.started = true;
+            }
+            switchLoop(name) {
+                if (!this.enabled || !this.started) return;
+                const next = this.music[name];
+                if (!next || this.currentLoop === next) return;
+                if (this.currentLoop) {
+                    this.currentLoop.pause();
+                    this.currentLoop.currentTime = 0;
+                }
+                this.currentLoop = next;
+                this.currentLoop.play().catch(() => {});
+            }
+            playBGM() {
+                this.switchLoop('gameplay');
+            }
+            playVictoryLoop() {
+                this.switchLoop('victory');
+            }
+            playDefeatLoop() {
+                this.switchLoop('defeat');
+            }
+            stopBGM() {
+                if (!this.currentLoop) return;
+                this.currentLoop.pause();
+                this.currentLoop.currentTime = 0;
+                this.currentLoop = null;
+            }
+            play(key, vol = 0.5, cooldown = 0) {
+                if (!this.enabled || !this.started) return;
+                const now = performance.now();
+                if (cooldown && this.lastPlayed[key] && now - this.lastPlayed[key] < cooldown) return;
+                const s = this.sfx[key];
+                if (s) {
+                    this.lastPlayed[key] = now;
+                    const c = s.cloneNode();
+                    c.volume = vol;
+                    c.play().catch(() => {});
+                }
+            }
+        }
+        const audio = new AudioController();
+
+        // --- Game State ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize
+        
+        let state = {
+            active: false,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            frame: 0,
+            kills: 0,
+            camera: { x: 0, y: 0 },
+            bossSpawned: false,
+            victory: false,
+            shake: 0
+        };
+
+        // Entities
+        let player = { 
+            x: 1000, y: 1000, r: 16, 
+            hp: 100, maxHp: 100, 
+            shield: 0, maxShield: 50, 
+            fireRate: 15, lastShot: 0, 
+            droneTier: 0, // 0 = none, 1+ = active
+            droneFireRate: 30,
+            angle: 0 
+        };
+        
+        let input = { active: false, startX: 0, startY: 0, currX: 0, currY: 0, vecX: 0, vecY: 0 };
+        let zombies = [];
+        let bullets = [];
+        let items = [];
+        let particles = [];
+        let obstacles = [];
+        let drone = null; // {x, y, angle}
+        let boss = null;
+        const gifTimers = new Map();
+
+        // --- Initialization ---
+        function initWorld() {
+            obstacles = [];
+            // Create tech-styled buildings
+            for(let i=0; i<25; i++) {
+                let w = 80 + Math.random() * 150;
+                let h = 80 + Math.random() * 150;
+                let x = Math.random() * (CONFIG.worldSize - w);
+                let y = Math.random() * (CONFIG.worldSize - h);
+                // Keep spawn clear
+                if (Math.abs(x - 1000) < 400 && Math.abs(y - 1000) < 400) continue;
+                obstacles.push({ x, y, w, h });
+            }
+            // Boundary walls
+            obstacles.push({x: -200, y: -200, w: CONFIG.worldSize+400, h: 200}); // Top
+            obstacles.push({x: -200, y: CONFIG.worldSize, w: CONFIG.worldSize+400, h: 200}); // Bottom
+            obstacles.push({x: -200, y: 0, w: 200, h: CONFIG.worldSize}); // Left
+            obstacles.push({x: CONFIG.worldSize, y: 0, w: 200, h: CONFIG.worldSize}); // Right
+        }
+
+        function resetGame() {
+            state.active = true;
+            state.frame = 0;
+            state.kills = 0;
+            state.bossSpawned = false;
+            state.victory = false;
+            state.shake = 0;
+            
+            player = { 
+                x: CONFIG.worldSize/2, y: CONFIG.worldSize/2, 
+                r: 16, 
+                hp: 100, maxHp: 100, 
+                shield: 0, maxShield: 50,
+                fireRate: 18, 
+                lastShot: 0,
+                droneTier: 0, // Permanent drone logic
+                droneFireRate: 40,
+                angle: 0
+            };
+            
+            drone = null;
+            boss = null;
+            zombies = [];
+            bullets = [];
+            items = [];
+            particles = [];
+            
+            updateHUD();
+            document.getElementById('boss-hud').classList.add('hidden');
+            document.getElementById('drone-status').classList.add('hidden');
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('victory-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            
+            initWorld();
+            audio.playBGM();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Input Handling ---
+        function handleResize() {
+            state.width = canvas.width = window.innerWidth;
+            state.height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', handleResize);
+        handleResize();
+
+        function updateInputVector() {
+            if (!input.active) {
+                input.vecX = 0;
+                input.vecY = 0;
+                return;
+            }
+            const dx = input.currX - input.startX;
+            const dy = input.currY - input.startY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const maxDrag = 70;
+            
+            if (dist > 0) {
+                const scale = Math.min(dist, maxDrag) / maxDrag;
+                input.vecX = (dx / dist) * scale;
+                input.vecY = (dy / dist) * scale;
+            }
+        }
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const t = e.touches[0];
+            input.active = true;
+            input.startX = t.clientX;
+            input.startY = t.clientY;
+            input.currX = t.clientX;
+            input.currY = t.clientY;
+            
+            const joy = document.getElementById('joystick-ui');
+            joy.style.left = t.clientX + 'px';
+            joy.style.top = t.clientY + 'px';
+            joy.style.transform = 'translate(-50%, -50%)';
+            joy.classList.add('active');
+            
+            const knob = joy.querySelector('.joystick-knob');
+            knob.style.transform = `translate(0px, 0px)`;
+            
+            updateInputVector();
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if(!input.active) return;
+            const t = e.touches[0];
+            input.currX = t.clientX;
+            input.currY = t.clientY;
+            updateInputVector();
+
+            // Visual knob update
+            const dx = input.currX - input.startX;
+            const dy = input.currY - input.startY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const maxDrag = 70;
+            const scale = Math.min(dist, maxDrag);
+            const angle = Math.atan2(dy, dx);
+            const kx = Math.cos(angle) * scale;
+            const ky = Math.sin(angle) * scale;
+            
+            const knob = document.querySelector('.joystick-knob');
+            knob.style.transform = `translate(${kx}px, ${ky}px)`;
+
+        }, {passive: false});
+
+        const endTouch = () => {
+            input.active = false;
+            input.vecX = 0;
+            input.vecY = 0;
+            document.getElementById('joystick-ui').classList.remove('active');
+        };
+        canvas.addEventListener('touchend', endTouch);
+        canvas.addEventListener('touchcancel', endTouch);
+
+        // --- Logic Helpers ---
+        function checkRectCollide(x, y, r, rect) {
+            const cx = Math.max(rect.x, Math.min(x, rect.x + rect.w));
+            const cy = Math.max(rect.y, Math.min(y, rect.y + rect.h));
+            const dx = x - cx;
+            const dy = y - cy;
+            return (dx*dx + dy*dy) < (r*r);
+        }
+
+        function resolveCollision(ent) {
+            let steps = 4;
+            for(let s=0; s<steps; s++) {
+                let hit = false;
+                for(let o of obstacles) {
+                    if (checkRectCollide(ent.x, ent.y, ent.r, o)) {
+                        const cx = Math.max(o.x, Math.min(ent.x, o.x + o.w));
+                        const cy = Math.max(o.y, Math.min(ent.y, o.y + o.h));
+                        const dx = ent.x - cx;
+                        const dy = ent.y - cy;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist > 0) {
+                            const overlap = ent.r - dist + 1;
+                            ent.x += (dx/dist) * overlap;
+                            ent.y += (dy/dist) * overlap;
+                            hit = true;
+                        }
+                    }
+                }
+                if(!hit) break;
+            }
+        }
+
+        function spawnItem(x, y) {
+            const rand = Math.random();
+            let type = null;
+            if (rand < 0.12) type = 'medkit'; // 12%
+            else if (rand < 0.20) type = 'shield'; // 8%
+            else if (rand < 0.25) type = 'power'; // 5%
+            else if (rand < 0.28) type = 'drone'; // 3%
+            
+            if (type) {
+                items.push({ x, y, type, life: 800, r: 12, bob: Math.random() * Math.PI });
+            }
+        }
+
+        function spawnZombie() {
+            if (zombies.length >= CONFIG.maxZombies) return;
+            if (state.bossSpawned && !boss) return; 
+
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.max(state.width, state.height) * 0.8;
+            const zx = player.x + Math.cos(angle) * dist;
+            const zy = player.y + Math.sin(angle) * dist;
+
+            if (zx < 0 || zx > CONFIG.worldSize || zy < 0 || zy > CONFIG.worldSize) return;
+            for(let o of obstacles) {
+                if (checkRectCollide(zx, zy, 15, o)) return;
+            }
+
+            const hp = 3 + Math.floor(state.kills / 15);
+            zombies.push({
+                x: zx, y: zy,
+                r: 14,
+                hp: hp, maxHp: hp,
+                speed: CONFIG.baseZombieSpeed + Math.random() * 0.8,
+                angle: 0,
+                wobble: Math.random() * 10
+            });
+        }
+
+        function spawnBoss() {
+            state.bossSpawned = true;
+            document.getElementById('boss-hud').classList.remove('hidden');
+            audio.play('bossWarn', 0.85, 1200);
+            flashGif('hit-gif', ASSETS.gifs.hit, 1600);
+            state.shake = 20;
+            
+            boss = {
+                x: player.x > CONFIG.worldSize/2 ? player.x - 500 : player.x + 500,
+                y: player.y,
+                r: 45,
+                hp: 600, maxHp: 600,
+                speed: 1.8,
+                attackTimer: 0,
+                angle: 0
+            };
+        }
+
+        function showFloatText(text, color, x, y) {
+            const el = document.createElement('div');
+            el.className = 'float-text';
+            el.innerText = text;
+            el.style.color = color;
+            const sx = x - state.camera.x + state.width/2;
+            const sy = y - state.camera.y + state.height/2;
+            el.style.left = sx + 'px';
+            el.style.top = sy + 'px';
+            document.getElementById('floating-text-layer').appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function flashGif(id, src, duration = 1400) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.src = src;
+            el.classList.add('visible');
+            clearTimeout(gifTimers.get(id));
+            gifTimers.set(id, setTimeout(() => {
+                el.classList.remove('visible');
+            }, duration));
+        }
+
+        function updateHUD() {
+            document.getElementById('hp-val').innerText = Math.ceil(player.hp) + '%';
+            document.getElementById('hp-bar').style.width = (player.hp / player.maxHp * 100) + '%';
+            document.getElementById('shield-bar').style.width = (player.shield / player.maxShield * 100) + '%';
+            document.getElementById('score-display').innerText = state.kills;
+            
+            if (boss) {
+                document.getElementById('boss-hp-bar').style.width = (boss.hp / boss.maxHp * 100) + '%';
+            }
+        }
+
+        function spawnParticles(x, y, color, count, speed=4) {
+            for(let k=0; k<count; k++) {
+                const a = Math.random() * Math.PI * 2;
+                const v = Math.random() * speed;
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(a) * v,
+                    vy: Math.sin(a) * v,
+                    life: 20 + Math.random() * 20,
+                    color: color,
+                    size: 1 + Math.random() * 2
+                });
+            }
+        }
+
+        // --- Main Loop ---
+        function gameLoop() {
+            if (!state.active) return;
+
+            // 1. Update Player
+            if (input.active) {
+                player.x += input.vecX * CONFIG.playerSpeed;
+                player.y += input.vecY * CONFIG.playerSpeed;
+                player.angle = Math.atan2(input.vecY, input.vecX);
+            }
+            player.x = Math.max(player.r, Math.min(CONFIG.worldSize - player.r, player.x));
+            player.y = Math.max(player.r, Math.min(CONFIG.worldSize - player.r, player.y));
+            resolveCollision(player);
+
+            // Camera
+            const targetCamX = player.x;
+            const targetCamY = player.y;
+            state.camera.x += (targetCamX - state.camera.x) * 0.1;
+            state.camera.y += (targetCamY - state.camera.y) * 0.1;
+
+            // Shake Decay
+            if(state.shake > 0) state.shake *= 0.9;
+            if(state.shake < 0.5) state.shake = 0;
+
+            // 2. Targeting & Shooting
+            let target = boss || null;
+            let minDist = boss ? (boss.x-player.x)**2 + (boss.y-player.y)**2 : Infinity;
+            
+            if (!target || minDist > 250000) { 
+                target = null;
+                minDist = Infinity;
+                for(let z of zombies) {
+                    const d = (z.x-player.x)**2 + (z.y-player.y)**2;
+                    if (d < 350*350 && d < minDist) {
+                        minDist = d;
+                        target = z;
+                    }
+                }
+            }
+
+            // Player Shoot
+            if (target && (state.frame - player.lastShot > player.fireRate)) {
+                const angle = Math.atan2(target.y - player.y, target.x - player.x);
+                bullets.push({
+                    x: player.x + Math.cos(angle)*20, 
+                    y: player.y + Math.sin(angle)*20,
+                    vx: Math.cos(angle) * 14,
+                    vy: Math.sin(angle) * 14,
+                    life: 60,
+                    dmg: 1,
+                    color: CONFIG.colors.bullet
+                });
+                player.lastShot = state.frame;
+                audio.play('shoot', 0.14, 70);
+                spawnParticles(player.x + Math.cos(angle)*20, player.y + Math.sin(angle)*20, '#fff', 2, 2);
+            }
+
+            // Drone Logic (Permanent)
+            if (player.droneTier > 0) {
+                if (!drone) drone = { x: player.x, y: player.y, angle: 0, lastShot: 0 };
+                
+                // Drone follows player with lag
+                const dx = (player.x - 35) - drone.x;
+                const dy = (player.y - 35) - drone.y;
+                drone.x += dx * 0.08;
+                drone.y += dy * 0.08;
+
+                // Drone Shoot
+                if (target && (state.frame - drone.lastShot > player.droneFireRate)) {
+                    const angle = Math.atan2(target.y - drone.y, target.x - drone.x);
+                    bullets.push({
+                        x: drone.x, y: drone.y,
+                        vx: Math.cos(angle) * 14,
+                        vy: Math.sin(angle) * 14,
+                        life: 60,
+                        dmg: 1,
+                        color: '#fcee0a'
+                    });
+                    drone.lastShot = state.frame;
+                    audio.play('shoot', 0.08, 90);
+                }
+            }
+
+            // 3. Update Projectiles
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                
+                let hit = false;
+                
+                // Hit Boss
+                if (boss) {
+                    const dx = b.x - boss.x;
+                    const dy = b.y - boss.y;
+                    if (dx*dx + dy*dy < boss.r*boss.r) {
+                        boss.hp -= b.dmg;
+                        hit = true;
+                        audio.play('enemyHit', 0.22, 80);
+                        spawnParticles(b.x, b.y, CONFIG.colors.boss, 4);
+                        if (boss.hp <= 0) {
+                            state.active = false;
+                            state.victory = true;
+                            document.getElementById('hud').classList.add('hidden');
+                            document.getElementById('victory-screen').classList.remove('hidden');
+                            flashGif('victory-gif', ASSETS.gifs.victory, 3200);
+                            audio.play('victory', 0.7);
+                            audio.playVictoryLoop();
+                        }
+                    }
+                }
+
+                // Hit Zombies
+                if (!hit) {
+                    for (let j = zombies.length - 1; j >= 0; j--) {
+                        let z = zombies[j];
+                        if ((b.x-z.x)**2 + (b.y-z.y)**2 < (z.r+5)**2) {
+                            z.hp -= b.dmg;
+                            hit = true;
+                            audio.play('enemyHit', 0.18, 50);
+                            spawnParticles(b.x, b.y, CONFIG.colors.zombie, 3);
+                            
+                            if (z.hp <= 0) {
+                                spawnItem(z.x, z.y);
+                                zombies.splice(j, 1);
+                                state.kills++;
+                                if (state.kills % 10 === 0) {
+                                    flashGif('hit-gif', ASSETS.gifs.hit, 900);
+                                }
+                                updateHUD();
+                                if (state.kills === CONFIG.bossTrigger && !state.bossSpawned) {
+                                    spawnBoss();
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (hit || b.life <= 0) bullets.splice(i, 1);
+            }
+
+            // 4. Update Zombies
+            if (state.frame % CONFIG.spawnRate === 0) spawnZombie();
+
+            for (let i = zombies.length - 1; i >= 0; i--) {
+                let z = zombies[i];
+                const dx = player.x - z.x;
+                const dy = player.y - z.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                z.x += (dx/dist) * z.speed;
+                z.y += (dy/dist) * z.speed;
+                z.angle = Math.atan2(dy, dx);
+                resolveCollision(z);
+
+                if (dist < player.r + z.r) {
+                    if (player.shield > 0) {
+                        player.shield -= 1;
+                        showFloatText("SHIELD", "#3b82f6", player.x, player.y - 30);
+                        spawnParticles(player.x, player.y, '#3b82f6', 2);
+                        audio.play('damage', 0.12, 180);
+                    } else {
+                        player.hp -= 0.8;
+                        state.shake = 5;
+                        flashGif('hit-gif', ASSETS.gifs.hit, 1000);
+                        audio.play('damage', 0.2, 180);
+                        spawnParticles(player.x, player.y, '#ff0000', 2);
+                    }
+                    updateHUD();
+                    // Knockback
+                    z.x -= (dx/dist) * 20;
+                    z.y -= (dy/dist) * 20;
+                }
+            }
+
+            // 5. Update Boss
+            if (boss) {
+                const dx = player.x - boss.x;
+                const dy = player.y - boss.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                boss.x += (dx/dist) * boss.speed;
+                boss.y += (dy/dist) * boss.speed;
+                boss.angle = Math.atan2(dy, dx);
+                
+                if (dist < player.r + boss.r) {
+                     if (player.shield > 0) player.shield -= 5;
+                     else player.hp -= 2;
+                     state.shake = 10;
+                     updateHUD();
+                }
+
+                boss.attackTimer++;
+                if (boss.attackTimer > 80) {
+                    // Boss Nova
+                    for(let k=0; k<12; k++) {
+                        const a = (Math.PI*2/12)*k + state.frame*0.05;
+                        bullets.push({ // Boss bullets
+                             x: boss.x, y: boss.y,
+                             vx: Math.cos(a)*6, vy: Math.sin(a)*6,
+                             life: 100, dmg: 10, // High dmg to player? No, handled by collision
+                             // Wait, bullets array is player bullets. Need enemy bullets?
+                             // Simplified: Treat as separate entity or just check player collision
+                        });
+                        // For MVP simplicity, we won't add separate enemy bullet array.
+                        // Instead, spawn mini-suicide drones (zombies)
+                        zombies.push({
+                            x: boss.x + Math.cos(a)*40,
+                            y: boss.y + Math.sin(a)*40,
+                            r: 8, hp: 1, maxHp: 1, speed: 6,
+                            angle: a, wobble: 0
+                        });
+                    }
+                    boss.attackTimer = 0;
+                    state.shake = 5;
+                }
+                updateHUD();
+            }
+
+            // 6. Items
+            for (let i = items.length - 1; i >= 0; i--) {
+                let it = items[i];
+                it.life--;
+                const dx = player.x - it.x;
+                const dy = player.y - it.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                // Magnet
+                if (dist < 120) {
+                    it.x += (dx/dist) * 5;
+                    it.y += (dy/dist) * 5;
+                }
+                
+                if (dist < player.r + it.r) {
+                    audio.play('pickup', 0.45, 120);
+                    if (it.type === 'medkit') {
+                        player.hp = Math.min(player.hp + 30, player.maxHp);
+                        showFloatText("+HP", "#0aff0a", player.x, player.y);
+                    } else if (it.type === 'shield') {
+                        player.shield = Math.min(player.shield + 25, player.maxShield);
+                        showFloatText("+SHIELD", "#00f3ff", player.x, player.y);
+                    } else if (it.type === 'power') {
+                        player.fireRate = Math.max(5, player.fireRate - 3);
+                        audio.play('powerup', 0.55, 180);
+                        flashGif('hit-gif', ASSETS.gifs.hit, 1200);
+                        showFloatText("FIRE RATE UP", "#ff003c", player.x, player.y);
+                    } else if (it.type === 'drone') {
+                        player.droneTier++;
+                        player.droneFireRate = Math.max(10, player.droneFireRate - 5);
+                        audio.play('powerup', 0.5, 180);
+                        document.getElementById('drone-status').classList.remove('hidden');
+                        showFloatText(player.droneTier === 1 ? "DRONE ACTIVATED" : "DRONE UPGRADED", "#fcee0a", player.x, player.y);
+                    }
+                    items.splice(i, 1);
+                    updateHUD();
+                } else if (it.life <= 0) {
+                    items.splice(i, 1);
+                }
+            }
+
+            // 7. Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if(p.life <= 0) particles.splice(i, 1);
+            }
+
+            if (player.hp <= 0) {
+                state.active = false;
+                audio.play('defeat', 0.7);
+                audio.playDefeatLoop();
+                document.getElementById('hud').classList.add('hidden');
+                document.getElementById('final-kills').innerText = state.kills;
+                document.getElementById('game-over-screen').classList.remove('hidden');
+            }
+
+            state.frame++;
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Rendering ---
+        function draw() {
+            // Background
+            ctx.fillStyle = CONFIG.colors.bg;
+            ctx.fillRect(0, 0, state.width, state.height);
+
+            // Camera Shake Transform
+            ctx.save();
+            const sx = (Math.random() - 0.5) * state.shake;
+            const sy = (Math.random() - 0.5) * state.shake;
+            ctx.translate(state.width/2 - state.camera.x + sx, state.height/2 - state.camera.y + sy);
+
+            // 1. Tech Grid
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 2;
+            const gridSize = 100;
+            const startX = Math.floor((state.camera.x - state.width/2) / gridSize) * gridSize;
+            const startY = Math.floor((state.camera.y - state.height/2) / gridSize) * gridSize;
+            
+            ctx.beginPath();
+            for(let x=startX; x<startX+state.width+200; x+=gridSize) {
+                ctx.moveTo(x, startY); ctx.lineTo(x, startY+state.height+200);
+            }
+            for(let y=startY; y<startY+state.height+200; y+=gridSize) {
+                ctx.moveTo(startX, y); ctx.lineTo(startX+state.width+200, y);
+            }
+            ctx.stroke();
+
+            // Glowing intersections
+            ctx.fillStyle = '#112';
+            for(let x=startX; x<startX+state.width+200; x+=gridSize) {
+                for(let y=startY; y<startY+state.height+200; y+=gridSize) {
+                    if ((x+y)%200 === 0) ctx.fillRect(x-2, y-2, 4, 4);
+                }
+            }
+
+            // World Bounds
+            ctx.strokeStyle = '#ff003c';
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff003c';
+            ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
+            ctx.shadowBlur = 0;
+
+            // 2. Obstacles
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2;
+            obstacles.forEach(o => {
+                ctx.fillRect(o.x, o.y, o.w, o.h);
+                ctx.strokeRect(o.x, o.y, o.w, o.h);
+                // Tech detail
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(o.x+5, o.y+5, 10, 10);
+                ctx.fillRect(o.x+o.w-15, o.y+o.h-15, 10, 10);
+                ctx.fillStyle = '#0f172a';
+            });
+
+            // 3. Items
+            items.forEach(it => {
+                let color = '#fff';
+                if(it.type === 'medkit') color = CONFIG.colors.zombie;
+                if(it.type === 'shield') color = CONFIG.colors.player;
+                if(it.type === 'power') color = CONFIG.colors.boss;
+                if(it.type === 'drone') color = CONFIG.colors.bullet;
+                
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = color;
+                ctx.fillStyle = color;
+                const bob = Math.sin(state.frame * 0.1 + it.bob) * 5;
+                
+                ctx.beginPath();
+                ctx.arc(it.x, it.y + bob, 6, 0, Math.PI*2);
+                ctx.fill();
+                
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(it.x, it.y + bob, 10 + Math.sin(state.frame*0.2)*2, 0, Math.PI*2);
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0;
+            });
+
+            // 4. Particles
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life / 30;
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1.0;
+            });
+
+            // 5. Zombies
+            zombies.forEach(z => {
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = CONFIG.colors.zombie;
+                ctx.fillStyle = CONFIG.colors.zombie;
+                
+                // Body
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, z.r, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Spikes/Details
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, z.r-4, 0, Math.PI*2);
+                ctx.fill();
+                
+                ctx.fillStyle = CONFIG.colors.zombie;
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, 4, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.shadowBlur = 0;
+            });
+
+            // 6. Boss
+            if (boss) {
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = CONFIG.colors.boss;
+                ctx.fillStyle = CONFIG.colors.boss;
+                
+                // Rotating core
+                ctx.save();
+                ctx.translate(boss.x, boss.y);
+                ctx.rotate(state.frame * 0.05);
+                ctx.fillRect(-25, -25, 50, 50);
+                ctx.restore();
+
+                // Outer Ring
+                ctx.strokeStyle = CONFIG.colors.boss;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(boss.x, boss.y, boss.r, 0, Math.PI*2);
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0;
+            }
+
+            // 7. Player
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = CONFIG.colors.player;
+            
+            // Shield
+            if (player.shield > 0) {
+                ctx.strokeStyle = '#00f3ff';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.4 + Math.sin(state.frame*0.2)*0.2;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.r + 8, 0, Math.PI*2);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            }
+
+            // Body
+            ctx.fillStyle = CONFIG.colors.player;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Direction Indicator
+            if (input.active) {
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y);
+                ctx.lineTo(player.x + Math.cos(player.angle)*25, player.y + Math.sin(player.angle)*25);
+                ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+
+            // Drone
+            if (drone) {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#fcee0a';
+                ctx.fillStyle = '#fcee0a';
+                ctx.beginPath();
+                ctx.arc(drone.x, drone.y, 6, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Orbiting dot
+                const ox = drone.x + Math.cos(state.frame*0.2)*12;
+                const oy = drone.y + Math.sin(state.frame*0.2)*12;
+                ctx.beginPath();
+                ctx.arc(ox, oy, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // 8. Bullets
+            bullets.forEach(b => {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = b.color;
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Trail
+                ctx.strokeStyle = b.color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(b.x, b.y);
+                ctx.lineTo(b.x - b.vx*1.5, b.y - b.vy*1.5);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+                ctx.shadowBlur = 0;
+            });
+
+            ctx.restore();
+        }
+
+        document.getElementById('hit-gif').src = ASSETS.gifs.hit;
+        document.getElementById('victory-gif').src = ASSETS.gifs.victory;
+
+        function handleGameStart() {
+            audio.unlock();
+            audio.play('start', 0.6);
+            resetGame();
+        }
+
+        function handleGameReset() {
+            audio.unlock();
+            audio.play('uiClick', 0.45);
+            resetGame();
+        }
+
+        // --- Controls Events ---
+        document.getElementById('start-btn').addEventListener('click', handleGameStart);
+        document.getElementById('restart-btn').addEventListener('click', handleGameReset);
+        document.getElementById('victory-btn').addEventListener('click', handleGameReset);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Runway Snapshot Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --font-display: 'Orbitron', 'Audiowide', sans-serif;
+        --font-body: 'Rajdhani', 'Exo 2', sans-serif;
+        --bg-top: #12091f;
+        --bg-bottom: #2b1450;
+        --panel: rgba(26, 14, 52, 0.86);
+        --panel-border: rgba(146, 215, 255, 0.48);
+        --panel-highlight: rgba(255, 255, 255, 0.18);
+        --accent: #ff70c8;
+        --accent-2: #77e9ff;
+        --accent-3: #ffd36f;
+        --text-main: #f8f5ff;
+        --text-dim: #d1c9f3;
+        --success: #5af2a8;
+        --shadow: rgba(8, 5, 20, 0.42);
+    }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(118, 95, 240, 0.35), transparent 40%),
+            linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        user-select: none;
+        -webkit-user-select: none;
+        font-family: var(--font-body);
+    }
+
+    body::before,
+    body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    body::before {
+        background:
+            radial-gradient(circle at 15% 20%, rgba(255, 112, 200, 0.18), transparent 16%),
+            radial-gradient(circle at 85% 25%, rgba(119, 233, 255, 0.2), transparent 18%),
+            radial-gradient(circle at 55% 80%, rgba(255, 211, 111, 0.16), transparent 22%);
+    }
+
+    body::after {
+        opacity: 0.2;
+        background-image:
+            linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+        background-size: 28px 28px;
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+    }
+
+    canvas {
+        display: block;
+        touch-action: none;
+        width: 100%;
+        height: 100%;
+    }
+
+    #ui-layer {
+        pointer-events: none;
+    }
+
+    #feedback-overlays {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    .feedback-gif {
+        position: absolute;
+        width: min(30vw, 132px);
+        max-width: 132px;
+        opacity: 0;
+        transform: scale(0.82);
+        transition: opacity 180ms ease, transform 180ms ease;
+        filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.36));
+        border-radius: 18px;
+        object-fit: cover;
+        background: rgba(18, 9, 31, 0.24);
+    }
+
+    .feedback-gif.visible {
+        opacity: 0.94;
+        transform: scale(1);
+    }
+
+    .feedback-gif.success {
+        top: max(env(safe-area-inset-top), 14px);
+        right: 14px;
+    }
+
+    .feedback-gif.fail {
+        left: 14px;
+        bottom: min(46vh, 300px);
+    }
+
+    @media (max-width: 640px) {
+        .feedback-gif {
+            width: min(34vw, 110px);
+        }
+
+        .feedback-gif.fail {
+            bottom: min(50vh, 268px);
+        }
+    }
+</style>
+<script id="game-config" type="application/x-game-config">
+{
+    "themeColor": { "type": "color", "label": "Theme Color", "value": "#FF70C8" },
+    "skinColor": { "type": "color", "label": "Skin Color", "value": "#FFE0BD" }
+}
+</script>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-layer" class="absolute inset-0 z-50 flex flex-col justify-between">
+        <!-- [agent-note][stage3] resolved-gif: success/fail feedback overlays -> catalogs/gifs.json -->
+        <div id="feedback-overlays" aria-hidden="true">
+            <img id="success-gif" class="feedback-gif success" alt="" src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp">
+            <img id="spotlight-gif" class="feedback-gif fail" alt="" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp">
+        </div>
+    </div>
+</div>
+
+<audio id="bgm_main" data-editable="audio" data-label="Background Music" preload="none" loop></audio>
+
+<script>
+// --- L0: Single Source of Truth & Configuration ---
+let gameConfig = { themeColor: '#FF70C8', skinColor: '#FFE0BD' };
+let cw = 0, ch = 0, dpr = window.devicePixelRatio || 1;
+let initialized = false;
+let gameState = 'PLAYING'; // PLAYING, GAMEOVER
+let lastTime = 0;
+
+// Game State
+const dollState = { hairStyle: 0, hairColor: 0, dress: 0, nails: 0 };
+let currentTab = 0; // 0: Style, 1: Color, 2: Dress, 3: Nails
+let particles = [];
+let flashAlpha = 0;
+let shimmer = 0;
+
+// Assets Definition
+const items = {
+    hairStyle: [
+        { id: 'long', name: 'Long Waves', icon: '🌟' },
+        { id: 'short', name: 'Short Cut', icon: '✂️' },
+        { id: 'buns', name: 'Twin Buns', icon: '🎀' },
+        { id: 'ponytail', name: 'Ponytail', icon: '💫' }
+    ],
+    hairColor: [
+        { id: 'brown', c: '#6B4423', name: 'Brown Glow' },
+        { id: 'pink', c: '#FF9AA2', name: 'Pink Pop' },
+        { id: 'yellow', c: '#FDFD96', name: 'Golden Beam' },
+        { id: 'purple', c: '#C7CEEA', name: 'Lavender' },
+        { id: 'blue', c: '#AEC6CF', name: 'Blue Mist' },
+        { id: 'orange', c: '#FFB347', name: 'Sunset' },
+        { id: 'black', c: '#2C2C2C', name: 'Midnight' }
+    ],
+    dress: [
+        { id: 'aline', c: '#E2F0CB', name: 'Spring Line' },
+        { id: 'overalls', c: '#FFB7B2', name: 'Peach Layers' },
+        { id: 'tube', c: '#E0BBE4', name: 'Plum Mini' },
+        { id: 'two', c: '#957DAD', name: 'Grape Set' }
+    ],
+    nails: [
+        { id: 'red', c: '#FF6961', name: 'Cherry Shine' },
+        { id: 'blue', c: '#AEC6CF', name: 'Sky Gloss' },
+        { id: 'yellow', c: '#FDFD96', name: 'Lemon Spark' },
+        { id: 'green', c: '#77DD77', name: 'Apple Gleam' }
+    ]
+};
+
+const tabs = ['Hair', 'Color', 'Outfit', 'Polish'];
+const typeMap = ['hairStyle', 'hairColor', 'dress', 'nails'];
+
+// UI Hitboxes
+let hitboxes = { tabs: [], grid: [], photoBtn: null, restartBtn: null };
+
+// --- L0: Audio System ---
+// [agent-note][stage3] resolved-audio: ui/select/photo/restart/bgm mapped from workspace/local approved sources
+let audioCtx = null;
+let audioUnlocked = false;
+let audioMasterGain = null;
+let ambienceGain = null;
+const audioState = { uiPulse: 0, tabPulse: 0, glamPulse: 0, winPulse: 0 };
+const gifTimers = new Map();
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioMasterGain = audioCtx.createGain();
+        audioMasterGain.gain.value = 0.72;
+        ambienceGain = audioCtx.createGain();
+        ambienceGain.gain.value = 0.12;
+        ambienceGain.connect(audioMasterGain);
+        audioMasterGain.connect(audioCtx.destination);
+    }
+}
+
+function startAmbientBed() {
+    if (!audioCtx || !ambienceGain) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const tremolo = audioCtx.createOscillator();
+    const tremoloGain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    const gain = audioCtx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(164.81, now);
+    tremolo.type = 'sine';
+    tremolo.frequency.setValueAtTime(0.22, now);
+    tremoloGain.gain.setValueAtTime(0.02, now);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(680, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.05, now + 1.6);
+
+    tremolo.connect(tremoloGain);
+    tremoloGain.connect(gain.gain);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ambienceGain);
+
+    osc.start(now);
+    tremolo.start(now);
+}
+
+function syncBgmState() {
+    const bgm = document.getElementById('bgm_main');
+    if (!bgm) return;
+    bgm.volume = gameState === 'GAMEOVER' ? 0.18 : 0.18;
+    if (!bgm.getAttribute('src')) {
+        bgm.pause();
+        return;
+    }
+    if (document.hidden) {
+        bgm.pause();
+        return;
+    }
+    if (audioUnlocked) {
+        bgm.play().catch(() => {});
+    }
+}
+
+function unlockAudio() {
+    if (audioUnlocked) return;
+    initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    startAmbientBed();
+    audioUnlocked = true;
+    syncBgmState();
+}
+
+function playSynth(type) {
+    if (!audioCtx || !audioMasterGain) return;
+    const now = audioCtx.currentTime;
+    const pulseWindow = 0.06;
+    if (type === 'ui' && now - audioState.uiPulse < pulseWindow) return;
+    if (type === 'tab' && now - audioState.tabPulse < pulseWindow) return;
+    if (type === 'glam' && now - audioState.glamPulse < pulseWindow) return;
+    if (type === 'win' && now - audioState.winPulse < 0.12) return;
+    if (type === 'ui') audioState.uiPulse = now;
+    if (type === 'tab') audioState.tabPulse = now;
+    if (type === 'glam') audioState.glamPulse = now;
+    if (type === 'win') audioState.winPulse = now;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioMasterGain);
+
+    if (type === 'ui') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(720, now);
+        osc.frequency.exponentialRampToValueAtTime(930, now + 0.08);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1800, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+        osc.start(now);
+        osc.stop(now + 0.13);
+    } else if (type === 'tab') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.exponentialRampToValueAtTime(265, now + 0.16);
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(760, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.11, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+        osc.start(now);
+        osc.stop(now + 0.19);
+    } else if (type === 'glam') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1120, now);
+        osc.frequency.linearRampToValueAtTime(1520, now + 0.07);
+        osc.frequency.linearRampToValueAtTime(1920, now + 0.14);
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(580, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.09, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
+        osc.start(now);
+        osc.stop(now + 0.27);
+    } else if (type === 'win') {
+        const secondOsc = audioCtx.createOscillator();
+        secondOsc.type = 'triangle';
+        secondOsc.frequency.setValueAtTime(880, now);
+        secondOsc.frequency.linearRampToValueAtTime(1320, now + 0.22);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(660, now);
+        osc.frequency.linearRampToValueAtTime(990, now + 0.18);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2400, now);
+        const winGain = audioCtx.createGain();
+        winGain.gain.setValueAtTime(0.0001, now);
+        winGain.gain.exponentialRampToValueAtTime(0.11, now + 0.03);
+        winGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+        osc.connect(filter);
+        secondOsc.connect(filter);
+        filter.connect(winGain);
+        winGain.connect(audioMasterGain);
+        osc.start(now);
+        secondOsc.start(now);
+        osc.stop(now + 0.42);
+        secondOsc.stop(now + 0.42);
+        return;
+    }
+}
+
+function vibrate(style = 'light') {
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+        params: { style: style }
+    });
+}
+
+function toggleFeedbackGif(id, active, duration = 1400) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (gifTimers.has(id)) {
+        clearTimeout(gifTimers.get(id));
+        gifTimers.delete(id);
+    }
+    el.classList.toggle('visible', active);
+    if (active && duration > 0) {
+        const timer = setTimeout(() => {
+            el.classList.remove('visible');
+            gifTimers.delete(id);
+        }, duration);
+        gifTimers.set(id, timer);
+    }
+}
+
+function updateFeedbackState() {
+    toggleFeedbackGif('success-gif', gameState === 'GAMEOVER', 0);
+    if (gameState !== 'GAMEOVER') {
+        toggleFeedbackGif('spotlight-gif', false, 0);
+    }
+}
+
+
+// --- L0: Core Setup & Lifecycle ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+function parseConfig() {
+    const script = document.getElementById('game-config');
+    if (script) {
+        try {
+            const defs = JSON.parse(script.textContent);
+            for (let k in defs) gameConfig[k] = defs[k].value;
+        } catch(e) { console.error('Config parse error', e); }
+    }
+}
+
+function initGame() {
+    dollState.hairStyle = 0;
+    dollState.hairColor = 0;
+    dollState.dress = 0;
+    dollState.nails = 0;
+    currentTab = 0;
+    particles = [];
+    flashAlpha = 0;
+    shimmer = 0;
+    gameState = 'PLAYING';
+
+    spawnParticles(cw / 2, ch * 0.15, items.hairColor[0].c, 20);
+
+    if (!initialized) {
+        initialized = true;
+        syncBgmState();
+        updateFeedbackState();
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function restartGame() {
+    toggleFeedbackGif('success-gif', false, 0);
+    initGame();
+}
+
+const ro = new ResizeObserver(entries => {
+    const rect = entries[0].contentRect;
+    cw = rect.width;
+    ch = rect.height;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!initialized) {
+        initGame();
+    }
+});
+
+// --- Input Handling ---
+function handleGlobalInput(e) {
+    if (e.pointerType !== 'mouse') {
+        e.preventDefault();
+    }
+    unlockAudio();
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (gameState === 'GAMEOVER') {
+        if (hitboxes.restartBtn && isInside(x, y, hitboxes.restartBtn)) {
+            playSynth('ui');
+            toggleFeedbackGif('spotlight-gif', false, 0);
+            vibrate('medium');
+            restartGame();
+        }
+        return;
+    }
+
+    if (gameState === 'PLAYING') {
+        for (let i = 0; i < hitboxes.tabs.length; i++) {
+            if (isInside(x, y, hitboxes.tabs[i])) {
+                if (currentTab !== i) {
+                    currentTab = i;
+                    playSynth('tab');
+                    vibrate('light');
+                }
+                return;
+            }
+        }
+
+        for (let i = 0; i < hitboxes.grid.length; i++) {
+            if (isInside(x, y, hitboxes.grid[i])) {
+                const type = typeMap[currentTab];
+                if (dollState[type] !== i) {
+                    dollState[type] = i;
+                    playSynth('glam');
+                    toggleFeedbackGif('spotlight-gif', true, 850);
+                    vibrate('medium');
+
+                    let px = cw / 2, py = ch * 0.3;
+                    if (type === 'hairStyle' || type === 'hairColor') py = ch * 0.15;
+                    if (type === 'dress') py = ch * 0.35;
+                    if (type === 'nails') { px = cw / 2 + cw * 0.15; py = ch * 0.35; }
+
+                    let pColor = '#FFFFFF';
+                    if (type === 'hairColor') pColor = items.hairColor[i].c;
+                    if (type === 'hairStyle') pColor = items.hairColor[dollState.hairColor].c;
+                    if (type === 'dress') pColor = items.dress[i].c;
+                    if (type === 'nails') pColor = items.nails[i].c;
+
+                    spawnParticles(px, py, pColor, 15);
+                }
+                return;
+            }
+        }
+
+        if (hitboxes.photoBtn && isInside(x, y, hitboxes.photoBtn)) {
+            playSynth('win');
+            toggleFeedbackGif('success-gif', true, 2000);
+            vibrate('heavy');
+            flashAlpha = 1.0;
+            spawnParticles(cw / 2, ch / 2, '#FFFFFF', 50, true);
+            gameState = 'GAMEOVER';
+            syncBgmState();
+            updateFeedbackState();
+        }
+    }
+}
+
+function isInside(x, y, box) {
+    return x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+}
+
+// --- Particles ---
+function spawnParticles(x, y, color, count, scatter = false) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * (scatter ? 400 : 200) + 50;
+        particles.push({
+            x: x, y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            color: color,
+            size: Math.random() * 6 + 4
+        });
+    }
+}
+
+function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 500 * dt;
+        p.life -= dt * 1.5;
+        if (p.life <= 0 || !isFinite(p.x) || !isFinite(p.y)) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function drawParticles() {
+    particles.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+function roundedPanel(x, y, w, h, radius, fill, stroke) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, radius);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function drawBackdrop() {
+    const stageGrad = ctx.createLinearGradient(0, 0, 0, ch);
+    stageGrad.addColorStop(0, '#12091f');
+    stageGrad.addColorStop(0.45, '#25124a');
+    stageGrad.addColorStop(1, '#3d1f62');
+    ctx.fillStyle = stageGrad;
+    ctx.fillRect(0, 0, cw, ch);
+
+    const beamColors = [
+        'rgba(255,112,200,0.15)',
+        'rgba(119,233,255,0.16)',
+        'rgba(255,211,111,0.12)'
+    ];
+    beamColors.forEach((color, i) => {
+        ctx.save();
+        ctx.translate(cw * (0.18 + i * 0.32), -40);
+        ctx.rotate((-0.18 + i * 0.18) + Math.sin(shimmer + i) * 0.05);
+        const beam = ctx.createLinearGradient(0, 0, 0, ch * 0.7);
+        beam.addColorStop(0, color);
+        beam.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = beam;
+        ctx.beginPath();
+        ctx.moveTo(-80, 0);
+        ctx.lineTo(80, 0);
+        ctx.lineTo(210, ch * 0.72);
+        ctx.lineTo(-210, ch * 0.72);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    });
+
+    for (let i = 0; i < 22; i++) {
+        const px = ((i * 127.4) % (cw + 120)) - 60;
+        const py = (i * 91.7 + shimmer * 18) % (ch + 120) - 60;
+        const size = 2 + (i % 3);
+        ctx.save();
+        ctx.globalAlpha = 0.3 + (i % 4) * 0.08;
+        ctx.fillStyle = i % 2 ? '#fff4c9' : '#c9f6ff';
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(px, py, size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    const floorY = ch * 0.58;
+    const floorGrad = ctx.createLinearGradient(0, floorY, 0, ch);
+    floorGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
+    floorGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(0, floorY, cw, ch - floorY);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    for (let y = floorY; y <= ch; y += 24) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(cw, y);
+        ctx.stroke();
+    }
+    for (let x = 0; x <= cw; x += 32) {
+        ctx.beginPath();
+        ctx.moveTo(x, floorY);
+        ctx.lineTo(cw / 2 + (x - cw / 2) * 0.55, ch);
+        ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#ff9fdc';
+    ctx.beginPath();
+    ctx.ellipse(cw / 2, ch * 0.32, Math.min(cw * 0.28, 180), Math.min(ch * 0.08, 50), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+// --- Rendering ---
+function drawClayShape(drawFn, color, shadowOffset = 5, strokeColor = 'rgba(255,255,255,0.34)') {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = shadowOffset;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    drawFn();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath();
+    drawFn();
+    ctx.clip();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 6;
+    ctx.translate(0, -2);
+    ctx.beginPath();
+    drawFn();
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawHairSparkles(styleId, hairColor) {
+    const sparklePositions = styleId === 'buns'
+        ? [[-38, -55], [38, -55], [0, -26]]
+        : styleId === 'ponytail'
+            ? [[34, -20], [52, 18], [-24, -18]]
+            : [[-28, -22], [8, -30], [28, -12]];
+    sparklePositions.forEach(([sx, sy], index) => {
+        ctx.save();
+        ctx.translate(sx, sy + Math.sin(shimmer * 3 + index) * 1.5);
+        ctx.rotate(shimmer + index);
+        ctx.strokeStyle = index % 2 ? '#fff6d4' : '#d9fbff';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(-5, 0);
+        ctx.lineTo(5, 0);
+        ctx.moveTo(0, -5);
+        ctx.lineTo(0, 5);
+        ctx.stroke();
+        ctx.restore();
+    });
+
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = hairColor;
+    ctx.beginPath();
+    ctx.ellipse(0, -10, 55, 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawDoll(x, y, scale) {
+    const skin = gameConfig.skinColor;
+    const styleId = items.hairStyle[dollState.hairStyle].id;
+    const hairColor = items.hairColor[dollState.hairColor].c;
+    const dress = items.dress[dollState.dress];
+    const nails = items.nails[dollState.nails];
+    const headTilt = Math.sin(shimmer * 2.1) * 0.012;
+    const eyeLift = Math.sin(shimmer * 3.2) * 0.8;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.rotate(headTilt);
+
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#10061c';
+    ctx.beginPath();
+    ctx.ellipse(0, 168, 68, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Back Hair
+    drawClayShape(() => {
+        if (styleId === 'long') {
+            ctx.roundRect(-62, -42, 124, 168, 24);
+        } else if (styleId === 'short') {
+            ctx.roundRect(-58, -40, 116, 84, 22);
+        } else if (styleId === 'buns') {
+            ctx.roundRect(-46, -32, 92, 70, 20);
+        } else if (styleId === 'ponytail') {
+            ctx.roundRect(-26, -40, 52, 66, 18);
+            ctx.ellipse(42, 24, 21, 68, Math.PI / 8, 0, Math.PI * 2);
+        }
+    }, hairColor, 6, 'rgba(255,255,255,0.28)');
+
+    // Neck and Body
+    drawClayShape(() => {
+        ctx.roundRect(-10, 32, 20, 18, 8);
+        ctx.roundRect(-31, 42, 62, 74, 22);
+    }, skin, 5, 'rgba(255,255,255,0.26)');
+
+    // Legs
+    drawClayShape(() => {
+        ctx.roundRect(-26, 102, 20, 62, 10);
+        ctx.roundRect(6, 102, 20, 62, 10);
+    }, skin, 4, 'rgba(255,255,255,0.24)');
+
+    // Shoes
+    drawClayShape(() => {
+        ctx.roundRect(-32, 155, 28, 15, 8);
+        ctx.roundRect(4, 155, 28, 15, 8);
+    }, '#f7f2ff', 2, 'rgba(255,255,255,0.5)');
+
+    // Dress
+    drawClayShape(() => {
+        if (dress.id === 'aline') {
+            ctx.moveTo(0, 42);
+            ctx.lineTo(-52, 124);
+            ctx.arcTo(-50, 134, 0, 134, 12);
+            ctx.arcTo(50, 134, 52, 124, 12);
+            ctx.lineTo(0, 42);
+        } else if (dress.id === 'overalls') {
+            ctx.roundRect(-34, 42, 68, 82, 16);
+            ctx.rect(-22, 112, 12, 28);
+            ctx.rect(10, 112, 12, 28);
+        } else if (dress.id === 'tube') {
+            ctx.roundRect(-30, 50, 60, 64, 14);
+        } else if (dress.id === 'two') {
+            ctx.roundRect(-32, 46, 64, 26, 12);
+            ctx.roundRect(-36, 78, 72, 42, 16);
+        }
+    }, dress.c, 6, 'rgba(255,255,255,0.4)');
+
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(-10, 68, 16, 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Arms
+    drawClayShape(() => {
+        ctx.roundRect(-58, 45, 20, 62, 10);
+        ctx.roundRect(38, 45, 20, 62, 10);
+    }, skin, 4, 'rgba(255,255,255,0.26)');
+
+    // Hands
+    drawClayShape(() => {
+        ctx.arc(-48, 110, 15, 0, Math.PI * 2);
+        ctx.arc(48, 110, 15, 0, Math.PI * 2);
+    }, skin, 3, 'rgba(255,255,255,0.24)');
+
+    // Nails
+    ctx.fillStyle = nails.c;
+    ctx.shadowColor = nails.c;
+    ctx.shadowBlur = 8;
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath(); ctx.arc(-53 + i * 5, 116, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(43 + i * 5, 116, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    // Head
+    drawClayShape(() => {
+        ctx.arc(0, 0, 52, 0, Math.PI * 2);
+    }, skin, 6, 'rgba(255,255,255,0.3)');
+
+    // Face
+    ctx.save();
+    ctx.translate(0, eyeLift * 0.15);
+
+    ctx.strokeStyle = '#59394c';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-23, -6);
+    ctx.quadraticCurveTo(-15, -13, -6, -7);
+    ctx.moveTo(6, -7);
+    ctx.quadraticCurveTo(15, -13, 23, -6);
+    ctx.stroke();
+
+    ctx.fillStyle = '#432540';
+    ctx.beginPath(); ctx.arc(-16, 6 + eyeLift, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(16, 6 + eyeLift, 5, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(-18, 4 + eyeLift, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(14, 4 + eyeLift, 2, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = 'rgba(255, 126, 189, 0.35)';
+    ctx.beginPath(); ctx.ellipse(-28, 18, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(28, 18, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = '#7a4468';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-7, 24);
+    ctx.quadraticCurveTo(0, 30 + Math.sin(shimmer * 2.4) * 1.5, 7, 24);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Front Hair
+    drawClayShape(() => {
+        if (styleId === 'long') {
+            ctx.arc(0, -15, 54, Math.PI, 0);
+            ctx.lineTo(52, 3);
+            ctx.quadraticCurveTo(18, 10, 4, 28);
+            ctx.quadraticCurveTo(-8, 12, -18, 4);
+            ctx.quadraticCurveTo(-26, 18, -52, 3);
+        } else if (styleId === 'short') {
+            ctx.arc(0, -16, 53, Math.PI, 0);
+            ctx.lineTo(54, 21);
+            ctx.quadraticCurveTo(20, 12, 0, 26);
+            ctx.quadraticCurveTo(-18, 12, -54, 21);
+        } else if (styleId === 'buns') {
+            ctx.arc(0, -10, 51, Math.PI, 0);
+            ctx.lineTo(50, 4);
+            ctx.lineTo(-50, 4);
+            ctx.moveTo(-36, -42); ctx.arc(-36, -42, 26, 0, Math.PI * 2);
+            ctx.moveTo(36, -42); ctx.arc(36, -42, 26, 0, Math.PI * 2);
+        } else if (styleId === 'ponytail') {
+            ctx.arc(0, -15, 54, Math.PI, 0);
+            ctx.lineTo(52, 4);
+            ctx.quadraticCurveTo(22, 14, 8, 26);
+            ctx.quadraticCurveTo(-16, 8, -52, 4);
+        }
+    }, hairColor, 6, 'rgba(255,255,255,0.24)');
+
+    drawHairSparkles(styleId, hairColor);
+
+    ctx.restore();
+}
+
+function drawHeader() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    ctx.fillStyle = '#9bf6ff';
+    ctx.shadowColor = 'rgba(119,233,255,0.5)';
+    ctx.shadowBlur = 18;
+    ctx.font = '700 26px var(--font-display)';
+    ctx.fillText('Runway Snapshot Studio', cw / 2, 20);
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#efe8ff';
+    ctx.font = '600 14px var(--font-body)';
+    ctx.fillText('Style a star model with spotlight glam, then lock the cover shot.', cw / 2, 58);
+
+    roundedPanel(cw / 2 - Math.min(160, cw * 0.32), 84, Math.min(320, cw * 0.64), 26, 13, 'rgba(26,14,52,0.68)', 'rgba(155,246,255,0.28)');
+    ctx.fillStyle = '#ffd36f';
+    ctx.font = '600 11px var(--font-body)';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SPOTLIGHT LOOK LAB', cw / 2, 97);
+    ctx.restore();
+}
+
+function drawUI() {
+    const panelH = ch * 0.45;
+    const panelY = ch - panelH;
+
+    drawHeader();
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.2)';
+    ctx.shadowBlur = 26;
+    ctx.shadowOffsetY = -8;
+    const panelGrad = ctx.createLinearGradient(0, panelY, 0, ch + 20);
+    panelGrad.addColorStop(0, 'rgba(20, 10, 42, 0.92)');
+    panelGrad.addColorStop(1, 'rgba(45, 22, 78, 0.97)');
+    ctx.fillStyle = panelGrad;
+    ctx.beginPath();
+    ctx.roundRect(0, panelY, cw, panelH + 20, [28, 28, 0, 0]);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(155,246,255,0.24)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(18, panelY + 8);
+    ctx.lineTo(cw - 18, panelY + 8);
+    ctx.stroke();
+    ctx.restore();
+
+    // Tabs
+    hitboxes.tabs = [];
+    const spacing = 6;
+    const tabW = (cw - 40 - (tabs.length - 1) * spacing) / tabs.length;
+    const tabH = 40;
+    const tabY = panelY + 18;
+
+    ctx.font = '600 12px var(--font-body)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    tabs.forEach((tab, i) => {
+        const tx = 20 + i * (tabW + spacing);
+        const isActive = currentTab === i;
+
+        hitboxes.tabs.push({x: tx, y: tabY, w: tabW, h: tabH});
+
+        ctx.save();
+        const tabGrad = ctx.createLinearGradient(tx, tabY, tx, tabY + tabH);
+        if (isActive) {
+            tabGrad.addColorStop(0, gameConfig.themeColor);
+            tabGrad.addColorStop(1, '#b64dff');
+            ctx.fillStyle = tabGrad;
+            ctx.shadowColor = 'rgba(255,112,200,0.35)';
+            ctx.shadowBlur = 12;
+            ctx.shadowOffsetY = 3;
+        } else {
+            tabGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
+            tabGrad.addColorStop(1, 'rgba(255,255,255,0.03)');
+            ctx.fillStyle = tabGrad;
+        }
+        ctx.beginPath();
+        ctx.roundRect(tx, tabY, tabW, tabH, 14);
+        ctx.fill();
+        ctx.strokeStyle = isActive ? 'rgba(255,255,255,0.46)' : 'rgba(155,246,255,0.18)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = isActive ? '#FFFFFF' : '#d1c9f3';
+        ctx.fillText(tab, tx + tabW / 2, tabY + tabH / 2);
+        ctx.restore();
+    });
+
+    // Grid Options
+    hitboxes.grid = [];
+    const gridY = tabY + tabH + 18;
+
+    const activeItems = items[typeMap[currentTab]];
+    const activeIndex = dollState[typeMap[currentTab]];
+
+    const cols = activeItems.length > 4 ? 3 : 2;
+    const rows = Math.ceil(activeItems.length / cols);
+    const spacingX = 14;
+    const spacingY = 12;
+    const itemW = (cw - 40 - (cols - 1) * spacingX) / cols;
+    const availableGridH = panelH - (gridY - panelY) - 74;
+    const itemH = Math.min(68, (availableGridH - (rows - 1) * spacingY) / rows);
+
+    activeItems.forEach((item, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const gx = 20 + col * (itemW + spacingX);
+        const gy = gridY + row * (itemH + spacingY);
+
+        hitboxes.grid.push({x: gx, y: gy, w: itemW, h: itemH});
+
+        ctx.save();
+        const itemGrad = ctx.createLinearGradient(gx, gy, gx, gy + itemH);
+        itemGrad.addColorStop(0, i === activeIndex ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)');
+        itemGrad.addColorStop(1, i === activeIndex ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)');
+        ctx.fillStyle = itemGrad;
+        ctx.shadowColor = 'rgba(0,0,0,0.18)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 4;
+
+        ctx.beginPath();
+        ctx.roundRect(gx, gy, itemW, itemH, 16);
+        ctx.fill();
+
+        ctx.strokeStyle = i === activeIndex ? 'rgba(255,112,200,0.95)' : 'rgba(155,246,255,0.18)';
+        ctx.lineWidth = i === activeIndex ? 3 : 1.5;
+        ctx.stroke();
+
+        if (currentTab === 0) {
+            ctx.fillStyle = '#fff4c9';
+            ctx.font = '22px var(--font-body)';
+            ctx.fillText(item.icon, gx + itemW / 2, gy + itemH / 2 - 8);
+        } else {
+            ctx.fillStyle = item.c;
+            ctx.shadowColor = item.c;
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.arc(gx + itemW / 2, gy + itemH / 2 - 10, Math.min(13, itemH * 0.24), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#efe8ff';
+        ctx.font = '600 11px var(--font-body)';
+        ctx.fillText(item.name, gx + itemW / 2, gy + itemH - 13);
+
+        ctx.restore();
+    });
+
+    // Photo Button
+    const btnW = 124;
+    const btnH = 46;
+    const btnX = cw / 2 - btnW / 2;
+    const btnY = panelY + panelH - btnH - 14;
+    hitboxes.photoBtn = {x: btnX, y: btnY, w: btnW, h: btnH};
+
+    ctx.save();
+    const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+    btnGrad.addColorStop(0, '#66ffc0');
+    btnGrad.addColorStop(1, '#14c47c');
+    ctx.fillStyle = btnGrad;
+    ctx.shadowColor = 'rgba(90,242,168,0.42)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 5;
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, 23);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.48)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#10222f';
+    ctx.font = '700 16px var(--font-body)';
+    ctx.fillText('📷 Finish', cw / 2, btnY + btnH / 2);
+    ctx.restore();
+}
+
+function drawGameOver() {
+    const overlayGrad = ctx.createLinearGradient(0, 0, 0, ch);
+    overlayGrad.addColorStop(0, 'rgba(13,7,30,0.54)');
+    overlayGrad.addColorStop(1, 'rgba(25,11,45,0.72)');
+    ctx.fillStyle = overlayGrad;
+    ctx.fillRect(0, 0, cw, ch);
+
+    const cardW = Math.min(cw - 32, 340);
+    const cardH = Math.min(ch * 0.28, 210);
+    const cardX = cw / 2 - cardW / 2;
+    const cardY = ch * 0.1;
+    ctx.save();
+    const cardGrad = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+    cardGrad.addColorStop(0, 'rgba(28,15,57,0.92)');
+    cardGrad.addColorStop(1, 'rgba(53,24,84,0.95)');
+    roundedPanel(cardX, cardY, cardW, cardH, 24, cardGrad, 'rgba(155,246,255,0.3)');
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#9bf6ff';
+    ctx.shadowColor = 'rgba(119,233,255,0.4)';
+    ctx.shadowBlur = 16;
+    ctx.font = '700 28px var(--font-display)';
+    ctx.fillText('Cover Shot Ready!', cw / 2, cardY + 52);
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#efe8ff';
+    ctx.font = '600 15px var(--font-body)';
+    ctx.fillText('Your glam look is locked in for the spotlight reel.', cw / 2, cardY + 92);
+    ctx.fillStyle = '#ffd36f';
+    ctx.font = '600 12px var(--font-body)';
+    ctx.fillText('Tap below to reset the session and style another star.', cw / 2, cardY + 122);
+    ctx.restore();
+
+    const btnW = 168;
+    const btnH = 56;
+    const btnX = cw / 2 - btnW / 2;
+    const btnY = ch * 0.8;
+    hitboxes.restartBtn = {x: btnX, y: btnY, w: btnW, h: btnH};
+
+    ctx.save();
+    const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+    btnGrad.addColorStop(0, gameConfig.themeColor);
+    btnGrad.addColorStop(1, '#9654ff');
+    ctx.fillStyle = btnGrad;
+    ctx.shadowColor = 'rgba(255,112,200,0.38)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 5;
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, 28);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.52)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 19px var(--font-body)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Style Again', cw / 2, btnY + btnH / 2);
+    ctx.restore();
+}
+
+// --- Main Loop ---
+function gameLoop(timestamp) {
+    requestAnimationFrame(gameLoop);
+    if (!cw || !ch) return;
+
+    let dt = (timestamp - lastTime) / 1000;
+    if (dt > 0.1) dt = 0.1;
+    lastTime = timestamp;
+    shimmer += dt;
+
+    try {
+        drawBackdrop();
+        updateParticles(dt);
+
+        if (gameState === 'PLAYING') {
+            drawDoll(cw / 2, ch * 0.32, Math.min(cw, ch) * 0.0035);
+            drawParticles();
+            drawUI();
+        } else if (gameState === 'GAMEOVER') {
+            drawDoll(cw / 2, ch * 0.45, Math.min(cw, ch) * 0.0045);
+            drawParticles();
+            drawGameOver();
+        }
+
+        if (flashAlpha > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+            ctx.fillRect(0, 0, cw, ch);
+            flashAlpha -= dt * 2;
+        }
+
+    } catch (e) {
+        console.error('Loop error', e);
+    }
+}
+
+// --- Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    parseConfig();
+    const bgm = document.getElementById('bgm_main');
+    if (bgm) {
+        bgm.volume = 0.38;
+        bgm.addEventListener('ended', () => {
+            if (audioUnlocked) bgm.play().catch(() => {});
+        });
+    }
+    document.addEventListener('visibilitychange', syncBgmState);
+    ro.observe(document.getElementById('game-container'));
+    // [agent-note][stage4] repaired: mobile-tap-scope | element: #gameCanvas | action: limited gesture suppression to canvas to avoid blocking outer UI taps
+    canvas.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+});
+
+</script>
+</body>
+</html>

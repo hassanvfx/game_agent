@@ -274,6 +274,24 @@ WORKFLOWS: dict[str, WorkflowDefinition] = {
             }
         ],
     ),
+    "creative_remix_v6": WorkflowDefinition(
+        workflow_id="creative_remix_v6",
+        run_label="creative-remix-v6",
+        nodes=[
+            {
+                "id": "remix_v6_semantic_inference_plus",
+                "prompt_file": "prompts/operators_v2/00_creative_remix_v6_semantic_inference_plus.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            },
+            {
+                "id": "remix_v6_super_operator",
+                "prompt_file": "prompts/operators_v2/00_creative_remix_v6_super_operator.md",
+                "accepted_upstream_statuses": ["ok", "warning", "error"],
+                "requires_contract": True,
+            }
+        ],
+    ),
     "remix-v4-vite": WorkflowDefinition(
         workflow_id="remix-v4-vite",
         run_label="creative-remix-v4-vite",

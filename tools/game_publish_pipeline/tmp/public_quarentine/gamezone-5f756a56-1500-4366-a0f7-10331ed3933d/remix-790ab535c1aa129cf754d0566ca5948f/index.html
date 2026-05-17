@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Metro Crossing Control</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] repaired: font-catalog-remap | element: head | action: use approved catalogs/fonts.json URLs and remove legacy mirrored font refs -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #08111d;
+            --bg-bottom: #13293d;
+            --rail-shadow: #091019;
+            --hud-glow: rgba(94, 234, 212, 0.4);
+            --panel-bg: rgba(4, 15, 24, 0.78);
+            --panel-border: rgba(103, 232, 249, 0.35);
+            --signal-red: #ff5b6e;
+            --signal-amber: #ffd166;
+            --signal-mint: #7af7d0;
+            --track-steel: #b9d6e2;
+            --road-base: #314758;
+            --road-edge: #1d2f3c;
+            --text-main: #f4fbff;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(103, 232, 249, 0.18), transparent 34%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            font-family: 'Exo 2', system-ui, sans-serif;
+            color: var(--text-main);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.06), transparent 28%),
+                repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 10px);
+            mix-blend-mode: screen;
+            opacity: 0.45;
+        }
+
+        canvas { display: block; touch-action: none; }
+
+        .glass {
+            background: linear-gradient(180deg, rgba(10, 24, 39, 0.9), rgba(5, 14, 23, 0.82));
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 14px 36px rgba(0, 0, 0, 0.45), 0 0 24px rgba(34, 211, 238, 0.14);
+        }
+
+        .hud-chip {
+            background: linear-gradient(180deg, rgba(8, 24, 37, 0.92), rgba(6, 15, 24, 0.78));
+            border: 1px solid rgba(122, 247, 208, 0.4);
+            box-shadow: 0 0 14px rgba(122, 247, 208, 0.18);
+        }
+
+        .title-font {
+            font-family: 'Orbitron', 'Exo 2', sans-serif;
+            letter-spacing: 0.06em;
+        }
+
+        .ui-copy {
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+
+        .pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 0.82; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.82; transform: scale(1); } }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-2px, 0, 0); } 20%, 80% { transform: translate3d(4px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-8px, 0, 0); } 40%, 60% { transform: translate3d(8px, 0, 0); } }
+        @keyframes popin { from { opacity: 0; transform: scale(0.88) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+        .reaction-badge {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(34vw, 180px);
+            min-width: 108px;
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.16);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+            background: rgba(5, 14, 23, 0.8);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 180ms ease;
+            z-index: 30;
+        }
+
+        .reaction-badge.visible {
+            opacity: 1;
+            animation: popin 220ms ease;
+        }
+
+        .reaction-badge img {
+            width: 100%;
+            display: block;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+        }
+
+        .reaction-badge figcaption {
+            font-size: 0.7rem;
+            line-height: 1.2;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            padding: 0.4rem 0.55rem 0.5rem;
+            color: #d7f9ff;
+            text-align: center;
+            background: linear-gradient(180deg, rgba(2, 132, 199, 0.25), rgba(8, 47, 73, 0.82));
+        }
+
+        #warning-reaction { top: 1rem; }
+        #crash-reaction {
+            bottom: 1rem;
+            width: min(42vw, 220px);
+        }
+
+        @media (max-width: 640px) {
+            #hud { top: 0.75rem; left: 0.75rem; right: 0.75rem; }
+            #start-screen, #game-over-screen {
+                width: min(92vw, 24rem);
+                padding: 1.25rem;
+                border-radius: 1rem;
+            }
+            .reaction-badge {
+                width: min(42vw, 150px);
+            }
+            #warning-reaction { top: 0.75rem; }
+            #crash-reaction { bottom: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "carSpeed": { "type": "number", "label": "Car Speed", "value": 150, "min": 50, "max": 400 },
+    "trainSpeed": { "type": "number", "label": "Train Speed", "value": 1200, "min": 500, "max": 2000 },
+    "spawnRate": { "type": "number", "label": "Car Spawn Rate (ms)", "value": 1200, "min": 500, "max": 3000 },
+    "trainInterval": { "type": "number", "label": "Train Interval (s)", "value": 5, "min": 3, "max": 10 }
+}
+</script>
+
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-font: title/ui -> Orbitron + Exo 2 from catalogs/fonts.json -->
+<!-- [agent-note][stage3] resolved-audio: loop/ui/score/warning/crash -> catalogs/audios.json -->
+<!-- [agent-note][stage3] resolved-gif: train-warning + crash-feedback -> catalogs/gifs.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM Crossing Loop" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_score" data-editable="audio" data-label="Score Reward" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3" preload="auto"></audio>
+<audio id="sfx_crash" data-editable="audio" data-label="Crash Burst" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3" preload="auto"></audio>
+<audio id="sfx_warning" data-editable="audio" data-label="Train Warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+<audio id="sfx_ui" data-editable="audio" data-label="UI Click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_start" data-editable="audio" data-label="Start Shift" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+
+<!-- UI Structure -->
+<div id="game-container" class="relative w-full h-full select-none">
+    <canvas id="gameCanvas"></canvas>
+
+    <figure id="warning-reaction" class="reaction-badge" aria-live="polite">
+        <img src="https://i.giphy.com/CITHEXm15BmhHVGZHq.webp" alt="Animated warning reaction for incoming train">
+        <figcaption class="title-font">Incoming train</figcaption>
+    </figure>
+
+    <figure id="crash-reaction" class="reaction-badge" aria-live="polite">
+        <img src="https://i.giphy.com/wY1So1mO4gaNbntT0r.webp" alt="Animated crash reaction">
+        <figcaption class="title-font">Crossing breach</figcaption>
+    </figure>
+    
+    <!-- HUD -->
+    <div id="hud" class="absolute top-4 left-4 hidden z-10">
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+        <div class="hud-chip rounded-2xl px-4 py-2 text-white shadow-lg">
+            <div class="text-[0.72rem] uppercase tracking-[0.32em] text-cyan-200/80">Signal Captain</div>
+            <div class="title-font text-xl sm:text-2xl text-white drop-shadow-md">Cars Guided: <span id="scoreVal" class="text-emerald-300">0</span></div>
+        </div>
+    </div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none">
+        
+        <!-- Start Screen -->
+        <div id="start-screen" class="glass p-8 rounded-xl text-center pointer-events-auto transform transition-all duration-300">
+            <!-- [agent-note][stage2] visual-intent: neon-crossing command booth | scope: menus,hud -->
+            <div class="mb-4 flex items-center justify-center gap-3 text-4xl">
+                <span aria-hidden="true">🚦</span>
+                <span aria-hidden="true">🚉</span>
+                <span aria-hidden="true">🛡️</span>
+            </div>
+            <h1 class="title-font text-4xl sm:text-5xl text-cyan-200 mb-2 uppercase drop-shadow-lg">Metro Crossing Control</h1>
+            <p class="ui-copy text-cyan-50/90 text-lg sm:text-xl mb-4 font-semibold tracking-wide">You are the signal captain of the neon line.</p>
+            <p class="ui-copy text-slate-200 text-base sm:text-lg mb-6">Hold to lower the barrier. Release to raise it.</p>
+            <div class="w-full h-2 bg-slate-800/80 mb-6 relative overflow-hidden rounded-full border border-cyan-200/20">
+                <div class="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-300 via-cyan-300 to-amber-300 w-1/3 animate-pulse"></div>
+            </div>
+            <button id="start-btn" class="title-font bg-gradient-to-b from-rose-500 to-red-700 hover:from-rose-400 hover:to-red-600 text-white text-xl sm:text-2xl px-8 sm:px-10 py-3 rounded-xl shadow-[0_5px_0_rgb(127,29,29)] active:shadow-none active:translate-y-1 transition-all uppercase pulse border border-white/10">
+                Begin Watch
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden glass p-8 rounded-xl text-center pointer-events-auto min-w-[300px]">
+            <div class="mb-3 text-4xl" aria-hidden="true">💥🚧</div>
+            <h2 class="title-font text-3xl sm:text-4xl text-rose-400 mb-2 uppercase drop-shadow-md">Crossing Breach</h2>
+            <div class="ui-copy text-white text-xl sm:text-2xl mb-6">Cars Guided: <span id="finalScore" class="text-amber-300 font-bold">0</span></div>
+            <button id="restart-btn" class="title-font bg-gradient-to-b from-amber-300 to-yellow-500 hover:from-yellow-200 hover:to-amber-400 text-slate-950 text-xl sm:text-2xl px-8 sm:px-10 py-3 rounded-xl shadow-[0_5px_0_rgb(161,98,7)] active:shadow-none active:translate-y-1 transition-all uppercase border border-white/20">
+                Restart Watch
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO MANAGER
+ * Handles BGM, SFX and synthesis fallbacks without blocking gameplay.
+ */
+class AudioManager {
+    constructor() {
+        this.ctx = null;
+        this.bgm = document.getElementById('bgm_main');
+        this.sfxBuffers = {};
+        this.unlocked = false;
+        this.lastPlayed = {};
+        this.fallbackMap = {
+            score: 'beep',
+            crash: 'explosion',
+            warning: 'alarm',
+            ui: 'tick',
+            start: 'startTone'
+        };
+
+        const unlock = () => {
+            this.unlock();
+            ['pointerdown', 'keydown'].forEach(e => document.removeEventListener(e, unlock));
+        };
+        ['pointerdown', 'keydown'].forEach(e => document.addEventListener(e, unlock, { once: true }));
+    }
+
+    ensureContext() {
+        if (!this.ctx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return null;
+            this.ctx = new Ctx();
+        }
+        return this.ctx;
+    }
+
+    async unlock() {
+        const ctx = this.ensureContext();
+        if (!ctx || this.unlocked) return;
+        try {
+            await ctx.resume();
+            this.unlocked = true;
+            this.primeSounds();
+            this.playBgm();
+        } catch (e) {
+            console.warn('Audio unlock failed', e);
+        }
+    }
+
+    primeSounds() {
+        this.loadSound('score', document.getElementById('sfx_score').src);
+        this.loadSound('crash', document.getElementById('sfx_crash').src);
+        this.loadSound('warning', document.getElementById('sfx_warning').src);
+        this.loadSound('ui', document.getElementById('sfx_ui').src);
+        this.loadSound('start', document.getElementById('sfx_start').src);
+    }
+
+    async loadSound(id, src) {
+        const ctx = this.ensureContext();
+        if (!ctx || this.sfxBuffers[id]) return;
+        try {
+            const res = await fetch(src);
+            const arrayBuffer = await res.arrayBuffer();
+            this.sfxBuffers[id] = await ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn(`Audio load failed for ${id}, using fallback ${this.fallbackMap[id]}`);
+            this.sfxBuffers[id] = this.fallbackMap[id];
+        }
+    }
+
+    playBgm() {
+        if (!this.bgm) return;
+        this.bgm.volume = 0.22;
+        this.bgm.play().catch(() => {});
+    }
+
+    pauseBgm() {
+        if (this.bgm && !this.bgm.paused) {
+            this.bgm.pause();
+        }
+    }
+
+    resumeBgm() {
+        if (this.unlocked) this.playBgm();
+    }
+
+    playSfx(id, minGap = 90) {
+        const ctx = this.ensureContext();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+        }
+
+        const now = performance.now();
+        if (this.lastPlayed[id] && now - this.lastPlayed[id] < minGap) return;
+        this.lastPlayed[id] = now;
+
+        const buffer = this.sfxBuffers[id];
+        if (buffer instanceof AudioBuffer) {
+            const source = ctx.createBufferSource();
+            const gain = ctx.createGain();
+            source.buffer = buffer;
+            gain.gain.value = id === 'crash' ? 0.42 : id === 'warning' ? 0.18 : 0.24;
+            source.connect(gain);
+            gain.connect(ctx.destination);
+            source.start(0);
+        } else {
+            this.synthesize(buffer || this.fallbackMap[id] || 'tick');
+        }
+    }
+
+    synthesize(type) {
+        const ctx = this.ensureContext();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'beep') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.12);
+        } else if (type === 'explosion') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(120, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.35);
+            gain.gain.setValueAtTime(0.22, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.35);
+        } else if (type === 'alarm') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(540, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(680, ctx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.07, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.12);
+        } else if (type === 'startTone') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(420, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(700, ctx.currentTime + 0.16);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.18);
+        } else {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(620, ctx.currentTime);
+            gain.gain.setValueAtTime(0.05, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.08);
+        }
+    }
+}
+
+/**
+ * GAME ENGINE
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+const warningReaction = document.getElementById('warning-reaction');
+const crashReaction = document.getElementById('crash-reaction');
+let audioManager;
+
+// Config Proxy
+window.gameConfigDefs = JSON.parse(document.getElementById('game-config').textContent);
+window.gameConfig = {};
+Object.keys(window.gameConfigDefs).forEach(k => window.gameConfig[k] = window.gameConfigDefs[k].value);
+
+window.updateGameConfig = (key, val) => {
+    if (window.gameConfig.hasOwnProperty(key)) {
+        window.gameConfig[key] = val;
+        if (key === 'carSpeed') Game.cars.forEach(c => c.baseSpeed = val);
+    }
+};
+
+// State
+let lastTime = 0;
+let isGameOver = false;
+let isPlaying = false;
+let score = 0;
+let dpr = 1;
+
+// Input State
+let inputActive = false;
+
+// Entities
+const Game = {
+    cars: [],
+    particles: [],
+    train: null,
+    gate: { angle: 0, targetAngle: 0, state: 'open' },
+    roadX: 0,
+    roadW: 0,
+    trackY: 0,
+    trackH: 0,
+    nextCarTime: 0,
+    nextTrainTime: 0,
+    shake: 0,
+    warningCuePlayed: false
+};
+
+function showReaction(el, ms = 1400) {
+    el.classList.add('visible');
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => el.classList.remove('visible'), ms);
+}
+
+// Resize Handler
+function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const { width, height } = document.body.getBoundingClientRect();
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    Game.roadW = Math.min(width * 0.3, 150);
+    Game.roadX = width / 2 - Game.roadW / 2;
+    Game.trackH = 60;
+    Game.trackY = height * 0.4;
+}
+
+// Particle System
+class Particle {
+    constructor(x, y, color, speed) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.vx = (Math.random() - 0.5) * speed;
+        this.vy = (Math.random() - 0.5) * speed;
+        this.life = 1.0;
+        this.decay = 0.02 + Math.random() * 0.03;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, 4, 4);
+        ctx.globalAlpha = 1;
+    }
+}
+
+function spawnParticles(x, y, color, count = 10, speed = 100) {
+    for (let i = 0; i < count; i++) {
+        Game.particles.push(new Particle(x, y, color, speed));
+    }
+}
+
+// Car Entity
+class Car {
+    constructor() {
+        this.w = Game.roadW * 0.6;
+        this.h = this.w * 1.5;
+        this.x = Game.roadX + (Game.roadW - this.w) / 2;
+        this.y = canvas.height / dpr + this.h;
+        this.color = ['#5eead4', '#fda4af', '#93c5fd', '#fcd34d', '#c4b5fd'][Math.floor(Math.random() * 5)];
+        this.speed = window.gameConfig.carSpeed * (0.8 + Math.random() * 0.4);
+        this.stopped = false;
+        this.scored = false;
+        this.id = Math.random().toString(36);
+    }
+
+    update(dt) {
+        const gateY = Game.trackY + Game.trackH + 10;
+        const distToGate = this.y - gateY;
+        const safeDist = 20;
+
+        if (Game.gate.state === 'closed' && distToGate > 0 && distToGate < safeDist + this.h) {
+            this.stopped = true;
+        } else {
+            this.stopped = false;
+        }
+
+        if (!this.stopped) {
+            this.y -= this.speed * dt;
+        }
+
+        if (!this.scored && this.y < -100) {
+            score++;
+            this.scored = true;
+            document.getElementById('scoreVal').innerText = score;
+            audioManager.playSfx('score', 70);
+            if (score % 3 === 0) {
+                showReaction(warningReaction, 900);
+            }
+        }
+    }
+
+    draw(ctx) {
+        const wheelW = this.w * 0.16;
+        const wheelH = this.h * 0.12;
+        const cabInset = this.w * 0.14;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(this.w * 0.08, this.h * 0.12, wheelW, wheelH);
+        ctx.fillRect(this.w * 0.76, this.h * 0.12, wheelW, wheelH);
+        ctx.fillRect(this.w * 0.08, this.h * 0.76, wheelW, wheelH);
+        ctx.fillRect(this.w * 0.76, this.h * 0.76, wheelW, wheelH);
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.roundRect(0, 0, this.w, this.h, 12);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(this.w * 0.08, this.h * 0.08, this.w * 0.18, this.h * 0.72);
+
+        ctx.fillStyle = '#082f49';
+        ctx.beginPath();
+        ctx.roundRect(cabInset, this.h * 0.14, this.w - cabInset * 2, this.h * 0.36, 8);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.72)';
+        ctx.fillRect(this.w * 0.28, this.h * 0.2, this.w * 0.12, this.h * 0.16);
+        ctx.fillRect(this.w * 0.6, this.h * 0.2, this.w * 0.12, this.h * 0.16);
+
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(this.w * 0.24, this.h * 0.06, 4, 0, Math.PI * 2);
+        ctx.arc(this.w * 0.76, this.h * 0.06, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fb7185';
+        ctx.fillRect(this.w * 0.2, this.h * 0.64, this.w * 0.6, this.h * 0.08);
+
+        ctx.restore();
+    }
+}
+
+// Train Entity
+class Train {
+    constructor() {
+        this.w = 300;
+        this.h = Game.trackH - 10;
+        this.dir = Math.random() > 0.5 ? 1 : -1;
+        this.x = this.dir === 1 ? -this.w : (canvas.width / dpr) + this.w;
+        this.y = Game.trackY + 5;
+        this.speed = window.gameConfig.trainSpeed;
+        this.state = 'warning';
+        this.warningTime = 2.0;
+        this.passed = false;
+        this.warningTimer = 0;
+    }
+
+    update(dt) {
+        if (this.state === 'warning') {
+            this.warningTimer += dt;
+            if (this.warningTimer % 0.65 < dt) {
+                audioManager.playSfx('warning', 250);
+            }
+            if (!Game.warningCuePlayed) {
+                Game.warningCuePlayed = true;
+                showReaction(warningReaction, 1700);
+            }
+            if (this.warningTimer >= this.warningTime) {
+                this.state = 'passing';
+                warningReaction.classList.remove('visible');
+            }
+        } else {
+            this.x += this.speed * this.dir * dt;
+
+            const screenW = canvas.width / dpr;
+            const centerDist = Math.abs((this.x + this.w / 2) - screenW / 2);
+            if (centerDist < screenW / 2) {
+                Game.shake = (1 - centerDist / (screenW / 2)) * 5;
+            }
+
+            if ((this.dir === 1 && this.x > screenW + 100) || (this.dir === -1 && this.x < -this.w - 100)) {
+                this.passed = true;
+            }
+        }
+    }
+
+    draw(ctx) {
+        if (this.state === 'warning') return;
+
+        ctx.save();
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath();
+        ctx.roundRect(this.x, this.y, this.w, this.h, 16);
+        ctx.fill();
+
+        ctx.fillStyle = '#7c2d12';
+        ctx.fillRect(this.x, this.y + this.h * 0.54, this.w, this.h * 0.14);
+
+        ctx.fillStyle = '#082f49';
+        for (let i = 12; i < this.w - 20; i += 42) {
+            ctx.beginPath();
+            ctx.roundRect(this.x + i, this.y + 8, 24, 14, 5);
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(this.x + (this.dir === 1 ? this.w - 18 : 18), this.y + this.h / 2, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// Game Loop
+function update(dt) {
+    if (isGameOver) return;
+
+    const gateSpeed = 10;
+    const target = inputActive ? Math.PI / 2 : 0;
+    const diff = target - Game.gate.angle;
+
+    if (Math.abs(diff) > 0.01) {
+        Game.gate.angle += Math.sign(diff) * Math.min(Math.abs(diff), gateSpeed * dt);
+    } else {
+        Game.gate.angle = target;
+    }
+
+    Game.gate.state = Game.gate.angle > Math.PI / 4 ? 'closed' : 'open';
+
+    Game.nextCarTime -= dt * 1000;
+    if (Game.nextCarTime <= 0) {
+        Game.cars.push(new Car());
+        Game.nextCarTime = window.gameConfig.spawnRate;
+    }
+
+    if (!Game.train) {
+        Game.nextTrainTime -= dt;
+        if (Game.nextTrainTime <= 0) {
+            Game.warningCuePlayed = false;
+            Game.train = new Train();
+        }
+    } else {
+        Game.train.update(dt);
+        if (Game.train.passed) {
+            warningReaction.classList.remove('visible');
+            Game.train = null;
+            Game.nextTrainTime = window.gameConfig.trainInterval;
+        }
+    }
+
+    for (let i = Game.cars.length - 1; i >= 0; i--) {
+        const c = Game.cars[i];
+        c.update(dt);
+
+        if (c.y < -200) {
+            Game.cars.splice(i, 1);
+            continue;
+        }
+
+        if (Game.train && Game.train.state === 'passing') {
+            const tx = Game.train.x;
+            const ty = Game.train.y;
+            const tw = Game.train.w;
+            const th = Game.train.h;
+
+            if (c.x < tx + tw && c.x + c.w > tx &&
+                c.y < ty + th && c.y + c.h > ty) {
+                gameOver();
+            }
+        }
+    }
+
+    Game.particles.forEach((p, i) => {
+        p.update();
+        if (p.life <= 0) Game.particles.splice(i, 1);
+    });
+
+    Game.shake *= 0.9;
+    if (Game.shake < 0.5) Game.shake = 0;
+}
+
+function draw() {
+    const W = canvas.width / dpr;
+    const H = canvas.height / dpr;
+
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, H);
+    skyGradient.addColorStop(0, '#08111d');
+    skyGradient.addColorStop(0.45, '#0f2233');
+    skyGradient.addColorStop(1, '#16384f');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, W, H);
+
+    const cityGlow = ctx.createRadialGradient(W * 0.5, H * 0.12, 20, W * 0.5, H * 0.12, W * 0.55);
+    cityGlow.addColorStop(0, 'rgba(103, 232, 249, 0.18)');
+    cityGlow.addColorStop(1, 'rgba(103, 232, 249, 0)');
+    ctx.fillStyle = cityGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#17344a';
+    ctx.fillRect(0, H * 0.18, W, H * 0.82);
+
+    ctx.save();
+    if (Game.shake > 0) {
+        const dx = (Math.random() - 0.5) * Game.shake;
+        const dy = (Math.random() - 0.5) * Game.shake;
+        ctx.translate(dx, dy);
+    }
+
+    const roadGradient = ctx.createLinearGradient(Game.roadX, 0, Game.roadX + Game.roadW, 0);
+    roadGradient.addColorStop(0, '#1d2f3c');
+    roadGradient.addColorStop(0.5, '#314758');
+    roadGradient.addColorStop(1, '#1d2f3c');
+    ctx.fillStyle = roadGradient;
+    ctx.fillRect(Game.roadX, 0, Game.roadW, H);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(Game.roadX + 6, 0, 3, H);
+    ctx.fillRect(Game.roadX + Game.roadW - 9, 0, 3, H);
+
+    ctx.strokeStyle = '#CFD8DC';
+    ctx.setLineDash([20, 20]);
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(Game.roadX + Game.roadW / 2, 0);
+    ctx.lineTo(Game.roadX + Game.roadW / 2, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#2c1a10';
+    const tieW = 12;
+    for (let i = 0; i < W; i += 22) {
+        ctx.fillRect(i, Game.trackY, tieW, Game.trackH);
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(0, Game.trackY, W, Game.trackH);
+
+    ctx.fillStyle = '#b9d6e2';
+    ctx.fillRect(0, Game.trackY + 10, W, 5);
+    ctx.fillRect(0, Game.trackY + Game.trackH - 15, W, 5);
+    ctx.fillStyle = 'rgba(122, 247, 208, 0.16)';
+    ctx.fillRect(0, Game.trackY - 3, W, 3);
+    ctx.fillRect(0, Game.trackY + Game.trackH, W, 3);
+
+    if (Game.train && Game.train.state === 'warning') {
+        const blink = Math.floor(Date.now() / 200) % 2 === 0;
+        if (blink) {
+            ctx.fillStyle = 'rgba(255, 91, 110, 0.2)';
+            ctx.fillRect(0, Game.trackY - 22, W, Game.trackH + 44);
+        }
+        ctx.fillStyle = blink ? 'rgba(255, 209, 102, 0.28)' : 'rgba(103, 232, 249, 0.12)';
+        ctx.fillRect(Game.roadX - 12, 0, Game.roadW + 24, H);
+    }
+
+    Game.cars.forEach(c => c.draw(ctx));
+    if (Game.train) Game.train.draw(ctx);
+
+    const gatePivotX = Game.roadX + Game.roadW + 10;
+    const gatePivotY = Game.trackY + Game.trackH + 15;
+
+    ctx.save();
+    ctx.translate(gatePivotX, gatePivotY);
+    ctx.rotate(Math.PI - Game.gate.angle);
+    ctx.rotate(-Game.gate.angle);
+
+    const armLen = Game.roadW + 20;
+    ctx.fillStyle = '#ff5b6e';
+    ctx.fillRect(-6, -armLen, 12, armLen);
+
+    ctx.fillStyle = '#FFF';
+    for (let i = 10; i < armLen; i += 20) {
+        ctx.fillRect(-5, -armLen + i, 10, 10);
+    }
+    ctx.restore();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(gatePivotX, gatePivotY, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7af7d0';
+    ctx.beginPath();
+    ctx.arc(gatePivotX, gatePivotY, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (Game.train && Game.train.state === 'warning') {
+        const blink = Math.floor(Date.now() / 100) % 2;
+        ctx.fillStyle = blink ? '#F44336' : '#550000';
+        ctx.beginPath();
+        ctx.arc(gatePivotX, gatePivotY - 15, 6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    Game.particles.forEach(p => p.draw(ctx));
+
+    ctx.restore();
+}
+
+function gameLoop(time) {
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+
+    if (isPlaying) {
+        try {
+            update(dt);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+function gameOver() {
+    isGameOver = true;
+    isPlaying = false;
+    audioManager.playSfx('crash', 120);
+    audioManager.pauseBgm();
+    Game.shake = 20;
+    showReaction(crashReaction, 2200);
+
+    const flash = document.createElement('div');
+    flash.className = 'absolute inset-0 bg-red-600 z-40';
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 100);
+
+    document.getElementById('finalScore').innerText = score;
+    document.getElementById('game-over-screen').classList.remove('hidden');
+    document.getElementById('hud').classList.add('hidden');
+}
+
+function resetGame(fromRestart = false) {
+    Game.cars = [];
+    Game.particles = [];
+    Game.train = null;
+    Game.nextCarTime = 0;
+    Game.nextTrainTime = 2;
+    Game.gate.angle = 0;
+    Game.warningCuePlayed = false;
+    score = 0;
+    inputActive = false;
+    document.getElementById('scoreVal').innerText = '0';
+    isGameOver = false;
+    isPlaying = true;
+    warningReaction.classList.remove('visible');
+    crashReaction.classList.remove('visible');
+
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+
+    audioManager.unlock();
+    audioManager.playSfx(fromRestart ? 'ui' : 'start', 100);
+    audioManager.resumeBgm();
+}
+
+// Initialization
+document.addEventListener('DOMContentLoaded', () => {
+    audioManager = new AudioManager();
+    resize();
+    window.addEventListener('resize', resize);
+
+    const handleDown = (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        e.preventDefault();
+        inputActive = true;
+    };
+    const handleUp = (e) => {
+        e.preventDefault();
+        inputActive = false;
+    };
+
+    canvas.addEventListener('pointerdown', handleDown, { passive: false });
+    document.addEventListener('pointerup', handleUp, { passive: false });
+    document.addEventListener('pointercancel', handleUp, { passive: false });
+
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+
+    startBtn.addEventListener('click', () => {
+        resetGame(false);
+    });
+    restartBtn.addEventListener('click', () => {
+        resetGame(true);
+    });
+
+    [startBtn, restartBtn].forEach(btn => {
+        btn.addEventListener('pointerenter', () => audioManager.playSfx('ui', 120));
+        btn.addEventListener('focus', () => audioManager.playSfx('ui', 120));
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            audioManager.pauseBgm();
+        } else if (isPlaying && !isGameOver) {
+            audioManager.resumeBgm();
+        }
+    });
+
+    requestAnimationFrame(gameLoop);
+});
+</script>
+</body>
+</html>

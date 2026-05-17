@@ -1,0 +1,899 @@
+<![CDATA[<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Cash Grid: Escape Run</title>
+    <!-- [agent-note][stage4] remapped-font: display=Russo One, ui=Exo 2 via catalogs/fonts.json -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&display=swap">
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg-deep: #040816;
+            --bg-mid: #0a1630;
+            --panel-fill: rgba(8, 18, 40, 0.84);
+            --panel-stroke: rgba(111, 235, 255, 0.26);
+            --text-main: #effbff;
+            --text-muted: #b7cfe5;
+            --cyan: #62f3ff;
+            --mint: #7dffcb;
+            --gold: #ffd64a;
+            --danger: #ff4d88;
+            --danger-strong: #ff215f;
+            --shadow: rgba(0, 0, 0, 0.55);
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(98, 243, 255, 0.12), transparent 34%),
+                radial-gradient(circle at bottom, rgba(255, 77, 136, 0.09), transparent 28%),
+                linear-gradient(180deg, var(--bg-mid), var(--bg-deep));
+            font-family: 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+        }
+
+        body {
+            color: var(--text-main);
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+
+        button {
+            font: inherit;
+            cursor: pointer;
+            border: 0;
+        }
+
+        .glass {
+            background:
+                linear-gradient(180deg, rgba(15, 35, 70, 0.82), rgba(6, 13, 30, 0.92)),
+                var(--panel-fill);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-stroke);
+            box-shadow:
+                0 10px 28px var(--shadow),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+                0 0 24px rgba(98, 243, 255, 0.08);
+        }
+
+        .neon-text {
+            text-shadow: 0 0 12px rgba(98, 243, 255, 0.32), 0 0 28px rgba(125, 255, 203, 0.18);
+        }
+
+        .neon-red {
+            text-shadow: 0 0 12px rgba(255, 77, 136, 0.48), 0 0 26px rgba(255, 33, 95, 0.2);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: 0.85rem;
+            width: clamp(80px, 20vw, 126px);
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(5, 10, 24, 0.74);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+            opacity: 0;
+            transform: translateY(12px) scale(0.96);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            object-fit: cover;
+            pointer-events: none;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+
+        #collect-gif {
+            top: 1rem;
+        }
+
+        #danger-gif {
+            bottom: 1rem;
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        #hud {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+            padding: 0.7rem 0.85rem 0.75rem;
+            border-radius: 1rem;
+            background: linear-gradient(180deg, rgba(5, 15, 36, 0.84), rgba(5, 15, 36, 0.56));
+            border: 1px solid rgba(98, 243, 255, 0.24);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+        }
+
+        #hud.hidden,
+        #game-over-screen.hidden {
+            display: none;
+        }
+
+        .hud-score {
+            font-family: 'Russo One', 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(1.45rem, 4vw, 2.1rem);
+            color: var(--gold);
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .hud-level {
+            margin-top: 0.05rem;
+            font-size: clamp(0.85rem, 2vw, 1rem);
+            color: var(--cyan);
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            opacity: 0.9;
+        }
+
+        .panel {
+            position: relative;
+            width: min(92vw, 34rem);
+            padding: 1.5rem 1.2rem 1.35rem;
+            border-radius: 1.25rem;
+            text-align: center;
+            pointer-events: auto;
+            border-top-width: 4px;
+            border-top-style: solid;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            overflow: hidden;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(120deg, transparent 0%, rgba(98, 243, 255, 0.06) 40%, transparent 70%),
+                radial-gradient(circle at top right, rgba(255, 214, 74, 0.14), transparent 26%);
+            pointer-events: none;
+        }
+
+        #start-screen {
+            border-top-color: var(--gold);
+        }
+
+        #start-screen:hover {
+            transform: translateY(-2px) scale(1.01);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42), 0 0 28px rgba(98, 243, 255, 0.08);
+        }
+
+        #game-over-screen {
+            border-top-color: var(--danger);
+        }
+
+        .title {
+            margin: 0 0 0.45rem;
+            font-family: 'Russo One', 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(2.35rem, 9vw, 4.1rem);
+            font-weight: 400;
+            line-height: 0.95;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            margin: 0 0 1.2rem;
+            color: var(--cyan);
+            font-size: clamp(0.98rem, 3vw, 1.2rem);
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+
+        .instruction {
+            margin: 0 0 0.8rem;
+            color: var(--text-muted);
+            font-size: clamp(0.95rem, 2.6vw, 1.05rem);
+            line-height: 1.45;
+            letter-spacing: 0.03em;
+        }
+
+        .button {
+            position: relative;
+            display: inline-block;
+            padding: 0.82rem 1.7rem;
+            border-radius: 999px;
+            font-family: 'Russo One', 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(0.98rem, 3vw, 1.25rem);
+            font-weight: 400;
+            letter-spacing: 0.08em;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+            transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .button:active {
+            transform: scale(0.96);
+        }
+
+        .button:hover {
+            filter: brightness(1.06);
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4);
+        }
+
+        .button-gold {
+            background: linear-gradient(180deg, #ffe27a, #ffc933);
+            color: #07111f;
+        }
+
+        .button-gold:hover {
+            background: linear-gradient(180deg, #ffea98, #ffd64a);
+        }
+
+        .button-red {
+            background: linear-gradient(180deg, #ff5f90, #ff2f67);
+            color: #ffffff;
+        }
+
+        .button-red:hover {
+            background: linear-gradient(180deg, #ff79a1, #ff4d88);
+        }
+
+        .game-over-title {
+            margin: 0 0 0.5rem;
+            font-family: 'Russo One', 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(2.1rem, 8vw, 3.4rem);
+            font-weight: 400;
+            color: var(--danger);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .final-score {
+            margin: 0 0 1.2rem;
+            font-size: clamp(1.05rem, 4vw, 1.5rem);
+            color: #ffffff;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .final-score span {
+            color: var(--gold);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.72; }
+            50% { opacity: 1; }
+        }
+
+        @media (max-width: 640px) {
+            #hud {
+                top: 0.75rem;
+                left: 0.75rem;
+                padding: 0.55rem 0.7rem 0.6rem;
+            }
+
+            .panel {
+                width: min(92vw, 28rem);
+                padding: 1.2rem 1rem 1.1rem;
+                border-radius: 1rem;
+            }
+
+            .subtitle {
+                letter-spacing: 0.18em;
+            }
+
+            .instruction {
+                font-size: 0.95rem;
+            }
+
+            .feedback-gif {
+                width: 84px;
+                right: 0.55rem;
+            }
+
+            #collect-gif {
+                top: 0.8rem;
+            }
+
+            #danger-gif {
+                bottom: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<script id="game-config" type="application/x-game-config">
+{
+    "heroSpeed": { "type": "number", "label": "Runner Speed", "value": 300, "min": 100, "max": 600 },
+    "enemySpeed": { "type": "number", "label": "Scanner Speed", "value": 180, "min": 50, "max": 400 },
+    "themeColor": { "type": "color", "label": "Trail Color", "value": "#00ff88" },
+    "gameTitle": { "type": "text", "label": "Game Title", "value": "ESCAPE GRID" }
+}
+</script>
+
+<!-- [agent-note][stage3] resolved-audio: bgm/pickup/fail/ui/levelup -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM Escape Run" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" preload="auto" loop></audio>
+<audio id="sfx_coin" data-editable="audio" data-label="SFX Pickup" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_fail" data-editable="audio" data-label="SFX Capture" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+<audio id="sfx_start" data-editable="audio" data-label="SFX Start" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+<audio id="sfx_levelup" data-editable="audio" data-label="SFX Level Up" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3" preload="auto"></audio>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <!-- [agent-note][stage3] resolved-gif: collect/fail feedback -> catalogs/gifs.json -->
+        <img id="collect-gif" class="feedback-gif" src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.gif" alt="Collect streak reaction" loading="lazy" decoding="async">
+        <img id="danger-gif" class="feedback-gif" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.gif" alt="Caught reaction" loading="lazy" decoding="async">
+        <div id="hud" class="hidden">
+            <div class="hud-score neon-text">
+                <span id="score">0</span> DATA
+            </div>
+            <div class="hud-level">SCAN LEVEL: <span id="level">1</span></div>
+        </div>
+
+        <div id="start-screen" class="glass panel">
+            <h1 id="ui-title" class="title neon-text">ESCAPE GRID</h1>
+            <p class="subtitle">Slip past the scanners.</p>
+            <p class="instruction">Hold or drag on the arena to steer your runner.</p>
+            <p class="instruction">Collect data sparks, but do not let the red scanners catch you.</p>
+            <button id="start-btn" class="button button-gold">START RUN</button>
+        </div>
+
+        <div id="game-over-screen" class="hidden glass panel">
+            <h2 class="game-over-title neon-red">CAUGHT</h2>
+            <div class="final-score">DATA SECURED: <span id="finalScore">0</span></div>
+            <button id="restart-btn" class="button button-red">RUN AGAIN</button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const defaultConfig = {
+        heroSpeed: 300,
+        enemySpeed: 180,
+        themeColor: "#00ff88",
+        gameTitle: "ESCAPE GRID"
+    };
+
+    window.gameConfig = { ...defaultConfig };
+    window.gameConfigDefs = {};
+
+    try {
+        const rawConfig = document.getElementById('game-config').textContent;
+        const parsed = JSON.parse(rawConfig);
+        for (const key in parsed) {
+            window.gameConfigDefs[key] = parsed[key];
+            window.gameConfig[key] = parsed[key].value;
+        }
+    } catch (e) {
+        console.error("Config parse error", e);
+    }
+
+    const titleEl = document.getElementById('ui-title');
+    if (titleEl) titleEl.innerText = window.gameConfig.gameTitle;
+
+    window.updateGameConfig = (key, val) => {
+        if (window.gameConfig.hasOwnProperty(key)) {
+            window.gameConfig[key] = val;
+            if (key === 'gameTitle' && titleEl) titleEl.innerText = val;
+        }
+    };
+
+    class AudioManager {
+        constructor() {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.bgmNode = document.getElementById('bgm_main');
+            this.sfxMap = {
+                'coin': document.getElementById('sfx_coin'),
+                'fail': document.getElementById('sfx_fail'),
+                'start': document.getElementById('sfx_start'),
+                'levelup': document.getElementById('sfx_levelup')
+            };
+            this.unlocked = false;
+            this.lastPlayedAt = {};
+        }
+
+        unlock() {
+            if (this.unlocked) return;
+            this.ctx.resume().then(() => {
+                this.unlocked = true;
+                this.startLoop();
+            }).catch(() => {});
+        }
+
+        startLoop() {
+            if (!this.bgmNode) return;
+            this.bgmNode.volume = 0.2;
+            this.bgmNode.play().catch(() => {});
+        }
+
+        stopLoop() {
+            if (!this.bgmNode) return;
+            this.bgmNode.pause();
+            this.bgmNode.currentTime = 0;
+        }
+
+        playSfx(key) {
+            if (!this.unlocked) return;
+            const now = performance.now();
+            const cooldown = key === 'coin' ? 70 : 120;
+            if (this.lastPlayedAt[key] && now - this.lastPlayedAt[key] < cooldown) return;
+            this.lastPlayedAt[key] = now;
+            const el = this.sfxMap[key];
+            if (el) {
+                el.pause();
+                el.currentTime = 0;
+                el.volume = key === 'fail' ? 0.5 : key === 'levelup' ? 0.42 : 0.35;
+                el.play().catch(() => this.synthesize(key));
+            } else {
+                this.synthesize(key);
+            }
+        }
+
+        synthesize(type) {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            if (type === 'coin') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1800, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            } else if (type === 'fail') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            } else if (type === 'start') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(420, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(760, this.ctx.currentTime + 0.18);
+                gain.gain.setValueAtTime(0.22, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.18);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.18);
+            } else if (type === 'levelup') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(540, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(960, this.ctx.currentTime + 0.22);
+                gain.gain.setValueAtTime(0.24, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.22);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.22);
+            }
+        }
+    }
+
+    const audio = new AudioManager();
+
+    const collectGif = document.getElementById('collect-gif');
+    const dangerGif = document.getElementById('danger-gif');
+    let collectGifTimer = null;
+    let dangerGifTimer = null;
+
+    const flashGif = (node, state, duration = 1100) => {
+        if (!node) return;
+        node.classList.add('visible');
+        if (state === 'collect') {
+            clearTimeout(collectGifTimer);
+            collectGifTimer = setTimeout(() => node.classList.remove('visible'), duration);
+        } else {
+            clearTimeout(dangerGifTimer);
+            dangerGifTimer = setTimeout(() => node.classList.remove('visible'), duration);
+        }
+    };
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    let gameState = 'START';
+    let lastTime = 0;
+    let score = 0;
+    let level = 1;
+    let inputPos = { x: 0, y: 0 };
+    let isPointerDown = false;
+
+    let hero = { x: 0, y: 0, r: 15, trail: [] };
+    let coins = [];
+    let enemies = [];
+    let particles = [];
+    let floatingTexts = [];
+
+    const resize = () => {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        canvas.style.width = window.innerWidth + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        if (gameState === 'START') {
+            hero.x = window.innerWidth / 2;
+            hero.y = window.innerHeight / 2;
+            inputPos = { x: hero.x, y: hero.y };
+        }
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    const handleInput = (e) => {
+        if (gameState !== 'PLAYING') return;
+        const rect = canvas.getBoundingClientRect();
+        inputPos.x = e.clientX - rect.left;
+        inputPos.y = e.clientY - rect.top;
+        isPointerDown = true;
+        audio.unlock();
+    };
+
+    const stopInput = () => {
+        isPointerDown = false;
+    };
+
+    canvas.addEventListener('pointerdown', handleInput, { passive: false });
+    canvas.addEventListener('pointermove', handleInput, { passive: false });
+    canvas.addEventListener('pointerup', stopInput);
+    canvas.addEventListener('pointercancel', stopInput);
+
+    const spawnCoin = () => {
+        const margin = 50;
+        coins.push({
+            x: margin + Math.random() * (window.innerWidth - margin * 2),
+            y: margin + Math.random() * (window.innerHeight - margin * 2),
+            r: 10,
+            val: 100,
+            pulse: 0
+        });
+    };
+
+    const spawnEnemy = () => {
+        const side = Math.floor(Math.random() * 4);
+        let ex, ey;
+        if (side === 0) { ex = Math.random() * window.innerWidth; ey = -50; }
+        else if (side === 1) { ex = window.innerWidth + 50; ey = Math.random() * window.innerHeight; }
+        else if (side === 2) { ex = Math.random() * window.innerWidth; ey = window.innerHeight + 50; }
+        else { ex = -50; ey = Math.random() * window.innerHeight; }
+
+        enemies.push({
+            x: ex,
+            y: ey,
+            r: 12,
+            speed: window.gameConfig.enemySpeed * (1 + (level * 0.1))
+        });
+    };
+
+    const createExplosion = (x, y, color, count) => {
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color: color,
+                size: Math.random() * 4 + 2
+            });
+        }
+    };
+
+    const createFloatingText = (x, y, text) => {
+        floatingTexts.push({ x, y, text, life: 1.0, vy: -50 });
+    };
+
+    const resetGame = () => {
+        hero.x = window.innerWidth / 2;
+        hero.y = window.innerHeight / 2;
+        hero.trail = [];
+        inputPos = { x: hero.x, y: hero.y };
+        score = 0;
+        level = 1;
+        coins = [];
+        enemies = [];
+        particles = [];
+        floatingTexts = [];
+
+        for (let i = 0; i < 3; i++) spawnCoin();
+
+        document.getElementById('score').innerText = score;
+        document.getElementById('level').innerText = level;
+    };
+
+    const gameOver = () => {
+        gameState = 'GAMEOVER';
+        audio.playSfx('fail');
+        audio.stopLoop();
+        flashGif(dangerGif, 'danger', 1600);
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('finalScore').innerText = score;
+
+        canvas.style.transform = 'translate(5px, 5px)';
+        setTimeout(() => canvas.style.transform = 'none', 50);
+        setTimeout(() => canvas.style.transform = 'translate(-5px, -5px)', 100);
+        setTimeout(() => canvas.style.transform = 'none', 150);
+    };
+
+    const loop = (timestamp) => {
+        const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+        lastTime = timestamp;
+
+        try {
+            if (gameState === 'PLAYING') {
+                const dx = inputPos.x - hero.x;
+                const dy = inputPos.y - hero.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > 5) {
+                    const moveStep = window.gameConfig.heroSpeed * dt;
+                    const moveDist = Math.min(dist, moveStep);
+                    const angle = Math.atan2(dy, dx);
+                    hero.x += Math.cos(angle) * moveDist;
+                    hero.y += Math.sin(angle) * moveDist;
+                    hero.trail.push({ x: hero.x, y: hero.y, age: 0 });
+                }
+
+                for (let i = hero.trail.length - 1; i >= 0; i--) {
+                    hero.trail[i].age += dt * 5;
+                    if (hero.trail[i].age > 1) hero.trail.splice(i, 1);
+                }
+
+                coins.forEach((c, i) => {
+                    c.pulse += dt * 5;
+                    const cdx = c.x - hero.x;
+                    const cdy = c.y - hero.y;
+                    if (cdx * cdx + cdy * cdy < (hero.r + c.r) ** 2) {
+                        score += c.val;
+                        coins.splice(i, 1);
+                        audio.playSfx('coin');
+                        flashGif(collectGif, 'collect', 900);
+                        createExplosion(c.x, c.y, '#ffd700', 10);
+                        createFloatingText(c.x, c.y, "+" + c.val + " DATA");
+                        spawnCoin();
+
+                        if (score % 500 === 0) {
+                            level++;
+                            spawnEnemy();
+                            audio.playSfx('levelup');
+                            flashGif(collectGif, 'collect', 1400);
+                            createFloatingText(window.innerWidth / 2, window.innerHeight / 2, "SCAN LEVEL UP!");
+                        }
+                    }
+                });
+
+                if (coins.length < 3) spawnCoin();
+
+                enemies.forEach(e => {
+                    const edx = hero.x - e.x;
+                    const edy = hero.y - e.y;
+                    const angle = Math.atan2(edy, edx);
+                    e.x += Math.cos(angle) * e.speed * dt;
+                    e.y += Math.sin(angle) * e.speed * dt;
+
+                    const distSq = (hero.x - e.x) ** 2 + (hero.y - e.y) ** 2;
+                    if (distSq < (hero.r + e.r) ** 2) {
+                        createExplosion(hero.x, hero.y, '#ff0055', 30);
+                        gameOver();
+                    }
+                });
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    let p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= dt * 2;
+                    if (p.life <= 0) particles.splice(i, 1);
+                }
+
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    let t = floatingTexts[i];
+                    t.y += t.vy * dt;
+                    t.life -= dt;
+                    if (t.life <= 0) floatingTexts.splice(i, 1);
+                }
+
+                document.getElementById('score').innerText = score;
+                document.getElementById('level').innerText = level;
+            }
+
+            const renderWidth = canvas.width / window.devicePixelRatio;
+            const renderHeight = canvas.height / window.devicePixelRatio;
+            const fieldGradient = ctx.createLinearGradient(0, 0, 0, renderHeight);
+            fieldGradient.addColorStop(0, '#0a1430');
+            fieldGradient.addColorStop(1, '#040816');
+            ctx.fillStyle = fieldGradient;
+            ctx.fillRect(0, 0, renderWidth, renderHeight);
+
+            const vignette = ctx.createRadialGradient(
+                renderWidth * 0.5,
+                renderHeight * 0.5,
+                Math.min(renderWidth, renderHeight) * 0.08,
+                renderWidth * 0.5,
+                renderHeight * 0.5,
+                Math.max(renderWidth, renderHeight) * 0.8
+            );
+            vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            vignette.addColorStop(1, 'rgba(2, 6, 16, 0.5)');
+            ctx.fillStyle = vignette;
+            ctx.fillRect(0, 0, renderWidth, renderHeight);
+
+            ctx.strokeStyle = 'rgba(92, 136, 188, 0.22)';
+            ctx.lineWidth = 1.5;
+            const gridSize = 50;
+            const w = renderWidth;
+            const h = renderHeight;
+
+            const offX = -hero.x % gridSize;
+            const offY = -hero.y % gridSize;
+
+            ctx.beginPath();
+            for (let x = offX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+            for (let y = offY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(98, 243, 255, 0.08)';
+            ctx.beginPath();
+            for (let x = offX; x < w; x += gridSize * 4) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+            for (let y = offY; y < h; y += gridSize * 4) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+            ctx.stroke();
+
+            if (hero.trail.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(hero.trail[0].x, hero.trail[0].y);
+                for (let i = 1; i < hero.trail.length; i++) {
+                    ctx.lineTo(hero.trail[i].x, hero.trail[i].y);
+                }
+                ctx.strokeStyle = window.gameConfig.themeColor;
+                ctx.lineWidth = hero.r;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.3;
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            }
+
+            coins.forEach(c => {
+                const scale = 1 + Math.sin(c.pulse) * 0.1;
+                ctx.fillStyle = '#ffd64a';
+                ctx.shadowColor = '#ffd64a';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.r * scale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fff1a8';
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                ctx.fillStyle = '#05101f';
+                ctx.font = '700 10px "Exo 2"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('D', c.x, c.y);
+            });
+
+            enemies.forEach(e => {
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.fillStyle = '#ff2f67';
+                ctx.shadowColor = '#ff2f67';
+                ctx.shadowBlur = 18;
+                ctx.beginPath();
+                ctx.moveTo(0, -e.r - 3);
+                ctx.lineTo(e.r + 3, 0);
+                ctx.lineTo(0, e.r + 3);
+                ctx.lineTo(-e.r - 3, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#ff97b6';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = '#fff2f6';
+                ctx.fillRect(-3, -7, 6, 14);
+                ctx.restore();
+            });
+
+            if (gameState === 'PLAYING') {
+                ctx.save();
+                ctx.translate(hero.x, hero.y);
+                ctx.fillStyle = window.gameConfig.themeColor;
+                ctx.shadowColor = window.gameConfig.themeColor;
+                ctx.shadowBlur = 22;
+                ctx.beginPath();
+                ctx.arc(0, 0, hero.r + 1, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#ecfffb';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, hero.r - 2, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = '#ecfffb';
+                ctx.beginPath();
+                ctx.arc(-4.5, -3.5, 2.2, 0, Math.PI * 2);
+                ctx.arc(4.5, -3.5, 2.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ecfffb';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-5, 5);
+                ctx.quadraticCurveTo(0, 9, 5, 5);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.globalAlpha = 1.0;
+            });
+
+            ctx.font = '700 18px "Exo 2"';
+            floatingTexts.forEach(t => {
+                ctx.fillStyle = `rgba(255, 215, 0, ${t.life})`;
+                ctx.fillText(t.text, t.x, t.y);
+            });
+        } catch (e) {
+            console.error("Game Loop Error:", e);
+        }
+
+        requestAnimationFrame(loop);
+    };
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        audio.unlock();
+        audio.playSfx('start');
+        resetGame();
+        gameState = 'PLAYING';
+    });
+
+    document.getElementById('restart-btn').addEventListener('click', () => {
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        audio.unlock();
+        audio.startLoop();
+        audio.playSfx('start');
+        resetGame();
+        gameState = 'PLAYING';
+    });
+
+    requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>
+]]>

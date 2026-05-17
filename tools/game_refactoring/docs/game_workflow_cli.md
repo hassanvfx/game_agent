@@ -99,6 +99,20 @@ Use `creative_remix_v5` when you want:
 - catalog-backed execution rails instead of a vague mega-prompt
 - a single-node workflow that still preserves blueprint, rebuild, worlding, visuals, media, and QA obligations
 
+### `creative_remix_v6`
+
+The `creative_remix_v6` workflow is the semantic-clone + super-operator variant. It runs these nodes:
+
+1. `remix_v6_semantic_inference_plus`
+2. `remix_v6_super_operator`
+
+This workflow uses:
+
+- `prompts/operators_v2/00_creative_remix_v6_semantic_inference_plus.md`
+- `prompts/operators_v2/00_creative_remix_v6_super_operator.md`
+
+Use `creative_remix_v6` when you want a dedicated v6 execution path (with v6 node ids and prompt paths) instead of the previous v5-alias wiring.
+
 ### `remix-v4-vite`
 
 The `remix-v4-vite` workflow is the Vite / compiled-bundle-specialized variant of v4. It runs these nodes:
@@ -202,6 +216,15 @@ python3 scripts/game_workflow.py \
 ```bash
 python3 scripts/game_workflow.py \
   --id creative_remix_v5 \
+  --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
+  --remix-prompt "your remix prompt here"
+```
+
+## Creative remix v6 example
+
+```bash
+python3 scripts/game_workflow.py \
+  --id creative_remix_v6 \
   --games-manifest-source fixtures/specimen_random10_inference_playwright_manifest.json \
   --remix-prompt "your remix prompt here"
 ```

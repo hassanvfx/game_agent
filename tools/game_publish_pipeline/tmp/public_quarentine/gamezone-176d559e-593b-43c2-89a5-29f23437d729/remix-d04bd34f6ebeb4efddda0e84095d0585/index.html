@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Hogwarts Familiar Forge</title>
+    <!-- [agent-note][world-design] resolved-fonts: Cinzel fantasy display + Rajdhani readable HUD from catalogs/fonts.json -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap">
+    <style>
+        :root {
+            --bg-night: #080612;
+            --bg-deep: #1a1028;
+            --bg-panel: rgba(31, 22, 47, 0.9);
+            --bg-panel-soft: rgba(58, 42, 78, 0.8);
+            --line-soft: rgba(229, 194, 119, 0.24);
+            --line-bright: rgba(246, 211, 122, 0.72);
+            --text-main: #fff8e7;
+            --text-muted: #d6c6a4;
+            --accent-cyan: #9ee7ff;
+            --accent-violet: #a77bff;
+            --accent-pink: #d98bff;
+            --accent-lime: #9cf0b2;
+            --danger: #ff8a78;
+            --parchment: #f2d99c;
+            --shadow-glow: 0 0 24px rgba(246, 211, 122, 0.2);
+            --panel-radius: 22px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: manipulation;
+            background:
+                radial-gradient(circle at top, rgba(173, 118, 255, 0.16), transparent 32%),
+                linear-gradient(180deg, var(--bg-deep), var(--bg-night));
+            color: var(--text-main);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        body::before {
+            background:
+                radial-gradient(circle at 20% 15%, rgba(126, 242, 255, 0.12), transparent 18%),
+                radial-gradient(circle at 78% 22%, rgba(255, 99, 182, 0.12), transparent 20%);
+            opacity: 0.9;
+        }
+
+        body::after {
+            background-image:
+                radial-gradient(circle, rgba(246, 211, 122, 0.16) 0 1px, transparent 1.5px),
+                linear-gradient(115deg, transparent 0 47%, rgba(242, 217, 156, 0.045) 48% 52%, transparent 53% 100%);
+            background-size: 54px 54px, 160px 160px;
+            opacity: 0.32;
+            mix-blend-mode: screen;
+            animation: parchmentDrift 18s linear infinite;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        button {
+            font: inherit;
+            border: 0;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .hidden { display: none !important; }
+
+        .screen-root {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(6, 6, 18, 0.35), rgba(7, 4, 18, 0.15));
+        }
+
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+        }
+
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            pointer-events: auto;
+            z-index: 50;
+            background:
+                radial-gradient(circle at center, rgba(14, 12, 32, 0.35), rgba(0, 0, 0, 0.82)),
+                linear-gradient(180deg, rgba(5, 5, 10, 0.58), rgba(5, 5, 10, 0.92));
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(44, 36, 93, 0.82), rgba(14, 13, 34, 0.88));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--line-soft);
+            box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38), var(--shadow-glow);
+        }
+
+        .intro-card {
+            width: min(100%, 420px);
+            border-radius: 28px;
+            padding: 26px 22px 22px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            border-top: 4px solid var(--parchment);
+            outline: 1px solid rgba(246, 211, 122, 0.18);
+            outline-offset: -8px;
+        }
+
+        .intro-card::before,
+        .intro-card::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(8px);
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .intro-card::before {
+            width: 140px;
+            height: 140px;
+            top: -30px;
+            left: -30px;
+            background: radial-gradient(circle, rgba(246, 211, 122, 0.62), transparent 68%);
+        }
+
+        .intro-card::after {
+            width: 180px;
+            height: 180px;
+            right: -45px;
+            bottom: -55px;
+            background: radial-gradient(circle, rgba(167, 123, 255, 0.5), transparent 70%);
+        }
+
+        .intro-card .spark-row::before,
+        .intro-card .spark-row::after {
+            content: "✦";
+            color: var(--parchment);
+            filter: drop-shadow(0 0 8px rgba(246, 211, 122, 0.45));
+        }
+
+        .lab-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            margin-bottom: 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--accent-cyan);
+            background: rgba(126, 242, 255, 0.08);
+            border: 1px solid rgba(126, 242, 255, 0.25);
+            box-shadow: inset 0 0 10px rgba(126, 242, 255, 0.08);
+        }
+
+        .title-display,
+        .font-display {
+            font-family: 'Cinzel', 'Rajdhani', serif;
+        }
+
+        .title-display {
+            margin: 0 0 8px;
+            font-size: clamp(34px, 9vw, 56px);
+            line-height: 0.96;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: transparent;
+            background: linear-gradient(90deg, var(--parchment), #fff8dc 46%, var(--accent-violet));
+            -webkit-background-clip: text;
+            background-clip: text;
+            filter: drop-shadow(0 0 16px rgba(126, 242, 255, 0.2));
+        }
+
+        .subtitle {
+            margin: 0 0 16px;
+            color: var(--text-muted);
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .safety-note {
+            margin: 0 0 18px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 106, 139, 0.26);
+            background: linear-gradient(180deg, rgba(100, 20, 41, 0.28), rgba(45, 11, 24, 0.22));
+            color: #ffd9e4;
+            font-size: 13px;
+            line-height: 1.35;
+            box-shadow: inset 0 0 18px rgba(255, 106, 139, 0.08);
+        }
+
+        .start-btn {
+            width: 100%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            color: #091019;
+            background:
+                radial-gradient(circle at 22% 0%, rgba(255,255,255,0.7), transparent 28%),
+                linear-gradient(90deg, var(--accent-cyan), #f6d37a 52%, var(--accent-pink));
+            box-shadow: 0 16px 30px rgba(86, 122, 255, 0.24), inset 0 0 0 1px rgba(255,255,255,0.42);
+            font-family: 'Cinzel', 'Rajdhani', serif;
+            font-size: 24px;
+            letter-spacing: 0.06em;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+        }
+
+        .start-btn:hover,
+        .start-btn:active {
+            transform: translateY(-1px) scale(1.02);
+            filter: brightness(1.05);
+            box-shadow: 0 18px 34px rgba(86, 122, 255, 0.34);
+        }
+
+        .start-btn:active,
+        .btn-option:active,
+        .mix-btn:active,
+        .pill-btn:active,
+        .reset-btn:active {
+            transform: scale(0.97);
+        }
+
+        .floating { animation: float 3s ease-in-out infinite; }
+
+        .spark-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 2px 0 16px;
+            opacity: 0.85;
+            font-size: 20px;
+        }
+
+        .hud {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+            max-width: min(58vw, 220px);
+            color: var(--text-main);
+            pointer-events: none;
+        }
+
+        .hud-status {
+            padding: 9px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.1;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            background: linear-gradient(180deg, rgba(20, 18, 41, 0.9), rgba(8, 7, 18, 0.82));
+            border: 1px solid rgba(126, 242, 255, 0.18);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .hud-status strong {
+            color: var(--parchment);
+            font-family: 'Cinzel', 'Rajdhani', serif;
+            font-weight: 700;
+        }
+
+        /* [agent-note][stage2] preserve: control-zone | reason: bottom action strip already mobile-safe */
+        .lab-controls {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: linear-gradient(180deg, rgba(5, 6, 11, 0), rgba(6, 7, 15, 0.82) 18%, rgba(6, 7, 15, 0.94));
+        }
+
+        .category-strip {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
+        }
+
+        .category-pill {
+            padding: 8px 12px;
+            border-radius: 999px;
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, rgba(31, 29, 64, 0.92), rgba(15, 13, 28, 0.82));
+            border: 1px solid rgba(126, 242, 255, 0.14);
+            box-shadow: inset 0 0 10px rgba(173, 118, 255, 0.08);
+        }
+
+        .ingredient-list {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 2px 4px 4px;
+            scroll-snap-type: x proximity;
+        }
+
+        .ingredient-list::-webkit-scrollbar { height: 6px; }
+        .ingredient-list::-webkit-scrollbar-thumb {
+            background: linear-gradient(90deg, rgba(126, 242, 255, 0.65), rgba(173, 118, 255, 0.65));
+            border-radius: 999px;
+        }
+
+        .btn-option {
+            position: relative;
+            min-width: 82px;
+            height: 86px;
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 8px;
+            border-radius: 18px;
+            color: var(--text-main);
+            cursor: pointer;
+            scroll-snap-align: start;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+            border: 1px solid rgba(190, 203, 255, 0.16);
+            background:
+                radial-gradient(circle at 50% 0%, rgba(246, 211, 122, 0.12), transparent 42%),
+                linear-gradient(180deg, rgba(41, 37, 79, 0.88), rgba(18, 16, 34, 0.92));
+            overflow: hidden;
+        }
+
+        .btn-option::before {
+            content: "✦";
+            position: absolute;
+            top: 7px;
+            left: 9px;
+            color: rgba(246, 211, 122, 0.42);
+            font-size: 10px;
+            pointer-events: none;
+        }
+
+        .btn-option .icon {
+            font-size: 28px;
+            line-height: 1;
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.14));
+        }
+
+        .btn-option .label {
+            font-size: 12px;
+            line-height: 1;
+            font-weight: 700;
+        }
+
+        .btn-option:hover {
+            transform: translateY(-1px);
+            border-color: rgba(126, 242, 255, 0.35);
+        }
+
+        .btn-selected {
+            border: 2px solid var(--line-bright);
+            background:
+                linear-gradient(180deg, rgba(53, 45, 108, 0.96), rgba(23, 22, 49, 0.96));
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+                0 0 18px rgba(126, 242, 255, 0.18);
+        }
+
+        .btn-selected::after {
+            content: "✓";
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            background: rgba(126, 242, 255, 0.15);
+            color: var(--accent-cyan);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .divider {
+            width: 2px;
+            height: 58px;
+            align-self: center;
+            flex: 0 0 auto;
+            border-radius: 999px;
+            background: linear-gradient(180deg, transparent, rgba(255,255,255,0.24), transparent);
+            margin: 0 1px;
+        }
+
+        .action-bar {
+            display: flex;
+            justify-content: center;
+            margin-top: 2px;
+        }
+
+        .mix-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 13px 22px;
+            min-width: min(88vw, 320px);
+            border-radius: 999px;
+            color: #08130b;
+            background: linear-gradient(90deg, #9cf0b2, #f6d37a);
+            box-shadow: 0 0 24px rgba(246, 211, 122, 0.32);
+            font-family: 'Cinzel', 'Rajdhani', serif;
+            font-size: 22px;
+            letter-spacing: 0.05em;
+            transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .mix-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+        }
+
+        .mix-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .play-controls {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .reset-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            color: var(--text-main);
+            background: linear-gradient(180deg, rgba(35, 31, 74, 0.92), rgba(18, 16, 34, 0.92));
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+            font-size: 14px;
+            font-weight: 700;
+            transition: background 0.18s ease, transform 0.18s ease;
+        }
+
+        .reset-btn:hover {
+            background: linear-gradient(180deg, rgba(52, 46, 110, 0.95), rgba(21, 18, 43, 0.96));
+        }
+
+        .interaction-bar {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 18px;
+            padding: 0 12px calc(env(safe-area-inset-bottom, 0px));
+            pointer-events: auto;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pill-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 92px;
+            padding: 11px 16px;
+            border-radius: 999px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+            transition: transform 0.18s ease, filter 0.18s ease;
+        }
+
+        .pill-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.05);
+        }
+
+        .pill-pet { background: linear-gradient(90deg, #4f7bd9, #9ee7ff); }
+        .pill-feed { background: linear-gradient(90deg, #d98b32, #f6d37a); color: #2b1600; }
+        .pill-scare { background: linear-gradient(90deg, #6f3aa8, #d98bff); }
+
+        .spark-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: rgba(126, 242, 255, 0.08);
+            box-shadow: inset 0 0 8px rgba(126, 242, 255, 0.16);
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        @keyframes parchmentDrift {
+            from { background-position: 0 0, 0 0; }
+            to { background-position: 54px -54px, 160px -160px; }
+        }
+
+        @media (max-width: 640px) {
+            .intro-card { padding: 22px 18px 18px; }
+            .subtitle { font-size: 18px; }
+            .lab-controls { gap: 8px; padding-top: 10px; }
+            .category-pill { font-size: 11px; padding: 7px 11px; }
+            .btn-option { min-width: 76px; height: 82px; border-radius: 16px; }
+            .mix-btn { min-width: 100%; font-size: 20px; padding: 12px 16px; }
+            .play-controls { top: 10px; right: 10px; }
+            .interaction-bar { gap: 8px; bottom: 14px; }
+            .pill-btn {
+                flex: 1 1 calc(33.333% - 8px);
+                min-width: 0;
+                padding: 11px 10px;
+                font-size: 14px;
+            }
+            .hud { top: 10px; left: 10px; max-width: calc(100vw - 132px); }
+            .hud-status { font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="screen-root">
+        <canvas id="gameCanvas"></canvas>
+        <!-- [agent-note][stage3] resolved-gif: affection/scare feedback -> catalogs/gifs.json lightweight HUD overlays -->
+        <div id="gif-feedback" class="hidden" aria-live="polite" style="position:absolute;top:76px;right:12px;z-index:40;pointer-events:none;width:min(30vw,120px);">
+            <img id="gif-feedback-img" alt="" style="display:block;width:100%;border-radius:18px;border:1px solid rgba(255,255,255,0.16);box-shadow:0 10px 22px rgba(0,0,0,0.24);background:rgba(8,8,20,0.55);">
+        </div>
+
+        <div id="ui-layer" class="ui-layer">
+            <div id="start-screen" class="overlay-screen">
+                <div class="glass-panel intro-card">
+                    <div class="lab-badge floating"><span>⚗️</span><span>First-Year Familiar Lesson</span></div>
+                    <div class="spark-row" aria-hidden="true"><span>🕯️</span><span>📜</span><span>✨</span></div>
+                    <h1 class="title-display">FAMILIAR FORGE</h1>
+                    <p class="subtitle">Choose a magical lineage, house aura, and charm size to brew a loyal castle familiar.</p>
+                    <div class="safety-note">
+                        ⚠ PROFESSOR'S NOTE:<br>Startles are harmless miscasts. Care charms build the bond.
+                    </div>
+                    <button id="start-btn" class="start-btn">
+                        <span>ENTER POTIONS CLASS</span>
+                        <span class="spark-chip" aria-hidden="true">🪄</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="lab-controls" class="lab-controls hidden">
+                <div class="category-strip">
+                    <div class="glass-panel category-pill">1. Lineage</div>
+                    <div class="glass-panel category-pill">2. Aura</div>
+                    <div class="glass-panel category-pill">3. Charm</div>
+                </div>
+
+                <div class="ingredient-list" id="ingredient-list">
+                </div>
+
+                <div class="action-bar">
+                    <button id="mix-btn" class="mix-btn">BREW FAMILIAR</button>
+                </div>
+            </div>
+
+            <div id="play-controls" class="play-controls hidden">
+                <button id="reset-btn" class="reset-btn glass-panel">⚗️ New Lesson</button>
+            </div>
+
+            <div id="interaction-bar" class="interaction-bar hidden">
+                <button id="pet-btn" class="pill-btn pill-pet">🪄 Soothe</button>
+                <button id="feed-btn" class="pill-btn pill-feed">🥧 Treat</button>
+                <button id="scare-btn" class="pill-btn pill-scare">👻 Miscast</button>
+            </div>
+
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: top-left compact status is already mobile-safe -->
+            <div id="hud" class="hud hidden">
+                <div class="hud-status glass-panel" id="status-text"><strong>Potions</strong> Class</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3",
+            sfx: {
+                ui: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                create: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                pet: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3",
+                feed: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                scare: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3",
+                blocked: "https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3",
+                menu: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3"
+            },
+            gifs: {
+                affection: "https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp",
+                scare: "https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp"
+            }
+        };
+
+        class AudioController {
+            constructor() {
+                this.ready = false;
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                this.lastPlayedAt = {};
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const audio = new Audio(v);
+                    audio.preload = 'auto';
+                    audio.volume = k === 'ui' ? 0.4 : 0.55;
+                    this.sfx[k] = audio;
+                }
+            }
+            unlock() {
+                this.ready = true;
+                this.bgm.load();
+                Object.values(this.sfx).forEach((sound) => sound.load());
+            }
+            playBGM() {
+                if (!this.ready) return;
+                this.bgm.play().catch(() => {});
+            }
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+            playSFX(key, debounceMs = 120) {
+                if (!this.ready || !this.sfx[key]) return;
+                const now = performance.now();
+                if (this.lastPlayedAt[key] && now - this.lastPlayedAt[key] < debounceMs) return;
+                this.lastPlayedAt[key] = now;
+                const sound = this.sfx[key].cloneNode();
+                sound.volume = this.sfx[key].volume;
+                sound.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+        const gifFeedback = document.getElementById('gif-feedback');
+        const gifFeedbackImg = document.getElementById('gif-feedback-img');
+        let gifFeedbackTimer = null;
+
+        function showGif(type, altText) {
+            const src = ASSETS.gifs[type];
+            if (!src) return;
+            gifFeedbackImg.src = src;
+            gifFeedbackImg.alt = altText;
+            gifFeedback.classList.remove('hidden');
+            clearTimeout(gifFeedbackTimer);
+            gifFeedbackTimer = setTimeout(() => gifFeedback.classList.add('hidden'), 1800);
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        let phase = 'lab';
+        let time = 0;
+
+        let selectedSpecies = 'fox';
+        let selectedColor = '#ff7e21';
+        let selectedSize = 1.0;
+        let cauldronColor = '#2d1b4e';
+        let particles = [];
+
+        let creature = {
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            species: 'fox',
+            color: '#ff7e21',
+            scale: 1.0,
+            state: 'idle',
+            stateTimer: 0,
+            blinkTimer: 0,
+            jumpY: 0,
+            faceDir: 1
+        };
+
+        const SPECIES = [
+            { id: 'fox', icon: '🦉', name: 'Owlfox', aura: '#ff9d3c' },
+            { id: 'cat', icon: '🐈', name: 'Castle Cat', aura: '#78f2ff' },
+            { id: 'dog', icon: '🐸', name: 'Toad Pup', aura: '#ffe17d' },
+            { id: 'dino', icon: '🐉', name: 'Tiny Drake', aura: '#7dffb0' },
+            { id: 'caracal', icon: '🔥', name: 'Fire Lynx', aura: '#ff7ea5' }
+        ];
+
+        const COLORS = [
+            { id: '#ef4444', icon: '🟥', name: 'Scarlet' },
+            { id: '#f97316', icon: '🕯️', name: 'Candle' },
+            { id: '#eab308', icon: '🟨', name: 'Gold' },
+            { id: '#22c55e', icon: '🟩', name: 'Emerald' },
+            { id: '#3b82f6', icon: '🟦', name: 'Sapphire' },
+            { id: '#a855f7', icon: '🟪', name: 'Violet' },
+            { id: '#ec4899', icon: '💗', name: 'Rose' },
+            { id: '#1f2937', icon: '🌑', name: 'Nocturne' },
+            { id: '#ffffff', icon: '⭐', name: 'Silver' },
+            { id: '#f472b6', icon: '🌈', name: 'Prismatic' }
+        ];
+
+        const SIZES = [
+            { val: 0.5, icon: '🔹', name: 'Pixie' },
+            { val: 0.8, icon: '🪶', name: 'Sprite' },
+            { val: 1.0, icon: '📜', name: 'Standard' },
+            { val: 1.5, icon: '🛡️', name: 'Guardian' },
+            { val: 2.0, icon: '🏰', name: 'Titan' }
+        ];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            if (phase === 'room') {
+                creature.y = height * 0.7;
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const listEl = document.getElementById('ingredient-list');
+
+        function renderIngredients() {
+            listEl.innerHTML = '';
+
+            const createSection = (items, type) => {
+                items.forEach(item => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-option glass-panel';
+                    btn.innerHTML = `<span class="icon">${item.icon}</span><span class="label">${item.name}</span>`;
+
+                    let isSelected = false;
+                    if (type === 'species' && selectedSpecies === item.id) isSelected = true;
+                    if (type === 'color' && selectedColor === item.id) isSelected = true;
+                    if (type === 'size' && selectedSize === item.val) isSelected = true;
+
+                    if (isSelected) btn.classList.add('btn-selected');
+
+                    btn.onclick = () => {
+                        audio.playSFX('ui');
+                        if (type === 'species') selectedSpecies = item.id;
+                        if (type === 'color') {
+                            selectedColor = item.id;
+                            cauldronColor = item.id === '#f472b6' ? '#ff00ff' : item.id;
+                        }
+                        if (type === 'size') selectedSize = item.val;
+
+                        for (let i = 0; i < 10; i++) {
+                            particles.push({
+                                x: width / 2,
+                                y: height / 2 - 100,
+                                vx: (Math.random() - 0.5) * 10,
+                                vy: (Math.random() - 0.5) * 10,
+                                life: 1.0,
+                                color: type === 'color' ? item.id : '#fff'
+                            });
+                        }
+                        renderIngredients();
+                    };
+                    listEl.appendChild(btn);
+                });
+
+                const div = document.createElement('div');
+                div.className = 'divider';
+                listEl.appendChild(div);
+            };
+
+            createSection(SPECIES, 'species');
+            createSection(COLORS, 'color');
+            createSection(SIZES, 'size');
+
+            const lastDivider = listEl.lastElementChild;
+            if (lastDivider && lastDivider.classList.contains('divider')) {
+                lastDivider.remove();
+            }
+        }
+
+        function drawStar(ctx, x, y, radius, color = 'rgba(246,211,122,0.7)') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const r = i % 2 === 0 ? radius : radius * 0.36;
+                const a = -Math.PI / 2 + (Math.PI * 2 * i) / 8;
+                const px = Math.cos(a) * r;
+                const py = Math.sin(a) * r;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawSpellCircle(ctx, x, y, radius, color = 'rgba(246,211,122,0.28)') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(time / 260);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.75;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
+            ctx.stroke();
+            for (let i = 0; i < 10; i++) {
+                const a = (Math.PI * 2 * i) / 10;
+                ctx.save();
+                ctx.rotate(a);
+                ctx.fillStyle = color;
+                ctx.font = `${Math.max(11, radius * 0.1)}px Cinzel`;
+                ctx.fillText(i % 2 ? '✦' : 'ᚱ', radius * 0.82, 4);
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+
+        function drawLab(ctx) {
+            const grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0, '#100817');
+            grad.addColorStop(0.35, '#241333');
+            grad.addColorStop(1, '#3a2549');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.strokeStyle = 'rgba(246,211,122,0.055)';
+            ctx.lineWidth = 1;
+            for (let y = height * 0.08; y < height * 0.62; y += 34) {
+                ctx.beginPath();
+                ctx.moveTo(0, y + Math.sin(time / 90 + y) * 2);
+                ctx.lineTo(width, y + Math.cos(time / 120 + y) * 2);
+                ctx.stroke();
+            }
+            for (let x = -30; x < width + 30; x += 74) {
+                ctx.beginPath();
+                ctx.moveTo(x + Math.sin(time / 130 + x) * 3, height * 0.08);
+                ctx.lineTo(x - 16, height * 0.62);
+                ctx.stroke();
+            }
+
+            const orbGrad = ctx.createRadialGradient(width * 0.5, height * 0.28, 10, width * 0.5, height * 0.28, width * 0.46);
+            orbGrad.addColorStop(0, 'rgba(246,211,122,0.16)');
+            orbGrad.addColorStop(0.45, 'rgba(120,238,180,0.08)');
+            orbGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = orbGrad;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = 'rgba(246,211,122,0.12)';
+            for (let i = 0; i < 12; i++) {
+                const y = (time * (16 + i * 3) + i * 90) % height;
+                const x = (width / 12) * i + Math.sin(time / 44 + i) * 18;
+                ctx.font = `${24 + i * 3}px Rajdhani`;
+                ctx.fillText(i % 3 === 0 ? '✦' : i % 2 === 0 ? '⚗' : 'ᚱ', x, y);
+            }
+
+            ctx.fillStyle = 'rgba(41, 27, 55, 0.62)';
+            for (let i = 0; i < 5; i++) {
+                const archX = (width / 5) * i + width * 0.08;
+                const archY = height * 0.18 + Math.sin(time / 70 + i) * 3;
+                ctx.beginPath();
+                ctx.roundRect(archX, archY, Math.min(72, width * 0.12), Math.min(120, height * 0.18), 34);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(246,211,122,0.22)';
+                ctx.fillRect(archX + 8, archY + 16, Math.min(56, width * 0.1), 6);
+                ctx.fillStyle = 'rgba(41, 27, 55, 0.62)';
+            }
+
+            for (let i = 0; i < 7; i++) {
+                const candleX = (width / 7) * i + width * 0.07;
+                const candleY = height * 0.12 + Math.sin(time / 35 + i) * 7;
+                ctx.fillStyle = 'rgba(245, 231, 185, 0.82)';
+                ctx.fillRect(candleX, candleY, 8, 24);
+                ctx.beginPath();
+                ctx.arc(candleX + 4, candleY - 4, 5 + Math.sin(time / 6 + i) * 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 192, 80, 0.75)';
+                ctx.fill();
+            }
+
+            const cx = width / 2;
+            const cy = height / 2 + 50;
+            const radius = Math.min(100, width * 0.24);
+
+            drawSpellCircle(ctx, cx, cy - 58, radius + 44, 'rgba(246,211,122,0.2)');
+            drawSpellCircle(ctx, cx, cy - 58, radius + 24, 'rgba(126,242,255,0.16)');
+
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 60, radius + 16, 42, 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(126, 242, 255, 0.09)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 60, radius, 30, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#2a2446';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 50, radius - 10, 25, 0, 0, Math.PI * 2);
+            ctx.fillStyle = cauldronColor;
+            ctx.shadowColor = cauldronColor;
+            ctx.shadowBlur = 26;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            if (Math.random() < 0.1) {
+                particles.push({
+                    x: cx + (Math.random() - 0.5) * 100,
+                    y: cy - 50,
+                    vx: 0,
+                    vy: -2,
+                    life: 0.5 + Math.random(),
+                    color: 'rgba(255,255,255,0.6)',
+                    type: 'bubble'
+                });
+            }
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI, false);
+            ctx.lineTo(cx - radius, cy - 60);
+            ctx.bezierCurveTo(cx - radius, cy + 100, cx + radius, cy + 100, cx + radius, cy - 60);
+            const potGrad = ctx.createLinearGradient(cx, cy - 80, cx, cy + 120);
+            potGrad.addColorStop(0, '#312b55');
+            potGrad.addColorStop(0.45, '#1b1836');
+            potGrad.addColorStop(1, '#0c0b18');
+            ctx.fillStyle = potGrad;
+            ctx.fill();
+            ctx.strokeStyle = '#69ddff';
+            ctx.lineWidth = 4;
+            ctx.globalAlpha = 0.25;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 60, radius, 30, 0, 0, Math.PI, false);
+            ctx.strokeStyle = '#c8f6ff';
+            ctx.globalAlpha = 0.6;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            ctx.fillStyle = 'rgba(126, 242, 255, 0.24)';
+            ctx.fillRect(cx - radius - 16, cy + 24, radius * 2 + 32, 8);
+
+            ctx.fillStyle = 'rgba(7, 6, 15, 0.55)';
+            ctx.fillRect(cx - radius * 0.74, cy + 30, 12, 38);
+            ctx.fillRect(cx + radius * 0.62, cy + 30, 12, 38);
+            drawStar(ctx, cx - radius * 0.42, cy - 92 + Math.sin(time / 18) * 4, 5, 'rgba(246,211,122,0.7)');
+            drawStar(ctx, cx + radius * 0.48, cy - 108 + Math.cos(time / 20) * 4, 4, 'rgba(158,231,255,0.7)');
+        }
+
+        function drawRoom(ctx) {
+            const wallGrad = ctx.createLinearGradient(0, 0, 0, height);
+            wallGrad.addColorStop(0, '#241733');
+            wallGrad.addColorStop(0.62, '#322044');
+            wallGrad.addColorStop(1, '#4a315b');
+            ctx.fillStyle = wallGrad;
+            ctx.fillRect(0, 0, width, height);
+
+            drawSpellCircle(ctx, width * 0.78, height * 0.22, Math.min(74, width * 0.18), 'rgba(246,211,122,0.13)');
+
+            ctx.strokeStyle = 'rgba(242,217,156,0.065)';
+            ctx.lineWidth = 1;
+            for (let y = 58; y < height * 0.68; y += 42) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y + Math.sin(time / 110 + y) * 1.5);
+                ctx.stroke();
+            }
+
+            const floorY = height * 0.7;
+            const floorGrad = ctx.createLinearGradient(0, floorY, 0, height);
+            floorGrad.addColorStop(0, '#7b5631');
+            floorGrad.addColorStop(1, '#3d281c');
+            ctx.fillStyle = floorGrad;
+            ctx.fillRect(0, floorY, width, height - floorY);
+
+            for (let i = 0; i < width; i += 48) {
+                ctx.strokeStyle = 'rgba(246, 211, 122, 0.12)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(i, floorY);
+                ctx.lineTo(i - 16, height);
+                ctx.stroke();
+            }
+
+            ctx.save();
+            ctx.translate(width / 2, floorY + 50);
+            ctx.scale(1, 0.3);
+            ctx.beginPath();
+            ctx.arc(0, 0, 200, 0, Math.PI * 2);
+            const rugGrad = ctx.createLinearGradient(-200, 0, 200, 0);
+            rugGrad.addColorStop(0, '#7f1d1d');
+            rugGrad.addColorStop(0.55, '#d9a441');
+            rugGrad.addColorStop(1, '#1f5f3f');
+            ctx.fillStyle = rugGrad;
+            ctx.globalAlpha = 0.78;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 10;
+            ctx.globalAlpha = 0.4;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            if (creature.state === 'eat') {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(150, 0, 30, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+            }
+            ctx.restore();
+
+            const winX = Math.max(36, width * 0.08);
+            const winY = Math.max(68, height * 0.1);
+            const winW = Math.min(220, width * 0.32);
+            const winH = Math.min(220, height * 0.25);
+            const skyGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+            skyGrad.addColorStop(0, '#101d3f');
+            skyGrad.addColorStop(1, '#3d4d78');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(winX, winY, winW, winH);
+            ctx.strokeStyle = '#f2d99c';
+            ctx.lineWidth = 10;
+            ctx.strokeRect(winX, winY, winW, winH);
+            ctx.beginPath();
+            ctx.moveTo(winX + winW / 2, winY);
+            ctx.lineTo(winX + winW / 2, winY + winH);
+            ctx.moveTo(winX, winY + winH / 2);
+            ctx.lineTo(winX + winW, winY + winH / 2);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.78)';
+            ctx.beginPath();
+            ctx.arc(winX + winW * 0.75, winY + winH * 0.28, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(246,211,122,0.18)';
+            for (let i = 0; i < 10; i++) {
+                const starX = winX + ((i * 31 + time * 0.18) % winW);
+                const starY = winY + 22 + (i * 19) % Math.max(28, winH - 34);
+                drawStar(ctx, starX, starY, 3 + (i % 3), 'rgba(246,211,122,0.46)');
+            }
+
+            ctx.strokeStyle = 'rgba(156,240,178,0.18)';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 5; i++) {
+                const tx = winX + i * winW / 4;
+                ctx.beginPath();
+                ctx.moveTo(tx, winY + winH);
+                ctx.quadraticCurveTo(tx + 18, winY + winH * 0.62, tx + 4, winY + winH * 0.38);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = 'rgba(246,211,122,0.16)';
+            for (let i = 0; i < 4; i++) {
+                const bannerX = width * 0.62 + i * 38;
+                const bannerY = Math.max(72, height * 0.13);
+                ctx.fillRect(bannerX, bannerY, 24, 86);
+                ctx.beginPath();
+                ctx.moveTo(bannerX, bannerY + 86);
+                ctx.lineTo(bannerX + 12, bannerY + 72);
+                ctx.lineTo(bannerX + 24, bannerY + 86);
+                ctx.fill();
+            }
+        }
+
+        function drawCreature(ctx) {
+            const cx = creature.x;
+            const cy = creature.y - creature.jumpY;
+            const s = creature.scale * 100;
+            const color = creature.color === '#f472b6' ? `hsl(${time * 50 % 360}, 78%, 63%)` : creature.color;
+            const outline = 'rgba(14, 15, 35, 0.85)';
+            const highlightColor = creature.color === '#1f2937' ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.22)';
+
+            ctx.save();
+            ctx.translate(cx, cy);
+
+            ctx.save();
+            ctx.rotate(time / 180);
+            ctx.strokeStyle = creature.state === 'happy' ? 'rgba(246,211,122,0.44)' : 'rgba(158,231,255,0.22)';
+            ctx.lineWidth = Math.max(2, s * 0.02);
+            ctx.setLineDash([Math.max(6, s * 0.08), Math.max(8, s * 0.1)]);
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.55, s * 0.98, s * 0.72, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+
+            if (creature.state === 'scared') {
+                ctx.translate((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
+            }
+
+            ctx.scale(creature.faceDir, 1);
+
+            const breath = Math.sin(time / 10) * 5;
+            const bounceScale = creature.state === 'happy' ? 1.04 : 1;
+
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 22;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.ellipse(0, -s / 2, (s / 1.2) * bounceScale, (s / 1.5 + breath) * bounceScale, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = outline;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (creature.species === 'fox') {
+                ctx.moveTo(-s / 2, -s); ctx.lineTo(-s / 4, -s * 1.5); ctx.lineTo(0, -s);
+                ctx.moveTo(s / 2, -s); ctx.lineTo(s / 4, -s * 1.5); ctx.lineTo(0, -s);
+                ctx.moveTo(-s / 2, -s / 2);
+                ctx.quadraticCurveTo(-s * 1.5, -s / 2, -s * 1.2, 0);
+                ctx.quadraticCurveTo(-s / 2, 0, -s / 2, -s / 2);
+            } else if (creature.species === 'cat' || creature.species === 'caracal') {
+                ctx.moveTo(-s / 2, -s); ctx.lineTo(-s / 2.5, -s * 1.4); ctx.lineTo(-s / 4, -s);
+                ctx.moveTo(s / 2, -s); ctx.lineTo(s / 2.5, -s * 1.4); ctx.lineTo(s / 4, -s);
+                ctx.moveTo(-s / 2, -s / 4);
+                ctx.bezierCurveTo(-s * 1.2, -s, -s * 1.2, 0, -s / 2, 0);
+            } else if (creature.species === 'dog') {
+                ctx.ellipse(-s / 2, -s / 2, s / 4, s / 2, 0.5, 0, Math.PI * 2);
+                ctx.ellipse(s / 2, -s / 2, s / 4, s / 2, -0.5, 0, Math.PI * 2);
+                const wag = Math.sin(time / 2) * 20;
+                ctx.moveTo(-s / 2, -s / 4);
+                ctx.lineTo(-s + wag, -s / 2);
+                ctx.lineTo(-s / 2, 0);
+            } else if (creature.species === 'dino') {
+                for (let i = 0; i < 3; i++) {
+                    ctx.moveTo(-s / 4 + i * 20, -s * 1.1);
+                    ctx.lineTo(0 + i * 20, -s * 1.3);
+                    ctx.lineTo(s / 4 + i * 20, -s * 1.1);
+                }
+                ctx.moveTo(-s / 2, 0);
+                ctx.lineTo(-s * 1.5, 0);
+                ctx.lineTo(-s / 2, -s / 4);
+            }
+            ctx.fill();
+
+            if (creature.species === 'caracal') {
+                ctx.beginPath();
+                ctx.moveTo(-s / 2.5, -s * 1.4); ctx.lineTo(-s / 2.8, -s * 1.7);
+                ctx.moveTo(s / 2.5, -s * 1.4); ctx.lineTo(s / 2.8, -s * 1.7);
+                ctx.strokeStyle = outline;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.68, s * 0.34, s * 0.19, 0, Math.PI, Math.PI * 2);
+            ctx.fillStyle = highlightColor;
+            ctx.fill();
+
+            ctx.fillStyle = 'white';
+            const eyeOpen = creature.blinkTimer <= 0 ? 10 : 1;
+            ctx.beginPath();
+            ctx.ellipse(-s / 4, -s / 2, 10, eyeOpen, 0, 0, Math.PI * 2);
+            ctx.ellipse(s / 4, -s / 2, 10, eyeOpen, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#141414';
+            ctx.beginPath();
+            ctx.arc(-s / 4, -s / 2, 4, 0, Math.PI * 2);
+            ctx.arc(s / 4, -s / 2, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.fillStyle = creature.state === 'scared' ? '#ffd5e1' : '#fff0f5';
+            ctx.ellipse(-s / 2.7, -s / 2.9, 9, 5, -0.2, 0, Math.PI * 2);
+            ctx.ellipse(s / 2.7, -s / 2.9, 9, 5, 0.2, 0, Math.PI * 2);
+            ctx.globalAlpha = 0.55;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(246,211,122,0.8)';
+            ctx.lineWidth = Math.max(2, s * 0.025);
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.78, s * 0.16, Math.PI * 0.15, Math.PI * 1.35);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255,248,231,0.86)';
+            ctx.font = `${Math.max(13, s * 0.13)}px Cinzel`;
+            ctx.textAlign = 'center';
+            ctx.fillText('✦', 0, -s * 0.72);
+            ctx.restore();
+
+            ctx.strokeStyle = outline;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            if (creature.state === 'scared') {
+                ctx.arc(0, -s / 3, 7, 0, Math.PI * 2);
+            } else {
+                ctx.arc(0, -s / 3, 8, 0.1, Math.PI - 0.1);
+            }
+            ctx.stroke();
+
+            if (creature.state === 'happy') {
+                ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                ctx.beginPath();
+                ctx.arc(0, -s * 0.45, s * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function updateCreature() {
+            if (phase !== 'room') return;
+
+            if (creature.blinkTimer > 0) creature.blinkTimer--;
+            else if (Math.random() < 0.01) creature.blinkTimer = 10;
+
+            if (creature.state === 'idle') {
+                if (Math.random() < 0.02) {
+                    creature.state = 'walk';
+                    creature.stateTimer = 100 + Math.random() * 100;
+                    creature.vx = (Math.random() - 0.5) * 2;
+                    creature.faceDir = creature.vx > 0 ? 1 : -1;
+                }
+            } else if (creature.state === 'walk') {
+                creature.x += creature.vx;
+                creature.jumpY = Math.abs(Math.sin(time / 5)) * 10;
+
+                if (creature.x < 50 || creature.x > width - 50) {
+                    creature.vx *= -1;
+                    creature.faceDir *= -1;
+                }
+
+                creature.stateTimer--;
+                if (creature.stateTimer <= 0) {
+                    creature.state = 'idle';
+                    creature.jumpY = 0;
+                    if (Math.abs(creature.x - width / 2) < 100 && Math.random() < 0.3) {
+                        creature.state = 'eat';
+                        creature.stateTimer = 60;
+                        audio.playSFX('feed');
+                    }
+                }
+            } else if (creature.state === 'eat') {
+                creature.jumpY = 0;
+                creature.stateTimer--;
+                if (creature.stateTimer <= 0) creature.state = 'idle';
+            } else if (creature.state === 'scared') {
+                creature.stateTimer--;
+                if (creature.stateTimer <= 0) creature.state = 'idle';
+            } else if (creature.state === 'happy') {
+                creature.jumpY = Math.abs(Math.sin(time / 2)) * 20;
+                creature.stateTimer--;
+                if (creature.stateTimer <= 0) {
+                    creature.state = 'idle';
+                    creature.jumpY = 0;
+                }
+            }
+        }
+
+        function drawParticles(ctx) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+
+                ctx.globalAlpha = p.life;
+                if (p.type === 'heart') {
+                    ctx.fillStyle = p.color || 'red';
+                    ctx.font = '20px Rajdhani';
+                    ctx.fillText('✨', p.x, p.y);
+                } else if (p.type === 'bubble') {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = p.color;
+                    ctx.fill();
+                } else {
+                    drawStar(ctx, p.x, p.y, 4, p.color || 'rgba(246,211,122,0.8)');
+                }
+                ctx.globalAlpha = 1;
+
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function gameLoop() {
+            time++;
+            ctx.clearRect(0, 0, width, height);
+
+            if (phase === 'lab') {
+                drawLab(ctx);
+            } else {
+                drawRoom(ctx);
+                updateCreature();
+                drawCreature(ctx);
+            }
+
+            drawParticles(ctx);
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('menu', 0);
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('lab-controls').classList.remove('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playBGM();
+            renderIngredients();
+            gameLoop();
+        });
+
+        document.getElementById('mix-btn').addEventListener('click', () => {
+            audio.playSFX('create', 0);
+            phase = 'room';
+
+            creature.species = selectedSpecies;
+            creature.color = selectedColor;
+            creature.scale = selectedSize;
+            creature.x = width / 2;
+            creature.y = height * 0.7;
+            creature.state = 'idle';
+
+            document.getElementById('lab-controls').classList.add('hidden');
+            document.getElementById('play-controls').classList.remove('hidden');
+            document.getElementById('interaction-bar').classList.remove('hidden');
+            document.getElementById('status-text').innerHTML = "<strong>Familiar</strong> Bond";
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            phase = 'lab';
+            audio.playSFX('blocked');
+            gifFeedback.classList.add('hidden');
+            document.getElementById('lab-controls').classList.remove('hidden');
+            document.getElementById('play-controls').classList.add('hidden');
+            document.getElementById('interaction-bar').classList.add('hidden');
+            document.getElementById('status-text').innerHTML = "<strong>Potions</strong> Class";
+        });
+
+        document.getElementById('pet-btn').addEventListener('click', () => {
+            creature.state = 'happy';
+            creature.stateTimer = 60;
+            audio.playSFX('pet');
+            showGif('affection', 'Familiar bond reaction');
+            for (let i = 0; i < 5; i++) {
+                particles.push({
+                    x: creature.x, y: creature.y - 50,
+                    vx: (Math.random() - 0.5) * 5, vy: -2 - Math.random() * 3,
+                    life: 1, type: 'heart'
+                });
+            }
+        });
+
+        document.getElementById('feed-btn').addEventListener('click', () => {
+            creature.scale = Math.min(creature.scale + 0.1, 3.0);
+            audio.playSFX('feed');
+            particles.push({
+                x: creature.x, y: creature.y - 50,
+                vx: 0, vy: -2,
+                life: 1, type: 'heart', color: 'orange'
+            });
+        });
+
+        document.getElementById('scare-btn').addEventListener('click', () => {
+            creature.state = 'scared';
+            creature.stateTimer = 40;
+            audio.playSFX('scare');
+            showGif('scare', 'Harmless miscast reaction');
+        });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (phase !== 'room') return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const dx = x - creature.x;
+            const dy = y - (creature.y - 50);
+            if (Math.sqrt(dx * dx + dy * dy) < 100 * creature.scale) {
+                document.getElementById('pet-btn').click();
+            }
+        });
+    });
+    </script>
+</body>
+</html>

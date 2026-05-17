@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Neon Relay: Pulse Runner</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <script>
+        tailwind.config = { 
+            theme: { 
+                extend: { 
+                    colors: { 
+                        zen: { 
+                            bg: '#080810', 
+                            panel: '#12121a',
+                            accent: '#65f3ff',
+                            second: '#ff4da6',
+                            gold: '#ffd76a',
+                            void: '#ffffff',
+                            aura: '#8d6bff',
+                            haze: '#1d1134'
+                        } 
+                    },
+                    fontFamily: {
+                        sans: ['Orbitron', 'Rajdhani', 'sans-serif'],
+                        mono: ['Press Start 2P', 'monospace']
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                } 
+            } 
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Press+Start+2P&family=Rajdhani:wght@400;600&display=swap');
+        
+        :root {
+            --bg-0: #050612;
+            --bg-1: #0b0f24;
+            --bg-2: #1a1131;
+            --panel-0: rgba(13, 18, 39, 0.84);
+            --panel-1: rgba(22, 30, 60, 0.84);
+            --edge: rgba(132, 233, 255, 0.22);
+            --edge-strong: rgba(255, 255, 255, 0.2);
+            --text-main: #f6fbff;
+            --text-soft: rgba(226, 238, 255, 0.68);
+            --track: rgba(255,255,255,0.09);
+            --glow-cyan: 0 0 20px rgba(101, 243, 255, 0.26);
+            --glow-pink: 0 0 18px rgba(255, 77, 166, 0.2);
+        }
+
+        * { box-sizing: border-box; }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            touch-action: manipulation; 
+            font-family: 'Rajdhani', sans-serif; 
+            background:
+                radial-gradient(circle at top, rgba(141, 107, 255, 0.18), transparent 34%),
+                radial-gradient(circle at 22% 18%, rgba(101, 243, 255, 0.12), transparent 24%),
+                linear-gradient(180deg, var(--bg-1), var(--bg-0) 58%, #03040a);
+            color: var(--text-main);
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(transparent 0 96%, rgba(255,255,255,0.03) 96% 100%),
+                linear-gradient(90deg, rgba(255,255,255,0.015), transparent 18%, transparent 82%, rgba(255,255,255,0.015));
+            background-size: 100% 5px, 100% 100%;
+            opacity: 0.35;
+            mix-blend-mode: screen;
+        }
+        
+        canvas { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+            touch-action: none;
+        }
+
+        .glass {
+            background: linear-gradient(180deg, var(--panel-0), var(--panel-1));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--edge);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 -10px 30px rgba(0,0,0,0.32);
+        }
+
+        .btn {
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.12s ease, box-shadow 0.16s ease, filter 0.16s ease;
+        }
+        .btn:active { transform: scale(0.96); }
+        
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent, rgba(255,255,255,0.12), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.18s ease;
+        }
+
+        .btn:hover::after,
+        .btn:focus-visible::after { opacity: 1; }
+        
+        .no-scroll::-webkit-scrollbar { display: none; }
+        .no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .safe-top { padding-top: max(20px, env(safe-area-inset-top)); }
+        .safe-bot { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+
+        .text-shadow { text-shadow: 0 0 10px currentColor; }
+        .text-outline { -webkit-text-stroke: 1px rgba(255,255,255,0.1); }
+
+        #score-el,
+        #void-vm-val,
+        #tree-ap-val {
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            letter-spacing: 0.02em;
+            text-shadow: 0 0 22px rgba(101, 243, 255, 0.18);
+        }
+
+        #rate-el,
+        #ap-text,
+        #pending-ap-val,
+        .font-mono {
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        #hold-hint {
+            letter-spacing: 0.28em;
+            text-shadow: 0 0 22px rgba(141, 107, 255, 0.28);
+        }
+
+        #dock {
+            border-top: 1px solid rgba(101, 243, 255, 0.18);
+            box-shadow: 0 -18px 42px rgba(2, 7, 18, 0.55);
+        }
+
+        #upgrade-list > div,
+        #view-tree > div,
+        #void-list > div {
+            border-color: rgba(125, 226, 255, 0.16) !important;
+            background-image:
+                linear-gradient(180deg, rgba(255,255,255,0.03), transparent 34%),
+                linear-gradient(180deg, rgba(16, 26, 57, 0.92), rgba(8, 13, 28, 0.9));
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 20px rgba(0,0,0,0.18);
+        }
+
+        #upgrade-list > div::before,
+        #view-tree > div::before,
+        #void-list > div::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: inherit;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+        }
+
+        #pending-ap-container,
+        #challenge-indicator {
+            box-shadow: var(--glow-cyan);
+        }
+
+        .fx-shell {
+            position: absolute;
+            width: min(34vw, 128px);
+            aspect-ratio: 1;
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.16);
+            background: rgba(6, 10, 24, 0.58);
+            box-shadow: 0 18px 40px rgba(0,0,0,0.28), 0 0 24px rgba(101, 243, 255, 0.16);
+            opacity: 0;
+            transform: scale(0.88);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .fx-shell.visible {
+            opacity: 0.92;
+            transform: scale(1);
+        }
+
+        .fx-top-right {
+            top: max(72px, calc(env(safe-area-inset-top) + 54px));
+            right: 12px;
+        }
+
+        .fx-bottom-left {
+            left: 12px;
+            bottom: max(118px, calc(env(safe-area-inset-bottom) + 106px));
+        }
+
+        .fx-gif {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            filter: saturate(1.1) contrast(1.04);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border-radius: 999px;
+            padding: 0.45rem 0.8rem;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.52rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: var(--glow-pink);
+        }
+
+        .status-dot {
+            width: 0.55rem;
+            height: 0.55rem;
+            border-radius: 999px;
+            background: #65f3ff;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        @media (max-width: 480px) {
+            #score-el,
+            #void-vm-val { font-size: 2.75rem !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Render Layer -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Main Game UI -->
+    <div id="media-fx-layer" class="absolute inset-0 z-5 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div id="combo-gif-shell" class="fx-shell fx-top-right hidden">
+            <img id="combo-gif" class="fx-gif" alt="Charge surge reaction" src="https://i.giphy.com/PoGkJRiJ0Q7HgB8XTt.webp">
+        </div>
+        <div id="bank-gif-shell" class="fx-shell fx-bottom-left hidden">
+            <img id="bank-gif" class="fx-gif" alt="Banked token celebration" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp">
+        </div>
+    </div>
+
+    <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col z-10">
+        
+        <!-- Top HUD -->
+            <div class="safe-top w-full flex flex-col items-center px-6 pt-4">
+                <div class="text-zen-accent/60 text-[10px] font-bold tracking-[0.4em] uppercase mb-1">Pulse Charge</div>
+                <div class="text-[9px] uppercase tracking-[0.45em] text-white/40 mb-2">Runner Signal</div>
+            <div id="score-el" class="text-5xl font-black text-white tracking-tighter drop-shadow-lg">0</div>
+            <div id="rate-el" class="text-white/40 text-xs font-mono mt-1 mb-4">0.0 charge / sec</div>
+
+            <!-- AP Progress -->
+            <div class="w-full max-w-[280px] h-1.5 bg-white/10 rounded-full overflow-hidden relative mb-2">
+                <div id="ap-bar" class="h-full bg-zen-gold shadow-[0_0_8px_#ffd700] w-0 transition-all duration-300"></div>
+            </div>
+            <div class="flex justify-between w-full max-w-[280px] text-[9px] font-bold uppercase tracking-widest text-zen-gold/80">
+                <span>Next Token</span>
+                <span id="ap-text">0 / 500</span>
+            </div>
+
+            <!-- Pending AP Notification -->
+            <div id="pending-ap-container" class="mt-4 opacity-0 transition-opacity duration-500 flex items-center gap-2 bg-zen-gold/10 border border-zen-gold/30 px-4 py-1.5 rounded-full pointer-events-auto">
+                <span class="text-zen-gold text-xs">⚡</span>
+                <span class="text-zen-gold text-xs font-bold tracking-wider">+<span id="pending-ap-val">0</span> TOKENS READY</span>
+                <button id="quick-ascend-btn" class="ml-2 bg-zen-gold text-black text-[9px] font-bold px-2 py-1 rounded hover:bg-white transition-colors">BANK</button>
+            </div>
+            
+            <!-- Challenge Active Indicator -->
+            <div id="challenge-indicator" class="hidden mt-2 bg-zen-second/20 border border-zen-second text-zen-second px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                ⚠ Interference Active
+            </div>
+            <div id="audio-status" class="status-pill mt-3 text-white/80 pointer-events-auto">
+                <span class="status-dot"></span>
+                <span id="audio-status-text">Tap anywhere for sound</span>
+            </div>
+        </div>
+
+        <!-- Center Hint -->
+        <div id="hold-hint" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/10 text-xs font-bold tracking-[0.3em] uppercase pointer-events-none transition-opacity duration-300">
+            Hold to boost the loop
+        </div>
+
+        <!-- Bottom Dock -->
+        <div class="mt-auto pointer-events-auto w-full glass rounded-t-3xl safe-bot transition-transform duration-300 translate-y-0" id="dock">
+            <div class="flex items-center justify-between px-6 py-3 border-b border-white/5">
+                <span class="text-[10px] font-bold text-white/50 uppercase tracking-widest">Loop Upgrades</span>
+                <button id="menu-btn" class="text-white/80 text-xs font-bold uppercase tracking-wider bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">Hub</button>
+            </div>
+            <div id="upgrade-list" class="flex overflow-x-auto gap-3 p-4 no-scroll snap-x">
+                <!-- Upgrades injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Menus (Hidden by default) -->
+    
+    <!-- 1. Ascension / Tree Screen -->
+    <div id="screen-ascension" class="absolute inset-0 z-20 bg-zen-bg flex flex-col hidden safe-top safe-bot pointer-events-auto">
+        <div class="px-6 py-4 border-b border-white/10 bg-black/20 flex justify-between items-center">
+            <div>
+                <div class="text-zen-gold text-[10px] font-bold tracking-[0.2em] uppercase">Relay Bank</div>
+                <div class="text-2xl font-black text-white"><span id="tree-ap-val">0</span> <span class="text-sm text-white/50">Tokens</span></div>
+            </div>
+            <button class="close-screen-btn text-white/40 text-2xl">&times;</button>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="flex border-b border-white/10">
+            <button id="tab-tree" class="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zen-gold border-b-2 border-zen-gold bg-white/5">Systems</button>
+            <button id="tab-challenges" class="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-white/40">Trials</button>
+        </div>
+
+        <!-- Tree Content -->
+        <div id="view-tree" class="flex-1 overflow-y-auto p-4 space-y-3 no-scroll">
+            <!-- Tree Items -->
+        </div>
+
+        <!-- Challenges Content -->
+        <div id="view-challenges" class="hidden flex-1 overflow-y-auto p-4 space-y-3 no-scroll">
+            <div class="text-center text-white/30 text-xs italic mb-2">Clear trials to unlock permanent boosts. <br>Each trial wipes the current loop.</div>
+            <!-- Challenge Items -->
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-white/10 bg-black/40 backdrop-blur">
+            <button id="btn-transcend-entry" class="hidden w-full mb-3 bg-white text-black font-bold py-3 rounded-xl uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(255,255,255,0.4)] animate-pulse">
+                A deeper signal is opening...
+            </button>
+            <button id="btn-rebirth" class="w-full bg-zen-panel border border-white/20 text-white font-bold py-3 rounded-xl uppercase tracking-widest text-xs">
+                Return to Loop
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Transcendence / Void Screen -->
+    <div id="screen-void" class="absolute inset-0 z-30 bg-black flex flex-col hidden safe-top safe-bot pointer-events-auto">
+        <div class="px-6 py-8 flex flex-col items-center border-b border-white/10">
+            <div class="text-white/50 text-[10px] font-bold tracking-[0.5em] uppercase mb-2">Deep Relay</div>
+            <div class="text-5xl font-black text-white tracking-tighter drop-shadow-[0_0_20px_white]" id="void-vm-val">0</div>
+            <div class="text-xs text-white/50 font-bold uppercase tracking-widest mt-1">Core Fragments</div>
+        </div>
+
+        <div id="void-list" class="flex-1 overflow-y-auto p-4 space-y-4 no-scroll">
+            <!-- Void Upgrades -->
+        </div>
+
+        <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur">
+            <div id="transcend-confirm-area" class="hidden mb-4 text-center">
+                <div class="text-white/60 text-xs mb-2">Reset <span class="text-zen-gold">Systems & Tokens</span> to gain:</div>
+                <div class="text-3xl font-bold text-white mb-4">+<span id="pending-vm-val">0</span> Fragments</div>
+                <button id="btn-do-transcend" class="w-full bg-white text-black font-bold py-3 rounded-xl uppercase tracking-widest text-xs mb-2 shadow-lg">
+                    Reboot Core
+                </button>
+                <button id="btn-cancel-transcend" class="text-white/30 text-[10px] uppercase p-2">Cancel</button>
+            </div>
+            <button id="btn-exit-void" class="w-full border border-white/20 text-white/50 hover:text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors">
+                Back
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS & CONFIG ---
+        const CONFIG = {
+            fps: 60,
+            uiThrottleMs: 100, // Update UI text every 100ms for performance
+            colors: {
+                bg: '#050612',
+                bgAlt: '#120c26',
+                ringGlow: 'rgba(101, 243, 255, 0.22)',
+                orbDefault: '#65f3ff',
+                orbAlt: '#ff4da6',
+                orbRare: '#ffd76a',
+                core: '#8d6bff'
+            }
+        };
+
+        // --- MEDIA MAPPER RESOLUTION ---
+        // [agent-note][stage4] repaired: mobile-scroll + approved-font-remap | action: scoped gesture suppression to canvas, preserved native menu taps/scroll
+        // [agent-note][stage3] resolved-font: title/counters -> Orbitron | ui/hud -> Rajdhani | retro accent -> Press Start 2P
+        // [agent-note][stage3] resolved-audio: bgm/ui/blocked/bank/challenge -> catalogs/audios.json
+        // [agent-note][stage3] resolved-gif: charge-surge + banked-tokens -> catalogs/gifs.json
+        const MEDIA = {
+            fonts: {
+                title: 'Orbitron',
+                ui: 'Rajdhani',
+                accent: 'Press Start 2P'
+            },
+            gifs: {
+                combo: 'https://i.giphy.com/PoGkJRiJ0Q7HgB8XTt.webp',
+                bank: 'https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp'
+            },
+            audio: {
+                bgm: 'https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3',
+                collect: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3',
+                bank: 'https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3',
+                uiOpen: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3',
+                uiClose: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3',
+                blocked: 'https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3',
+                success: 'https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3',
+                challenge: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3',
+                transcend: 'https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_02.mp3'
+            }
+        };
+
+        const AudioEngine = {
+            enabled: false,
+            unlocked: false,
+            bgm: null,
+            instances: new Map(),
+            lastPlayed: new Map(),
+            ensureUnlocked() {
+                if (this.unlocked) return;
+                this.unlocked = true;
+                this.enabled = true;
+                this.updateStatus('Sound online');
+                this.startLoop();
+            },
+            updateStatus(label) {
+                const node = document.getElementById('audio-status-text');
+                if (node) node.textContent = label;
+            },
+            startLoop() {
+                if (!this.enabled) return;
+                if (!this.bgm) {
+                    this.bgm = new Audio(MEDIA.audio.bgm);
+                    this.bgm.loop = true;
+                    this.bgm.volume = 0.2;
+                    this.bgm.preload = 'auto';
+                }
+                const playPromise = this.bgm.paused ? this.bgm.play() : null;
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {
+                        this.enabled = false;
+                        this.updateStatus('Sound muted');
+                    });
+                }
+            },
+            pauseLoop() {
+                if (this.bgm && !this.bgm.paused) this.bgm.pause();
+            },
+            pulseLoop(active) {
+                if (!this.bgm) return;
+                this.bgm.volume = active ? 0.2 : 0.16;
+            },
+            play(name, volume = 0.5, cooldown = 120) {
+                if (!this.enabled) return;
+                const now = performance.now();
+                const last = this.lastPlayed.get(name) || 0;
+                if (now - last < cooldown) return;
+                this.lastPlayed.set(name, now);
+
+                const src = MEDIA.audio[name];
+                if (!src) return;
+                let audio = this.instances.get(name);
+                if (!audio) {
+                    audio = new Audio(src);
+                    audio.preload = 'auto';
+                    this.instances.set(name, audio);
+                }
+                try {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.volume = volume;
+                    const playPromise = audio.play();
+                    if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(() => {});
+                } catch (_) {}
+            }
+        };
+
+        const VisualFX = {
+            timers: new Map(),
+            show(id, duration = 1100) {
+                const shell = document.getElementById(id);
+                if (!shell) return;
+                shell.classList.remove('hidden');
+                requestAnimationFrame(() => shell.classList.add('visible'));
+                clearTimeout(this.timers.get(id));
+                this.timers.set(id, setTimeout(() => {
+                    shell.classList.remove('visible');
+                    setTimeout(() => shell.classList.add('hidden'), 220);
+                }, duration));
+            }
+        };
+
+        // --- GAME STATE ---
+        const Game = {
+            lastTime: 0,
+            lastUiTime: 0,
+            
+            // Layer 0: Cycle
+            essence: 0,
+            runEssence: 0, // For challenge tracking
+            orbitals: [],
+            isHolding: false,
+            holdIntensity: 0,
+            
+            // Layer 1: Ascension
+            ap: 0, // Spendable
+            pendingAp: 0,
+            apProgress: 0,
+            lifetimeApInTrans: 0, // AP earned in current Transcendence (resets on Trans)
+            
+            // Layer 2: Transcendence
+            vm: 0,
+            
+            // Upgrades Data
+            upgrades: {
+                cycle: { speed: 0, value: 0, count: 0, boost: 0 },
+                tree: { karma: 0, greed: 0, synergy: 0, discount: 0 },
+                void: { timeWarp: 0, reality: 0, inflation: 0 }
+            },
+
+            // Challenges
+            challenges: {
+                'c1': { completed: false },
+                'c2': { completed: false },
+                'c3': { completed: false }
+            },
+            activeChallengeId: null
+        };
+
+        // --- DEFINITIONS ---
+        const CycleDefs = {
+            speed: { name: 'Pulse Drive', base: 10, mult: 1.5, icon: '⚡', desc: 'Run the loop faster.' },
+            value: { name: 'Charge Cache', base: 25, mult: 1.6, icon: '💎', desc: 'More Charge per lap.' },
+            count: { name: 'Relay Nodes', base: 500, mult: 3.0, icon: '💠', desc: 'Add another runner.' },
+            boost: { name: 'Overclock', base: 150, mult: 2.2, icon: '🔥', desc: 'Stronger hold boost.' }
+        };
+
+        const TreeDefs = [
+            { id: 'karma', name: 'Live Current', base: 1, scale: 1, max: 50, icon: '🕉️', desc: '+50% Charge gain per level.' },
+            { id: 'greed', name: 'Hot Start', base: 2, scale: 2, max: 10, icon: '🌟', desc: 'Start loops with bonus Charge.' },
+            { id: 'synergy', name: 'Mesh Sync', base: 5, scale: 3, max: 10, icon: '🔗', desc: '+10% speed per runner.' },
+            { id: 'discount', name: 'Signal Compression', base: 10, scale: 5, max: 5, icon: '📉', desc: 'Loop upgrades are 10% cheaper.' }
+        ];
+
+        const VoidDefs = [
+            { id: 'timeWarp', name: 'Phase Skip', base: 1, scale: 1, max: 10, icon: '⏳', desc: 'Global speed x2 per level.' },
+            { id: 'reality', name: 'Core Stabilizer', base: 2, scale: 2, max: 5, icon: '⚓', desc: 'Token thresholds scale slower.' },
+            { id: 'inflation', name: 'Charge Surge', base: 5, scale: 5, max: 5, icon: '🎈', desc: 'Base Charge x10 per level.' }
+        ];
+
+        const ChallengeDefs = [
+            { id: 'c1', name: 'Brownout', desc: 'Upgrades cost 5x more.', goal: 1000000, rewardDesc: 'x2 Global Charge', color: '#ff4444' },
+            { id: 'c2', name: 'Lag Spike', desc: 'Speed is capped at 10%.', goal: 500000, rewardDesc: 'x3 Token Gain', color: '#ffaa00' },
+            { id: 'c3', name: 'Solo Circuit', desc: 'Only 1 runner allowed.', goal: 2000000, rewardDesc: 'x5 Global Charge', color: '#00ccff' }
+        ];
+
+        // --- LOGIC: CALCULATORS ---
+
+        function getCycleCost(id) {
+            const def = CycleDefs[id];
+            const lvl = Game.upgrades.cycle[id];
+            let cost = def.base * Math.pow(def.mult, lvl);
+            
+            // Tree Discount
+            const discountLvl = Game.upgrades.tree.discount;
+            cost *= (1 - (discountLvl * 0.1));
+
+            // Challenge: Poverty
+            if (Game.activeChallengeId === 'c1') cost *= 5;
+
+            return Math.floor(cost);
+        }
+
+        function getEssencePerLap() {
+            let base = CycleDefs.value.base * Math.pow(1.2, Game.upgrades.cycle.value); // Base scaling for value
+            
+            // Tree: Karma
+            base *= (1 + (Game.upgrades.tree.karma * 0.5));
+            
+            // Void: Inflation
+            base *= Math.pow(10, Game.upgrades.void.inflation);
+
+            // Challenge Rewards
+            if (Game.challenges['c1'].completed) base *= 2;
+            if (Game.challenges['c3'].completed) base *= 5;
+
+            return base;
+        }
+
+        function getOrbitalSpeed() {
+            let spd = 1.5 + (Game.upgrades.cycle.speed * 0.3);
+            
+            // Tree: Synergy
+            const count = getOrbitalCount();
+            spd *= (1 + (count * Game.upgrades.tree.synergy * 0.1));
+
+            // Void: Time Warp
+            spd *= Math.pow(2, Game.upgrades.void.timeWarp);
+
+            // Hold Boost
+            const boostMult = 3 + (Game.upgrades.cycle.boost * 0.5);
+            spd *= (1 + (Game.holdIntensity * (boostMult - 1)));
+
+            // Challenge: Slug
+            if (Game.activeChallengeId === 'c2') spd *= 0.1;
+
+            return spd;
+        }
+
+        function getOrbitalCount() {
+            if (Game.activeChallengeId === 'c3') return 1;
+            return 1 + Game.upgrades.cycle.count;
+        }
+
+        function getApThreshold(pending) {
+            // Base 500, grows by 15% per point
+            let growth = 1.15;
+            // Void: Reality Anchor reduces growth
+            growth -= (Game.upgrades.void.reality * 0.02); 
+            if (growth < 1.01) growth = 1.01;
+
+            return Math.floor(500 * Math.pow(growth, pending));
+        }
+
+        // --- CORE FUNCTIONS ---
+
+        function init() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Input
+            const onDown = (e) => {
+                if (e.target.closest('button') || e.target.closest('.scrollable') || e.target.closest('#dock') || e.target.closest('#screen-ascension') || e.target.closest('#screen-void')) return;
+                if (e.cancelable) e.preventDefault();
+                Game.isHolding = true;
+                document.getElementById('hold-hint').style.opacity = '1';
+                document.getElementById('hold-hint').classList.add('text-zen-accent');
+            };
+            const onUp = (e) => {
+                if (e?.cancelable) e.preventDefault();
+                Game.isHolding = false;
+                document.getElementById('hold-hint').style.opacity = '0.3';
+                document.getElementById('hold-hint').classList.remove('text-zen-accent');
+            };
+            
+            canvas.addEventListener('mousedown', onDown);
+            window.addEventListener('mouseup', onUp);
+            canvas.addEventListener('touchstart', onDown, { passive: false });
+            window.addEventListener('touchend', onUp, { passive: false });
+            document.addEventListener('pointerdown', () => AudioEngine.ensureUnlocked(), { once: true });
+            document.addEventListener('keydown', () => AudioEngine.ensureUnlocked(), { once: true });
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) AudioEngine.pauseLoop();
+                else if (AudioEngine.enabled) AudioEngine.startLoop();
+            });
+
+            // UI Init
+            initUpgradeUI();
+            initTreeUI();
+            initVoidUI();
+            initChallengeUI();
+
+            // Start Loop
+            requestAnimationFrame(loop);
+            
+            // Initial Reset
+            resetRun();
+        }
+
+        function resetRun(keepAp = false) {
+            Game.essence = 0;
+            Game.runEssence = 0;
+            Game.apProgress = 0;
+            Game.pendingAp = 0;
+            
+            // Reset Cycle Upgrades
+            for(let k in Game.upgrades.cycle) Game.upgrades.cycle[k] = 0;
+            
+            // Tree Bonus: Greed
+            Game.essence += Game.upgrades.tree.greed * 1000;
+
+            syncOrbitals();
+            updateUpgradeUI();
+        }
+
+        function syncOrbitals() {
+            const target = getOrbitalCount();
+            while(Game.orbitals.length < target) {
+                const i = Game.orbitals.length;
+                Game.orbitals.push({
+                    angle: (Math.PI * 2 / target) * i,
+                    color: i % 3 === 0 ? CONFIG.colors.orbDefault : (i % 3 === 1 ? CONFIG.colors.orbAlt : CONFIG.colors.orbRare),
+                    trail: []
+                });
+            }
+            // If we have too many (e.g. challenge started), remove extra
+            if (Game.orbitals.length > target) {
+                Game.orbitals.length = target;
+            }
+            // Distribute angles evenly
+            Game.orbitals.forEach((o, i) => {
+                o.angle = (Math.PI * 2 / target) * i;
+            });
+        }
+
+        function triggerLap(orb) {
+            const val = getEssencePerLap();
+            Game.essence += val;
+            Game.runEssence += val;
+
+            // AP Logic
+            let apGainMult = 1;
+            if (Game.challenges['c2'].completed) apGainMult = 3;
+
+            Game.apProgress += val * apGainMult;
+            
+            let thresh = getApThreshold(Game.pendingAp);
+            while(Game.apProgress >= thresh) {
+                Game.apProgress -= thresh;
+                Game.pendingAp++;
+                thresh = getApThreshold(Game.pendingAp);
+                AudioEngine.play('success', 0.42, 240);
+                VisualFX.show('combo-gif-shell', 900);
+                
+                // Visual feedback
+                const b = document.getElementById('pending-ap-container');
+                b.style.transform = "scale(1.2)";
+                setTimeout(()=>b.style.transform="scale(1)", 150);
+            }
+
+            // Challenge Check
+            if (Game.activeChallengeId) {
+                const c = ChallengeDefs.find(x => x.id === Game.activeChallengeId);
+                if (Game.runEssence >= c.goal) {
+                    completeChallenge(c.id);
+                }
+            }
+
+            // FX
+            AudioEngine.play('collect', 0.2, 90);
+            spawnPopup(`+${formatNum(val)}`, orb.x, orb.y);
+        }
+
+        function completeChallenge(id) {
+            Game.challenges[id].completed = true;
+            Game.activeChallengeId = null;
+            AudioEngine.play('success', 0.55, 200);
+            VisualFX.show('bank-gif-shell', 1400);
+            alert(`TRIAL CLEAR!\nPermanent boost unlocked.`);
+            document.getElementById('challenge-indicator').classList.add('hidden');
+            document.getElementById('screen-ascension').classList.remove('hidden'); // Return to menu
+            initChallengeUI();
+            resetRun();
+        }
+
+        // --- UI BUILDERS ---
+
+        function initUpgradeUI() {
+            const list = document.getElementById('upgrade-list');
+            list.innerHTML = '';
+            Object.keys(CycleDefs).forEach(key => {
+                const def = CycleDefs[key];
+                const btn = document.createElement('div');
+                btn.className = 'flex-shrink-0 w-32 bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col gap-1 cursor-pointer select-none active:bg-white/10 transition-colors btn';
+                btn.id = `btn-cycle-${key}`;
+                btn.innerHTML = `
+                    <div class="flex justify-between text-xs font-bold text-white/80">
+                        <span>${def.icon} ${def.name}</span>
+                        <span class="text-white/40" id="lvl-${key}">0</span>
+                    </div>
+                    <div class="text-[10px] text-white/40 h-6 leading-tight">${def.desc}</div>
+                    <div class="mt-auto pt-2 border-t border-white/5 flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-zen-accent">COST</span>
+                        <span class="text-xs font-mono font-bold" id="cost-${key}">0</span>
+                    </div>
+                `;
+                btn.onclick = (e) => { e.stopPropagation(); buyCycleUpgrade(key); };
+                list.appendChild(btn);
+            });
+        }
+
+        function buyCycleUpgrade(key) {
+            const cost = getCycleCost(key);
+            if (Game.essence >= cost) {
+                AudioEngine.play('uiOpen', 0.2, 80);
+                Game.essence -= cost;
+                Game.upgrades.cycle[key]++;
+                if (key === 'count') syncOrbitals();
+                updateUpgradeUI();
+            } else {
+                AudioEngine.play('blocked', 0.3, 140);
+            }
+        }
+
+        function updateUpgradeUI() {
+            Object.keys(CycleDefs).forEach(key => {
+                const cost = getCycleCost(key);
+                const elCost = document.getElementById(`cost-${key}`);
+                const elLvl = document.getElementById(`lvl-${key}`);
+                const btn = document.getElementById(`btn-cycle-${key}`);
+                
+                elCost.innerText = formatNum(cost);
+                elLvl.innerText = Game.upgrades.cycle[key];
+                
+                if (Game.essence >= cost) {
+                    btn.classList.remove('opacity-50', 'grayscale');
+                } else {
+                    btn.classList.add('opacity-50', 'grayscale');
+                }
+            });
+        }
+
+        // --- ASCENSION LOGIC ---
+
+        function ascend() {
+            if (Game.pendingAp <= 0) {
+                AudioEngine.play('blocked', 0.3, 180);
+                return;
+            }
+            
+            AudioEngine.play('bank', 0.48, 250);
+            VisualFX.show('bank-gif-shell', 1300);
+            Game.ap += Game.pendingAp;
+            Game.lifetimeApInTrans += Game.pendingAp;
+            
+            resetRun();
+            
+            // Show Screen
+            document.getElementById('screen-ascension').classList.remove('hidden');
+            refreshTreeUI();
+        }
+
+        function initTreeUI() {
+            const list = document.getElementById('view-tree');
+            list.innerHTML = '';
+            TreeDefs.forEach(def => {
+                const el = document.createElement('div');
+                el.className = 'bg-zen-gold/5 border border-zen-gold/20 p-3 rounded-lg flex items-center gap-3 cursor-pointer btn';
+                el.id = `tree-card-${def.id}`;
+                el.onclick = () => buyTreeUpgrade(def.id);
+                el.innerHTML = `
+                    <div class="text-2xl w-10 text-center">${def.icon}</div>
+                    <div class="flex-1">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-xs font-bold text-zen-gold">${def.name}</span>
+                            <span class="text-[10px] bg-zen-gold/20 px-1.5 rounded text-zen-gold" id="tree-lvl-${def.id}">Lvl 0</span>
+                        </div>
+                        <div class="text-[10px] text-white/50">${def.desc}</div>
+                    </div>
+                    <div class="flex flex-col items-end min-w-[50px]">
+                        <span class="text-[9px] text-white/40">COST</span>
+                        <span class="text-sm font-bold text-white" id="tree-cost-${def.id}">0</span>
+                    </div>
+                `;
+                list.appendChild(el);
+            });
+        }
+
+        function buyTreeUpgrade(id) {
+            const def = TreeDefs.find(x => x.id === id);
+            const lvl = Game.upgrades.tree[id];
+            if (lvl >= def.max) return;
+            
+            const cost = def.base + (lvl * def.scale);
+            if (Game.ap >= cost) {
+                AudioEngine.play('uiOpen', 0.24, 90);
+                Game.ap -= cost;
+                Game.upgrades.tree[id]++;
+                refreshTreeUI();
+            } else {
+                AudioEngine.play('blocked', 0.3, 160);
+            }
+        }
+
+        function refreshTreeUI() {
+            document.getElementById('tree-ap-val').innerText = formatNum(Game.ap);
+            
+            // Check Transcendence unlock
+            if (Game.lifetimeApInTrans >= 100 || Game.vm > 0) {
+                document.getElementById('btn-transcend-entry').classList.remove('hidden');
+            }
+
+            TreeDefs.forEach(def => {
+                const lvl = Game.upgrades.tree[def.id];
+                const cost = def.base + (lvl * def.scale);
+                const isMax = lvl >= def.max;
+                
+                document.getElementById(`tree-lvl-${def.id}`).innerText = isMax ? 'MAX' : `Lvl ${lvl}`;
+                document.getElementById(`tree-cost-${def.id}`).innerText = isMax ? '-' : cost;
+                
+                const card = document.getElementById(`tree-card-${def.id}`);
+                if (isMax) {
+                    card.classList.add('opacity-50');
+                    card.style.borderColor = 'transparent';
+                } else if (Game.ap < cost) {
+                    card.classList.add('opacity-50');
+                } else {
+                    card.classList.remove('opacity-50');
+                }
+            });
+        }
+
+        // --- CHALLENGES LOGIC ---
+
+        function initChallengeUI() {
+            const list = document.getElementById('view-challenges');
+            // Clear existing items except the header text
+            while(list.children.length > 1) { list.removeChild(list.lastChild); }
+
+            ChallengeDefs.forEach(c => {
+                const isDone = Game.challenges[c.id].completed;
+                const el = document.createElement('div');
+                el.className = `p-4 rounded-xl border ${isDone ? 'border-green-500/50 bg-green-500/10' : 'border-white/10 bg-white/5'} flex flex-col gap-2 relative overflow-hidden`;
+                
+                el.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-sm" style="color:${c.color}">${c.name}</span>
+                        ${isDone ? '<span class="text-[10px] font-bold text-green-400">COMPLETED</span>' : ''}
+                    </div>
+                    <div class="text-[11px] text-white/60">${c.desc}</div>
+                    <div class="text-[10px] font-bold text-white/40 uppercase mt-1">Goal: ${formatNum(c.goal)} Charge</div>
+                    <div class="text-[10px] font-bold text-zen-accent uppercase">Reward: ${c.rewardDesc}</div>
+                    ${!isDone ? `<button class="mt-2 w-full py-2 bg-white/10 hover:bg-white/20 rounded text-[10px] font-bold uppercase tracking-widest transition-colors start-chal-btn">Start Trial</button>` : ''}
+                `;
+                
+                if (!isDone) {
+                    el.querySelector('.start-chal-btn').onclick = () => startChallenge(c.id);
+                }
+                list.appendChild(el);
+            });
+        }
+
+        function startChallenge(id) {
+            if (!confirm("Starting a trial will RESET your current loop. Continue?")) return;
+            AudioEngine.play('challenge', 0.38, 200);
+            VisualFX.show('combo-gif-shell', 1200);
+            Game.activeChallengeId = id;
+            resetRun();
+            document.getElementById('screen-ascension').classList.add('hidden');
+            document.getElementById('challenge-indicator').classList.remove('hidden');
+        }
+
+        // --- TRANSCENDENCE LOGIC ---
+        
+        function initVoidUI() {
+            const list = document.getElementById('void-list');
+            list.innerHTML = '';
+            VoidDefs.forEach(def => {
+                const el = document.createElement('div');
+                el.className = 'bg-white/5 border border-white/20 p-4 rounded-xl flex items-center gap-4 cursor-pointer btn';
+                el.id = `void-card-${def.id}`;
+                el.onclick = () => buyVoidUpgrade(def.id);
+                el.innerHTML = `
+                    <div class="text-3xl w-12 text-center text-white drop-shadow-[0_0_10px_white]">${def.icon}</div>
+                    <div class="flex-1">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-sm font-bold text-white">${def.name}</span>
+                            <span class="text-[10px] border border-white/30 px-1.5 rounded text-white" id="void-lvl-${def.id}">Lvl 0</span>
+                        </div>
+                        <div class="text-[11px] text-white/50">${def.desc}</div>
+                    </div>
+                    <div class="flex flex-col items-end min-w-[50px]">
+                        <span class="text-[9px] text-white/40">COST</span>
+                        <span class="text-sm font-bold text-white" id="void-cost-${def.id}">0</span>
+                    </div>
+                `;
+                list.appendChild(el);
+            });
+        }
+
+        function buyVoidUpgrade(id) {
+            const def = VoidDefs.find(x => x.id === id);
+            const lvl = Game.upgrades.void[id];
+            if (lvl >= def.max) return;
+            
+            const cost = def.base + (lvl * def.scale);
+            if (Game.vm >= cost) {
+                AudioEngine.play('uiOpen', 0.24, 90);
+                Game.vm -= cost;
+                Game.upgrades.void[id]++;
+                refreshVoidUI();
+            } else {
+                AudioEngine.play('blocked', 0.3, 160);
+            }
+        }
+
+        function refreshVoidUI() {
+            document.getElementById('void-vm-val').innerText = Game.vm;
+            
+            // Calc pending VM (1 VM per 50 lifetime AP in this trans)
+            const pending = Math.floor(Game.lifetimeApInTrans / 50);
+            document.getElementById('pending-vm-val').innerText = pending;
+            
+            if (pending > 0) {
+                document.getElementById('transcend-confirm-area').classList.remove('hidden');
+            } else {
+                document.getElementById('transcend-confirm-area').classList.add('hidden');
+            }
+
+            VoidDefs.forEach(def => {
+                const lvl = Game.upgrades.void[def.id];
+                const cost = def.base + (lvl * def.scale);
+                const isMax = lvl >= def.max;
+
+                document.getElementById(`void-lvl-${def.id}`).innerText = isMax ? 'MAX' : `Lvl ${lvl}`;
+                document.getElementById(`void-cost-${def.id}`).innerText = isMax ? '-' : cost;
+                
+                const card = document.getElementById(`void-card-${def.id}`);
+                if (isMax || Game.vm < cost) {
+                    card.classList.add('opacity-50');
+                } else {
+                    card.classList.remove('opacity-50');
+                }
+            });
+        }
+
+        function doTranscend() {
+            const pending = Math.floor(Game.lifetimeApInTrans / 50);
+            if (pending <= 0) return;
+
+            AudioEngine.play('transcend', 0.55, 250);
+            VisualFX.show('bank-gif-shell', 1500);
+            Game.vm += pending;
+            
+            // Reset Layer 1
+            Game.ap = 0;
+            Game.pendingAp = 0;
+            Game.lifetimeApInTrans = 0;
+            for(let k in Game.upgrades.tree) Game.upgrades.tree[k] = 0;
+            
+            // Reset Layer 0
+            resetRun();
+            
+            // UI
+            document.getElementById('screen-void').classList.add('hidden');
+            document.getElementById('screen-ascension').classList.add('hidden');
+            
+            alert("CORE REBOOT COMPLETE\nThe relay came back stronger.");
+        }
+
+        // --- RENDERING & LOOP ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize
+        let particles = [];
+        let popups = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function loop(timestamp) {
+            const dt = Math.min((timestamp - Game.lastTime) / 1000, 0.1);
+            Game.lastTime = timestamp;
+
+            updateLogic(dt);
+            render(ctx);
+
+            // Throttle UI Updates
+            if (timestamp - Game.lastUiTime > CONFIG.uiThrottleMs) {
+                updateUI();
+                Game.lastUiTime = timestamp;
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        function updateLogic(dt) {
+            // Hold Logic
+            const targetInt = Game.isHolding ? 1.0 : 0.0;
+            Game.holdIntensity += (targetInt - Game.holdIntensity) * 5 * dt;
+            AudioEngine.pulseLoop(Game.isHolding);
+
+            // Orbitals
+            const speed = getOrbitalSpeed();
+            Game.orbitals.forEach(orb => {
+                orb.angle += speed * dt;
+                if (orb.angle >= Math.PI * 2) {
+                    orb.angle -= Math.PI * 2;
+                    triggerLap(orb);
+                }
+                
+                // Simple Trail Logic (Optimized)
+                // Only add trail point every few frames or based on distance could be better,
+                // but for now just limit length hard.
+                orb.x = canvas.width/2 + Math.cos(orb.angle) * (canvas.width * 0.25);
+                orb.y = canvas.height * 0.35 + Math.sin(orb.angle) * (canvas.width * 0.25);
+                
+                orb.trail.push({x: orb.x, y: orb.y});
+                if (orb.trail.length > 15) orb.trail.shift();
+            });
+
+            // Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy;
+                p.life -= dt * 2;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Popups
+            for (let i = popups.length - 1; i >= 0; i--) {
+                const p = popups[i];
+                p.y -= 50 * dt;
+                p.life -= dt;
+                if (p.life <= 0) popups.splice(i, 1);
+            }
+        }
+
+        function render(ctx) {
+            ctx.fillStyle = CONFIG.colors.bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height * 0.35;
+            const r = canvas.width * 0.25;
+
+            const time = Date.now() / 1000;
+            const pulse = 1 + (Game.holdIntensity * 0.1) + (Math.sin(Date.now()/500)*0.02);
+
+            const bgGradient = ctx.createRadialGradient(cx, cy, r * 0.08, cx, cy, r * 1.45);
+            bgGradient.addColorStop(0, CONFIG.colors.bgAlt);
+            bgGradient.addColorStop(0.5, '#0b1022');
+            bgGradient.addColorStop(1, CONFIG.colors.bg);
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.globalAlpha = 0.18;
+            for (let i = 0; i < 28; i++) {
+                const angle = (i / 28) * Math.PI * 2 + time * 0.12;
+                const x = cx + Math.cos(angle) * r * 1.18;
+                const y = cy + Math.sin(angle) * r * 0.84;
+                ctx.beginPath();
+                ctx.arc(x, y, 1.5 + (i % 3), 0, Math.PI * 2);
+                ctx.fillStyle = i % 2 === 0 ? CONFIG.colors.orbDefault : CONFIG.colors.orbAlt;
+                ctx.fill();
+            }
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 1.03, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 10;
+            ctx.stroke();
+
+            // Core
+            const coreRadius = r * 0.15 * pulse;
+            const coreGlow = ctx.createRadialGradient(cx, cy, r * 0.02, cx, cy, r * 0.32);
+            coreGlow.addColorStop(0, Game.vm > 0 ? '#ffffff' : CONFIG.colors.core);
+            coreGlow.addColorStop(0.45, 'rgba(141, 107, 255, 0.75)');
+            coreGlow.addColorStop(1, 'rgba(141, 107, 255, 0)');
+            ctx.fillStyle = coreGlow;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.33, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, coreRadius, 0, Math.PI*2);
+            ctx.fillStyle = Game.vm > 0 ? '#ffffff' : '#1b2148';
+            ctx.fill();
+            ctx.strokeStyle = CONFIG.colors.orbDefault;
+            ctx.lineWidth = 2.5;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = CONFIG.colors.orbDefault;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Ring
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI*2);
+            ctx.strokeStyle = CONFIG.colors.ringGlow;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.74, 0, Math.PI*2);
+            ctx.strokeStyle = 'rgba(255, 77, 166, 0.12)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([8, 14]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Orbitals
+            Game.orbitals.forEach((orb, index) => {
+                if (orb.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = orb.color;
+                    ctx.lineWidth = 4.5;
+                    ctx.lineCap = 'round';
+                    for(let i=0; i<orb.trail.length-1; i++) {
+                        ctx.globalAlpha = (i/orb.trail.length) * 0.45;
+                        ctx.moveTo(orb.trail[i].x, orb.trail[i].y);
+                        ctx.lineTo(orb.trail[i+1].x, orb.trail[i+1].y);
+                    }
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+
+                ctx.save();
+                ctx.translate(orb.x, orb.y);
+                ctx.rotate(orb.angle + index);
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = orb.color;
+
+                ctx.beginPath();
+                ctx.moveTo(0, -13);
+                ctx.lineTo(10, 0);
+                ctx.lineTo(0, 13);
+                ctx.lineTo(-10, 0);
+                ctx.closePath();
+                ctx.fillStyle = orb.color;
+                ctx.globalAlpha = 0.92;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(0, -6);
+                ctx.lineTo(5, 0);
+                ctx.lineTo(0, 6);
+                ctx.lineTo(-5, 0);
+                ctx.closePath();
+                ctx.fillStyle = '#ffffff';
+                ctx.globalAlpha = 0.96;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(0, 0, 15, 0, Math.PI*2);
+                ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 1;
+                ctx.stroke();
+
+                ctx.restore();
+                ctx.shadowBlur = 0;
+            });
+
+            // Popups
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 18px "Orbitron"';
+            popups.forEach(p => {
+                ctx.fillStyle = `rgba(255,255,255,${p.life})`;
+                ctx.fillText(p.text, p.x, p.y);
+            });
+        }
+
+        function spawnPopup(text, x, y) {
+            if (popups.length > 10) popups.shift(); // Limit count
+            popups.push({ text, x, y, life: 1.0 });
+        }
+
+        function updateUI() {
+            document.getElementById('score-el').innerText = formatNum(Game.essence);
+            
+            // Rate calc
+            const perLap = getEssencePerLap();
+            const speed = getOrbitalSpeed(); // rad/s
+            const count = Game.orbitals.length;
+            const rate = (speed / (2*Math.PI)) * perLap * count;
+            document.getElementById('rate-el').innerText = `${formatNum(rate)} charge / sec`;
+
+            // AP Progress
+            const thresh = getApThreshold(Game.pendingAp);
+            const pct = (Game.apProgress / thresh) * 100;
+            document.getElementById('ap-bar').style.width = `${Math.min(100, pct)}%`;
+            document.getElementById('ap-text').innerText = `${formatNum(Game.apProgress)} / ${formatNum(thresh)}`;
+
+            // Pending AP
+            const penEl = document.getElementById('pending-ap-container');
+            if (Game.pendingAp > 0) {
+                penEl.classList.remove('opacity-0');
+                document.getElementById('pending-ap-val').innerText = Game.pendingAp;
+            } else {
+                penEl.classList.add('opacity-0');
+            }
+
+            // Button States
+            updateUpgradeUI();
+        }
+
+        function formatNum(n) {
+            if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+            if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+            if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+            return Math.floor(n).toLocaleString();
+        }
+
+        // --- BINDINGS ---
+        document.getElementById('quick-ascend-btn').onclick = (e) => { e.stopPropagation(); ascend(); };
+        
+        document.getElementById('menu-btn').onclick = (e) => {
+            e.stopPropagation();
+            AudioEngine.play('uiOpen', 0.32, 100);
+            document.getElementById('screen-ascension').classList.remove('hidden');
+            refreshTreeUI();
+        };
+
+        // Ascension Screen
+        document.querySelector('#screen-ascension .close-screen-btn').onclick = () => {
+            AudioEngine.play('uiClose', 0.28, 100);
+            document.getElementById('screen-ascension').classList.add('hidden');
+        };
+        document.getElementById('btn-rebirth').onclick = () => {
+            AudioEngine.play('uiClose', 0.28, 100);
+            document.getElementById('screen-ascension').classList.add('hidden');
+        };
+        
+        // Tabs
+        const tabTree = document.getElementById('tab-tree');
+        const tabChal = document.getElementById('tab-challenges');
+        const viewTree = document.getElementById('view-tree');
+        const viewChal = document.getElementById('view-challenges');
+
+        tabTree.onclick = () => {
+            viewTree.classList.remove('hidden'); viewChal.classList.add('hidden');
+            tabTree.classList.add('text-zen-gold', 'border-b-2', 'border-zen-gold', 'bg-white/5');
+            tabTree.classList.remove('text-white/40');
+            tabChal.classList.remove('text-zen-gold', 'border-b-2', 'border-zen-gold', 'bg-white/5');
+            tabChal.classList.add('text-white/40');
+        };
+        tabChal.onclick = () => {
+            viewChal.classList.remove('hidden'); viewTree.classList.add('hidden');
+            tabChal.classList.add('text-zen-gold', 'border-b-2', 'border-zen-gold', 'bg-white/5');
+            tabChal.classList.remove('text-white/40');
+            tabTree.classList.remove('text-zen-gold', 'border-b-2', 'border-zen-gold', 'bg-white/5');
+            tabTree.classList.add('text-white/40');
+        };
+
+        // Transcendence Entry
+        document.getElementById('btn-transcend-entry').onclick = () => {
+            AudioEngine.play('uiOpen', 0.32, 100);
+            document.getElementById('screen-void').classList.remove('hidden');
+            refreshVoidUI();
+        };
+
+        // Void Screen
+        document.getElementById('btn-exit-void').onclick = () => {
+            AudioEngine.play('uiClose', 0.28, 100);
+            document.getElementById('screen-void').classList.add('hidden');
+        };
+        document.getElementById('btn-do-transcend').onclick = doTranscend;
+        document.getElementById('btn-cancel-transcend').onclick = () => {
+            AudioEngine.play('uiClose', 0.28, 100);
+            document.getElementById('transcend-confirm-area').classList.add('hidden');
+        };
+
+        // Init
+        init();
+
+    </script>
+</body>
+</html>
