@@ -50,6 +50,86 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _safe_join(root: Path, relative_path: str) -> Path | None:
+    candidate = (root / relative_path).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def candidate_index_paths(record: dict[str, Any], *, scope_root: Path, scope_name: str) -> list[Path]:
+    fields: list[str] = []
+    if scope_name == "public":
+        fields.extend(["public_index_html", "index_html"])
+    else:
+        fields.extend(["obfuscated_index_html", "public_index_html", "index_html"])
+
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    for field in fields:
+        raw_value = record.get(field)
+        if not isinstance(raw_value, str) or not raw_value.strip():
+            continue
+        candidate = _safe_join(scope_root, raw_value.strip())
+        if candidate is not None and candidate not in seen:
+            candidates.append(candidate)
+            seen.add(candidate)
+
+    published_path = record.get("published_path")
+    if isinstance(published_path, str) and published_path.strip():
+        fallback = _safe_join(scope_root, str(Path(published_path.strip()) / "index.html"))
+        if fallback is not None and fallback not in seen:
+            candidates.append(fallback)
+            seen.add(fallback)
+
+    return candidates
+
+
+def sanitize_merged_payload(
+    merged: dict[str, Any],
+    *,
+    scope_root: Path,
+    scope_name: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    sanitized: dict[str, Any] = {}
+    removed_details: list[dict[str, Any]] = []
+
+    for key, value in merged.items():
+        if not isinstance(key, str) or not key:
+            continue
+        if not isinstance(value, dict):
+            removed_details.append({"key": key, "reason": "record_not_object"})
+            continue
+
+        candidates = candidate_index_paths(value, scope_root=scope_root, scope_name=scope_name)
+        if not candidates:
+            removed_details.append({"key": key, "reason": "no_index_candidate_paths"})
+            continue
+
+        if any(candidate.is_file() for candidate in candidates):
+            sanitized[key] = value
+            continue
+
+        removed_details.append(
+            {
+                "key": key,
+                "reason": "missing_index_html",
+                "candidate_paths": [str(path) for path in candidates],
+            }
+        )
+
+    stats = {
+        "records_before": len(merged),
+        "records_after": len(sanitized),
+        "records_removed": len(removed_details),
+        "removed_samples": removed_details[:10],
+    }
+    return sanitized, stats
+
+
 def merge_payloads(paths: list[Path], precedence: str) -> tuple[dict[str, Any], dict[str, int]]:
     merged: dict[str, Any] = {}
     stats = {"sources": 0, "records_seen": 0, "records_written": 0}
@@ -100,22 +180,30 @@ def main() -> None:
             for artifact_path in artifact_paths:
                 print(f"[materialize]     source={artifact_path}", flush=True)
             merged, stats = merge_payloads(artifact_paths, args.precedence)
+            sanitized, sanitize_stats = sanitize_merged_payload(
+                merged,
+                scope_root=scope_root,
+                scope_name=scope_name,
+            )
             output_path = scope_root / artifact_name
             if not args.dry_run:
-                write_json(output_path, merged)
+                write_json(output_path, sanitized)
                 print(
-                    f"[materialize]     wrote={output_path} records={stats['records_written']}",
+                    f"[materialize]     wrote={output_path} records={sanitize_stats['records_after']} removed={sanitize_stats['records_removed']}",
                     flush=True,
                 )
             else:
                 print(
-                    f"[materialize]     dry-run would write={output_path} records={stats['records_written']}",
+                    f"[materialize]     dry-run would write={output_path} records={sanitize_stats['records_after']} removed={sanitize_stats['records_removed']}",
                     flush=True,
                 )
             scope_report[artifact_name] = {
                 "output": str(output_path),
                 "sources": [str(path) for path in artifact_paths],
-                "records": stats["records_written"],
+                "merged_records": stats["records_written"],
+                "records": sanitize_stats["records_after"],
+                "records_removed": sanitize_stats["records_removed"],
+                "removed_samples": sanitize_stats["removed_samples"],
             }
         result[scope_name] = scope_report
 

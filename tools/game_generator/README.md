@@ -70,6 +70,24 @@ Flags:
 
 Default port is deterministic from run path hash.
 
+### Dashboard timing and maintenance
+
+The dashboard now displays:
+
+- total run duration in human-readable form (`22s`, `5m 7s`, `1h 2m 9s`)
+- per-stage timing for `Match`, `Refactor`, and `Publish`
+- a large live stopwatch-style run counter (`MM:SS` / `HH:MM:SS`) that updates every second while the run is active
+- timestamp-backed timing for both successful and failed runs when stage artifacts exist
+
+Validated sample artifact cases:
+
+- successful run: `pipeline_runs/run_pipeline_20260517T110057Z`
+- failed run: `pipeline_runs/run_pipeline_20260517T124528Z`
+
+For the full maintenance workflow and artifact walkthrough, see:
+
+- `docs/pipeline-dashboard-maintenance.md`
+
 ## Architecture boundary
 
 `game_generator` orchestrates multi-repo execution and observability. It calls out to external tools (matcher/refactoring/publish/obfuscation layers) and persists canonical run state/events for inspection.

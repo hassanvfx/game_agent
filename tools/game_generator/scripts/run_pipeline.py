@@ -554,6 +554,7 @@ class PipelineRun:
             "current_step": self.state["current_step"],
             "updated_at": self.state["updated_at"],
             "started_at": self.state["started_at"],
+            "completed_at": self.state.get("completed_at"),
             "publish_enabled": self.publish_enabled,
             "remix_prompt": self.remix_prompt,
             "upload_enabled": self.upload_enabled,

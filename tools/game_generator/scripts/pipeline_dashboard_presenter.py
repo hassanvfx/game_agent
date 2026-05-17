@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import shlex
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,82 @@ def safe_read_json(path: Path) -> Any | None:
         return read_json(path)
     except Exception:
         return None
+
+
+def parse_iso_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def format_duration_human(total_seconds: int | None) -> str | None:
+    if total_seconds is None:
+        return None
+    total_seconds = max(0, int(total_seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts: list[str] = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes or hours:
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
+def build_timing_summary(started_at: Any, completed_at: Any = None, fallback_end_at: Any = None) -> dict[str, Any]:
+    started_raw = started_at if isinstance(started_at, str) and started_at else None
+    completed_raw = completed_at if isinstance(completed_at, str) and completed_at else None
+    fallback_raw = fallback_end_at if isinstance(fallback_end_at, str) and fallback_end_at else None
+
+    started_dt = parse_iso_timestamp(started_raw)
+    completed_dt = parse_iso_timestamp(completed_raw)
+    ended_dt = completed_dt or parse_iso_timestamp(fallback_raw)
+
+    duration_seconds = None
+    if started_dt is not None and ended_dt is not None:
+        duration_seconds = max(0, int((ended_dt - started_dt).total_seconds()))
+
+    return {
+        "started_at": started_raw,
+        "completed_at": completed_raw,
+        "ended_at": completed_raw or fallback_raw,
+        "duration_seconds": duration_seconds,
+        "duration_human": format_duration_human(duration_seconds),
+    }
+
+
+def build_stage_flow_item(
+    stage_id: str,
+    label: str,
+    status: str,
+    *,
+    step_details: dict[str, Any],
+    cost_story: str,
+    run_updated_at: Any,
+) -> dict[str, Any]:
+    stage_state = step_details.get("details") if isinstance(step_details.get("details"), dict) else step_details
+    stage_started_at = stage_state.get("started_at")
+    stage_completed_at = stage_state.get("completed_at")
+    fallback_end_at = (stage_state.get("updated_at") or run_updated_at) if stage_started_at or stage_completed_at else None
+    return {
+        "id": stage_id,
+        "label": label,
+        "status": status,
+        "cost_story": cost_story,
+        "timing": build_timing_summary(
+            stage_started_at,
+            stage_completed_at,
+            fallback_end_at,
+        ),
+    }
 
 
 def quote_prompt(value: str) -> str:
@@ -477,35 +554,65 @@ def build_recent_runs(current_run_id: str, *, limit: int = RECENT_RUN_CARD_LIMIT
 def build_current_run_view(base_payload: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     name_map = load_match_name_map(run_dir)
     step_map = build_step_map(base_payload)
+    match_step = step_map.get("matcher", {})
+    if not isinstance(match_step, dict):
+        match_step = {}
+    refactor_step = step_map.get("refactoring", {})
+    if not isinstance(refactor_step, dict):
+        refactor_step = {}
     publish_status = "disabled"
     publish_step = step_map.get("publish")
+    if not isinstance(publish_step, dict):
+        publish_step = {}
     if publish_step:
         publish_status = str(publish_step.get("status") or "unknown")
     elif base_payload.get("publish_enabled"):
         publish_status = "pending"
 
-    refactor_status = str(step_map.get("refactoring", {}).get("status") or "pending")
-    match_status = str(step_map.get("matcher", {}).get("status") or "pending")
+    refactor_status = str(refactor_step.get("status") or "pending")
+    match_status = str(match_step.get("status") or "pending")
     cost_story = build_cost_story(base_payload, name_map)
     refactor_stage = next((item for item in cost_story.get("stages", []) if item.get("id") == "refactor"), {})
+    run_timing = build_timing_summary(
+        base_payload.get("started_at"),
+        base_payload.get("completed_at"),
+        base_payload.get("updated_at"),
+    )
 
     return {
         "run_id": base_payload.get("run_id"),
         "prompt": base_payload.get("prompt"),
         "status": base_payload.get("status"),
+        "timing": run_timing,
         "stage_flow": [
-            {"id": "match", "label": "Match", "status": match_status, "cost_story": "Not tracked"},
-            {
-                "id": "refactor",
-                "label": "Refactor",
-                "status": refactor_status,
-                "cost_story": (
+            build_stage_flow_item(
+                "match",
+                "Match",
+                match_status,
+                step_details=match_step,
+                cost_story="Not tracked",
+                run_updated_at=base_payload.get("updated_at"),
+            ),
+            build_stage_flow_item(
+                "refactor",
+                "Refactor",
+                refactor_status,
+                step_details=refactor_step,
+                cost_story=(
                     f"${float(refactor_stage.get('projected_cost_usd')):.2f} projected"
                     if refactor_stage.get("tracked") and refactor_stage.get("projected_cost_usd") is not None
                     else "No spend artifact"
                 ),
-            },
-            {"id": "publish", "label": "Publish", "status": publish_status, "cost_story": "Not tracked"},
+                run_updated_at=base_payload.get("updated_at"),
+            ),
+            build_stage_flow_item(
+                "publish",
+                "Publish",
+                publish_status,
+                step_details=publish_step,
+                cost_story="Not tracked",
+                run_updated_at=base_payload.get("updated_at"),
+            ),
         ],
         "match_cards": build_match_cards(run_dir),
         "refactor_cards": build_refactor_cards(base_payload, name_map),
@@ -660,6 +767,31 @@ def generate_dashboard_html() -> str:
     .hero,
     .section {
       padding: 22px;
+    }
+
+    .timer-hero {
+      padding: 26px 22px;
+      display: grid;
+      gap: 10px;
+      align-items: center;
+      justify-items: start;
+      background:
+        linear-gradient(180deg, rgba(25, 42, 68, 0.96), rgba(11, 18, 31, 0.98));
+    }
+
+    .timer-display {
+      font-size: clamp(2.6rem, 10vw, 5.4rem);
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      text-shadow: 0 10px 30px rgba(125, 211, 252, 0.12);
+    }
+
+    .timer-caption {
+      color: var(--muted);
+      font-size: 0.95rem;
     }
 
     .eyebrow {
@@ -902,6 +1034,49 @@ def generate_dashboard_html() -> str:
       return String(value || "unknown").replaceAll("_", " ");
     }
 
+    function parseIsoTimestamp(value) {
+      if (!value) return null;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return parsed;
+    }
+
+    function formatClockDuration(totalSeconds) {
+      if (typeof totalSeconds !== "number" || Number.isNaN(totalSeconds) || totalSeconds < 0) return "--:--";
+      const seconds = Math.max(0, Math.floor(totalSeconds));
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const remainder = seconds % 60;
+      const two = (value) => String(value).padStart(2, "0");
+      if (hours > 0) {
+        return `${two(hours)}:${two(minutes)}:${two(remainder)}`;
+      }
+      return `${two(minutes)}:${two(remainder)}`;
+    }
+
+    function computeLiveDurationSeconds(startedAt, endedAt) {
+      const start = parseIsoTimestamp(startedAt);
+      if (!start) return null;
+      const end = parseIsoTimestamp(endedAt) || new Date();
+      return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
+    }
+
+    function formatTimingLines(timing, endedLabel = "Ended") {
+      if (!timing) {
+        return '<div class="meta" style="margin-top:10px;"><div><strong>Duration:</strong> —</div></div>';
+      }
+      const rows = [
+        ["Duration", timing.duration_human || "—"],
+        ["Started", timing.started_at || "—"],
+        [endedLabel, timing.completed_at || timing.ended_at || "—"],
+      ];
+      return `
+        <div class="meta" style="margin-top:10px; display:grid; gap:4px;">
+          ${rows.map(([label, value]) => `<div><strong>${esc(label)}:</strong> ${esc(value)}</div>`).join("")}
+        </div>
+      `;
+    }
+
     function openPreview(url) {
       if (!url) return;
       window.open(url, "previewWindow", "popup=yes,width=400,height=700");
@@ -939,12 +1114,36 @@ def generate_dashboard_html() -> str:
       `;
     }
 
+    function renderRunTimer(view, data) {
+      const timing = view?.timing || {};
+      const startedAt = timing.started_at || data.started_at || "";
+      const endedAt = timing.completed_at || timing.ended_at || data.completed_at || (data.status === "completed" || data.status === "failed" ? data.updated_at : "");
+      const initialSeconds = computeLiveDurationSeconds(startedAt, endedAt);
+      const statusLabel = humanStatus(view?.status || data.status || "unknown");
+      return `
+        <section class="section timer-hero">
+          <div class="eyebrow">Live Run Timer</div>
+          <div
+            id="liveRunTimer"
+            class="timer-display"
+            data-started-at="${esc(startedAt)}"
+            data-ended-at="${esc(endedAt)}"
+          >${esc(formatClockDuration(initialSeconds))}</div>
+          <div class="timer-caption">Elapsed since run start · status: ${esc(statusLabel)}</div>
+        </section>
+      `;
+    }
+
     function renderSummary(view, data) {
+      const timing = view?.timing || {};
       return `
         <div class="summary-grid">
           <div class="summary-item"><div class="label">Prompt</div><div class="value">${esc(view?.prompt || data.prompt || "")}</div></div>
           <div class="summary-item"><div class="label">Run ID</div><div class="value">${esc(view?.run_id || data.run_id || "")}</div></div>
           <div class="summary-item"><div class="label">Status</div><div class="value">${esc(humanStatus(view?.status || data.status))}</div></div>
+          <div class="summary-item"><div class="label">Started</div><div class="value">${esc(timing.started_at || data.started_at || "—")}</div></div>
+          <div class="summary-item"><div class="label">Finished</div><div class="value">${esc(timing.completed_at || timing.ended_at || data.completed_at || data.updated_at || "—")}</div></div>
+          <div class="summary-item"><div class="label">Total Time</div><div class="value">${esc(timing.duration_human || "—")}</div></div>
           <div class="summary-item"><div class="label">Updated</div><div class="value">${esc(data.updated_at || "—")}</div></div>
         </div>
       `;
@@ -960,6 +1159,7 @@ def generate_dashboard_html() -> str:
               <h3>${esc(humanStatus(item.status))}</h3>
               <div class="status-pill status-${esc(item.status)}">${esc(humanStatus(item.status))}</div>
               <div class="meta" style="margin-top:10px;">${esc(item.cost_story || "")}</div>
+              ${formatTimingLines(item.timing, "Ended")}
             </div>
           `).join("")}
         </div>
@@ -1182,6 +1382,23 @@ def generate_dashboard_html() -> str:
       setTimeout(() => { button.textContent = original; }, 1200);
     }
 
+    function updateLiveRunTimer() {
+      const timer = document.getElementById('liveRunTimer');
+      if (!timer) return;
+      const startedAt = timer.dataset.startedAt || '';
+      const endedAt = timer.dataset.endedAt || '';
+      const seconds = computeLiveDurationSeconds(startedAt, endedAt);
+      timer.textContent = formatClockDuration(seconds);
+    }
+
+    function installLiveRunTimerTick() {
+      if (window.__dashboardLiveRunTimerInterval) {
+        window.clearInterval(window.__dashboardLiveRunTimerInterval);
+      }
+      updateLiveRunTimer();
+      window.__dashboardLiveRunTimerInterval = window.setInterval(updateLiveRunTimer, 1000);
+    }
+
     async function render() {
       const app = document.getElementById('app');
       try {
@@ -1191,6 +1408,7 @@ def generate_dashboard_html() -> str:
 
         app.innerHTML = `
           ${renderPromptHelper(helper)}
+          ${renderRunTimer(view, data)}
           <section class="section">
             <h2>Current Run</h2>
             ${renderSummary(view, data)}
@@ -1219,6 +1437,7 @@ def generate_dashboard_html() -> str:
         `;
 
         refreshCommandPreview();
+        installLiveRunTimerTick();
         document.getElementById('promptInput')?.addEventListener('input', refreshCommandPreview);
         document.getElementById('publishToggle')?.addEventListener('change', refreshCommandPreview);
         document.getElementById('uploadToggle')?.addEventListener('change', refreshCommandPreview);

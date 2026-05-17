@@ -126,6 +126,9 @@ Artifact refresh now also renders annotator dashboards at two scopes:
 - `scripts/refresh_app_artifacts.py` — refresh persistent app artifact snapshots
   - defaults to `--reconcile-mode replace` (prunes stale keys; keeps only newest generated key set)
   - use `--reconcile-mode merge` only when you intentionally want cumulative historical keys
+- `scripts/materialize_artifact_view.py` — merge run-scoped root view artifacts into `games/published/public|obfuscated`
+  - now sanitizes merged records against the actual root asset trees
+  - records whose target `index.html` does not exist in the target scope are pruned from `index.json`, `app_tags.json`, and `app.json`
 - `scripts/validate_published_outputs.py` — validate outputs/screenshots/artifacts
 - `scripts/detect_identical_public_obfuscated.py` — detect `.html/.js/.css` files that are unchanged between public and obfuscated outputs
 - `scripts/generate_annotator_entry.py` — render annotator dashboard HTML for run/root published artifact views

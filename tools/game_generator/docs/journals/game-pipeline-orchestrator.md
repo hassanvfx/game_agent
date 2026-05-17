@@ -1,6 +1,6 @@
 # Game Pipeline Orchestrator Implementation Journal
 
-**Last Updated:** 2026-05-17 07:24 America/Mexico_City  
+**Last Updated:** 2026-05-17 08:03 America/Mexico_City  
 **Feature Spec:** N/A  
 **Backend Reference:** N/A
 
@@ -37,6 +37,146 @@
 ---
 
 ## 📝 Journal Entries
+
+### 2026-05-17 08:03 - Added root-view sanitization to published artifact materialization
+
+**Achievement:**
+- Fixed the published-root inconsistency that allowed matcher/refactoring to target entries whose root `public` assets did not actually exist
+- Added sanitization to the publish-pipeline materializer so root catalog views now prune non-materialized entries
+- Verified the problematic GTA-like composite key was removed from the root views after rematerialization
+
+**Implementation Details:**
+- `../game_publish_pipeline/scripts/materialize_artifact_view.py`
+  - added safe path resolution helpers for record-backed index paths
+  - added scope-aware candidate path resolution using:
+    - `public_index_html`
+    - `obfuscated_index_html`
+    - `index_html`
+    - `published_path/index.html`
+  - added a sanitization pass that removes merged records when none of the target `index.html` candidates exist in the target scope root
+  - applied the same pruning logic to:
+    - `index.json`
+    - `app_tags.json`
+    - `app.json`
+  - added reporting for:
+    - merged record count
+    - kept record count
+    - removed record count
+    - removed sample keys
+- `../game_publish_pipeline/README.md`
+  - documented that root-view materialization now sanitizes against real root assets
+- Temporary validation helpers added:
+  - `tmp/rematerialize_with_sanitization.py`
+  - `tmp/verify_sanitization_downstream.py`
+
+**Technical Decisions:**
+- Fixed the issue at the materialized-view boundary instead of only patching the local orchestrator, because the root published catalog should be trustworthy for all downstream consumers
+- Chose default-on sanitization so root metadata cannot drift ahead of the actual root asset tree
+- Required real `index.html` existence as the acceptance condition because downstream refactoring source resolution ultimately depends on a playable materialized path
+
+**Testing:**
+- Re-ran full-run materialization across 8 discovered published runs
+- Sanitization pruned 275 stale entries from each root artifact view
+- Verified the problematic key was removed from root `public/app.json`:
+  - `gamezone-29e7c3b5-974b-47c7-b7bf-585b6d5cc301__remix-2d9ceef4234dc323cd850ecec55d170a`
+- Verified downstream matcher impact:
+  - target key no longer present in root `public/app.json`
+  - target game id no longer appears in top matcher results for `3d gta game` after rebuild
+
+**Next Steps:**
+- [ ] Optionally add a `--no-sanitize` escape hatch if operators ever need to inspect raw merged metadata for debugging
+- [ ] Decide whether the orchestrator should still defensively skip non-resolvable matches as a second layer of protection
+
+**Status:** Complete
+
+### 2026-05-17 07:48 - Added large live stopwatch timer to the dashboard
+
+**Achievement:**
+- Added a large, visually prominent stopwatch-style timer near the top of the dashboard
+- The timer now counts live from run `started_at` until the run ends, then freezes on the final elapsed value
+
+**Implementation Details:**
+- `scripts/pipeline_dashboard_presenter.py`
+  - added browser-side time parsing and clock-format helpers
+  - added `renderRunTimer(...)` to display a large `MM:SS` / `HH:MM:SS` counter
+  - added `updateLiveRunTimer()` and `installLiveRunTimerTick()` so the timer updates every second in the browser
+  - wired the timer to persisted run timing fields via `data-started-at` and `data-ended-at`
+- Updated docs to explain the difference between:
+  - static human-readable duration summaries
+  - the large live stopwatch counter
+
+**Technical Decisions:**
+- Kept the stopwatch ticking in browser JavaScript while preserving artifact-backed timing as the source of truth for final durations
+- Reused the existing 5-second dashboard refresh loop and added a separate 1-second UI-only timer tick for smoother elapsed-time feedback
+
+**Testing:**
+- Confirmed the new run timing payload already exposes the timestamps required by the live counter
+- Prepared validation updates so future checks can confirm the timer HTML wiring exists alongside the timing payload
+
+**Next Steps:**
+- [ ] Extend the tmp validator to assert the generated HTML contains the live timer hooks
+- [ ] Optionally do a visual browser pass on the fresh dashboard if requested
+
+**Status:** Complete
+
+### 2026-05-17 07:40 - Added dashboard stage durations and sample-case maintenance documentation
+
+**Achievement:**
+- Added human-readable run timing and per-stage durations to the local pipeline dashboard
+- Documented a concrete maintenance workflow using one successful and one failed sample run from persisted artifacts
+- Kept the change localized to the dashboard presentation layer plus a small payload-contract cleanup for `completed_at`
+
+**Implementation Details:**
+- `scripts/pipeline_dashboard_presenter.py`
+  - added timestamp parsing helpers for ISO-8601 values from persisted run artifacts
+  - added duration formatting for human-readable output such as `22s`, `4m 25s`, and `5m 7s`
+  - extended `current_run_view` with run-level timing metadata
+  - extended `stage_flow` items with stage-level timing metadata derived from `steps[*].details.started_at` / `completed_at`
+  - updated dashboard HTML rendering to show:
+    - Started
+    - Finished
+    - Total Time
+    - per-stage Duration / Started / Ended values
+- `scripts/run_pipeline.py`
+  - added `completed_at` to the dashboard base payload so completed runs expose a cleaner timing contract
+- `README.md`
+  - added a short dashboard timing and maintenance reference section
+- `docs/pipeline-dashboard-maintenance.md`
+  - added a future-facing maintenance document covering artifact sources, sample runs, validation flow, and troubleshooting notes
+
+**Sample Cases:**
+- Successful run:
+  - `pipeline_runs/run_pipeline_20260517T110057Z`
+  - expected durations after refresh:
+    - total: `5m 7s`
+    - match: `22s`
+    - refactor: `4m 25s`
+    - publish: `20s`
+- Failed run:
+  - `pipeline_runs/run_pipeline_20260517T124528Z`
+  - expected durations after refresh:
+    - total: `20s`
+    - match failed after `20s`
+    - refactor/publish remain pending with no duration values
+
+**Technical Decisions:**
+- Computed durations in the presenter layer instead of browser-only JavaScript so the dashboard contract stays reusable for future observer tooling and documentation
+- Reused persisted step timestamps rather than inventing new orchestration state
+- Treated `updated_at` as the fallback end marker only when a run or stage has started but not yet exposed an explicit completed timestamp
+
+**Testing:**
+- Refreshed dashboard assets for both sample runs and verified the enriched payloads now include timing blocks
+- Confirmed successful-run stage timings resolved from real step artifacts:
+  - matcher `22s`
+  - refactoring `4m 25s`
+  - publish `20s`
+- Confirmed failed-run matcher timing resolved to `20s` while untouched pending stages remained unset
+
+**Next Steps:**
+- [ ] Optionally mirror the same timing summary in `observe_pipeline_run.py` terminal output if operators want parity with the HTML dashboard
+- [ ] Optionally add a browser-level visual check of the refreshed dashboard cards if another UI pass is requested
+
+**Status:** Complete
 
 ### 2026-05-17 07:24 - Materialized all published runs and restored GTA-like matcher coverage
 
