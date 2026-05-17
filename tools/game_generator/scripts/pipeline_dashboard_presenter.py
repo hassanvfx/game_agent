@@ -298,14 +298,57 @@ def build_match_cards(run_dir: Path) -> list[dict[str, Any]]:
 
 
 def build_refactor_cards(base_payload: dict[str, Any], name_map: dict[str, str]) -> list[dict[str, Any]]:
-    output_dirs = resolve_output_dirs(base_payload)
+    finalized_output_dirs = resolve_output_dirs(base_payload)
+    upstream_payload = load_refactoring_dashboard_payload(base_payload)
+    upstream_games = upstream_payload.get("games")
     cards: list[dict[str, Any]] = []
-    for game_id, path in output_dirs.items():
+
+    if isinstance(upstream_games, list):
+        for item in upstream_games:
+            if not isinstance(item, dict):
+                continue
+            game_id = item.get("game_id")
+            if not isinstance(game_id, str) or not game_id:
+                continue
+
+            finalized_path = finalized_output_dirs.get(game_id)
+            preview_url = None
+            if finalized_path is not None and (finalized_path / "index.html").exists():
+                preview_url = f"{ROUTE_PREFIX}/output/{urllib.parse.quote(game_id)}/index.html"
+
+            display_name = item.get("display_name") if isinstance(item.get("display_name"), str) else None
+            upstream_output_path = item.get("output_path") if isinstance(item.get("output_path"), str) else None
+            input_mirror_path = item.get("input_mirror_path") if isinstance(item.get("input_mirror_path"), str) else None
+            last_error = item.get("last_error") if isinstance(item.get("last_error"), str) and item.get("last_error") else None
+
+            cards.append(
+                {
+                    "game_id": game_id,
+                    "title": display_name or name_map.get(game_id, game_id),
+                    "status": str(item.get("status") or item.get("creative_status") or "unknown"),
+                    "phase": item.get("current_phase") or item.get("creative_phase"),
+                    "local_path": str(finalized_path) if finalized_path is not None else upstream_output_path,
+                    "finalized_path": str(finalized_path) if finalized_path is not None else None,
+                    "upstream_output_path": upstream_output_path,
+                    "input_mirror_path": input_mirror_path,
+                    "last_error": last_error,
+                    "preview_url": preview_url,
+                }
+            )
+        return cards
+
+    for game_id, path in finalized_output_dirs.items():
         cards.append(
             {
                 "game_id": game_id,
                 "title": name_map.get(game_id, game_id),
+                "status": "completed",
+                "phase": "finalized_output_available",
                 "local_path": str(path),
+                "finalized_path": str(path),
+                "upstream_output_path": None,
+                "input_mirror_path": None,
+                "last_error": None,
                 "preview_url": f"{ROUTE_PREFIX}/output/{urllib.parse.quote(game_id)}/index.html",
             }
         )
@@ -317,7 +360,7 @@ def build_publish_cards(base_payload: dict[str, Any], name_map: dict[str, str]) 
     publish_dirs = resolve_publish_dirs(base_payload)
     cards: list[dict[str, Any]] = []
     if not isinstance(entries, list):
-        return cards
+        entries = []
 
     for entry in entries:
         if not isinstance(entry, dict):
@@ -336,6 +379,7 @@ def build_publish_cards(base_payload: dict[str, Any], name_map: dict[str, str]) 
             {
                 "game_id": game_id,
                 "title": name_map.get(game_id, game_id),
+                "status": "completed",
                 "poster_url": poster_url or derive_cdn_screenshot(entry.get("public_cdn_url") or entry.get("play_cdn_url")),
                 "public_cdn_url": entry.get("public_cdn_url"),
                 "play_cdn_url": entry.get("play_cdn_url"),
@@ -351,7 +395,71 @@ def build_publish_cards(base_payload: dict[str, Any], name_map: dict[str, str]) 
                 ),
             }
         )
-    return cards
+    if cards:
+        return cards
+
+    step_map = build_step_map(base_payload)
+    publish_step = step_map.get("publish", {})
+    if not isinstance(publish_step, dict):
+        publish_step = {}
+    publish_details = publish_step.get("details") if isinstance(publish_step.get("details"), dict) else publish_step
+    publish_status = str(publish_step.get("status") or publish_details.get("status") or ("pending" if base_payload.get("publish_enabled") else "disabled"))
+    publish_reason = publish_details.get("reason") if isinstance(publish_details.get("reason"), str) else None
+    return [
+        {
+            "kind": "status",
+            "title": "Publish",
+            "status": publish_status,
+            "reason": publish_reason,
+        }
+    ]
+
+
+def build_finalize_cards(base_payload: dict[str, Any], name_map: dict[str, str]) -> list[dict[str, Any]]:
+    step_map = build_step_map(base_payload)
+    finalize_step = step_map.get("finalize", {})
+    if not isinstance(finalize_step, dict):
+        finalize_step = {}
+    finalize_details = finalize_step.get("details") if isinstance(finalize_step.get("details"), dict) else finalize_step
+
+    source_by_game_id: dict[str, str] = {}
+    source_dirs = finalize_details.get("source_dirs")
+    if isinstance(source_dirs, list):
+        for item in source_dirs:
+            if not isinstance(item, str):
+                continue
+            path = Path(item).resolve()
+            if path.exists():
+                source_by_game_id[path.name] = str(path)
+
+    destination = finalize_details.get("destination") if isinstance(finalize_details.get("destination"), str) else None
+    finalized_output_dirs = resolve_output_dirs(base_payload)
+    cards: list[dict[str, Any]] = []
+    for game_id, path in finalized_output_dirs.items():
+        cards.append(
+            {
+                "game_id": game_id,
+                "title": name_map.get(game_id, game_id),
+                "status": str(finalize_step.get("status") or finalize_details.get("status") or "completed"),
+                "local_path": str(path),
+                "source_path": source_by_game_id.get(game_id),
+                "destination": destination,
+                "preview_url": f"{ROUTE_PREFIX}/output/{urllib.parse.quote(game_id)}/index.html",
+            }
+        )
+    if cards:
+        return cards
+
+    if finalize_step or destination or base_payload.get("final_output_dir"):
+        return [
+            {
+                "kind": "status",
+                "title": "Finalize",
+                "status": str(finalize_step.get("status") or finalize_details.get("status") or "pending"),
+                "destination": destination or base_payload.get("final_output_dir"),
+            }
+        ]
+    return []
 
 
 def resolve_refactoring_run_dir(base_payload: dict[str, Any]) -> Path | None:
@@ -373,6 +481,14 @@ def resolve_refactoring_run_dir(base_payload: dict[str, Any]) -> Path | None:
             if path.exists():
                 return path
     return None
+
+
+def load_refactoring_dashboard_payload(base_payload: dict[str, Any]) -> dict[str, Any]:
+    refactoring_run_dir = resolve_refactoring_run_dir(base_payload)
+    if refactoring_run_dir is None:
+        return {}
+    payload = safe_read_json(refactoring_run_dir / "dashboard" / "dashboard_data.json")
+    return payload if isinstance(payload, dict) else {}
 
 
 def build_cost_story(base_payload: dict[str, Any], name_map: dict[str, str]) -> dict[str, Any]:
@@ -560,6 +676,9 @@ def build_current_run_view(base_payload: dict[str, Any], run_dir: Path) -> dict[
     refactor_step = step_map.get("refactoring", {})
     if not isinstance(refactor_step, dict):
         refactor_step = {}
+    finalize_step = step_map.get("finalize", {})
+    if not isinstance(finalize_step, dict):
+        finalize_step = {}
     publish_status = "disabled"
     publish_step = step_map.get("publish")
     if not isinstance(publish_step, dict):
@@ -569,8 +688,17 @@ def build_current_run_view(base_payload: dict[str, Any], run_dir: Path) -> dict[
     elif base_payload.get("publish_enabled"):
         publish_status = "pending"
 
-    refactor_status = str(refactor_step.get("status") or "pending")
+    refactor_state = refactor_step.get("details") if isinstance(refactor_step.get("details"), dict) else refactor_step
+    refactor_failed = False
+    if isinstance(refactor_state, dict):
+        refactor_failed = bool(refactor_state.get("failed")) or (
+            isinstance(refactor_state.get("games_transform_failed"), int)
+            and int(refactor_state.get("games_transform_failed") or 0) > 0
+        ) or str(refactor_state.get("last_known_status") or "").endswith("failed")
+    raw_refactor_status = str(refactor_step.get("status") or refactor_state.get("status") or "pending")
+    refactor_status = "failed" if refactor_failed else raw_refactor_status
     match_status = str(match_step.get("status") or "pending")
+    finalize_status = str(finalize_step.get("status") or ("completed" if base_payload.get("final_output_dir") else "pending"))
     cost_story = build_cost_story(base_payload, name_map)
     refactor_stage = next((item for item in cost_story.get("stages", []) if item.get("id") == "refactor"), {})
     run_timing = build_timing_summary(
@@ -613,10 +741,19 @@ def build_current_run_view(base_payload: dict[str, Any], run_dir: Path) -> dict[
                 cost_story="Not tracked",
                 run_updated_at=base_payload.get("updated_at"),
             ),
+            build_stage_flow_item(
+                "finalize",
+                "Finalize",
+                finalize_status,
+                step_details=finalize_step,
+                cost_story="Local output copy",
+                run_updated_at=base_payload.get("updated_at"),
+            ),
         ],
         "match_cards": build_match_cards(run_dir),
         "refactor_cards": build_refactor_cards(base_payload, name_map),
         "publish_cards": build_publish_cards(base_payload, name_map),
+        "finalize_cards": build_finalize_cards(base_payload, name_map),
         "dig_deeper": {
             "artifacts_anchor": "#dig-deeper",
             "refactoring_dashboard_path": (
@@ -1189,13 +1326,17 @@ def generate_dashboard_html() -> str:
       return `<div class="card-grid">${cards.map((card) => `
         <article class="card">
           <div>
-            <div class="eyebrow" style="margin-bottom:6px;">Refactor Output</div>
+            <div class="eyebrow" style="margin-bottom:6px;">${esc(card.status === 'failed' ? 'Refactor Failed' : 'Refactor')}</div>
             <h3>${esc(card.title)}</h3>
-            <div class="card-meta">${esc(card.game_id)}</div>
+            <div class="card-meta">${esc(card.game_id)} · ${esc(humanStatus(card.status || 'unknown'))}</div>
           </div>
-          <div class="muted">${esc(card.local_path)}</div>
+          ${card.phase ? `<div class="muted"><strong>Phase:</strong> ${esc(card.phase)}</div>` : ''}
+          ${card.local_path ? `<div class="muted"><strong>Path:</strong> ${esc(card.local_path)}</div>` : ''}
+          ${card.input_mirror_path ? `<div class="muted"><strong>Input:</strong> ${esc(card.input_mirror_path)}</div>` : ''}
+          ${card.upstream_output_path && card.upstream_output_path !== card.local_path ? `<div class="muted"><strong>Upstream Output:</strong> ${esc(card.upstream_output_path)}</div>` : ''}
+          ${card.last_error ? `<div class="muted" style="color:#ffb4bf;"><strong>Error:</strong> ${esc(card.last_error)}</div>` : ''}
           <div class="card-actions">
-            <button type="button" onclick="openPreview('${esc(card.preview_url)}')">Open 400x700</button>
+            ${card.preview_url ? `<button type="button" onclick="openPreview('${esc(card.preview_url)}')">Open 400x700</button>` : ''}
           </div>
         </article>
       `).join("")}</div>`;
@@ -1205,15 +1346,35 @@ def generate_dashboard_html() -> str:
       if (!Array.isArray(cards) || !cards.length) return '<div class="empty">Publish links appear after publish completes.</div>';
       return `<div class="card-grid">${cards.map((card) => `
         <article class="card">
-          ${posterMarkup(card.poster_url, card.title)}
+          ${card.kind === 'status' ? '' : posterMarkup(card.poster_url, card.title)}
           <div>
-            <div class="eyebrow" style="margin-bottom:6px;">Published</div>
+            <div class="eyebrow" style="margin-bottom:6px;">${esc(card.kind === 'status' ? `Publish ${humanStatus(card.status || 'unknown')}` : 'Published')}</div>
             <h3>${esc(card.title)}</h3>
-            <div class="card-meta">${esc(card.game_id)}</div>
+            ${card.game_id ? `<div class="card-meta">${esc(card.game_id)}</div>` : ''}
           </div>
+          ${card.reason ? `<div class="muted"><strong>Reason:</strong> ${esc(card.reason)}</div>` : ''}
           <div class="card-actions">
             ${card.play_cdn_url ? `<button type="button" onclick="window.open('${esc(card.play_cdn_url)}', '_blank')">Open CDN</button>` : ""}
             ${card.local_play_preview_url ? `<button class="ghost" type="button" onclick="openPreview('${esc(card.local_play_preview_url)}')">Open Local 400x700</button>` : ""}
+          </div>
+        </article>
+      `).join("")}</div>`;
+    }
+
+    function renderFinalizeCards(cards) {
+      if (!Array.isArray(cards) || !cards.length) return '<div class="empty">Finalize paths appear after local output copy completes.</div>';
+      return `<div class="card-grid">${cards.map((card) => `
+        <article class="card">
+          <div>
+            <div class="eyebrow" style="margin-bottom:6px;">${esc(card.kind === 'status' ? `Finalize ${humanStatus(card.status || 'unknown')}` : 'Finalized Output')}</div>
+            <h3>${esc(card.title)}</h3>
+            ${card.game_id ? `<div class="card-meta">${esc(card.game_id)} · ${esc(humanStatus(card.status || 'unknown'))}</div>` : ''}
+          </div>
+          ${card.local_path ? `<div class="muted"><strong>Path:</strong> ${esc(card.local_path)}</div>` : ''}
+          ${card.source_path ? `<div class="muted"><strong>Source:</strong> ${esc(card.source_path)}</div>` : ''}
+          ${card.destination ? `<div class="muted"><strong>Destination:</strong> ${esc(card.destination)}</div>` : ''}
+          <div class="card-actions">
+            ${card.preview_url ? `<button type="button" onclick="openPreview('${esc(card.preview_url)}')">Open 400x700</button>` : ''}
           </div>
         </article>
       `).join("")}</div>`;
@@ -1425,6 +1586,10 @@ def generate_dashboard_html() -> str:
               <section>
                 <div class="eyebrow">Publish</div>
                 ${renderPublishCards(view.publish_cards)}
+              </section>
+              <section>
+                <div class="eyebrow">Finalize</div>
+                ${renderFinalizeCards(view.finalize_cards)}
               </section>
               <div>
                 <button class="ghost" type="button" onclick="document.getElementById('dig-deeper').open = true; document.getElementById('dig-deeper').scrollIntoView({behavior:'smooth'});">Dig deeper</button>

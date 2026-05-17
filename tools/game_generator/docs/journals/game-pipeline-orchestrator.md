@@ -1,6 +1,6 @@
 # Game Pipeline Orchestrator Implementation Journal
 
-**Last Updated:** 2026-05-17 08:03 America/Mexico_City  
+**Last Updated:** 2026-05-17 08:44 America/Mexico_City  
 **Feature Spec:** N/A  
 **Backend Reference:** N/A
 
@@ -37,6 +37,55 @@
 ---
 
 ## 📝 Journal Entries
+
+### 2026-05-17 08:44 - Expanded dashboard to show failed refactor entries plus publish/finalize path status
+
+**Achievement:**
+- Fixed the local pipeline dashboard so refactor cards no longer hide failed games
+- Added clearer publish and finalize sections so skipped publish state and finalized output copy paths are visible
+- Verified the latest `3d gta game` run now exposes the failed `Archive Rush 3D` refactor item with its error and paths
+
+**Implementation Details:**
+- `scripts/pipeline_dashboard_presenter.py`
+  - changed `build_refactor_cards(...)` to load upstream refactoring dashboard payloads and build cards from all upstream game entries, not just successful `final_output_dirs`
+  - successful refactor cards still expose local preview URLs when finalized output exists
+  - failed refactor cards now expose:
+    - `status`
+    - `phase`
+    - `local_path`
+    - `input_mirror_path`
+    - `upstream_output_path`
+    - `last_error`
+  - added `build_finalize_cards(...)` using finalize step details and finalized output dirs
+  - improved `build_publish_cards(...)` so when publish has no CDN entries it still shows a status card with the skip reason
+  - added a `Finalize` stage tile to `stage_flow`
+  - updated browser rendering to display:
+    - failure-aware refactor cards
+    - status-aware publish cards
+    - finalize cards with source/destination/local paths
+
+**Technical Decisions:**
+- Kept the fix in the presentation layer because upstream run data was already correct and complete
+- Used upstream refactor dashboard `games[*]` as the source of truth for per-game refactor outcomes
+- Preserved successful preview behavior while extending visibility for failures and local finalize copy behavior
+
+**Testing:**
+- Recompiled presenter:
+  - `python3 -m py_compile scripts/pipeline_dashboard_presenter.py`
+- Refreshed dashboard assets for:
+  - `pipeline_runs/run_pipeline_20260517T140907Z`
+- Verified refreshed dashboard payload now includes:
+  - failed refactor card for `Archive Rush 3D`
+  - `last_error: node_01_remix_v5_super_operator failed after retries; last_status=failed`
+  - `input_mirror_path` and upstream/local output paths for the failed item
+  - publish status card with reason `publish flag not provided`
+  - finalize card with source and destination paths for the finalized successful output
+
+**Next Steps:**
+- [ ] Optionally surface upstream working-clone/operator artifact paths too if you want one-click failure investigation links
+- [ ] Optionally do a browser UI pass on the refreshed dashboard if another visual verification is requested
+
+**Status:** Complete
 
 ### 2026-05-17 08:03 - Added root-view sanitization to published artifact materialization
 
