@@ -1,6 +1,6 @@
 # Demo Pipeline Launcher Implementation Journal
 
-**Last Updated:** 2026-04-27 11:29  
+**Last Updated:** 2026-05-18 10:08  
 **Feature Spec:** N/A  
 **Backend Reference:** See existing pipeline scripts in `scripts/`
 
@@ -36,6 +36,29 @@
 ---
 
 ## 📝 Journal Entries
+
+### 2026-05-18 10:08 - Demo Launch Request With Prompt Limit 3
+
+**What Changed:**
+- Re-opened the demo launcher workflow for an operational launch request
+- Verified the standalone launcher usage in `scripts/demo_pipeline_launch.py`
+- Prepared a run using the prompt `dress up game tim burton inspired` with matcher limit `3`
+
+**Why:**
+This task is a continuation of the existing demo launcher workflow, so the operational run should be tracked in the same journal for continuity.
+
+**Files Referenced:**
+- `scripts/demo_pipeline_launch.py` - Confirms the CLI arguments and default launch behavior
+- `docs/journals/demo-pipeline-launcher.md` - Maintains continuity for launcher-related work
+
+**Next Steps:**
+- [x] Confirm launcher argument format
+- [ ] Execute the requested launcher command
+- [ ] Capture the resulting run id and watch URL
+
+**Status:** In Progress
+
+---
 
 ### 2026-04-27 11:28 - Initial Setup
 

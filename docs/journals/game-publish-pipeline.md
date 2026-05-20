@@ -38,6 +38,118 @@
 
 ## 📝 Journal Entries
 
+### 2026-05-18 23:58 - Document detector manual for identical public-vs-obfuscated outputs
+
+**What Changed:**
+- expanded `tools/game_publish_pipeline/README.md` with an operator-facing manual for `scripts/detect_identical_public_obfuscated.py`
+- documented the intended purpose of the detector as a parity/suspicion check for published outputs that appear not to have been meaningfully obfuscated
+- documented a safe step-by-step workflow covering:
+  - report-only scan
+  - strict scan
+  - affected-gamezone listing
+  - quarantine copy flow
+  - delete dry-run
+  - real cleanup with automatic post-cleanup reconciliation
+- documented the important report fields and the common repo convention of writing:
+  - `tmp/identical_public_obfuscated_report.json`
+- clarified that the CLI accepts both `--quarentine` and `--quarantine`, while prose should prefer the correct spelling `--quarantine`
+
+**Operator Manual Summary:**
+```bash
+python3 tools/game_publish_pipeline/scripts/detect_identical_public_obfuscated.py \
+  --report-path tmp/identical_public_obfuscated_report.json
+```
+
+Useful escalation sequence:
+1. generate a JSON report without mutating files
+2. rerun with `--strict` when you want shell/CI failure on identical pairs
+3. use `--list-affected-gamezones` to identify the impacted `gamezone-*` folders
+4. use `--quarantine` to preserve suspicious identical files for review
+5. use `--delete-affected-gamezones --delete-dry-run` before any destructive cleanup
+6. only then run real cleanup, allowing the built-in refresh/materialize/validate post-steps unless you have a reason to override them
+
+**Why:**
+The detector script already had a meaningful remediation workflow encoded in its flags, but the practical operator usage was easy to forget. Recording the workflow in the tool README and journal preserves the “what is this for?”, “how do I run it safely?”, and “what comes after detection?” context close to the publish pipeline docs.
+
+**Files Updated:**
+- `tools/game_publish_pipeline/README.md`
+
+**Status:** Complete
+
+### 2026-05-19 00:08 - Quarantine identical public-vs-obfuscated detector matches for manual analysis
+
+**What Changed:**
+- ran the detector in quarantine mode so the currently identical published files were copied into a reviewable run-scoped quarantine folder
+- refreshed the machine-readable report at:
+  - `tmp/identical_public_obfuscated_report.json`
+- captured the current quarantine root for follow-up manual inspection
+
+**Executed Command:**
+```bash
+python3 tools/game_publish_pipeline/scripts/detect_identical_public_obfuscated.py \
+  --quarantine \
+  --list-affected-gamezones \
+  --report-path tmp/identical_public_obfuscated_report.json
+```
+
+**Observed Result:**
+- scanned public files:
+  - `3985`
+- comparable file pairs:
+  - `1393`
+- identical file pairs:
+  - `158`
+- quarantined files copied:
+  - `158`
+- affected gamezone IDs:
+  - `158`
+- missing in obfuscated:
+  - `0`
+
+**Quarantine Location:**
+- `games/published/runs/run_20260519T060846Z/quarantine`
+
+**Current Pattern:**
+- the reported identical matches are currently `index.html` files for the affected published game folders
+- the first affected IDs appear in paired suffix form such as:
+  - `__p01`
+  - `__p02`
+
+**Why:**
+This preserves a concrete record of the live detector run and the exact quarantine folder used for analysis, so future debugging can start from the captured suspicious files instead of rerunning detection blindly.
+
+**Status:** Complete
+
+### 2026-05-19 02:00 - Ground the `gamezone-*`-only GCS sync rule before implementation
+
+**What Changed:**
+- documented the intended behavior change for `tools/game_publish_pipeline/scripts/sync_to_gcs.py` before modifying code
+- locked the new requirement that sync should only upload top-level entries whose names start with `gamezone-`
+- clarified that the rule should apply across all target modalities:
+  - `public`
+  - `obfuscated`
+  - `both`
+
+**Grounded Current Behavior:**
+The current sync helper enumerates top-level directories under the selected local root and plans rsync operations from those directories. In its current form it does not explicitly constrain uploads to the `gamezone-*` namespace, so non-gamezone top-level directories could be considered eligible if present.
+
+**Intended New Behavior:**
+After the change:
+- `--target public` should only sync `games/published/public/gamezone-*`
+- `--target obfuscated` should only sync `games/published/obfuscated/gamezone-*`
+- `--target both` should apply the same rule to both roots
+- root-level shared artifacts and non-gamezone folders should be excluded from this sync path
+
+**Why:**
+The sync helper should behave as a game-folder uploader, not as a generic published-root uploader. Locking the rule before implementation keeps the upcoming code change aligned with the intended operational contract and reduces ambiguity about whether collection files or other root extras belong in cloud sync.
+
+**Planned Follow-up:**
+- update `sync_to_gcs.py` item selection so only `gamezone-*` directories are eligible
+- preserve current destination mapping and target semantics
+- update README examples so the new rule is visible in operator docs
+
+**Status:** In Progress
+
 ### 2026-05-16 11:54 - Final operator command recap for dashboard-aware publish flow
 
 **What Changed:**

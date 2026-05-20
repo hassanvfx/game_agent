@@ -104,14 +104,20 @@ def validate_source_root(path: Path, label: str) -> None:
 
 
 def iter_top_level_items(root: Path, only_items: set[str]) -> list[Path]:
-    items = [path for path in sorted(root.iterdir()) if path.is_dir()]
+    items = [
+        path
+        for path in sorted(root.iterdir())
+        if path.is_dir() and path.name.startswith("gamezone-")
+    ]
     if only_items:
         items = [path for path in items if path.name in only_items]
         missing = sorted(only_items - {path.name for path in items})
         if missing:
-            raise SystemExit(f"Requested item(s) not found under {root}: {', '.join(missing)}")
+            raise SystemExit(
+                f"Requested gamezone item(s) not found under {root}: {', '.join(missing)}"
+            )
     if not items:
-        raise SystemExit(f"No top-level directories found to sync under: {root}")
+        raise SystemExit(f"No top-level gamezone directories found to sync under: {root}")
     return items
 
 

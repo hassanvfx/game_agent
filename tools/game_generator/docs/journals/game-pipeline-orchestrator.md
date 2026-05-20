@@ -1,6 +1,6 @@
 # Game Pipeline Orchestrator Implementation Journal
 
-**Last Updated:** 2026-05-17 12:34 America/Mexico_City  
+**Last Updated:** 2026-05-18 09:48 America/Mexico_City  
 **Feature Spec:** N/A  
 **Backend Reference:** N/A
 
@@ -37,6 +37,218 @@
 ---
 
 ## 📝 Journal Entries
+
+### 2026-05-18 09:48 - Reconciled completed vs failed searches into `manifest_may_18_searches_1`
+
+**Achievement:**
+- Added a dedicated reconciliation artifact that combines the two completed search batches into one success/failure report
+- Captured where successful outputs were copied, and where failed items should be investigated, without needing to manually inspect each batch item file
+
+**Implementation Details:**
+- Added `tmp/reconcile_manifest_batches.py`
+  - reconciles these completed batches:
+    - `batch_pipeline_20260517T205036Z` → `tmp/curated_limit2_prompt_only_manifest.json`
+    - `batch_pipeline_20260517T205038Z` → `tmp/vatsal_top_mechanics.json`
+  - emits:
+    - `tmp/manifest_may_18_searches_1.json`
+- The artifact contains:
+  - top-level summary counts
+  - batch-level summaries
+  - `successful_items`
+  - `failed_items`
+  - failure rollups by manifest and by failed step
+
+**Technical Decisions:**
+- Treated `result_summary.final_output_dir` and `result_summary.final_output_dirs` as the source of truth for successful reconciled outputs
+- Treated `last_error`, `result_summary.error`, `pipeline_run_id`, and upstream refactor metadata as the source of truth for failed items
+- Kept the artifact as a single combined JSON report so future filtering can be done from one place rather than splitting immediately into multiple files
+
+**Testing:**
+- Ran:
+  - `python3 tmp/reconcile_manifest_batches.py`
+- Confirmed generated artifact:
+  - `tmp/manifest_may_18_searches_1.json`
+- Confirmed totals:
+  - `total_successes: 93`
+  - `total_failures: 187`
+  - `failure_count_by_step`:
+    - `matcher: 176`
+    - `refactoring: 11`
+- Confirmed manifest-level success/failure totals:
+  - `curated_top_80`: `32 completed`, `48 failed`
+  - `vatsal_top_mechanics_200`: `61 completed`, `139 failed`
+
+**Next Steps:**
+- [ ] Optionally derive a success-only manifest from `manifest_may_18_searches_1.json`
+- [ ] Optionally derive a failure-only investigation list grouped by matcher vs refactoring issues
+- [ ] Optionally add a second tmp script that exports just the successful prompts into a relaunch-ready manifest
+
+**Status:** Complete
+
+### 2026-05-17 14:11 - Generated first mechanic-rooted `vatsal_top_mechanics` manifest with sidecar annotations
+
+**Achievement:**
+- Built the first mechanic-rooted catalog pass as a standard runnable batch manifest derived from the content-manager mechanic sheet
+- Preserved a separate annotations sidecar so future focused passes can expand by mechanic, feel, player context, aesthetic, or meme cluster without breaking manifest compatibility
+
+**Implementation Details:**
+- Added `tmp/extract_first_100_mechanics.py`
+  - reads `/Users/hassan/Downloads/game_mechanic_tags_2026-2.xlsx`
+  - extracts and normalizes the first 100 mechanic rows into JSON
+  - writes `tmp/first_100_mechanics_rows.json`
+- Added `tmp/generate_vatsal_top_mechanics.py`
+  - consumes:
+    - `tmp/first_100_mechanics_rows.json`
+    - `tmp/curated_limit2_prompt_only_manifest.json`
+  - emits:
+    - `tmp/vatsal_top_mechanics.json`
+    - `tmp/vatsal_top_mechanics.annotations.json`
+  - generates 2 brand/style variants per mechanic row
+  - keeps the output manifest in the normal batch format with `defaults` + `runs`
+- Added `tmp/validate_vatsal_top_mechanics.py`
+  - validates the generated manifest with `batch_pipeline_state.resolve_manifest(...)`
+  - prints a summary of total runs, unique prompts, and annotations count
+
+**Technical Decisions:**
+- Kept the new file as a **regular manifest** so it remains directly runnable by the existing batch launcher
+- Used a **sidecar annotations file** instead of embedding extra metadata into the main manifest, because this keeps the launch artifact simple while still enabling future filtered/focused passes
+- Used the curated manifest as an **inspiration palette** and the XLSX as the **mechanic hierarchy backbone**
+- Set safer exploratory defaults for the first pass:
+  - `publish: false`
+  - `upload: false`
+  - `limit: 6`
+  - `matcher_mode: v2`
+
+**Testing:**
+- Ran:
+  - `python3 tmp/extract_first_100_mechanics.py`
+  - confirmed `row_count: 100`
+- Ran:
+  - `python3 tmp/generate_vatsal_top_mechanics.py`
+  - confirmed generated outputs:
+    - `tmp/vatsal_top_mechanics.json`
+    - `tmp/vatsal_top_mechanics.annotations.json`
+- Ran:
+  - `python3 tmp/validate_vatsal_top_mechanics.py`
+  - confirmed:
+    - `resolved_run_count: 200`
+    - `annotations_item_count: 200`
+    - `unique_prompt_count: 124`
+
+**Caveats / Follow-ups:**
+- Some mechanics still produce duplicate prompt values across the two variants because the second prompt candidate can collapse to the same short key in low-entropy rows
+- The first pass is structurally valid, but still needs editorial tightening before it should be considered the final production catalog
+
+**Next Steps:**
+- [ ] Tighten prompt deduplication so each mechanic produces two more distinct but still mechanic-rooted search keys where possible
+- [ ] Matcher-prevalidate a sample slice of the new 200-run manifest before launching any expensive batch
+- [ ] Decide whether to derive smaller follow-up manifests by cluster (cozy, horror, style, social, action) from the annotations sidecar
+
+**Status:** Complete
+
+### 2026-05-17 13:15 - Corrected the editorial pass to preserve brand hooks in remix prompts
+
+**Achievement:**
+- Corrected the earlier editorial pass so branded concepts were not replaced by generic concepts in the final manifest
+- Restored the intended structure for the affected entries:
+  - `prompt` = short mechanic/theme key
+  - `remix_prompt` = explicit satirical/parody-inspired brand hook plus full mobile-first remixer guidance
+
+**Implementation Details:**
+- Updated `tmp/editorialize_curated_manifest.py`
+  - changed the helper from generic concept replacement into a branded-entry normalization helper
+  - helper now supports both transitional states:
+    - previously swapped generic prompts
+    - original brand-heavy prompts
+  - helper now rewrites affected entries into short mechanic-first prompts while keeping brand references only in `remix_prompt`
+- Updated `tmp/curated_limit2_prompt_only_manifest.json`
+  - corrected affected entries such as:
+    - `dynasty strategy drama` → satirical remix prompt inspired by Game of Thrones
+    - `crime escalation strategy` → satirical remix prompt inspired by Breaking Bad
+    - `forbidden romance fantasy` → satirical remix prompt inspired by Twilight
+    - `workplace cringe comedy` → satirical remix prompt inspired by The Office
+    - `camp slasher survival` → satirical remix prompt inspired by Friday the 13th
+    - `killer doll horror` → satirical remix prompt inspired by Chucky
+    - `possession horror narrative` → satirical remix prompt inspired by The Exorcist
+    - `surreal psychedelic visual` → satirical remix prompt inspired by Pink Floyd
+    - `retro-future comedy` → satirical remix prompt inspired by Futurama
+    - `mutant team strategy` → satirical remix prompt inspired by X-Men
+    - `cyberpunk rebellion chase` → satirical remix prompt inspired by Akira
+
+**Technical Decisions:**
+- Preserved brand familiarity inside the generation instruction rather than the matcher query so search remains broader and less brittle
+- Used “A satirical game inspired by …” phrasing to keep the parody intent explicit in the remixer instruction
+- Avoided re-replacing branded entries with generic lifestyle/mobile concepts once the desired contract was clarified
+
+**Testing:**
+- Ran:
+  - `python3 tmp/editorialize_curated_manifest.py`
+- Confirmed:
+  - branded affected entries normalize into short mechanic-first prompts
+  - brand/IP references remain in `remix_prompt`
+  - a second helper run becomes stable after the rewrite
+
+**Next Steps:**
+- [ ] Decide whether to normalize the remaining brand-heavy prompts in the rest of the manifest to the same short-key + satirical-remix pattern
+- [ ] Matcher-prevalidate the strongest revised entries before launching a fresh batch
+
+**Status:** Complete
+
+### 2026-05-17 12:42 - Applied editorial mobile-first pass to the curated batch manifest
+
+**Achievement:**
+- Kept the existing curated catalog structure intact while applying a focused editorial replacement pass for stronger Gen Z / millennial casual mobile fit
+- Preserved the agreed contract:
+  - `prompt` = short mechanic/search key
+  - `remix_prompt` = redundant remixer instruction
+
+**Implementation Details:**
+- Added `tmp/editorialize_curated_manifest.py`
+  - repeatable helper that updates the curated manifest in place
+  - replaces selected weaker entries with stronger mobile-native vectors
+- Updated `tmp/curated_limit2_prompt_only_manifest.json`
+  - preserved defaults and overall catalog breadth
+  - replaced 13 targeted entries with more casual/mobile-native concepts
+
+**Editorial Replacements Applied:**
+- `Game of Thrones dark fantasy strategy RPG` → `cozy kingdom builder`
+- `Breaking Bad crime escalation strategy` → `text thread detective`
+- `Twilight romance fantasy` → `closet outfit sorter`
+- `The Office workplace comedy sim` → `cafe order rush`
+- `Friday the 13th camp-slasher survival` → `haunted hotel hidden-object`
+- `Chucky killer-doll horror` → `ghost photo mystery`
+- `Exorcist possession-horror narrative` → `witch potion merge`
+- `Pink Floyd surreal psychedelic visual` → `playlist mood matcher`
+- `forgot-my-password first-world-problems meme` → `doomscroll reflex game`
+- `avocado-toast brunch-problems meme` → `beauty shelf organizer`
+- `Futurama sci-fi comedy` → `delivery route dash`
+- `X-Men mutant-team strategy` → `idle hero collector`
+- `Akira cyberpunk rebellion` → `neon scooter dodger`
+
+**Technical Decisions:**
+- Replaced entries that skewed too lore-heavy, too system-heavy, or too abstract relative to portrait-first casual mobile play
+- Added more vectors with clearer one-thumb verbs and stronger mobile retention/readability patterns:
+  - sorting
+  - matching
+  - merge loops
+  - route/dodge loops
+  - phone-native social deduction
+  - aesthetic organization fantasy
+- Kept the broader fandom / seasonal / aesthetic / meme coverage so the catalog still feels editorially diverse rather than over-optimized into one genre
+
+**Testing:**
+- Ran:
+  - `python3 tmp/editorialize_curated_manifest.py`
+- Confirmed:
+  - `replacement_count: 13`
+  - manifest JSON structure remained valid
+  - entries continue to use short `prompt` plus redundant mobile-first `remix_prompt`
+
+**Next Steps:**
+- [ ] Optionally matcher-prevalidate the strongest replaced entries before launching a new batch
+- [ ] Decide whether to launch a fresh curated batch from the revised manifest or make one more editorial tightening pass first
+
+**Status:** Complete
 
 ### 2026-05-17 12:23 - Restored root artifact materialization to default across all published runs
 

@@ -43,11 +43,42 @@ def load_dotenv() -> None:
     local development usable before dependencies are installed.
     """
 
+    for env_path in candidate_env_paths():
+        _load_single_dotenv(env_path)
+
+
+def candidate_env_paths() -> list[Path]:
+    """Return dotenv locations in preferred resolution order.
+
+    Precedence is still governed by existing environment variables because we never
+    override keys already present in the process environment.
+
+    For file-backed values, we prefer:
+    1. current working directory `.env`
+    2. repository root `.env`
+    3. tool-local `tools/kie-api/.env`
+    """
+
+    cwd_env = Path.cwd() / ".env"
+    repo_root_env = Path(__file__).resolve().parents[4] / ".env"
+    tool_env = Path(__file__).resolve().parents[2] / ".env"
+
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in (cwd_env, repo_root_env, tool_env):
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        ordered.append(candidate)
+    return ordered
+
+
+def _load_single_dotenv(env_path: Path) -> None:
     if python_dotenv_load is not None:
-        python_dotenv_load()
+        python_dotenv_load(dotenv_path=env_path, override=False)
         return
 
-    env_path = Path(".env")
     if not env_path.is_file():
         return
 
