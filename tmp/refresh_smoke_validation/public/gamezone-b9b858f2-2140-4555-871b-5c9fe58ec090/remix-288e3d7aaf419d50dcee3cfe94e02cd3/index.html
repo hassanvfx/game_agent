@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+    <title>OMNI_MOD // ADVANCED_CONSOLE</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] resolved-font: ui/display -> Orbitron, terminal text -> VT323 from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #020617;
+            --bg-panel: #0f172a;
+            --accent-cyan: #67e8f9;
+            --accent-purple: #a78bfa;
+            --accent-red: #fb7185;
+            --accent-green: #34d399;
+            --accent-yellow: #fbbf24;
+            --text-main: #ecfeff;
+            --text-dim: #7dd3fc;
+            --panel-line: rgba(103, 232, 249, 0.22);
+            --panel-glow: 0 0 24px rgba(103, 232, 249, 0.12);
+            --avatar-size: 2.75rem;
+        }
+
+        html, body {
+            width: 100%; height: 100%; margin: 0; padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            overflow: hidden;
+            touch-action: auto;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* CRT/Hologram Grain */
+        .grain-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='assets/www.w3.org/2000/svg.html'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.6;
+        }
+
+        .scanlines {
+            position: absolute; inset: 0; pointer-events: none; z-index: 51;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            opacity: 0.15;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Animations */
+        @keyframes flash-red {
+            0% { background-color: rgba(239, 68, 68, 0); }
+            10% { background-color: rgba(239, 68, 68, 0.2); }
+            100% { background-color: rgba(239, 68, 68, 0); }
+        }
+        .anim-flash-red { animation: flash-red 0.5s ease-out; }
+
+        @keyframes glitch-anim {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+        .anim-glitch { animation: glitch-anim 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite; }
+
+        .cmd-text { font-family: 'VT323', monospace; letter-spacing: 0.08em; }
+
+        .material-symbols-sharp {
+            font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+
+        .neon-shell {
+            background:
+                radial-gradient(circle at top, rgba(103, 232, 249, 0.08), transparent 35%),
+                radial-gradient(circle at bottom, rgba(167, 139, 250, 0.08), transparent 30%),
+                linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 1));
+        }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(8, 15, 30, 0.92));
+            box-shadow: var(--panel-glow);
+            border-top: 1px solid var(--panel-line);
+        }
+
+        .header-panel,
+        .controls-panel,
+        .status-panel,
+        .command-well,
+        .start-card,
+        .toast-card,
+        .ban-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-panel::before,
+        .controls-panel::before,
+        .status-panel::before,
+        .command-well::before,
+        .start-card::before,
+        .toast-card::before,
+        .ban-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(120deg, rgba(103, 232, 249, 0.08), transparent 45%, rgba(167, 139, 250, 0.1));
+            opacity: 0.85;
+        }
+
+        .status-panel::after,
+        .controls-panel::after,
+        .start-card::after {
+            content: "";
+            position: absolute;
+            inset-inline: 0;
+            top: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.8), transparent);
+            opacity: 0.8;
+        }
+
+        .mod-avatar {
+            position: relative;
+            width: var(--avatar-size);
+            height: var(--avatar-size);
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            background:
+                radial-gradient(circle at 35% 30%, rgba(255,255,255,0.26), transparent 28%),
+                radial-gradient(circle at 50% 45%, rgba(103, 232, 249, 0.28), rgba(15, 23, 42, 0.18) 40%, rgba(8, 47, 73, 0.84) 75%, rgba(2, 6, 23, 1));
+            border: 1px solid rgba(103, 232, 249, 0.45);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.06) inset,
+                0 0 18px rgba(103, 232, 249, 0.32);
+        }
+
+        .mod-avatar::before,
+        .mod-avatar::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            pointer-events: none;
+        }
+
+        .mod-avatar::before {
+            inset: -0.2rem;
+            border: 1px solid rgba(167, 139, 250, 0.35);
+            opacity: 0.9;
+        }
+
+        .mod-avatar::after {
+            inset: 0.7rem 0.7rem 0.55rem;
+            background: linear-gradient(180deg, rgba(103,232,249,0.18), rgba(167,139,250,0.2));
+            filter: blur(7px);
+            opacity: 0.85;
+        }
+
+        .mod-avatar__face {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            gap: 0.28rem;
+            justify-items: center;
+        }
+
+        .mod-avatar__eyes {
+            display: flex;
+            gap: 0.38rem;
+        }
+
+        .mod-avatar__eyes span {
+            width: 0.36rem;
+            height: 0.36rem;
+            border-radius: 999px;
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(103, 232, 249, 0.9);
+            animation: eye-pulse 1.7s ease-in-out infinite;
+        }
+
+        .mod-avatar__sigil {
+            width: 1rem;
+            height: 0.18rem;
+            border-radius: 999px;
+            background: linear-gradient(90deg, transparent, rgba(167,139,250,0.9), transparent);
+            box-shadow: 0 0 10px rgba(167, 139, 250, 0.65);
+        }
+
+        @keyframes eye-pulse {
+            0%, 100% { transform: scaleY(1); opacity: 0.78; }
+            45% { transform: scaleY(1.18); opacity: 1; }
+            50% { transform: scaleY(0.2); opacity: 0.6; }
+            60% { transform: scaleY(1); opacity: 0.95; }
+        }
+
+        .quick-strip {
+            position: relative;
+            padding: 0.15rem;
+            border-radius: 0.95rem;
+            border: 1px solid rgba(103, 232, 249, 0.16);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.88));
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+        }
+
+        .cmd-btn {
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(6px);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+
+        .cmd-btn::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, rgba(255,255,255,0.12), transparent 45%, rgba(255,255,255,0.04));
+            opacity: 0.75;
+            pointer-events: none;
+        }
+
+        .send-btn {
+            background: linear-gradient(180deg, rgba(56, 189, 248, 0.28), rgba(59, 130, 246, 0.18));
+            border-color: rgba(103, 232, 249, 0.28);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.16);
+        }
+
+        .send-btn svg {
+            filter: drop-shadow(0 0 8px rgba(103, 232, 249, 0.45));
+        }
+
+        .start-card {
+            background:
+                radial-gradient(circle at top, rgba(103, 232, 249, 0.12), transparent 35%),
+                linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.96));
+            box-shadow:
+                0 0 0 1px rgba(103, 232, 249, 0.12) inset,
+                0 24px 60px rgba(2, 6, 23, 0.6),
+                0 0 36px rgba(103, 232, 249, 0.14);
+        }
+
+        .start-scanline {
+            position: relative;
+        }
+
+        .start-scanline::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.05), transparent 24%, transparent 76%, rgba(255,255,255,0.04));
+            mix-blend-mode: screen;
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        .ban-card {
+            background:
+                linear-gradient(180deg, rgba(220, 38, 38, 0.9), rgba(153, 27, 27, 0.95));
+            border-color: rgba(255,255,255,0.58);
+            box-shadow: 0 0 80px rgba(248, 113, 113, 0.5);
+        }
+
+        .custom-input {
+            background: transparent; border: none; outline: none;
+            color: white; font-family: 'VT323', monospace; width: 100%;
+        }
+        .custom-input::placeholder { color: var(--text-dim); }
+
+        .btn-press:active { transform: scale(0.96); opacity: 0.9; }
+        
+        /* Command Button Styles */
+        .cmd-btn {
+            flex: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: all 0.1s;
+            border-width: 1px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Audio Assets -->
+<!-- [agent-note][stage3] resolved-audio: start/ui/success/fail/ban -> catalogs/audios.json -->
+<audio id="bgm_loop" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_msg" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_err" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+<audio id="sfx_ban" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3" preload="auto"></audio>
+<audio id="sfx_scan" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3" preload="auto"></audio>
+<audio id="sfx_warn" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+<audio id="sfx_success" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+
+<div class="grain-overlay"></div>
+<div class="scanlines"></div>
+
+<!-- Main App Container -->
+<div id="app" class="relative w-full h-full flex flex-col bg-slate-950 z-10 overflow-hidden neon-shell">
+
+    <!-- Header -->
+    <div class="flex-none h-14 glass-panel header-panel flex items-center justify-between px-4 z-20 border-b border-cyan-400/10 shadow-2xl">
+        <div class="flex items-center gap-3">
+            <div id="connection-status-dot" class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center border border-slate-700 transition-colors duration-300">
+                <div class="w-1.5 h-1.5 bg-slate-500 rounded-full shadow-[0_0_8px_currentColor]"></div>
+            </div>
+            <div class="mod-avatar" aria-hidden="true">
+                <div class="mod-avatar__face">
+                    <div class="mod-avatar__eyes"><span></span><span></span></div>
+                    <div class="mod-avatar__sigil"></div>
+                </div>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-[9px] text-slate-500 font-bold tracking-widest uppercase">Target ID</span>
+                <span id="target-id" class="text-xs text-white font-bold cmd-text tracking-wider">DISCONNECTED</span>
+            </div>
+        </div>
+        <div class="flex flex-col items-end">
+            <div class="text-[9px] text-purple-400 font-bold tracking-widest uppercase">Karma</div>
+            <div id="score-display" class="text-lg font-black text-white cmd-text tracking-tighter">0000</div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="flex-none h-6 bg-slate-900 status-panel flex items-center justify-between px-4 z-10 border-b border-cyan-500/10">
+        <span class="text-[9px] text-slate-500 font-mono">UPTIME: <span id="session-timer" class="text-slate-300">00:00</span></span>
+        <span id="status-indicator" class="text-[9px] text-slate-500 font-bold tracking-wider">IDLE</span>
+    </div>
+
+    <!-- Canvas Area (Chat) -->
+    <div class="flex-1 relative bg-slate-950 w-full overflow-hidden">
+        <canvas id="gameCanvas" class="block w-full h-full"></canvas>
+        
+        <!-- Toast Notification -->
+        <div id="toast" class="absolute top-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-600 text-white px-4 py-2 rounded shadow-2xl opacity-0 transition-opacity duration-300 pointer-events-none flex items-center gap-2 z-30 toast-card">
+            <span id="toast-icon">ℹ</span>
+            <span id="toast-msg" class="text-xs font-bold font-mono">SYSTEM MESSAGE</span>
+        </div>
+
+        <!-- Ban Stamp -->
+        <div id="ban-overlay" class="absolute inset-0 pointer-events-none flex items-center justify-center hidden z-40">
+            <div class="bg-red-600 text-white px-10 py-6 text-5xl font-black uppercase tracking-tighter transform -rotate-12 border-8 border-white shadow-[0_0_100px_rgba(220,38,38,0.8)] backdrop-blur-sm ban-card">
+                BANNED
+            </div>
+        </div>
+
+        <!-- [agent-note][stage3] resolved-gif: threat/fail reactions -> catalogs/gifs.json -->
+        <div id="reaction-gif-shell" class="absolute bottom-5 right-4 z-30 pointer-events-none hidden max-w-[28vw] min-w-[88px]">
+            <img id="reaction-gif" alt="Reaction feedback" class="w-full rounded-lg border border-cyan-400/30 shadow-[0_0_22px_rgba(103,232,249,0.25)] opacity-90" src="" />
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <!-- [agent-note][stage2] preserve: control-zone | reason: already mobile-safe -->
+    <div class="flex-none glass-panel controls-panel p-3 pb-safe z-30 flex flex-col gap-3">
+        
+        <!-- Quick Commands Strip -->
+        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1 quick-strip">
+            <!-- Info / Soft Actions -->
+            <button onclick="GAME.fillCommand('/scan')" class="cmd-btn bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 btn-press">/SCAN</button>
+            <button onclick="GAME.fillCommand('/mute')" class="cmd-btn bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 btn-press">/MUTE</button>
+            <button onclick="GAME.fillCommand('/purge')" class="cmd-btn bg-slate-500/10 border-slate-500/30 text-slate-400 hover:bg-slate-500/20 btn-press">/PURGE</button>
+            
+            <div class="w-px h-6 bg-slate-700 flex-none mx-1 self-center"></div>
+            
+            <!-- Punitive Actions -->
+            <button onclick="GAME.fillCommand('/warn')" class="cmd-btn bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 btn-press">/WARN</button>
+            <button onclick="GAME.fillCommand('/kick')" class="cmd-btn bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20 btn-press">/DISC</button>
+            <button onclick="GAME.fillCommand('/ban')" class="cmd-btn bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 btn-press">/BAN</button>
+        </div>
+
+        <!-- Input Bar -->
+        <div class="flex gap-2 items-center bg-slate-900 border border-cyan-500/15 rounded-lg p-1.5 shadow-inner command-well">
+            <div class="flex-none w-6 h-full flex items-center justify-center text-slate-600 font-mono text-sm select-none">></div>
+            <input id="msg-input" type="text" autocomplete="off" placeholder="Enter command..." class="flex-1 h-8 custom-input text-sm">
+            <button id="btn-send" class="flex-none w-10 h-8 bg-slate-700 hover:bg-slate-600 rounded flex items-center justify-center text-white shadow btn-press border border-slate-600 send-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+        <div class="w-full max-w-sm relative group">
+            <div class="absolute -inset-1 bg-gradient-to-r from-cyan-600 to-purple-600 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+            <div class="relative bg-slate-900 border border-slate-700 p-8 rounded-xl shadow-2xl start-card start-scanline">
+                <div class="mod-avatar mx-auto mb-6" style="--avatar-size: 5.25rem;" aria-hidden="true">
+                    <div class="mod-avatar__face">
+                        <div class="mod-avatar__eyes"><span></span><span></span></div>
+                        <div class="mod-avatar__sigil"></div>
+                    </div>
+                </div>
+                <h1 class="text-4xl font-black text-white tracking-tight mb-2">OMNI_MOD</h1>
+                <p class="text-slate-500 text-xs mb-8 font-mono uppercase tracking-widest">Advanced Moderation System v2.0</p>
+                
+                <div class="space-y-2 text-left bg-slate-950/80 p-4 rounded border border-slate-800 mb-8 font-mono">
+                    <div class="flex gap-3 text-[10px] text-slate-400">
+                        <span class="text-cyan-500 font-bold">CMD</span>
+                        <span>/SCAN to reveal user stats.</span>
+                    </div>
+                    <div class="flex gap-3 text-[10px] text-slate-400">
+                        <span class="text-purple-500 font-bold">CMD</span>
+                        <span>/MUTE to silence spammers.</span>
+                    </div>
+                    <div class="flex gap-3 text-[10px] text-slate-400">
+                        <span class="text-red-500 font-bold">CMD</span>
+                        <span>/BAN to remove threats.</span>
+                    </div>
+                </div>
+
+                <button id="btn-start" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 rounded-lg transition-all transform active:scale-95 shadow-[0_0_20px_rgba(8,145,178,0.4)] border border-cyan-400/20">
+                    INITIALIZE LINK
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+/**
+ * OMNI_MOD // ADVANCED LOGIC
+ * Extended with Scan, Mute, Purge mechanics
+ */
+
+const GAME = {
+    canvas: null,
+    ctx: null,
+    width: 0,
+    height: 0,
+    
+    state: 'MENU',
+    messages: [],
+    
+    score: 0,
+    startTime: 0,
+    sessionTimerInterval: null,
+    
+    // Scroll & Anim
+    scrollOffset: 0,
+    targetScrollOffset: 0,
+    lastTime: 0,
+    shakeIntensity: 0,
+    
+    // Bot State
+    bot: {
+        name: "UNKNOWN",
+        isSus: false,
+        isMuted: false,
+        stats: {},
+        patience: 100,
+        spamTimer: 0
+    },
+    isTyping: false,
+    
+    CONFIG: {
+        fontSize: 13,
+        lineHeight: 20,
+        fontFamily: "'VT323', monospace",
+        bubblePad: 12,
+        // Colors
+        colUserBg: '#0e7490', // Cyan 700
+        colUserText: '#ffffff',
+        colBotBg: '#334155', // Slate 700
+        colBotText: '#e2e8f0',
+        colSysText: '#64748b',
+        colScanBg: '#0f172a',
+        colScanBorder: '#1e293b'
+    },
+
+    init() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d', { alpha: false });
+        
+        // Audio
+        this.sounds = {
+            bgm: document.getElementById('bgm_loop'),
+            msg: document.getElementById('sfx_msg'),
+            err: document.getElementById('sfx_err'),
+            ban: document.getElementById('sfx_ban'),
+            scan: document.getElementById('sfx_scan'),
+            warn: document.getElementById('sfx_warn'),
+            success: document.getElementById('sfx_success')
+        };
+        
+        this.audioEnabled = false;
+        this.activeReactionTimer = null;
+        this.reactionGifEl = document.getElementById('reaction-gif');
+        this.reactionGifShell = document.getElementById('reaction-gif-shell');
+
+        // Resize
+        this.resize();
+        window.addEventListener('resize', () => {
+            this.resize();
+            this.scrollToBottom();
+        });
+
+        // Controls
+        document.getElementById('btn-start').onclick = () => this.startGame();
+        
+        const sendBtn = document.getElementById('btn-send');
+        const input = document.getElementById('msg-input');
+        
+        sendBtn.onclick = () => this.handleInput();
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') this.handleInput();
+        });
+        
+        // Loop
+        requestAnimationFrame((t) => this.loop(t));
+    },
+
+    resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        this.width = rect.width;
+        this.height = rect.height;
+        this.canvas.width = this.width * dpr;
+        this.canvas.height = this.height * dpr;
+        this.ctx.scale(dpr, dpr);
+        this.layoutMessages();
+    },
+
+    ensureAudioReady() {
+        if (this.audioEnabled) return;
+        this.audioEnabled = true;
+        Object.values(this.sounds).forEach((sound) => {
+            if (!sound) return;
+            sound.volume = sound.id === 'bgm_loop' ? 0.2 : 0.5;
+            try { sound.load(); } catch (_) {}
+        });
+    },
+
+    playSound(id, pitch = 1) {
+        if (!this.audioEnabled) return;
+        const s = this.sounds[id];
+        if (s) {
+            s.pause();
+            s.currentTime = 0;
+            s.playbackRate = pitch;
+            s.play().catch(() => {});
+        }
+    },
+
+    syncBgm() {
+        const bgm = this.sounds.bgm;
+        if (!bgm || !this.audioEnabled) return;
+        if (this.state === 'PLAY') {
+            bgm.volume = 0.2;
+            bgm.play().catch(() => {});
+        } else {
+            bgm.pause();
+            bgm.currentTime = 0;
+        }
+    },
+
+    showReactionGif(url, duration = 1800) {
+        if (!this.reactionGifEl || !this.reactionGifShell) return;
+        clearTimeout(this.activeReactionTimer);
+        this.reactionGifEl.src = url;
+        this.reactionGifShell.classList.remove('hidden');
+        this.activeReactionTimer = setTimeout(() => {
+            this.reactionGifShell.classList.add('hidden');
+            this.reactionGifEl.removeAttribute('src');
+        }, duration);
+    },
+
+    startGame() {
+        this.ensureAudioReady();
+        this.state = 'PLAY';
+        this.score = 0;
+        this.messages = [];
+        this.scrollOffset = 0;
+        this.startTime = Date.now();
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        this.updateScore();
+        this.playSound('success', 1.02);
+        this.syncBgm();
+        
+        // Session Timer
+        if (this.sessionTimerInterval) clearInterval(this.sessionTimerInterval);
+        this.sessionTimerInterval = setInterval(() => {
+            const delta = Math.floor((Date.now() - this.startTime) / 1000);
+            const m = Math.floor(delta / 60).toString().padStart(2, '0');
+            const s = (delta % 60).toString().padStart(2, '0');
+            document.getElementById('session-timer').innerText = `${m}:${s}`;
+        }, 1000);
+
+        this.addSystemMessage("SYSTEM INITIALIZED. SEARCHING FEED...");
+        setTimeout(() => this.findNewPartner(), 1200);
+    },
+
+    findNewPartner() {
+        // Generate Bot
+        const isSus = Math.random() < 0.45; // 45% chance of bad actor
+        const id = Math.floor(Math.random() * 90000) + 10000;
+        
+        this.bot = {
+            name: `USR_${id}`,
+            isSus: isSus,
+            isMuted: false,
+            patience: 100,
+            spamTimer: Date.now() + 2000,
+            stats: {
+                age: isSus ? Math.floor(Math.random() * 5) : Math.floor(Math.random() * 1000) + 50,
+                reports: isSus ? Math.floor(Math.random() * 50) + 5 : 0,
+                risk: isSus ? (Math.random() > 0.5 ? 'CRITICAL' : 'HIGH') : 'LOW',
+                ip: `192.168.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`
+            }
+        };
+
+        // UI Updates
+        document.getElementById('target-id').innerText = this.bot.name;
+        document.getElementById('target-id').className = "text-xs text-white font-bold cmd-text tracking-wider";
+        this.setStatus("CONNECTED", "emerald");
+        
+        const dot = document.getElementById('connection-status-dot');
+        dot.className = "w-8 h-8 rounded bg-emerald-900/50 flex items-center justify-center border border-emerald-500/50 transition-colors duration-300";
+        dot.children[0].className = "w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_currentColor] animate-pulse";
+
+        this.addSystemMessage(`CONNECTION ESTABLISHED: ${this.bot.name}`);
+        
+        // Bot Intro
+        setTimeout(() => {
+            this.botType(800, this.getBotPhrase(true));
+        }, 500);
+    },
+
+    setStatus(text, color) {
+        const el = document.getElementById('status-indicator');
+        el.innerText = text;
+        const colors = {
+            'emerald': 'text-emerald-500',
+            'slate': 'text-slate-500',
+            'red': 'text-red-500',
+            'purple': 'text-purple-500'
+        };
+        el.className = `text-[9px] font-bold tracking-wider ${colors[color] || 'text-slate-500'}`;
+    },
+
+    // --- Input & Command Handling ---
+
+    fillCommand(cmd) {
+        const input = document.getElementById('msg-input');
+        input.value = cmd;
+        // Auto-submit for better UX on buttons
+        this.handleInput();
+    },
+
+    handleInput() {
+        const input = document.getElementById('msg-input');
+        const text = input.value.trim();
+        if (!text) return;
+        
+        input.value = '';
+
+        if (text.startsWith('/')) {
+            this.handleCommand(text);
+        } else {
+            this.addMessage(text, true);
+            // Bot reaction to chat
+            setTimeout(() => {
+                if (!this.bot.isMuted) this.botType(1000, this.getBotResponse());
+            }, 500);
+        }
+    },
+
+    handleCommand(rawCmd) {
+        const parts = rawCmd.split(' ');
+        const cmd = parts[0].toLowerCase();
+
+        this.addMessage(rawCmd, true, true); 
+
+        // Command Switch
+        switch(cmd) {
+            case '/ban':
+                this.executeBan();
+                break;
+            case '/kick':
+            case '/disc':
+            case '/disconnect':
+                this.executeDisconnect();
+                break;
+            case '/warn':
+                this.executeWarn();
+                break;
+            case '/mute':
+                this.executeMute();
+                break;
+            case '/scan':
+                this.executeScan();
+                break;
+            case '/purge':
+            case '/clear':
+                this.executePurge();
+                break;
+            case '/help':
+                this.addSystemMessage("CMDS: /SCAN, /MUTE, /BAN, /WARN, /PURGE, /DISC");
+                break;
+            default:
+                this.addSystemMessage(`ERR: UNKNOWN COMMAND ${cmd}`);
+                this.playSound('err');
+        }
+    },
+
+    // --- Command Logic ---
+
+    executeScan() {
+        this.playSound('scan', 1.04); // Security sweep pulse
+        const s = this.bot.stats;
+        
+        // Create a formatted system block
+        const report = [
+            `TARGET: ${this.bot.name}`,
+            `IP_ADDR: ${s.ip}`,
+            `ACC_AGE: ${s.age} DAYS`,
+            `REPORTS: ${s.reports}`,
+            `RISK_LV: ${s.risk}`
+        ];
+        
+        // Add as a special block message
+        this.addScanMessage(report, s.risk === 'CRITICAL' || s.risk === 'HIGH');
+    },
+
+    executeMute() {
+        if (this.bot.isMuted) {
+            this.addSystemMessage("TARGET ALREADY MUTED.");
+            return;
+        }
+        this.bot.isMuted = true;
+        this.setStatus("TARGET MUTED", "purple");
+        this.addSystemMessage(`TARGET ${this.bot.name} MUTED FOR 15s.`);
+        this.playSound('warn', 0.92);
+        
+        // Auto unmute
+        setTimeout(() => {
+            if (this.state === 'PLAY' && this.bot.isMuted) {
+                this.bot.isMuted = false;
+                this.setStatus("CONNECTED", "emerald");
+                this.addSystemMessage("MUTE EXPIRED.");
+            }
+        }, 15000);
+    },
+
+    executePurge() {
+        // Remove last 3 messages
+        if (this.messages.length > 0) {
+            this.messages = this.messages.slice(0, Math.max(0, this.messages.length - 4));
+            this.addSystemMessage("CACHE PURGED.");
+            this.playSound('msg', 1.18);
+            this.layoutMessages();
+        }
+    },
+
+    executeDisconnect() {
+        this.addSystemMessage(`DISCONNECTING ${this.bot.name}...`);
+        this.closeConnection(false); // Neutral exit
+    },
+
+    executeWarn() {
+        this.addSystemMessage(`WARNING SENT TO ${this.bot.name}`);
+        this.playSound('warn', 1.08);
+        setTimeout(() => {
+            if (!this.bot.isMuted) {
+                if (this.bot.isSus) {
+                    this.botType(600, "lol whatever");
+                } else {
+                    this.botType(600, "sorry!!");
+                }
+            }
+        }, 500);
+    },
+
+    executeBan() {
+        const overlay = document.getElementById('ban-overlay');
+        overlay.classList.remove('hidden');
+        this.playSound('ban');
+        this.shakeIntensity = 10;
+        
+        // Scoring Logic
+        let points = 0;
+        let type = '';
+        
+        if (this.bot.isSus) {
+            points = 500;
+            type = 'success';
+            this.showToast("THREAT ELIMINATED", "success");
+            this.playSound('success', 1.08);
+            this.showReactionGif("https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp", 1900);
+        } else {
+            points = -300;
+            type = 'error';
+            this.showToast("WRONG TARGET BANNED", "error");
+            this.playSound('err', 0.96);
+            this.showReactionGif("https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp", 2200);
+        }
+        
+        this.score += points;
+        this.updateScore();
+
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            this.closeConnection(true);
+        }, 1000);
+    },
+
+    closeConnection(wasBanned) {
+        document.getElementById('target-id').innerText = "DISCONNECTED";
+        this.setStatus("SEARCHING...", "slate");
+        
+        const dot = document.getElementById('connection-status-dot');
+        dot.className = "w-8 h-8 rounded bg-slate-800 flex items-center justify-center border border-slate-700";
+        dot.children[0].className = "w-1.5 h-1.5 bg-slate-500 rounded-full";
+
+        if (!wasBanned) this.addSystemMessage("SESSION ENDED.");
+        
+        this.syncBgm();
+        setTimeout(() => this.findNewPartner(), 1500);
+    },
+
+    // --- Bot AI ---
+
+    getBotPhrase(intro) {
+        const normal = ["hi", "hello", "new here", "is this live?", "hey mods", "nice stream", "how r u"];
+        const sus = ["CLICK HERE FREE", "follow 4 follow", "hot singles", "dm for hacks", "u suck", "GIVEAWAY LINK", "crypto pump"];
+        
+        if (intro) {
+            // Sus bots try to hide initially 70% of time
+            if (this.bot.isSus && Math.random() < 0.3) {
+                return sus[Math.floor(Math.random() * sus.length)];
+            }
+            return normal[Math.floor(Math.random() * normal.length)];
+        }
+        return "hmm";
+    },
+
+    getBotResponse() {
+        const normal = ["yeah", "cool", "lol", "true", "wait what", "ok", "sure"];
+        const sus = ["click link", "send money", "i hack u", "stfu", "mod me", "check bio"];
+        
+        if (this.bot.isSus) {
+            return Math.random() < 0.6 ? sus[Math.floor(Math.random() * sus.length)] : normal[Math.floor(Math.random() * normal.length)];
+        }
+        return normal[Math.floor(Math.random() * normal.length)];
+    },
+
+    botType(delay, text) {
+        if (this.bot.isMuted) {
+            // Try to type but fail
+            setTimeout(() => {
+                this.addSystemMessage(`BLOCKED MSG FROM ${this.bot.name}`);
+            }, delay);
+            return;
+        }
+
+        this.isTyping = true;
+        this.setStatus("TYPING...", "slate");
+        
+        setTimeout(() => {
+            this.isTyping = false;
+            this.setStatus("CONNECTED", "emerald");
+            this.addMessage(text, false);
+        }, delay);
+    },
+
+    // --- Rendering & Data ---
+
+    addMessage(text, isMine, isCommand = false) {
+        const msg = {
+            id: Date.now(),
+            text: text,
+            isMine: isMine,
+            isCommand: isCommand,
+            type: 'chat',
+            lines: [],
+            width: 0,
+            height: 0,
+            y: 0,
+            targetY: 0,
+            alpha: 0
+        };
+        this.messages.push(msg);
+        this.layoutMessages();
+        this.scrollToBottom();
+        if (!isMine) this.playSound('msg');
+    },
+
+    addSystemMessage(text) {
+        this.messages.push({
+            id: Date.now(),
+            text: text,
+            type: 'system',
+            y: 0, targetY: 0, alpha: 0, height: 20
+        });
+        this.layoutMessages();
+        this.scrollToBottom();
+    },
+
+    addScanMessage(lines, isBad) {
+        this.messages.push({
+            id: Date.now(),
+            lines: lines, // Array of strings
+            type: 'scan',
+            isBad: isBad,
+            y: 0, targetY: 0, alpha: 0, width: 0, height: 0
+        });
+        this.layoutMessages();
+        this.scrollToBottom();
+    },
+
+    layoutMessages() {
+        let y = 20;
+        const maxWidth = this.width * 0.85;
+        this.ctx.font = `${this.CONFIG.fontSize}px ${this.CONFIG.fontFamily}`;
+
+        this.messages.forEach(msg => {
+            if (msg.type === 'system') {
+                msg.height = 24;
+            } else if (msg.type === 'scan') {
+                msg.width = this.width * 0.7;
+                msg.height = (msg.lines.length * 18) + 20;
+            } else {
+                // Chat layout
+                if (!msg.lines.length) {
+                    const words = msg.text.split(' ');
+                    let line = '';
+                    words.forEach(word => {
+                        const testLine = line + word + ' ';
+                        const metrics = this.ctx.measureText(testLine);
+                        if (metrics.width > maxWidth && line !== '') {
+                            msg.lines.push(line);
+                            line = word + ' ';
+                        } else {
+                            line = testLine;
+                        }
+                    });
+                    msg.lines.push(line);
+                    
+                    const lineWidths = msg.lines.map(l => this.ctx.measureText(l).width);
+                    msg.width = Math.max(...lineWidths) + (this.CONFIG.bubblePad * 2);
+                    msg.height = (msg.lines.length * this.CONFIG.lineHeight) + (this.CONFIG.bubblePad * 2);
+                }
+            }
+
+            msg.targetY = y;
+            if (msg.alpha === 0) msg.y = y + 20;
+            
+            y += msg.height + 8;
+        });
+    },
+
+    scrollToBottom() {
+        const last = this.messages[this.messages.length-1];
+        if (!last) return;
+        const totalH = last.targetY + last.height + 40;
+        this.targetScrollOffset = Math.max(0, totalH - this.height);
+    },
+
+    updateScore() {
+        document.getElementById('score-display').innerText = this.score.toString().padStart(4, '0');
+    },
+
+    showToast(msg, type) {
+        const t = document.getElementById('toast');
+        const icon = document.getElementById('toast-icon');
+        const txt = document.getElementById('toast-msg');
+        
+        txt.innerText = msg;
+        icon.innerText = type === 'success' ? '✔' : '⚠';
+        const colorClass = type === 'success' ? 'text-emerald-400 border-emerald-500/50 bg-emerald-950/90' : 'text-red-400 border-red-500/50 bg-red-950/90';
+        t.className = `absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded shadow-2xl opacity-100 transition-opacity duration-300 pointer-events-none flex items-center gap-2 z-30 border backdrop-blur-md ${colorClass}`;
+        
+        setTimeout(() => {
+            t.style.opacity = '0';
+        }, 2000);
+    },
+
+    // --- Loop ---
+
+    loop(t) {
+        const dt = Math.min((t - this.lastTime) / 1000, 0.1);
+        this.lastTime = t;
+
+        if (this.state === 'PLAY') {
+            this.update(dt);
+            this.draw();
+        }
+        
+        requestAnimationFrame((time) => this.loop(time));
+    },
+
+    update(dt) {
+        // Scroll Lerp
+        this.scrollOffset += (this.targetScrollOffset - this.scrollOffset) * 0.1;
+        
+        // Message Anim
+        this.messages.forEach(msg => {
+            msg.alpha += (1 - msg.alpha) * 10 * dt;
+            msg.y += (msg.targetY - msg.y) * 10 * dt;
+        });
+
+        // Shake Decay
+        if (this.shakeIntensity > 0) {
+            this.shakeIntensity *= 0.9;
+            if (this.shakeIntensity < 0.5) this.shakeIntensity = 0;
+        }
+
+        // Spam Logic for Sus Bots
+        if (this.bot.isSus && !this.bot.isMuted && !this.isTyping) {
+            if (Date.now() > this.bot.spamTimer) {
+                this.botType(0, this.getBotPhrase(true));
+                // Random interval 2-5s
+                this.bot.spamTimer = Date.now() + 2000 + Math.random() * 3000;
+            }
+        }
+    },
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        
+        // Shake
+        let sx = 0, sy = 0;
+        if (this.shakeIntensity > 0) {
+            sx = (Math.random() - 0.5) * this.shakeIntensity;
+            sy = (Math.random() - 0.5) * this.shakeIntensity;
+        }
+
+        this.ctx.save();
+        this.ctx.translate(sx, sy - this.scrollOffset + 20);
+
+        this.messages.forEach(msg => {
+            this.ctx.globalAlpha = msg.alpha;
+            
+            // SYSTEM MSG
+            if (msg.type === 'system') {
+                this.ctx.fillStyle = this.CONFIG.colSysText;
+                this.ctx.font = `10px ${this.CONFIG.fontFamily}`;
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`-- ${msg.text} --`, this.width/2, msg.y + 12);
+                return;
+            }
+
+            // SCAN RESULT
+            if (msg.type === 'scan') {
+                const x = (this.width - msg.width) / 2;
+                this.ctx.fillStyle = this.CONFIG.colScanBg;
+                this.ctx.strokeStyle = msg.isBad ? '#ef4444' : '#06b6d4';
+                this.ctx.lineWidth = 1;
+                
+                this.ctx.beginPath();
+                this.ctx.roundRect(x, msg.y, msg.width, msg.height, 4);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.fillStyle = msg.isBad ? '#fca5a5' : '#67e8f9';
+                this.ctx.font = `11px ${this.CONFIG.fontFamily}`;
+                this.ctx.textAlign = 'left';
+                
+                msg.lines.forEach((line, i) => {
+                    this.ctx.fillText(line, x + 10, msg.y + 20 + (i * 18));
+                });
+                return;
+            }
+
+            // CHAT MSG
+            const x = msg.isMine ? this.width - msg.width - 16 : 16;
+            
+            // Bubble
+            if (msg.isMine) {
+                if (msg.isCommand) {
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                    this.ctx.strokeStyle = '#475569';
+                } else {
+                    this.ctx.fillStyle = this.CONFIG.colUserBg;
+                    this.ctx.strokeStyle = 'transparent';
+                }
+            } else {
+                this.ctx.fillStyle = this.CONFIG.colBotBg;
+                this.ctx.strokeStyle = 'transparent';
+            }
+            
+            this.ctx.beginPath();
+            this.ctx.roundRect(x, msg.y, msg.width, msg.height, 12);
+            this.ctx.fill();
+            if (msg.isCommand) {
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+            }
+
+            // Text
+            this.ctx.fillStyle = msg.isMine ? this.CONFIG.colUserText : this.CONFIG.colBotText;
+            this.ctx.font = `${this.CONFIG.fontSize}px ${this.CONFIG.fontFamily}`;
+            this.ctx.textAlign = 'left';
+            this.ctx.textBaseline = 'top';
+            
+            msg.lines.forEach((line, i) => {
+                this.ctx.fillText(line, x + this.CONFIG.bubblePad, msg.y + this.CONFIG.bubblePad + (i * this.CONFIG.lineHeight));
+            });
+
+            // Name Label
+            if (!msg.isMine) {
+                this.ctx.fillStyle = '#64748b';
+                this.ctx.font = `9px ${this.CONFIG.fontFamily}`;
+                this.ctx.fillText(this.bot.name, x + 4, msg.y - 5);
+            }
+        });
+
+        // Typing Indicator
+        if (this.isTyping) {
+            const lastMsg = this.messages[this.messages.length-1];
+            const y = lastMsg ? lastMsg.y + lastMsg.height + 24 : 24;
+            
+            this.ctx.fillStyle = '#64748b';
+            this.ctx.font = `10px ${this.CONFIG.fontFamily}`;
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText(`${this.bot.name} is typing...`, 20, y);
+        }
+
+        this.ctx.restore();
+    }
+};
+
+window.onload = () => GAME.init();
+</script>
+</body>
+</html>

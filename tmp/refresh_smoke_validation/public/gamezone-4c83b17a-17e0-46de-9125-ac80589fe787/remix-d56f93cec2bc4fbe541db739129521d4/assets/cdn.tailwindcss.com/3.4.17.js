@@ -1,0 +1,1 @@
+/* Stage 02 cleanup: Tailwind CDN mirror disabled because its embedded policy-blocked upgrade URL is not used by this game. */

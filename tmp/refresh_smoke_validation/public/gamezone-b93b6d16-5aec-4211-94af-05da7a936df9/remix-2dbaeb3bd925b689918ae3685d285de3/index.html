@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Drone Defense Arena</title>
+    <!-- [agent-note][stage4] approved-fonts: Audiowide + Rajdhani kept via catalogs/fonts.json URLs -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #060913;
+            --bg-deep: #04060d;
+            --panel: rgba(10, 18, 35, 0.82);
+            --panel-strong: rgba(13, 24, 44, 0.94);
+            --line: rgba(127, 209, 255, 0.26);
+            --line-strong: rgba(127, 209, 255, 0.62);
+            --text: #edf7ff;
+            --muted: rgba(214, 236, 255, 0.74);
+            --accent: #75f0ff;
+            --accent-strong: #34d4ff;
+            --gold: #ffd452;
+            --danger: #ff647d;
+            --violet: #b579ff;
+            --blue: #6bb7ff;
+            --orange: #ff9a54;
+            --hud-radius: 999px;
+            --shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 12px 30px rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(52, 212, 255, 0.18), transparent 30%),
+                radial-gradient(circle at bottom, rgba(181, 121, 255, 0.14), transparent 28%),
+                linear-gradient(180deg, #09101f 0%, var(--bg) 45%, var(--bg-deep) 100%);
+            color: var(--text);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        button {
+            border: none;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #game-container::before {
+            background:
+                radial-gradient(circle at 20% 25%, rgba(117, 240, 255, 0.12), transparent 16%),
+                radial-gradient(circle at 80% 20%, rgba(255, 212, 82, 0.1), transparent 14%),
+                radial-gradient(circle at 50% 80%, rgba(181, 121, 255, 0.12), transparent 22%);
+            mix-blend-mode: screen;
+        }
+
+        #game-container::after {
+            background-image:
+                linear-gradient(rgba(117, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(117, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 28px 28px;
+            opacity: 0.25;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .screen {
+            position: absolute;
+            inset: 0;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .screen.hidden,
+        #hud.hidden {
+            display: none;
+        }
+
+        .overlay-menu {
+            background:
+                radial-gradient(circle at top, rgba(52, 212, 255, 0.08), transparent 30%),
+                linear-gradient(180deg, rgba(2, 4, 9, 0.6), rgba(2, 4, 9, 0.9));
+        }
+
+        .menu-shell {
+            width: min(100%, 420px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 84px;
+            height: 84px;
+            border-radius: 28px;
+            background:
+                linear-gradient(145deg, rgba(117, 240, 255, 0.22), rgba(181, 121, 255, 0.18)),
+                rgba(10, 18, 35, 0.9);
+            border: 1px solid rgba(117, 240, 255, 0.45);
+            box-shadow:
+                0 0 24px rgba(52, 212, 255, 0.18),
+                inset 0 0 24px rgba(255,255,255,0.05);
+            font-size: 2.7rem;
+        }
+
+        .title-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .menu-title,
+        .section-title,
+        .gameover-title,
+        .hud-label,
+        .action-btn,
+        .frame-name {
+            font-family: 'Audiowide', system-ui, sans-serif;
+        }
+
+        .menu-title {
+            margin: 0;
+            font-size: clamp(2.2rem, 12vw, 4.6rem);
+            line-height: 0.92;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #f7fcff;
+            text-shadow:
+                0 0 16px rgba(117, 240, 255, 0.28),
+                0 0 40px rgba(52, 212, 255, 0.18);
+        }
+
+        .title-accent {
+            color: var(--gold);
+        }
+
+        .menu-subtitle,
+        .menu-footnote,
+        .frame-copy,
+        .gameover-score {
+            color: var(--muted);
+        }
+
+        .menu-subtitle {
+            margin: 0;
+            max-width: 30ch;
+            font-size: 0.98rem;
+            line-height: 1.4;
+        }
+
+        .menu-actions {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin-top: 8px;
+        }
+
+        .action-btn,
+        .ghost-btn,
+        .return-btn {
+            min-height: 52px;
+            border-radius: 18px;
+            transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease, border-color 140ms ease;
+        }
+
+        .action-btn:active,
+        .ghost-btn:active,
+        .return-btn:active,
+        .brawler-card:active {
+            transform: scale(0.97);
+        }
+
+        .action-btn {
+            position: relative;
+            overflow: hidden;
+            padding: 14px 18px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #081018;
+            font-size: 1rem;
+            font-weight: 700;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+        }
+
+        .action-btn::after {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(180deg, #ffe384 0%, #ffd452 45%, #f3a41e 100%);
+            box-shadow: 0 10px 0 #8f5610, 0 16px 28px rgba(243, 164, 30, 0.22);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(180deg, #8fe6ff 0%, #51cbff 45%, #2090ff 100%);
+            box-shadow: 0 10px 0 #134f91, 0 16px 28px rgba(32, 144, 255, 0.22);
+        }
+
+        .ghost-btn,
+        .return-btn {
+            padding: 12px 20px;
+            background: rgba(255,255,255,0.06);
+            color: var(--text);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: var(--shadow);
+        }
+
+        .menu-footnote {
+            margin: 6px 0 0;
+            font-size: 0.84rem;
+        }
+
+        .selection-shell,
+        .gameover-shell {
+            width: min(100%, 860px);
+            border-radius: 28px;
+            padding: 24px;
+            background:
+                linear-gradient(180deg, rgba(12, 18, 33, 0.96), rgba(7, 11, 22, 0.98)),
+                rgba(7, 11, 22, 0.92);
+            border: 1px solid rgba(117, 240, 255, 0.18);
+            box-shadow:
+                0 18px 48px rgba(0, 0, 0, 0.48),
+                inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+
+        .section-title,
+        .gameover-title {
+            margin: 0 0 8px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .section-title {
+            font-size: clamp(1.5rem, 7vw, 2.4rem);
+        }
+
+        .selection-subtitle {
+            margin: 0 auto 18px;
+            max-width: 40ch;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.96rem;
+        }
+
+        .brawler-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .brawler-card {
+            width: 100%;
+            text-align: left;
+            padding: 16px;
+            border-radius: 22px;
+            background:
+                linear-gradient(180deg, rgba(22, 32, 56, 0.95), rgba(11, 18, 33, 0.98));
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--text);
+            box-shadow: var(--shadow);
+            transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+
+        .brawler-card.selected {
+            border-color: rgba(255, 212, 82, 0.72);
+            box-shadow:
+                0 0 0 1px rgba(255, 212, 82, 0.35),
+                0 16px 38px rgba(255, 212, 82, 0.16);
+            background:
+                linear-gradient(180deg, rgba(30, 38, 64, 0.98), rgba(14, 20, 36, 0.98));
+        }
+
+        .brawler-card-inner {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .frame-core {
+            position: relative;
+            flex: 0 0 82px;
+            width: 82px;
+            height: 82px;
+            border-radius: 28px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background:
+                radial-gradient(circle at 35% 35%, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 24%, transparent 26%),
+                linear-gradient(180deg, rgba(255,255,255,0.14), rgba(0,0,0,0.22));
+            box-shadow: inset 0 0 24px rgba(255,255,255,0.08), 0 8px 20px rgba(0,0,0,0.35);
+        }
+
+        .frame-core::before,
+        .frame-core::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.82);
+        }
+
+        .frame-core::before {
+            width: 18px;
+            height: 18px;
+            top: 20px;
+            left: 20px;
+            box-shadow: 24px 0 0 rgba(255,255,255,0.82);
+        }
+
+        .frame-core::after {
+            width: 34px;
+            height: 7px;
+            left: 24px;
+            bottom: 18px;
+            opacity: 0.8;
+        }
+
+        .frame-core.scout {
+            background-color: rgba(181, 121, 255, 0.22);
+            box-shadow: inset 0 0 30px rgba(181, 121, 255, 0.24), 0 8px 20px rgba(0,0,0,0.35);
+        }
+
+        .frame-core.bulwark {
+            background-color: rgba(107, 183, 255, 0.2);
+            box-shadow: inset 0 0 30px rgba(107, 183, 255, 0.24), 0 8px 20px rgba(0,0,0,0.35);
+        }
+
+        .frame-core.lancer {
+            background-color: rgba(255, 154, 84, 0.22);
+            box-shadow: inset 0 0 30px rgba(255, 154, 84, 0.22), 0 8px 20px rgba(0,0,0,0.35);
+        }
+
+        .frame-meta {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .frame-name {
+            margin: 0 0 6px;
+            font-size: 1.1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .frame-copy {
+            margin: 0;
+            font-size: 0.84rem;
+            line-height: 1.45;
+        }
+
+        .frame-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .frame-tag {
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.08);
+            font-size: 0.72rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.82);
+        }
+
+        #hud {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        .hud-pill {
+            position: absolute;
+            top: max(12px, env(safe-area-inset-top));
+            min-height: 46px;
+            padding: 10px 14px;
+            border-radius: var(--hud-radius);
+            background:
+                linear-gradient(180deg, rgba(12, 22, 42, 0.94), rgba(8, 14, 28, 0.94));
+            border: 1px solid rgba(117, 240, 255, 0.18);
+            box-shadow:
+                0 10px 28px rgba(0, 0, 0, 0.42),
+                inset 0 0 0 1px rgba(255,255,255,0.04);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .hud-pill.left {
+            left: max(12px, env(safe-area-inset-left));
+        }
+
+        .hud-pill.right {
+            right: max(12px, env(safe-area-inset-right));
+        }
+
+        .hud-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .hud-label strong {
+            font-size: 1rem;
+            color: var(--text);
+        }
+
+        .hud-icon {
+            font-size: 1rem;
+            filter: drop-shadow(0 0 6px rgba(255,255,255,0.22));
+        }
+
+        .score-label {
+            color: var(--gold);
+        }
+
+        .hp-label {
+            color: #ff8093;
+        }
+
+        /* [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction */
+        #joystick-zone {
+            position: absolute;
+            left: max(18px, env(safe-area-inset-left));
+            bottom: max(18px, env(safe-area-inset-bottom));
+            width: 112px;
+            height: 112px;
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+            border: 1px solid rgba(255,255,255,0.16);
+            background:
+                radial-gradient(circle at center, rgba(117, 240, 255, 0.12), rgba(255,255,255,0.02) 55%, transparent 56%),
+                rgba(8, 14, 28, 0.34);
+            box-shadow:
+                inset 0 0 0 1px rgba(255,255,255,0.04),
+                0 12px 24px rgba(0, 0, 0, 0.24);
+        }
+
+        #joystick-zone::before,
+        #joystick-zone::after {
+            content: "";
+            position: absolute;
+            inset: 14px;
+            border-radius: 50%;
+            border: 1px dashed rgba(117, 240, 255, 0.18);
+        }
+
+        #joystick-zone::after {
+            inset: 34px;
+            border-style: solid;
+            border-color: rgba(255,255,255,0.08);
+        }
+
+        #joystick-knob {
+            width: 42px;
+            height: 42px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            background:
+                radial-gradient(circle at 35% 30%, rgba(255,255,255,0.9), rgba(255,255,255,0.3) 30%, rgba(117, 240, 255, 0.7) 75%),
+                linear-gradient(180deg, rgba(255,255,255,0.5), rgba(52, 212, 255, 0.7));
+            box-shadow:
+                0 0 16px rgba(117, 240, 255, 0.3),
+                inset 0 -4px 10px rgba(0, 0, 0, 0.18);
+        }
+
+        .gameover-shell {
+            max-width: 420px;
+            text-align: center;
+        }
+
+        .gameover-title {
+            font-size: clamp(2rem, 10vw, 3.3rem);
+            color: #ff95a4;
+            text-shadow: 0 0 18px rgba(255, 100, 125, 0.24);
+        }
+
+        .gameover-score {
+            margin: 0 0 18px;
+            font-size: 1rem;
+        }
+
+        .gameover-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            z-index: 4;
+            pointer-events: none;
+            width: min(32vw, 152px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 20px;
+            border: 1px solid rgba(117, 240, 255, 0.24);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+            opacity: 0;
+            transform: scale(0.88);
+            transition: opacity 180ms ease, transform 180ms ease;
+            background: rgba(7, 11, 22, 0.72);
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.9;
+            transform: scale(1);
+        }
+
+        #kill-gif {
+            top: max(92px, calc(env(safe-area-inset-top) + 78px));
+            right: max(12px, env(safe-area-inset-right));
+        }
+
+        #danger-gif {
+            left: max(12px, env(safe-area-inset-left));
+            bottom: max(148px, calc(env(safe-area-inset-bottom) + 130px));
+        }
+
+        .animate-float {
+            animation: float 3.2s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-7px); }
+        }
+
+        @media (min-width: 700px) {
+            .screen {
+                padding: 28px;
+            }
+
+            .selection-shell {
+                padding: 28px;
+            }
+
+            .brawler-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 18px;
+            }
+
+            .brawler-card-inner {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+
+            .frame-meta {
+                width: 100%;
+            }
+
+            .frame-tags {
+                justify-content: center;
+            }
+
+            #joystick-zone {
+                display: none;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .screen {
+                padding: 14px;
+            }
+
+            .selection-shell,
+            .gameover-shell {
+                padding: 18px 16px;
+                border-radius: 24px;
+            }
+
+            .menu-actions {
+                gap: 12px;
+            }
+
+            .action-btn,
+            .ghost-btn,
+            .return-btn {
+                min-height: 48px;
+            }
+
+            .hud-pill {
+                padding: 9px 12px;
+            }
+
+            .hud-label {
+                font-size: 0.68rem;
+            }
+
+            .hud-label strong {
+                font-size: 0.92rem;
+            }
+
+            .feedback-gif {
+                width: min(30vw, 112px);
+                border-radius: 16px;
+            }
+
+            #danger-gif {
+                bottom: max(132px, calc(env(safe-area-inset-bottom) + 116px));
+            }
+
+            #joystick-zone {
+                width: 102px;
+                height: 102px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-layer">
+            <div id="menu-screen" class="screen overlay-menu">
+                <div class="menu-shell">
+                    <div class="hero-badge animate-float" aria-hidden="true">🤖</div>
+                    <div class="title-stack">
+                        <h1 class="menu-title">Drone <span class="title-accent">Defense</span></h1>
+                        <p class="menu-subtitle">Pilot a custom interceptor frame and hold the neon arena while auto-targeting hostile drones.</p>
+                    </div>
+
+                    <div class="menu-actions">
+                        <button id="play-btn" class="action-btn btn-primary">Deploy</button>
+                        <button id="brawlers-btn" class="action-btn btn-secondary">Loadout</button>
+                    </div>
+                    <p class="menu-footnote">WASD to steer • Auto-target hostile drones</p>
+                </div>
+            </div>
+
+            <div id="brawlers-screen" class="screen hidden overlay-menu">
+                <div class="selection-shell">
+                    <h2 class="section-title">Select Frame</h2>
+                    <p class="selection-subtitle">Choose the chassis personality that matches your preferred combat rhythm. Stats and mechanics stay intact.</p>
+
+                    <div class="brawler-grid">
+                        <button class="brawler-card selected" data-id="0">
+                            <div class="brawler-card-inner">
+                                <div class="frame-core scout" aria-hidden="true"></div>
+                                <div class="frame-meta">
+                                    <h3 class="frame-name" style="color: var(--violet);">Scout</h3>
+                                    <p class="frame-copy">Fast pulse rate and nimble response for skimming the edge of the swarm.</p>
+                                    <div class="frame-tags">
+                                        <span class="frame-tag">Rapid</span>
+                                        <span class="frame-tag">Light Impact</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button class="brawler-card" data-id="1">
+                            <div class="brawler-card-inner">
+                                <div class="frame-core bulwark" aria-hidden="true"></div>
+                                <div class="frame-meta">
+                                    <h3 class="frame-name" style="color: var(--blue);">Bulwark</h3>
+                                    <p class="frame-copy">Heavy shell plating with a broad burst pattern built for pressure control.</p>
+                                    <div class="frame-tags">
+                                        <span class="frame-tag">Armor</span>
+                                        <span class="frame-tag">Burst Spread</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button class="brawler-card" data-id="2">
+                            <div class="brawler-card-inner">
+                                <div class="frame-core lancer" aria-hidden="true"></div>
+                                <div class="frame-meta">
+                                    <h3 class="frame-name" style="color: var(--orange);">Lancer</h3>
+                                    <p class="frame-copy">Long-range optics and decisive strikes for precise high-value takedowns.</p>
+                                    <div class="frame-tags">
+                                        <span class="frame-tag">Range</span>
+                                        <span class="frame-tag">Power</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+
+                    <button id="back-btn" class="ghost-btn">Confirm Loadout</button>
+                </div>
+            </div>
+
+            <div id="hud" class="hidden">
+                <div class="hud-pill left">
+                    <span class="hud-label score-label"><span class="hud-icon" aria-hidden="true">✦</span> Threat Score <strong id="score-display">0</strong></span>
+                </div>
+                <div class="hud-pill right">
+                    <span class="hud-label hp-label"><span class="hud-icon" aria-hidden="true">❤</span> Hull <strong id="hp-display">100</strong></span>
+                </div>
+                <!-- [agent-note][stage3] resolved-gif: kill/danger feedback -> catalogs/gifs.json | caution: keep-gif-off-playfield -->
+                <img id="kill-gif" class="feedback-gif" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" alt="" aria-hidden="true">
+                <img id="danger-gif" class="feedback-gif" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="" aria-hidden="true">
+                <div id="joystick-zone">
+                    <div id="joystick-knob"></div>
+                </div>
+            </div>
+
+            <div id="game-over-screen" class="screen hidden overlay-menu">
+                <div class="gameover-shell">
+                    <h2 class="gameover-title">Drone Lost</h2>
+                    <p class="gameover-score">Threat score: <span id="final-score">0</span></p>
+                    <div class="gameover-stack">
+                        <button id="restart-btn" class="action-btn btn-primary">Redeploy</button>
+                        <button id="menu-return-btn" class="return-btn">Return to Hangar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS & CONFIG */
+        const ASSETS = {
+            menuBgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3",
+            battleBgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3",
+            shoot: "https://gamezone-virid.vercel.app/assets/audios/sfx/projectile_02.mp3",
+            hit: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3",
+            kill: "https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3",
+            damage: "https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3",
+            lowHealth: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3",
+            uiClick: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+            menuOpen: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3",
+            menuClose: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_02.mp3",
+            start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3",
+            gameOver: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3"
+        };
+
+        const BRAWLERS = [
+            { name: "SCOUT", color: "#a855f7", hp: 100, speed: 4, fireRate: 10, damage: 1, range: 300, bulletSpeed: 12, spread: 0 },
+            { name: "BULWARK", color: "#3b82f6", hp: 200, speed: 3, fireRate: 40, damage: 2, range: 200, bulletSpeed: 10, spread: 0.3 },
+            { name: "LANCER", color: "#f97316", hp: 80, speed: 5, fireRate: 50, damage: 5, range: 600, bulletSpeed: 20, spread: 0 }
+        ];
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.lastPlayed = {};
+                this.menuMusic = this.createLoop(ASSETS.menuBgm, 0.2);
+                this.battleMusic = this.createLoop(ASSETS.battleBgm, 0.2);
+
+                this.sfx = {
+                    shoot: this.createSfx(ASSETS.shoot, 0.28),
+                    hit: this.createSfx(ASSETS.hit, 0.26),
+                    kill: this.createSfx(ASSETS.kill, 0.35),
+                    damage: this.createSfx(ASSETS.damage, 0.38),
+                    lowHealth: this.createSfx(ASSETS.lowHealth, 0.3),
+                    uiClick: this.createSfx(ASSETS.uiClick, 0.3),
+                    menuOpen: this.createSfx(ASSETS.menuOpen, 0.3),
+                    menuClose: this.createSfx(ASSETS.menuClose, 0.3),
+                    start: this.createSfx(ASSETS.start, 0.34),
+                    gameOver: this.createSfx(ASSETS.gameOver, 0.42)
+                };
+            }
+
+            createLoop(src, volume) {
+                const audio = new Audio(src);
+                audio.loop = true;
+                audio.volume = volume;
+                audio.preload = 'auto';
+                return audio;
+            }
+
+            createSfx(src, volume) {
+                const audio = new Audio(src);
+                audio.volume = volume;
+                audio.preload = 'auto';
+                return audio;
+            }
+
+            unlock() {
+                if (this.enabled) return;
+                this.enabled = true;
+                this.menuMusic.load();
+                this.battleMusic.load();
+                Object.values(this.sfx).forEach((sound) => sound.load());
+            }
+
+            safePlay(track) {
+                if (!this.enabled || !track) return;
+                track.play().catch(() => {});
+            }
+
+            stopLoop(track) {
+                if (!track) return;
+                track.pause();
+                track.currentTime = 0;
+            }
+
+            playMenuMusic() {
+                this.stopLoop(this.battleMusic);
+                this.safePlay(this.menuMusic);
+            }
+
+            playBattleMusic() {
+                this.stopLoop(this.menuMusic);
+                this.safePlay(this.battleMusic);
+            }
+
+            stopAllMusic() {
+                this.stopLoop(this.menuMusic);
+                this.stopLoop(this.battleMusic);
+            }
+
+            playSFX(key, cooldown = 0) {
+                const sound = this.sfx[key];
+                if (!this.enabled || !sound) return;
+
+                const now = performance.now();
+                if (cooldown && this.lastPlayed[key] && now - this.lastPlayed[key] < cooldown) return;
+                this.lastPlayed[key] = now;
+
+                sound.currentTime = 0;
+                sound.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+
+        /** 3. GAME STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let selectedBrawlerIndex = 0;
+        let gameState = 'MENU';
+        let score = 0;
+        let frameCount = 0;
+        let updateLoopStarted = false;
+
+        let player = { x: 0, y: 0, hp: 100, maxHp: 100, angle: 0 };
+        let bullets = [];
+        let enemies = [];
+        let particles = [];
+
+        const killGif = document.getElementById('kill-gif');
+        const dangerGif = document.getElementById('danger-gif');
+        let gifTimers = { kill: null, danger: null };
+        let lowHealthAlerted = false;
+
+        const keys = {};
+        const joystick = { active: false, dx: 0, dy: 0, originX: 0, originY: 0 };
+
+        /** 4. RESIZE & INPUT HANDLERS */
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        const joyZone = document.getElementById('joystick-zone');
+        const joyKnob = document.getElementById('joystick-knob');
+
+        joyZone.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            joystick.active = true;
+            joystick.originX = touch.clientX;
+            joystick.originY = touch.clientY;
+            joystick.dx = 0;
+            joystick.dy = 0;
+        }, { passive: false });
+
+        joyZone.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (!joystick.active) return;
+            const touch = e.changedTouches[0];
+            const deltaX = touch.clientX - joystick.originX;
+            const deltaY = touch.clientY - joystick.originY;
+            const distance = Math.min(50, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+            const angle = Math.atan2(deltaY, deltaX);
+
+            joystick.dx = Math.cos(angle) * (distance / 50);
+            joystick.dy = Math.sin(angle) * (distance / 50);
+
+            joyKnob.style.transform = `translate(calc(-50% + ${Math.cos(angle) * distance}px), calc(-50% + ${Math.sin(angle) * distance}px))`;
+        }, { passive: false });
+
+        const resetJoystick = () => {
+            joystick.active = false;
+            joystick.dx = 0;
+            joystick.dy = 0;
+            joyKnob.style.transform = 'translate(-50%, -50%)';
+        };
+        joyZone.addEventListener('touchend', resetJoystick);
+        joyZone.addEventListener('touchcancel', resetJoystick);
+
+        function flashGif(type, duration = 700) {
+            const element = type === 'kill' ? killGif : dangerGif;
+            if (!element) return;
+            element.classList.add('visible');
+            if (gifTimers[type]) clearTimeout(gifTimers[type]);
+            gifTimers[type] = setTimeout(() => {
+                element.classList.remove('visible');
+            }, duration);
+        }
+
+        /** 5. GAME LOGIC */
+        function initGame() {
+            const brawler = BRAWLERS[selectedBrawlerIndex];
+            player = {
+                x: 0,
+                y: 0,
+                hp: brawler.hp,
+                maxHp: brawler.hp,
+                angle: 0,
+                lastShot: 0
+            };
+            bullets = [];
+            enemies = [];
+            particles = [];
+            score = 0;
+            frameCount = 0;
+            lowHealthAlerted = false;
+            killGif.classList.remove('visible');
+            dangerGif.classList.remove('visible');
+
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('hp-display').innerText = player.hp;
+        }
+
+        function spawnEnemy() {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.max(width, height) / 1.5 + Math.random() * 200;
+            enemies.push({
+                x: player.x + Math.cos(angle) * dist,
+                y: player.y + Math.sin(angle) * dist,
+                hp: 3 + Math.floor(score / 100),
+                speed: 2 + Math.random() * 1.5,
+                size: 20,
+                color: '#ef4444'
+            });
+        }
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color
+                });
+            }
+        }
+
+        function update() {
+            if (gameState !== 'PLAY') return;
+            frameCount++;
+
+            const brawler = BRAWLERS[selectedBrawlerIndex];
+
+            let dx = 0;
+            let dy = 0;
+            if (keys['w'] || keys['arrowup']) dy = -1;
+            if (keys['s'] || keys['arrowdown']) dy = 1;
+            if (keys['a'] || keys['arrowleft']) dx = -1;
+            if (keys['d'] || keys['arrowright']) dx = 1;
+
+            if (joystick.active) {
+                dx = joystick.dx;
+                dy = joystick.dy;
+            }
+
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                if (!joystick.active) {
+                    dx /= len;
+                    dy /= len;
+                }
+                player.x += dx * brawler.speed;
+                player.y += dy * brawler.speed;
+            }
+
+            let nearestDist = brawler.range;
+            let target = null;
+
+            for (const enemy of enemies) {
+                const dist = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    target = enemy;
+                }
+            }
+
+            if (target) {
+                player.angle = Math.atan2(target.y - player.y, target.x - player.x);
+
+                if (frameCount - player.lastShot > brawler.fireRate) {
+                    player.lastShot = frameCount;
+                    audio.playSFX('shoot');
+
+                    const shotCount = brawler.spread > 0 ? 3 : 1;
+                    for (let i = 0; i < shotCount; i++) {
+                        const spreadAngle = (i - (shotCount - 1) / 2) * brawler.spread;
+                        bullets.push({
+                            x: player.x,
+                            y: player.y,
+                            vx: Math.cos(player.angle + spreadAngle) * brawler.bulletSpeed,
+                            vy: Math.sin(player.angle + spreadAngle) * brawler.bulletSpeed,
+                            life: 60
+                        });
+                    }
+                }
+            } else if (len > 0) {
+                player.angle = Math.atan2(dy, dx);
+            }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                if (b.life <= 0) bullets.splice(i, 1);
+            }
+
+            if (frameCount % 60 === 0) spawnEnemy();
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                const angle = Math.atan2(player.y - e.y, player.x - e.x);
+                e.x += Math.cos(angle) * e.speed;
+                e.y += Math.sin(angle) * e.speed;
+
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    const b = bullets[j];
+                    const dist = Math.hypot(e.x - b.x, e.y - b.y);
+                    if (dist < e.size + 5) {
+                        e.hp -= brawler.damage;
+                        bullets.splice(j, 1);
+                        audio.playSFX('hit', 60);
+                        createParticles(e.x, e.y, '#fbbf24', 3);
+                        if (e.hp <= 0) {
+                            score += 10;
+                            document.getElementById('score-display').innerText = score;
+                            audio.playSFX('kill', 90);
+                            flashGif('kill', 520);
+                            createParticles(e.x, e.y, '#ef4444', 10);
+                            enemies.splice(i, 1);
+                        }
+                        break;
+                    }
+                }
+
+                const pDist = Math.hypot(e.x - player.x, e.y - player.y);
+                if (pDist < e.size + 15) {
+                    player.hp -= 10;
+                    document.getElementById('hp-display').innerText = player.hp;
+                    enemies.splice(i, 1);
+                    createParticles(player.x, player.y, '#ff0000', 5);
+                    audio.playSFX('damage', 180);
+                    flashGif('danger', 900);
+
+                    if (player.hp > 0 && player.hp <= Math.max(20, player.maxHp * 0.3) && !lowHealthAlerted) {
+                        lowHealthAlerted = true;
+                        audio.playSFX('lowHealth', 500);
+                    }
+
+                    if (player.hp > Math.max(20, player.maxHp * 0.3)) {
+                        lowHealthAlerted = false;
+                    }
+
+                    if (player.hp <= 0) {
+                        setGameOver();
+                    }
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawDroneBody(x, y, angle, brawler) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            const glow = ctx.createRadialGradient(0, 0, 6, 0, 0, 34);
+            glow.addColorStop(0, 'rgba(255,255,255,0.22)');
+            glow.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, 34, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.09)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-16, 0);
+            ctx.lineTo(-28, -16);
+            ctx.moveTo(-16, 0);
+            ctx.lineTo(-28, 16);
+            ctx.moveTo(10, -12);
+            ctx.lineTo(18, -20);
+            ctx.moveTo(10, 12);
+            ctx.lineTo(18, 20);
+            ctx.stroke();
+
+            ctx.fillStyle = brawler.color;
+            ctx.beginPath();
+            ctx.roundRect(-18, -18, 36, 36, 14);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath();
+            ctx.arc(-4, -4, 4, 0, Math.PI * 2);
+            ctx.arc(-4, 4, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#082131';
+            ctx.beginPath();
+            ctx.roundRect(5, -7, 28, 14, 7);
+            ctx.fill();
+
+            ctx.fillStyle = '#8ff7ff';
+            ctx.beginPath();
+            ctx.roundRect(16, -4, 14, 8, 4);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawEnemyBody(enemy) {
+            ctx.save();
+            ctx.translate(enemy.x, enemy.y);
+
+            const glow = ctx.createRadialGradient(0, 0, 5, 0, 0, 28);
+            glow.addColorStop(0, 'rgba(255,110,130,0.22)');
+            glow.addColorStop(1, 'rgba(255,110,130,0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, 28, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#6b1021';
+            ctx.beginPath();
+            ctx.moveTo(0, -enemy.size * 0.8);
+            ctx.lineTo(enemy.size * 0.75, 0);
+            ctx.lineTo(0, enemy.size * 0.8);
+            ctx.lineTo(-enemy.size * 0.75, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#ff7f93';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffd4dc';
+            ctx.fillRect(-4, -4, 8, 8);
+
+            ctx.restore();
+
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(enemy.x - 12, enemy.y - 22, 24, 5);
+            ctx.fillStyle = '#ff5d75';
+            ctx.fillRect(enemy.x - 12, enemy.y - 22, 24 * (enemy.hp / 5), 5);
+        }
+
+        function drawBullet(bullet) {
+            const glow = ctx.createRadialGradient(bullet.x, bullet.y, 1, bullet.x, bullet.y, 10);
+            glow.addColorStop(0, 'rgba(255,245,200,0.95)');
+            glow.addColorStop(1, 'rgba(251,191,36,0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffd452';
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#060913';
+            ctx.fillRect(0, 0, width, height);
+
+            if (gameState !== 'PLAY') return requestAnimationFrame(draw);
+
+            ctx.save();
+
+            const camX = -player.x + width / 2;
+            const camY = -player.y + height / 2;
+            ctx.translate(camX, camY);
+
+            drawGrid(player.x, player.y);
+
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+
+            enemies.forEach(drawEnemyBody);
+            bullets.forEach(drawBullet);
+
+            const brawler = BRAWLERS[selectedBrawlerIndex];
+
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(117,240,255,0.08)';
+            ctx.setLineDash([8, 12]);
+            ctx.arc(player.x, player.y, brawler.range, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            drawDroneBody(player.x, player.y, player.angle, brawler);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(player.x - 22, player.y - 34, 44, 6);
+            ctx.fillStyle = '#59f0a1';
+            ctx.fillRect(player.x - 22, player.y - 34, 44 * (player.hp / player.maxHp), 6);
+
+            ctx.restore();
+            requestAnimationFrame(draw);
+        }
+
+        function drawGrid(px, py) {
+            const gridSize = 100;
+
+            const xCount = Math.ceil(width / gridSize) + 2;
+            const yCount = Math.ceil(height / gridSize) + 2;
+
+            for (let x = 0; x < xCount; x++) {
+                for (let y = 0; y < yCount; y++) {
+                    const gx = (Math.floor((px - width / 2) / gridSize) + x) * gridSize;
+                    const gy = (Math.floor((py - height / 2) / gridSize) + y) * gridSize;
+
+                    ctx.strokeStyle = (x + y) % 2 === 0 ? 'rgba(117,240,255,0.08)' : 'rgba(181,121,255,0.06)';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(gx, gy, gridSize, gridSize);
+
+                    ctx.fillStyle = 'rgba(117,240,255,0.02)';
+                    ctx.beginPath();
+                    ctx.arc(gx, gy, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function setGameOver() {
+            gameState = 'GAMEOVER';
+            audio.playSFX('gameOver');
+            audio.stopAllMusic();
+            flashGif('danger', 1400);
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+        }
+
+        /** 6. UI EVENT LISTENERS */
+        document.getElementById('play-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start');
+            audio.playBattleMusic();
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameState = 'PLAY';
+            initGame();
+
+            if (!updateLoopStarted) {
+                setInterval(update, 1000 / 60);
+                updateLoopStarted = true;
+            }
+            requestAnimationFrame(draw);
+        });
+
+        document.getElementById('brawlers-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('menuOpen');
+            audio.playMenuMusic();
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('brawlers-screen').classList.remove('hidden');
+        });
+
+        const cards = document.querySelectorAll('.brawler-card');
+        cards.forEach(card => {
+            card.addEventListener('click', () => {
+                cards.forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+
+                selectedBrawlerIndex = parseInt(card.getAttribute('data-id'));
+                audio.playSFX('uiClick', 80);
+            });
+        });
+
+        document.getElementById('back-btn').addEventListener('click', () => {
+            audio.playSFX('menuClose');
+            document.getElementById('brawlers-screen').classList.add('hidden');
+            document.getElementById('menu-screen').classList.remove('hidden');
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playBattleMusic();
+            gameState = 'PLAY';
+            initGame();
+            requestAnimationFrame(draw);
+        });
+
+        document.getElementById('menu-return-btn').addEventListener('click', () => {
+            audio.playSFX('menuClose');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('menu-screen').classList.remove('hidden');
+            audio.playMenuMusic();
+            gameState = 'MENU';
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                audio.stopAllMusic();
+            } else if (gameState === 'PLAY') {
+                audio.playBattleMusic();
+            } else if (gameState === 'MENU') {
+                audio.playMenuMusic();
+            }
+        });
+
+        ctx.fillStyle = '#060913';
+        ctx.fillRect(0, 0, width, height);
+    });
+    </script>
+</body>
+</html>

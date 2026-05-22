@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Checkpoint Rope Run</title>
+    <!-- [agent-note][stage4] resolved-font: title/ui -> catalogs/fonts.json | removed non-catalog Press Start refs -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap">
+    <style>
+        :root {
+            --bg-top: #150b2b;
+            --bg-bottom: #06020d;
+            --panel: rgba(23, 12, 40, 0.88);
+            --panel-strong: rgba(33, 18, 56, 0.96);
+            --panel-border: #7c5cff;
+            --panel-glow: rgba(124, 92, 255, 0.38);
+            --text-main: #f6f1ff;
+            --text-soft: rgba(246, 241, 255, 0.76);
+            --mint: #59f8d2;
+            --gold: #ffd76e;
+            --danger: #ff6886;
+            --danger-deep: #9a2342;
+            --shadow: rgba(0, 0, 0, 0.42);
+            --feedback-win: #59f8d2;
+            --feedback-fail: #ff6886;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Rajdhani', ui-sans-serif, system-ui, sans-serif;
+            background:
+                radial-gradient(circle at 50% 12%, rgba(135, 88, 255, 0.26), transparent 30%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text-main);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #game-container::before {
+            background:
+                radial-gradient(circle at 20% 18%, rgba(89, 248, 210, 0.08), transparent 18%),
+                radial-gradient(circle at 82% 24%, rgba(255, 215, 110, 0.1), transparent 16%),
+                radial-gradient(circle at 50% 80%, rgba(255, 104, 134, 0.08), transparent 20%);
+            z-index: 0;
+        }
+
+        #game-container::after {
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 100% 18px, 18px 100%;
+            opacity: 0.22;
+            mix-blend-mode: screen;
+            z-index: 0;
+        }
+
+        #gameCanvas {
+            position: relative;
+            z-index: 1;
+            touch-action: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            z-index: 3;
+            padding: max(12px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+        }
+
+        .screen-card {
+            position: relative;
+            width: min(100%, 25rem);
+            padding: 1.2rem 1rem 1rem;
+            border: 2px solid rgba(124, 92, 255, 0.88);
+            border-radius: 1.15rem;
+            background:
+                linear-gradient(180deg, rgba(41, 21, 70, 0.97), rgba(15, 9, 29, 0.95));
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 16px 32px var(--shadow),
+                0 0 28px var(--panel-glow);
+            text-align: center;
+            pointer-events: auto;
+            overflow: hidden;
+        }
+
+        .screen-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 28%),
+                linear-gradient(180deg, rgba(89, 248, 210, 0.08), transparent 55%);
+            pointer-events: none;
+        }
+
+        .screen-card.hidden,
+        .hidden {
+            display: none !important;
+        }
+
+        .title-stack {
+            position: relative;
+            margin-bottom: 0.7rem;
+        }
+
+        .title-stack::after {
+            content: "";
+            display: block;
+            width: 4.2rem;
+            height: 0.32rem;
+            margin: 0.75rem auto 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--mint), var(--gold));
+            box-shadow: 0 0 14px rgba(89, 248, 210, 0.5);
+        }
+
+        .title {
+            margin: 0;
+            font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(1.65rem, 6vw, 2.25rem);
+            line-height: 1.05;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-shadow: 0 0 18px rgba(124, 92, 255, 0.42);
+        }
+
+        .subtitle {
+            margin: 0 0 1rem;
+            font-size: 0.95rem;
+            line-height: 1.3;
+            color: var(--text-soft);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem 0.8rem;
+            border: 1px solid rgba(89, 248, 210, 0.3);
+            border-radius: 999px;
+            background: rgba(8, 16, 30, 0.55);
+            box-shadow: 0 0 18px rgba(89, 248, 210, 0.14);
+            font-size: 0.86rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #ccfff2;
+        }
+
+        .hero-emoji {
+            font-size: 1.45rem;
+            line-height: 1;
+            filter: drop-shadow(0 0 10px rgba(255, 215, 110, 0.45));
+            animation: mascotBob 1.8s ease-in-out infinite;
+        }
+
+        .stat-readout {
+            margin: 0 0 1rem;
+            padding: 0.8rem 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.95rem;
+            background: rgba(255, 255, 255, 0.045);
+            color: rgba(255, 255, 255, 0.88);
+        }
+
+        .stat-label {
+            display: block;
+            margin-bottom: 0.2rem;
+            font-size: 0.8rem;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.66);
+        }
+
+        .stat-value {
+            display: block;
+            font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(2rem, 8vw, 2.8rem);
+            color: var(--gold);
+            text-shadow: 0 0 14px rgba(255, 215, 110, 0.35);
+        }
+
+        .pixel-btn {
+            position: relative;
+            width: 100%;
+            border: 0;
+            border-radius: 0.95rem;
+            padding: 0.92rem 1rem;
+            background: linear-gradient(180deg, #ff738f, #e23e61);
+            color: white;
+            font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(1rem, 4vw, 1.1rem);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            box-shadow:
+                0 0.35rem 0 0 var(--danger-deep),
+                0 0 18px rgba(255, 104, 134, 0.34);
+            transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+            image-rendering: pixelated;
+        }
+
+        .pixel-btn:hover,
+        .pixel-btn:focus-visible {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+            outline: none;
+        }
+
+        .pixel-btn:active {
+            transform: translateY(0.28rem);
+            box-shadow:
+                0 0 0 0 var(--danger-deep),
+                0 0 10px rgba(255, 104, 134, 0.24);
+        }
+
+        #hud {
+            position: absolute;
+            top: max(0.6rem, env(safe-area-inset-top));
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            gap: 0.55rem;
+            padding: 0 0.65rem;
+            z-index: 4;
+        }
+
+        .hud-pill {
+            min-width: 0;
+            padding: 0.55rem 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            background: rgba(10, 10, 22, 0.7);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+        }
+
+        .hud-label {
+            display: block;
+            font-size: 0.7rem;
+            line-height: 1;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.66);
+            margin-bottom: 0.12rem;
+        }
+
+        .hud-value {
+            display: block;
+            font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+            font-size: clamp(0.85rem, 3vw, 1rem);
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        .hud-pill.score .hud-value {
+            color: var(--mint);
+            text-shadow: 0 0 10px rgba(89, 248, 210, 0.28);
+        }
+
+        .hud-pill.runners .hud-value {
+            color: #ffa4b8;
+            text-shadow: 0 0 10px rgba(255, 104, 134, 0.24);
+        }
+
+        @keyframes mascotBob {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-4px) scale(1.04); }
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: clamp(0.5rem, 2vw, 1rem);
+            bottom: max(4.4rem, env(safe-area-inset-bottom) + 3.75rem);
+            width: clamp(88px, 22vw, 120px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 0.9rem;
+            background: rgba(7, 6, 18, 0.68);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
+            object-fit: cover;
+            opacity: 0;
+            transform: translateY(12px) scale(0.94);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.95;
+            transform: translateY(0) scale(1);
+        }
+
+        #fail-gif {
+            left: 50%;
+            right: auto;
+            top: 50%;
+            bottom: auto;
+            width: min(62vw, 220px);
+            max-width: 220px;
+            transform: translate(-50%, -46%) scale(0.94);
+            z-index: 5;
+        }
+
+        #fail-gif.visible {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        @media (max-width: 480px) {
+            .screen-card {
+                width: min(100%, 22rem);
+                padding: 1rem 0.85rem 0.9rem;
+            }
+
+            .subtitle {
+                font-size: 0.86rem;
+            }
+
+            #hud {
+                padding: 0 0.45rem;
+                gap: 0.4rem;
+            }
+
+            .hud-pill {
+                flex: 1 1 0;
+                padding: 0.5rem 0.62rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+        <div id="ui-layer">
+            <div id="start-screen" class="screen-card">
+                <div class="hero-badge">
+                    <span class="hero-emoji" aria-hidden="true">🪢</span>
+                    <span>Neon skip captain</span>
+                </div>
+                <div class="title-stack">
+                    <h1 class="title">Checkpoint<br>Rope Run</h1>
+                </div>
+                <p class="subtitle">Tap to spring over the sweep and keep your crew in the glow lane.</p>
+                <button id="start-btn" class="pixel-btn">Start Round</button>
+            </div>
+
+            <div id="game-over-screen" class="screen-card hidden">
+                <div class="hero-badge">
+                    <span class="hero-emoji" aria-hidden="true">💥</span>
+                    <span>Rope clipped the run</span>
+                </div>
+                <div class="title-stack">
+                    <h2 class="title">Round Over</h2>
+                </div>
+                <div class="stat-readout">
+                    <span class="stat-label">Checkpoints Cleared</span>
+                    <span class="stat-value" id="finalScore">0</span>
+                </div>
+                <button id="restart-btn" class="pixel-btn">Run Again</button>
+            </div>
+
+            <div id="hud" class="hidden">
+                <div class="hud-pill score">
+                    <span class="hud-label">Checkpoints</span>
+                    <span class="hud-value"><span id="score">0</span></span>
+                </div>
+                <div class="hud-pill runners">
+                    <span class="hud-label">Runners</span>
+                    <span class="hud-value"><span id="alive-count">0</span></span>
+                </div>
+            </div>
+
+            <!-- [agent-note][stage3] resolved-gif: checkpoint/fail overlays -> catalogs/gifs.json -->
+            <!-- [agent-note][stage3] caution: keep-gif-off-playfield | reason: protect controls -->
+            <img
+                id="score-gif"
+                class="feedback-gif"
+                src="https://i.giphy.com/443DE4MxVGnbM8vCi6.webp"
+                alt="Checkpoint celebration"
+                width="120"
+                height="120"
+                decoding="async"
+                loading="eager"
+            >
+            <img
+                id="fail-gif"
+                class="feedback-gif"
+                src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+                alt="Round over reaction"
+                width="220"
+                height="160"
+                decoding="async"
+                loading="eager"
+            >
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3",
+                jump: "https://gamezone-virid.vercel.app/assets/audios/sfx/jump_01.mp3",
+                land: "https://gamezone-virid.vercel.app/assets/audios/sfx/land_02.mp3",
+                score: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3",
+                runnerDown: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_defeat_01.mp3"
+            }
+        };
+
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                this.lastPlayedAt = new Map();
+
+                for (const [key, url] of Object.entries(ASSETS.sfx)) {
+                    const audio = new Audio(url);
+                    audio.preload = 'auto';
+                    this.sfx[key] = {
+                        template: audio,
+                        volume: {
+                            start: 0.55,
+                            jump: 0.42,
+                            land: 0.34,
+                            score: 0.5,
+                            fail: 0.58,
+                            runnerDown: 0.36
+                        }[key] ?? 0.45
+                    };
+                }
+            }
+
+            unlock() {
+                this.enabled = true;
+            }
+
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            playSFX(key, minInterval = 0) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const now = performance.now();
+                const last = this.lastPlayedAt.get(key) ?? 0;
+                if (now - last < minInterval) return;
+                this.lastPlayedAt.set(key, now);
+
+                const clip = this.sfx[key].template.cloneNode();
+                clip.volume = this.sfx[key].volume;
+                clip.play().catch(() => {});
+            }
+        }
+
+        const audio = new AudioController();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreGif = document.getElementById('score-gif');
+        const failGif = document.getElementById('fail-gif');
+
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let frameCount = 0;
+        let scoreGifTimeout = null;
+        let failGifTimeout = null;
+
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -12;
+        const GROUND_Y_OFFSET = 100;
+
+        let ropeAngle = 0;
+        let ropeSpeed = 0.05;
+        let ropeRadius = 0;
+        let ropeCenterY = 0;
+
+        let player = { x: 0, y: 0, vy: 0, w: 30, h: 60, grounded: true, dead: false, color: '#22c55e' };
+        let bots = [];
+        const BOT_COUNT = 4;
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            ctx.imageSmoothingEnabled = false;
+
+            const groundY = height - GROUND_Y_OFFSET;
+            ropeCenterY = groundY - 40;
+            ropeRadius = 150;
+
+            player.x = width / 2;
+            if (player.grounded) player.y = groundY;
+
+            const spacing = 60;
+            bots.forEach((bot, i) => {
+                let offset = (i < BOT_COUNT / 2) ? -(i + 1) * spacing : (i - BOT_COUNT / 2 + 1) * spacing;
+                bot.x = width / 2 + offset;
+                if (bot.grounded) bot.y = groundY;
+            });
+        }
+        window.addEventListener('resize', resize);
+
+        function initGame() {
+            score = 0;
+            ropeAngle = -Math.PI / 2;
+            ropeSpeed = 0.04;
+
+            const groundY = height - GROUND_Y_OFFSET;
+
+            player = {
+                x: width / 2,
+                y: groundY,
+                vy: 0,
+                w: 30,
+                h: 60,
+                grounded: true,
+                dead: false,
+                color: '#22c55e'
+            };
+
+            bots = [];
+            for (let i = 0; i < BOT_COUNT; i++) {
+                bots.push({
+                    x: 0,
+                    y: groundY,
+                    vy: 0,
+                    w: 30,
+                    h: 60,
+                    grounded: true,
+                    dead: false,
+                    color: '#15803d',
+                    reactionDelay: Math.random() * 0.2,
+                    failChance: 0.00
+                });
+            }
+            resize();
+            updateHUD();
+        }
+
+        function showFeedbackGif(element, duration = 900) {
+            if (!element) return;
+            element.classList.remove('visible');
+            void element.offsetWidth;
+            element.classList.add('visible');
+
+            if (element === scoreGif) {
+                clearTimeout(scoreGifTimeout);
+                scoreGifTimeout = setTimeout(() => element.classList.remove('visible'), duration);
+            } else if (element === failGif) {
+                clearTimeout(failGifTimeout);
+                failGifTimeout = setTimeout(() => element.classList.remove('visible'), duration);
+            }
+        }
+
+        function clearFeedbackGifs() {
+            scoreGif?.classList.remove('visible');
+            failGif?.classList.remove('visible');
+            clearTimeout(scoreGifTimeout);
+            clearTimeout(failGifTimeout);
+        }
+
+        function jump(entity) {
+            if (entity.grounded && !entity.dead) {
+                entity.vy = JUMP_FORCE;
+                entity.grounded = false;
+                if (entity === player) {
+                    audio.playSFX('jump', 120);
+                }
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('score').innerText = score;
+            const alive = bots.filter(b => !b.dead).length + (player.dead ? 0 : 1);
+            document.getElementById('alive-count').innerText = alive;
+        }
+
+        function update() {
+            if (!gameActive) return;
+            frameCount++;
+            const groundY = height - GROUND_Y_OFFSET;
+
+            ropeSpeed += 0.00005;
+            ropeAngle += ropeSpeed;
+            if (ropeAngle > Math.PI * 2) {
+                ropeAngle -= Math.PI * 2;
+                if (!player.dead) {
+                    score++;
+                    audio.playSFX('score', 180);
+                    showFeedbackGif(scoreGif, 850);
+                    updateHUD();
+                }
+            }
+
+            const ropeSin = Math.sin(ropeAngle);
+            const ropeCos = Math.cos(ropeAngle);
+            const isRopeLow = ropeSin > 0.8;
+            const isRopeFront = ropeCos > 0;
+
+            if (!player.grounded) {
+                player.vy += GRAVITY;
+                player.y += player.vy;
+                if (player.y >= groundY) {
+                    player.y = groundY;
+                    player.vy = 0;
+                    player.grounded = true;
+                    audio.playSFX('land', 120);
+                }
+            }
+
+            if (isRopeLow && isRopeFront && player.grounded && !player.dead) {
+                gameOver();
+                return;
+            }
+
+            bots.forEach(bot => {
+                if (bot.dead) return;
+
+                if (!bot.grounded) {
+                    bot.vy += GRAVITY;
+                    bot.y += bot.vy;
+                    if (bot.y >= groundY) {
+                        bot.y = groundY;
+                        bot.vy = 0;
+                        bot.grounded = true;
+                    }
+                }
+
+                const shouldJump = (ropeSin > 0.4 && ropeCos > 0) && bot.grounded;
+
+                if (shouldJump) {
+                    if (Math.random() < (0.005 + ropeSpeed * 0.1)) {
+                    } else {
+                        if (Math.random() > 0.1) jump(bot);
+                    }
+                }
+
+                if (isRopeLow && isRopeFront && bot.grounded) {
+                    bot.dead = true;
+                    bot.color = '#525252';
+                    audio.playSFX('runnerDown', 140);
+                    updateHUD();
+                }
+            });
+        }
+
+        function drawRoundedRect(x, y, w, h, radius) {
+            const r = Math.min(radius, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        function drawPlayer(entity, isMainCharacter = false) {
+            const groundY = height - GROUND_Y_OFFSET;
+            if (entity.dead) {
+                ctx.fillStyle = '#4b5563';
+                drawRoundedRect(entity.x - entity.h / 2, groundY - entity.w * 0.85, entity.h, entity.w * 0.68, 8);
+                ctx.fill();
+                return;
+            }
+
+            const jumpHeight = Math.max(0, groundY - entity.y);
+            const shadowScale = Math.max(0.45, 1 - jumpHeight / 130);
+
+            ctx.fillStyle = isMainCharacter ? 'rgba(89, 248, 210, 0.26)' : 'rgba(0, 0, 0, 0.34)';
+            drawRoundedRect(entity.x - (entity.w * shadowScale) / 2, groundY - 8, entity.w * shadowScale, 8, 5);
+            ctx.fill();
+
+            const suitX = entity.x - entity.w / 2;
+            const suitY = entity.y - entity.h + 6;
+            const suitW = entity.w;
+            const suitH = entity.h - 6;
+
+            ctx.fillStyle = isMainCharacter ? '#3cf0b4' : '#1eb980';
+            drawRoundedRect(suitX, suitY, suitW, suitH, 8);
+            ctx.fill();
+
+            ctx.fillStyle = isMainCharacter ? '#128a72' : '#0f6e59';
+            drawRoundedRect(entity.x + 2, suitY + 6, 8, suitH - 12, 4);
+            ctx.fill();
+
+            const headSize = isMainCharacter ? 24 : 22;
+            const headX = entity.x - headSize / 2;
+            const headY = entity.y - entity.h - 16;
+
+            ctx.fillStyle = isMainCharacter ? '#fff7d6' : '#f5f5f5';
+            drawRoundedRect(headX, headY, headSize, headSize, 7);
+            ctx.fill();
+
+            ctx.fillStyle = isMainCharacter ? '#8b5cf6' : '#312e81';
+            drawRoundedRect(headX + 3, headY + 4, headSize - 6, 7, 3);
+            ctx.fill();
+
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(headX + 6, headY + 10, 3, 3);
+            ctx.fillRect(headX + headSize - 9, headY + 10, 3, 3);
+            ctx.fillRect(headX + 7, headY + 16, headSize - 14, 2);
+
+            if (isMainCharacter) {
+                ctx.strokeStyle = 'rgba(255, 215, 110, 0.95)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(entity.x, headY + headSize / 2, headSize / 2 + 5, Math.PI * 1.05, Math.PI * 1.95);
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(89, 248, 210, 0.9)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(suitX + 5, suitY + 15);
+                ctx.lineTo(suitX - 2, suitY + 30);
+                ctx.moveTo(suitX + suitW - 5, suitY + 15);
+                ctx.lineTo(suitX + suitW + 2, suitY + 30);
+                ctx.stroke();
+            }
+        }
+
+        function drawCrowdGlow(groundY) {
+            const glowRadius = width * 0.32;
+            const crowdGlow = ctx.createRadialGradient(width / 2, groundY - 120, 30, width / 2, groundY - 120, glowRadius);
+            crowdGlow.addColorStop(0, 'rgba(124, 92, 255, 0.2)');
+            crowdGlow.addColorStop(0.5, 'rgba(89, 248, 210, 0.08)');
+            crowdGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = crowdGlow;
+            ctx.fillRect(0, 0, width, groundY + 40);
+        }
+
+        function drawBackground(groundY) {
+            const sky = ctx.createLinearGradient(0, 0, 0, groundY);
+            sky.addColorStop(0, '#24114a');
+            sky.addColorStop(0.55, '#3e1d74');
+            sky.addColorStop(1, '#160b2e');
+            ctx.fillStyle = sky;
+            ctx.fillRect(0, 0, width, groundY);
+
+            drawCrowdGlow(groundY);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            for (let i = 0; i < width; i += 80) {
+                const pulse = ((frameCount + i) % 120) / 120;
+                ctx.fillRect(i, 36 + Math.sin((frameCount + i) * 0.03) * 4, 2, 14 + pulse * 16);
+            }
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, groundY - 48, width, 18);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = -40; x < width + 40; x += 44) {
+                ctx.moveTo(x + (frameCount % 44), groundY - 48);
+                ctx.lineTo(x + 22 + (frameCount % 44), groundY - 30);
+            }
+            ctx.stroke();
+
+            const floor = ctx.createLinearGradient(0, groundY - 6, 0, height);
+            floor.addColorStop(0, '#ff5ca0');
+            floor.addColorStop(0.24, '#9b4dff');
+            floor.addColorStop(1, '#24072d');
+            ctx.fillStyle = floor;
+            ctx.fillRect(0, groundY, width, height - groundY);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            for (let i = 0; i < width + 60; i += 34) {
+                const laneOffset = (frameCount * 2) % 34;
+                ctx.fillRect(i - laneOffset, groundY + 10, 18, 4);
+            }
+        }
+
+        function drawRope(ropeY, ropeZ) {
+            ctx.beginPath();
+            ctx.moveTo(0, ropeCenterY);
+            ctx.quadraticCurveTo(width / 2, ropeY, width, ropeCenterY);
+
+            if (ropeZ < 0) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+                return;
+            }
+
+            ctx.strokeStyle = '#ffe68f';
+            ctx.lineWidth = 7;
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = 'rgba(255, 215, 110, 0.5)';
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.beginPath();
+            ctx.moveTo(0, ropeCenterY);
+            ctx.quadraticCurveTo(width / 2, ropeY, width, ropeCenterY);
+            ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function draw() {
+            const groundY = height - GROUND_Y_OFFSET;
+            drawBackground(groundY);
+
+            const ropeY = ropeCenterY + Math.sin(ropeAngle) * ropeRadius;
+            const ropeZ = Math.cos(ropeAngle);
+
+            if (ropeZ < 0) {
+                drawRope(ropeY, ropeZ);
+            }
+
+            bots.forEach(bot => drawPlayer(bot, false));
+            drawPlayer(player, true);
+
+            if (ropeZ >= 0) {
+                drawRope(ropeY, ropeZ);
+            }
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail');
+            showFeedbackGif(failGif, 1800);
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        const handleInput = (e) => {
+            if (gameActive) {
+                e.preventDefault();
+                jump(player);
+            }
+        };
+
+        // [agent-note][stage4] repaired: mobile-cta-tap | action: scope gesture suppression to gameplay surface
+        canvas.addEventListener('mousedown', handleInput);
+        canvas.addEventListener('touchstart', handleInput, { passive: false });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                handleInput(e);
+            }
+        });
+
+        document.getElementById('start-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            audio.unlock();
+            clearFeedbackGifs();
+            audio.playSFX('start');
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameActive = true;
+            resize();
+            initGame();
+            gameLoop();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            audio.unlock();
+            clearFeedbackGifs();
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playSFX('start');
+            audio.playBGM();
+            gameActive = true;
+            resize();
+            initGame();
+            gameLoop();
+        });
+
+        resize();
+        draw();
+    });
+    </script>
+</body>
+</html>

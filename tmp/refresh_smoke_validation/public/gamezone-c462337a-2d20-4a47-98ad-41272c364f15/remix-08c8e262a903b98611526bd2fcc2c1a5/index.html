@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Brainrot Beat Clicker</title>
+    <!-- [agent-note][stage4] preserved-font-remap: title/display -> Bangers | ui/hud -> Rajdhani from catalogs/fonts.json -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap">
+    <style>
+        :root {
+            --bg-deep: #12071f;
+            --bg-mid: #26103d;
+            --panel-bg: rgba(17, 12, 33, 0.92);
+            --panel-border: rgba(121, 226, 255, 0.72);
+            --text-main: #f7fbff;
+            --text-soft: #bfd2ec;
+            --accent: #ff4fd8;
+            --accent-warm: #ffd84d;
+            --accent-cool: #79e2ff;
+            --success: #65ffb2;
+            --danger: #ff6b8f;
+            --shadow-strong: rgba(0, 0, 0, 0.48);
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(255, 79, 216, 0.18), transparent 30%),
+                radial-gradient(circle at bottom, rgba(121, 226, 255, 0.2), transparent 34%),
+                linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-deep) 65%, #06030d 100%);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            color: var(--text-main);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 60%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 15;
+            overflow: hidden;
+        }
+
+        .reaction-badge {
+            position: absolute;
+            right: 12px;
+            width: min(28vw, 112px);
+            border: 2px solid rgba(121, 226, 255, 0.5);
+            border-radius: 16px;
+            background: rgba(12, 10, 25, 0.68);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transform: translateY(10px) scale(0.94);
+            transition: opacity 180ms ease, transform 180ms ease;
+            object-fit: cover;
+        }
+
+        .reaction-badge.show {
+            opacity: 0.94;
+            transform: translateY(0) scale(1);
+        }
+
+        #reaction-win {
+            top: 88px;
+        }
+
+        #reaction-fail {
+            top: 210px;
+            border-color: rgba(255, 107, 143, 0.55);
+        }
+
+        #hud {
+            width: 100%;
+            padding: 14px 14px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        #title-banner {
+            max-width: min(92vw, 460px);
+            margin-bottom: 10px;
+            padding: 10px 14px;
+            border: 2px solid var(--panel-border);
+            border-radius: 18px;
+            background:
+                linear-gradient(180deg, rgba(34, 20, 63, 0.94), rgba(13, 9, 27, 0.92)),
+                rgba(0, 0, 0, 0.4);
+            box-shadow:
+                0 12px 30px var(--shadow-strong),
+                0 0 18px rgba(121, 226, 255, 0.24);
+            backdrop-filter: blur(6px);
+        }
+
+        #game-title {
+            font-family: 'Bangers', 'Rajdhani', system-ui, sans-serif;
+            font-size: clamp(1.8rem, 5.5vw, 2.9rem);
+            letter-spacing: 0.09em;
+            line-height: 1.05;
+            color: var(--text-main);
+            text-shadow:
+                0 0 18px rgba(121, 226, 255, 0.45),
+                0 4px 0 rgba(4, 6, 18, 0.9);
+        }
+
+        #game-subtitle {
+            margin-top: 6px;
+            font-size: clamp(0.9rem, 2.8vw, 1.15rem);
+            font-weight: 600;
+            color: var(--accent-warm);
+        }
+
+        #score-display {
+            font-family: 'Bangers', 'Rajdhani', system-ui, sans-serif;
+            font-size: clamp(2.1rem, 8vw, 3.7rem);
+            color: var(--text-main);
+            text-shadow:
+                0 0 20px rgba(255, 79, 216, 0.32),
+                0 4px 0 rgba(5, 4, 14, 0.95);
+            letter-spacing: 0.08em;
+            line-height: 1;
+        }
+
+        #income-display {
+            margin-top: 2px;
+            font-size: clamp(1.1rem, 3.8vw, 1.7rem);
+            font-weight: 600;
+            color: #fde047;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+        }
+
+        #shop-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background:
+                linear-gradient(180deg, rgba(13, 9, 27, 0.95), rgba(8, 7, 18, 0.98));
+            border-top: 3px solid var(--panel-border);
+            box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
+            overflow-y: auto;
+            overscroll-behavior-y: contain;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            pointer-events: auto;
+            z-index: 20;
+            padding: 10px 0 calc(44px + env(safe-area-inset-bottom, 0px));
+            box-sizing: border-box;
+        }
+
+        #shop-heading {
+            padding: 0 14px 8px;
+            text-align: center;
+        }
+
+        #shop-title {
+            font-family: 'Bangers', 'Rajdhani', system-ui, sans-serif;
+            font-size: clamp(1.35rem, 4.9vw, 2rem);
+            letter-spacing: 0.06em;
+            color: var(--accent-cool);
+        }
+
+        #shop-instruction {
+            font-size: 0.95rem;
+            color: var(--text-soft);
+            font-weight: 600;
+        }
+
+        .shop-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px;
+            margin: 8px;
+            border: 1px solid rgba(191, 210, 236, 0.18);
+            background:
+                linear-gradient(135deg, rgba(41, 25, 67, 0.92), rgba(16, 14, 34, 0.96));
+            color: white;
+            border-radius: 14px;
+            box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
+            transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+        }
+
+        .shop-item.affordable {
+            border-color: rgba(101, 255, 178, 0.9);
+            background:
+                linear-gradient(135deg, rgba(12, 80, 82, 0.95), rgba(20, 54, 39, 0.95));
+            box-shadow:
+                0 0 0 1px rgba(101, 255, 178, 0.16),
+                0 12px 22px rgba(0, 0, 0, 0.18);
+        }
+
+        .shop-item:active {
+            transform: scale(0.985);
+        }
+
+        .shop-left {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .item-emoji {
+            font-size: 2rem;
+            margin-right: 12px;
+            flex-shrink: 0;
+            filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.18));
+        }
+
+        .item-copy {
+            min-width: 0;
+        }
+
+        .item-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.05;
+            color: var(--text-main);
+        }
+
+        .status-pill {
+            position: absolute;
+            left: 14px;
+            top: calc(env(safe-area-inset-top, 0px) + 14px);
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(8, 7, 18, 0.8);
+            border: 1px solid rgba(121, 226, 255, 0.35);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--accent-cool);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+        }
+
+        .item-income {
+            font-size: 0.8rem;
+            color: var(--text-soft);
+            margin-top: 4px;
+        }
+
+        .shop-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            flex-shrink: 0;
+        }
+
+        .item-cost {
+            font-size: 1.02rem;
+            font-weight: 700;
+            color: var(--accent-warm);
+            line-height: 1;
+            text-shadow: 0 0 12px rgba(255, 216, 77, 0.18);
+        }
+
+        .item-owned {
+            font-size: 0.8rem;
+            color: #9bb0c9;
+            margin-top: 4px;
+        }
+
+        .glass { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(4px); }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(8, 7, 18, 0.96); }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--accent), var(--accent-cool)); border-radius: 4px; }
+
+        @media (max-width: 480px) {
+            #title-banner {
+                padding: 8px 12px;
+            }
+
+            .shop-item {
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .item-name {
+                font-size: 1.05rem;
+            }
+
+            .reaction-badge {
+                width: min(24vw, 88px);
+                right: 8px;
+            }
+
+            #reaction-win {
+                top: 92px;
+            }
+
+            #reaction-fail {
+                top: 188px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<script id="game-config" type="application/x-game-config">
+{
+    "heroSpeed": { "type": "number", "label": "Bounce Speed", "value": 5, "min": 1, "max": 12 },
+    "themeColor": { "type": "color", "label": "Theme Color", "value": "#FF00FF" }
+}
+</script>
+
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-audio: tap/purchase/fail/streak + bgm -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM Brainrot" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3" loop preload="none"></audio>
+<audio id="sfx_click" data-editable="audio" data-label="SFX Click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+<audio id="sfx_buy" data-editable="audio" data-label="SFX Buy" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3" preload="auto"></audio>
+<audio id="sfx_fail" data-editable="audio" data-label="SFX Fail" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+<audio id="sfx_bonus" data-editable="audio" data-label="SFX Bonus" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3" preload="auto"></audio>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="status-pill" id="status-pill">Tap stage to start the loop</div>
+        <div id="hud">
+            <div id="title-banner">
+                <div id="game-title">Brainrot Beat Clicker</div>
+                <div id="game-subtitle">Tap the star performer, stack rhythm icons, and grow your hype per second.</div>
+            </div>
+            <div id="score-display">$0</div>
+            <div id="income-display">+$0 / sec</div>
+        </div>
+    </div>
+
+    <div id="feedback-layer">
+        <!-- [agent-note][stage3] resolved-gif: streak/fail reactions -> catalogs/gifs.json | keep off playfield -->
+        <img id="reaction-win" class="reaction-badge" alt="Crowd hype reaction" src="https://i.giphy.com/3uHqVTVsvzuZia7z39.webp">
+        <img id="reaction-fail" class="reaction-badge" alt="Missed buy reaction" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp">
+    </div>
+
+    <div id="shop-container">
+        <div id="shop-heading">
+            <div id="shop-title">Lineup Upgrades</div>
+            <div id="shop-instruction">Tap the stage to earn cash, then book louder acts below.</div>
+        </div>
+        <!-- [agent-note][stage1] role: future-audio | trigger: expensive-purchase | intent: bigger crowd-pop feedback -->
+        <!-- Items injected by JS -->
+    </div>
+</div>
+
+<script>
+const CONFIG = {
+    items: [
+        { id: 'common1', name: 'Pizza Hype Intern', cost: 5, income: 1, emoji: '🍕', color: '#FFA500' },
+        { id: 'common2', name: 'Cheese Loop DJ', cost: 10, income: 2, emoji: '🧀', color: '#FFFF00' },
+        { id: 'rare1', name: 'Sahur Drum Caller', cost: 1000, income: 50, emoji: '🥁', color: '#00FFFF' },
+        { id: 'rare2', name: 'Glitch Spin Headliner', cost: 2000, income: 120, emoji: '😵‍💫', color: '#FF00FF' },
+        { id: 'epic1', name: 'Brass Echo Blaster', cost: 10000, income: 500, emoji: '🎺', color: '#FF4444' },
+        { id: 'epic2', name: 'Fire Chant Starter', cost: 25000, income: 1500, emoji: '🔥', color: '#FF8800' },
+        { id: 'secret1', name: 'Backstage Signal 67', cost: 10000000, income: 50000, emoji: '👽', color: '#00FF00' },
+        { id: 'secret2', name: 'Void Choir Beacon', cost: 20000000, income: 120000, emoji: '🌌', color: '#8800FF' },
+        { id: 'og1', name: 'Strawberry Elephant Icon', cost: 100000000, income: 500000, emoji: '🍓🐘', color: '#FF0088' },
+        { id: 'og2', name: 'Final Encore Cat', cost: 200000000, income: 1000000, emoji: '🐱', color: '#FFFFFF' }
+    ]
+};
+
+let state = {
+    money: 0,
+    income: 0,
+    inventory: {},
+    lastTime: 0,
+    bgHue: 0,
+    currentHero: CONFIG.items[0],
+    particles: [],
+    floaters: [],
+    shake: 0,
+    streak: 0,
+    lastClickAt: 0,
+    nextMilestone: 25,
+    gifTimers: {}
+};
+
+let canvas, ctx, cw, ch;
+let gameConfig = {};
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let audioUnlocked = false;
+const sfxCooldowns = {};
+
+function unlockAudio() {
+    if (!audioUnlocked) {
+        audioUnlocked = true;
+        audioCtx.resume().catch(() => {});
+        setStatus('Arcade loop live');
+    }
+    const bgm = document.getElementById('bgm_main');
+    if (bgm) {
+        bgm.volume = 0.18;
+        bgm.play().catch(() => {});
+    }
+}
+
+function playSfx(id, cooldown = 0) {
+    const now = performance.now();
+    if (cooldown > 0 && sfxCooldowns[id] && now - sfxCooldowns[id] < cooldown) return;
+    sfxCooldowns[id] = now;
+
+    const el = document.getElementById(id);
+    if (el) {
+        el.pause();
+        el.currentTime = 0;
+        el.play().catch(() => playSynth(id === 'sfx_buy' || id === 'sfx_bonus' ? 'win' : id === 'sfx_fail' ? 'fail' : 'click'));
+    } else {
+        playSynth(id === 'sfx_buy' || id === 'sfx_bonus' ? 'win' : id === 'sfx_fail' ? 'fail' : 'click');
+    }
+}
+
+function playSynth(type) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'click') {
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } else if (type === 'fail') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(120, audioCtx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.18);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.18);
+    } else {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(260, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(700, audioCtx.currentTime + 0.28);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.28);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.28);
+    }
+}
+
+function vibrate(type) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate',
+            requestId: 'h5-' + Date.now(),
+            version: '1.0',
+            params: { style: type }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(type === 'heavy' ? 50 : 10);
+    }
+}
+
+function setStatus(text) {
+    const pill = document.getElementById('status-pill');
+    if (pill) pill.textContent = text;
+}
+
+function showReaction(id, duration = 1200) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    clearTimeout(state.gifTimers[id]);
+    el.classList.add('show');
+    state.gifTimers[id] = setTimeout(() => {
+        el.classList.remove('show');
+    }, duration);
+}
+
+function pauseBgm() {
+    const bgm = document.getElementById('bgm_main');
+    if (bgm) bgm.pause();
+}
+
+function resumeBgm() {
+    if (!audioUnlocked) return;
+    const bgm = document.getElementById('bgm_main');
+    if (bgm && document.visibilityState === 'visible') {
+        bgm.play().catch(() => {});
+    }
+}
+
+function initGame() {
+    try {
+        const raw = JSON.parse(document.getElementById('game-config').textContent);
+        for (let k in raw) gameConfig[k] = raw[k].value;
+    } catch (e) {
+        gameConfig = { heroSpeed: 5, themeColor: '#FF00FF' };
+    }
+
+    state.money = 0;
+    state.income = 0;
+    state.inventory = {};
+    CONFIG.items.forEach(i => state.inventory[i.id] = 0);
+    state.currentHero = CONFIG.items[0];
+    state.streak = 0;
+    state.lastClickAt = 0;
+    state.nextMilestone = 25;
+
+    renderShop();
+    updateHUD();
+    setStatus('Tap stage to start the loop');
+}
+
+function resize() {
+    cw = canvas.clientWidth;
+    ch = canvas.clientHeight;
+    canvas.width = cw * window.devicePixelRatio;
+    canvas.height = ch * window.devicePixelRatio;
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+}
+
+function spawnParticle(x, y, color) {
+    for (let i = 0; i < 8; i++) {
+        state.particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+function spawnFloater(x, y, text) {
+    state.floaters.push({
+        x: x, y: y,
+        vy: -2,
+        life: 1.0,
+        text: text,
+        scale: 1
+    });
+}
+
+function handleClick(e) {
+    unlockAudio();
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const clickValue = Math.max(1, Math.floor(state.income * 0.1));
+    state.money += clickValue;
+
+    const now = performance.now();
+    state.streak = now - state.lastClickAt < 1200 ? state.streak + 1 : 1;
+    state.lastClickAt = now;
+    state.shake = 10;
+    vibrate('light');
+    playSfx('sfx_click', 55);
+
+    if (state.streak % 12 === 0) {
+        playSfx('sfx_bonus', 150);
+        showReaction('reaction-win', 1000);
+        setStatus(`Hype streak x${state.streak}`);
+    }
+
+    spawnParticle(x, y, state.currentHero.color);
+    spawnFloater(x, y, `+$${formatNumber(clickValue)}`);
+
+    updateHUD();
+    updateShopState();
+}
+
+function buyItem(item) {
+    if (state.money >= item.cost) {
+        state.money -= item.cost;
+        state.inventory[item.id]++;
+        state.income += item.income;
+
+        item.cost = Math.ceil(item.cost * 1.15);
+        state.currentHero = item;
+
+        vibrate('heavy');
+        playSfx('sfx_buy', 120);
+        setStatus(`${item.name} booked`);
+
+        if (item.income >= state.nextMilestone) {
+            showReaction('reaction-win', 1600);
+            playSfx('sfx_bonus', 180);
+            state.nextMilestone = Math.ceil(state.nextMilestone * 1.8);
+        }
+
+        if (item.income > 1000) {
+            for (let i = 0; i < 5; i++) spawnParticle(cw / 2, ch / 2, item.color);
+        }
+
+        renderShop();
+        updateHUD();
+    } else {
+        vibrate('light');
+        playSfx('sfx_fail', 160);
+        showReaction('reaction-fail', 1200);
+        setStatus(`Need $${formatNumber(item.cost - state.money)} more`);
+    }
+}
+
+function formatNumber(num) {
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(1) + 'k';
+    return Math.floor(num).toString();
+}
+
+function renderShop() {
+    const container = document.getElementById('shop-container');
+    const itemsMarkup = CONFIG.items.map(item => {
+        const count = state.inventory[item.id];
+        const itemClass = `shop-item ${state.money >= item.cost ? 'affordable' : 'opacity-50'}`;
+        return `
+            <div class="${itemClass}" data-item-id="${item.id}" role="button" tabindex="0" aria-label="Buy ${item.name} for $${formatNumber(item.cost)}">
+                <div class="shop-left">
+                    <div class="item-emoji">${item.emoji}</div>
+                    <div class="item-copy">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-income">+${formatNumber(item.income)} hype/sec</div>
+                    </div>
+                </div>
+                <div class="shop-right">
+                    <div class="item-cost">$${formatNumber(item.cost)}</div>
+                    <div class="item-owned">Booked: ${count}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div id="shop-heading">
+            <div id="shop-title">Lineup Upgrades</div>
+            <div id="shop-instruction">Tap the stage to earn cash, then book louder acts below.</div>
+        </div>
+        <!-- [agent-note][stage1] role: future-audio | trigger: expensive-purchase | intent: bigger crowd-pop feedback -->
+        ${itemsMarkup}
+    `;
+
+    CONFIG.items.forEach(item => {
+        const el = container.querySelector(`[data-item-id="${item.id}"]`);
+        if (el) {
+            const activatePurchase = (e) => {
+                e.stopPropagation();
+                unlockAudio();
+                buyItem(item);
+            };
+            el.onclick = activatePurchase;
+            el.onkeydown = (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    activatePurchase(e);
+                }
+            };
+        }
+    });
+}
+
+function updateShopState() {
+    const items = document.querySelectorAll('#shop-container [data-item-id]');
+    CONFIG.items.forEach((item, idx) => {
+        if (items[idx]) {
+            if (state.money >= item.cost) {
+                items[idx].classList.add('affordable');
+                items[idx].classList.remove('opacity-50');
+            } else {
+                items[idx].classList.remove('affordable');
+                items[idx].classList.add('opacity-50');
+            }
+        }
+    });
+}
+
+function updateHUD() {
+    document.getElementById('score-display').innerText = '$' + formatNumber(state.money);
+    document.getElementById('income-display').innerText = '+' + formatNumber(state.income) + ' hype / sec';
+}
+
+function draw(dt) {
+    state.bgHue = (state.bgHue + dt * 20) % 360;
+    const bgColor = `hsl(${state.bgHue}, 50%, 10%)`;
+
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, cw, ch);
+
+    let shakeX = 0, shakeY = 0;
+    if (state.shake > 0) {
+        shakeX = (Math.random() - 0.5) * state.shake;
+        shakeY = (Math.random() - 0.5) * state.shake;
+        state.shake *= 0.9;
+        if (state.shake < 0.5) state.shake = 0;
+    }
+
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
+    const cx = cw / 2;
+    const cy = ch / 2;
+    const bounce = Math.sin(Date.now() / 150) * 20;
+
+    const grad = ctx.createRadialGradient(cx, cy, 50, cx, cy, 150);
+    grad.addColorStop(0, state.currentHero.color);
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 150 + bounce, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+
+    ctx.font = `${100 + bounce / 2}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(state.currentHero.emoji, cx, cy);
+
+    state.particles.forEach((p, i) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= dt * 2;
+        if (p.life > 0) {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5 * p.life, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            state.particles.splice(i, 1);
+        }
+    });
+
+    ctx.font = '700 34px "Rajdhani"';
+    ctx.fillStyle = '#f7fbff';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    state.floaters.forEach((f, i) => {
+        f.y += f.vy;
+        f.life -= dt;
+        if (f.life > 0) {
+            ctx.globalAlpha = f.life;
+            ctx.strokeText(f.text, f.x, f.y);
+            ctx.fillText(f.text, f.x, f.y);
+        } else {
+            state.floaters.splice(i, 1);
+        }
+    });
+
+    ctx.restore();
+}
+
+function loop(timestamp) {
+    if (!state.lastTime) state.lastTime = timestamp;
+    const dt = (timestamp - state.lastTime) / 1000;
+    state.lastTime = timestamp;
+
+    if (state.income > 0) {
+        state.money += state.income * dt;
+        if (Math.floor(timestamp) % 10 === 0) {
+            updateHUD();
+            updateShopState();
+        }
+    }
+
+    draw(dt);
+    requestAnimationFrame(loop);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+
+    resize();
+    window.addEventListener('resize', resize);
+
+    initGame();
+
+    canvas.addEventListener('pointerdown', handleClick, { passive: false });
+
+    requestAnimationFrame(loop);
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            pauseBgm();
+        } else {
+            resumeBgm();
+        }
+    });
+
+    window.addEventListener('blur', pauseBgm);
+    window.addEventListener('focus', resumeBgm);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Emoji Decoder Dash</title>
+    <!-- [agent-note][stage4] repaired: approved catalog font refs for display + UI roles -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #120f2f;
+            --bg-bottom: #25164d;
+            --panel: rgba(20, 16, 53, 0.88);
+            --panel-edge: rgba(151, 240, 255, 0.45);
+            --cyan: #8cf4ff;
+            --cyan-strong: #5ad8ff;
+            --pink: #ff71c8;
+            --pink-strong: #ff4fb5;
+            --gold: #ffe27a;
+            --ink: #f5f7ff;
+            --muted: #ced6ff;
+            --shadow: rgba(6, 8, 24, 0.42);
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(140, 244, 255, 0.12), transparent 28%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            color: var(--ink);
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 18%, rgba(255, 113, 200, 0.18), transparent 18%),
+                radial-gradient(circle at 80% 14%, rgba(140, 244, 255, 0.2), transparent 16%),
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: auto, auto, 26px 26px, 26px 26px;
+            opacity: 0.65;
+        }
+        #game-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        canvas { display: block; touch-action: none; width: 100%; height: 100%; }
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+        }
+        #ui-layer > * { pointer-events: auto; }
+        #hud {
+            padding: 1rem 1rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+        .clay-panel {
+            background: linear-gradient(180deg, rgba(31, 23, 79, 0.95), rgba(14, 11, 39, 0.95));
+            border-radius: 22px;
+            box-shadow:
+                0 14px 28px var(--shadow),
+                inset 0 1px 0 rgba(255,255,255,0.16),
+                0 0 0 1px rgba(255,255,255,0.04);
+            border: 2px solid var(--panel-edge);
+            backdrop-filter: blur(8px);
+        }
+        .hud-pill {
+            position: relative;
+            min-width: 7.5rem;
+            padding: 0.75rem 0.95rem;
+            font-size: 0.95rem;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            line-height: 1.25;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 10px currentColor;
+        }
+        .hud-pill::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent 55%);
+            pointer-events: none;
+        }
+        .text-pink-500 { color: var(--pink); }
+        .text-blue-500 { color: var(--cyan); }
+        #feedback-stack {
+            position: absolute;
+            right: 0.85rem;
+            bottom: 0.9rem;
+            z-index: 55;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.65rem;
+            pointer-events: none;
+        }
+        .reaction-card {
+            width: min(36vw, 9.5rem);
+            border-radius: 18px;
+            border: 2px solid rgba(255,255,255,0.14);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.28);
+            overflow: hidden;
+            background: rgba(8, 11, 28, 0.84);
+            opacity: 0;
+            transform: translateY(12px) scale(0.96);
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+        .reaction-card.is-visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        .reaction-card img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+        }
+        .reaction-chip {
+            padding: 0.35rem 0.55rem 0.45rem;
+            font: 700 0.78rem/1 'Rajdhani', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ink);
+        }
+        #game-over-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(5, 7, 18, 0.56);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+        }
+        .game-over-card {
+            width: 100%;
+            max-width: 22rem;
+            padding: 1.5rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+        .game-over-title {
+            margin: 0;
+            font: 400 2rem/1.1 'Audiowide', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            color: var(--pink);
+            text-shadow: 0 0 14px rgba(255, 113, 200, 0.35);
+        }
+        .game-over-copy {
+            margin: 0;
+            font: 600 1.1rem/1.2 'Rajdhani', system-ui, sans-serif;
+            color: var(--muted);
+        }
+        .score-strong {
+            font-weight: 800;
+            color: var(--gold);
+        }
+        .clay-btn {
+            background: linear-gradient(180deg, var(--pink), var(--pink-strong));
+            color: #fffdfd;
+            border-radius: 16px;
+            box-shadow: 0 8px 0 #98246b, 0 14px 20px rgba(0,0,0,0.22);
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.1s;
+            border: none;
+            cursor: pointer;
+            padding: 0.95rem 1.15rem;
+            font: 400 1rem/1 'Audiowide', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+        }
+        .clay-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 4px 0 #98246b, 0 9px 16px rgba(0,0,0,0.2);
+            filter: brightness(1.06);
+        }
+        .intro-card {
+            align-self: center;
+            margin-top: 0.6rem;
+            padding: 0.95rem 1.1rem;
+            max-width: min(92vw, 34rem);
+            text-align: center;
+            color: var(--muted);
+        }
+        .intro-title {
+            margin: 0 0 0.4rem 0;
+            font: 400 1rem/1.25 'Audiowide', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            color: var(--gold);
+            text-shadow: 0 0 12px rgba(255, 226, 122, 0.24);
+        }
+        .intro-copy {
+            margin: 0;
+            font: 700 1.02rem/1.2 'Rajdhani', system-ui, sans-serif;
+        }
+        .hidden { display: none !important; }
+        @media (max-width: 640px) {
+            #hud { padding: 0.8rem 0.8rem 0; gap: 0.6rem; }
+            .hud-pill { min-width: 6.4rem; font-size: 0.8rem; padding: 0.68rem 0.72rem; }
+            .intro-card { margin: 0.45rem 0.8rem 0; padding: 0.85rem 0.95rem; }
+            .intro-title { font-size: 0.8rem; }
+            .intro-copy { font-size: 0.96rem; }
+            .game-over-title { font-size: 1.45rem; }
+            .clay-btn { font-size: 0.84rem; padding: 0.9rem 1rem; }
+            #feedback-stack {
+                right: 0.6rem;
+                bottom: 0.65rem;
+                gap: 0.5rem;
+            }
+            .reaction-card {
+                width: min(30vw, 5.4rem);
+                border-radius: 14px;
+            }
+            .reaction-chip {
+                font-size: 0.58rem;
+                padding: 0.28rem 0.35rem 0.35rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <!-- HUD -->
+        <div id="hud">
+            <div class="clay-panel hud-pill text-pink-500">
+                POSTS: <span id="score-val">0</span>
+            </div>
+            <div class="clay-panel hud-pill text-blue-500">
+                TREND: <span id="level-val">1</span>
+            </div>
+        </div>
+
+        <div class="clay-panel intro-card">
+            <h1 class="intro-title">EMOJI DECODER DASH</h1>
+            <p class="intro-copy">Tap the floating letters in order to decode each viral post before the feed scrolls away.</p>
+        </div>
+
+        <!-- [agent-note][stage3] resolved-gif: score/fail reactions -> catalogs/gifs.json | keep off playfield to protect controls -->
+        <div id="feedback-stack" aria-hidden="true">
+            <div id="success-reaction" class="reaction-card">
+                <img src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="Celebration reaction">
+                <div class="reaction-chip">POST BOOST</div>
+            </div>
+            <div id="fail-reaction" class="reaction-card">
+                <img src="https://i.giphy.com/Oqboy6icaw3APkCTaQ.webp" alt="Confused reaction">
+                <div class="reaction-chip">DECODE MISS</div>
+            </div>
+        </div>
+
+        <!-- Game Over -->
+        <div id="game-over-screen" class="hidden">
+            <div class="clay-panel game-over-card">
+                <h2 class="game-over-title">FEED FROZE!</h2>
+                <p class="game-over-copy">You decoded <span id="final-score" class="score-strong">0</span> posts before the trend cooled off.</p>
+                <button id="restart-btn" class="clay-btn">RELOAD FEED</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- [agent-note][stage3] resolved-audio: bgm + 5 semantic cues -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="none" loop></audio>
+<audio id="sfx_pick" data-editable="audio" data-label="Pick Letter" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_win" data-editable="audio" data-label="Decode Success" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_fail" data-editable="audio" data-label="Decode Fail" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+<audio id="sfx_gameover" data-editable="audio" data-label="Game Over" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3" preload="auto"></audio>
+<audio id="sfx_restart" data-editable="audio" data-label="Restart Feed" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+
+<script id="game-config" type="application/x-game-config">
+{
+  "gameDuration": { "type": "number", "label": "Game Duration (s)", "value": 60, "min": 30, "max": 180 },
+  "clayPrimary": { "type": "color", "label": "Clay Color", "value": "#ff7eb3" },
+  "claySecondary": { "type": "color", "label": "Background Color", "value": "#f0ebe3" }
+}
+</script>
+
+<script>
+(function() {
+    // --- System Constants & State ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const configEl = document.getElementById('game-config');
+    const bgm = document.getElementById('bgm_main');
+    const successReaction = document.getElementById('success-reaction');
+    const failReaction = document.getElementById('fail-reaction');
+    let gameConfig = {};
+    let gameState = 'PLAYING';
+    let cw, ch, dpr;
+    let initialized = false;
+    let score = 0;
+    let level = 1;
+    let timeLeft = 60;
+    let lastTime = 0;
+    let audioUnlocked = false;
+    let bgmStarted = false;
+    let lastSoundAt = 0;
+    let reactionTimer = 0;
+    let lastTouchAt = 0;
+    let activeInputPointerId = null;
+
+    // --- Word Database ---
+    const WORDS = ["APPLE", "BEACH", "CANDY", "DREAM", "EAGLE", "FLOWER", "GARDEN", "HAPPY", "ISLAND", "JUNGLE", "KITTEN", "LEMON", "MAGIC", "NIGHT", "OCEAN", "PARTY", "QUEEN", "RIVER", "SMILE", "TIGER", "UNDER", "VOICE", "WATER", "YOUNG", "ZEBRA"];
+    let currentWord = "";
+    let scrambledLetters = [];
+    let selectedIndices = [];
+    let particles = [];
+
+    function hideReactionCards() {
+        successReaction.classList.remove('is-visible');
+        failReaction.classList.remove('is-visible');
+    }
+
+    function showReaction(type) {
+        hideReactionCards();
+        const target = type === 'success' ? successReaction : failReaction;
+        target.classList.add('is-visible');
+        clearTimeout(reactionTimer);
+        reactionTimer = window.setTimeout(hideReactionCards, 1400);
+    }
+
+    // --- Audio System ---
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = AudioCtx ? new AudioCtx() : null;
+    const sfxBuffers = {};
+    const soundVolumes = {
+        sfx_pick: 0.22,
+        sfx_win: 0.34,
+        sfx_fail: 0.22,
+        sfx_gameover: 0.3,
+        sfx_restart: 0.24
+    };
+
+    async function initAudio() {
+        if (!audioCtx) return;
+        const sfxElements = document.querySelectorAll('audio[id^="sfx_"]');
+        for (let el of sfxElements) {
+            try {
+                const response = await fetch(el.src);
+                const arrayBuffer = await response.arrayBuffer();
+                sfxBuffers[el.id] = await audioCtx.decodeAudioData(arrayBuffer);
+            } catch (e) {}
+        }
+        bgm.volume = 0.2;
+    }
+
+    function playTone(frequency = 440, duration = 0.1, gainLevel = 0.05, type = 'sine') {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        gain.gain.setValueAtTime(gainLevel, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playFallbackFor(id) {
+        if (id === 'sfx_fail') {
+            playTone(240, 0.12, 0.03, 'triangle');
+            return;
+        }
+        if (id === 'sfx_gameover') {
+            playTone(180, 0.24, 0.04, 'sawtooth');
+            return;
+        }
+        if (id === 'sfx_win') {
+            playTone(660, 0.14, 0.04, 'square');
+            return;
+        }
+        playTone(520, 0.08, 0.025, 'sine');
+    }
+
+    function playSfx(id, throttleMs = 70) {
+        if (!audioCtx) return;
+        const now = performance.now();
+        if (now - lastSoundAt < throttleMs) return;
+        lastSoundAt = now;
+
+        if (sfxBuffers[id]) {
+            const source = audioCtx.createBufferSource();
+            const gain = audioCtx.createGain();
+            source.buffer = sfxBuffers[id];
+            gain.gain.value = soundVolumes[id] || 0.24;
+            source.connect(gain);
+            gain.connect(audioCtx.destination);
+            source.start(0);
+        } else {
+            playFallbackFor(id);
+        }
+    }
+
+    function syncBgm() {
+        if (!bgm) return;
+        if (gameState === 'PLAYING' && audioUnlocked && bgmStarted) {
+            bgm.play().catch(() => {});
+        } else {
+            bgm.pause();
+        }
+    }
+
+    function unlockAudio() {
+        if (!audioCtx) return;
+        audioUnlocked = true;
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+        if (!bgmStarted) {
+            bgmStarted = true;
+        }
+        syncBgm();
+    }
+
+    // --- Game Logic ---
+    function nextWord() {
+        currentWord = WORDS[Math.floor(Math.random() * WORDS.length)];
+        scrambledLetters = currentWord.split('').sort(() => Math.random() - 0.5).map((char, i) => ({
+            char,
+            id: i,
+            x: 0, y: 0,
+            targetX: 0, targetY: 0,
+            scale: 0,
+            angle: (Math.random() - 0.5) * 0.2,
+            color: `hsl(${Math.random() * 360}, 70%, 65%)`
+        }));
+        selectedIndices = [];
+        layoutLetters();
+    }
+
+    function layoutLetters() {
+        const margin = 60;
+        const availableW = cw - margin * 2;
+        const spacing = availableW / (scrambledLetters.length);
+        scrambledLetters.forEach((l, i) => {
+            l.targetX = margin + spacing * i + spacing / 2;
+            l.targetY = ch * 0.6;
+            if (l.scale === 0) { l.x = l.targetX; l.y = ch + 100; }
+        });
+    }
+
+    function setState(next) {
+        const previous = gameState;
+        gameState = next;
+        document.getElementById('game-over-screen').classList.toggle('hidden', next !== 'GAMEOVER');
+
+        if (next === 'GAMEOVER') {
+            document.getElementById('final-score').innerText = score;
+            playSfx('sfx_gameover', 0);
+            showReaction('fail');
+            window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({ action: 'vibrate', params: { style: 'heavy' } });
+        } else if (previous === 'GAMEOVER' && next === 'PLAYING') {
+            hideReactionCards();
+        }
+
+        syncBgm();
+    }
+
+    function spawnParticles(x, y, color) {
+        for (let i = 0; i < 15; i++) {
+            particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color,
+                size: Math.random() * 8 + 4
+            });
+        }
+    }
+
+    // --- Input Handling ---
+    function handleInput(e) {
+        if (e.type === 'pointerdown' && performance.now() - lastTouchAt < 20) return;
+        lastTouchAt = performance.now();
+
+        const point = e.touches ? e.touches[0] : e;
+        if (!point) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const touchX = point.clientX - rect.left;
+        const touchY = point.clientY - rect.top;
+        if (touchX < 0 || touchX > rect.width || touchY < 0 || touchY > rect.height) return;
+
+        unlockAudio();
+        if (gameState === 'GAMEOVER') return;
+
+        scrambledLetters.forEach((l, idx) => {
+            const dx = touchX - l.x;
+            const dy = touchY - l.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < 40 && !selectedIndices.includes(idx)) {
+                selectedIndices.push(idx);
+                playSfx('sfx_pick');
+                l.scale = 1.3;
+                window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({ action: 'vibrate', params: { style: 'light' } });
+                
+                const attempt = selectedIndices.map(i => scrambledLetters[i].char).join('');
+                if (attempt === currentWord) {
+                    score += 10;
+                    level = Math.floor(score / 50) + 1;
+                    document.getElementById('score-val').innerText = score;
+                    document.getElementById('level-val').innerText = level;
+                    spawnParticles(l.x, l.y, l.color);
+                    playSfx('sfx_win', 0);
+                    showReaction('success');
+                    setTimeout(nextWord, 500);
+                } else if (attempt.length === currentWord.length) {
+                    selectedIndices = [];
+                    playSfx('sfx_fail', 0);
+                    showReaction('fail');
+                    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({ action: 'vibrate', params: { style: 'medium' } });
+                }
+            }
+        });
+    }
+
+    // --- Core Loop ---
+    function update(dt) {
+        if (gameState === 'PLAYING') {
+            timeLeft -= dt;
+            if (timeLeft <= 0) setState('GAMEOVER');
+        }
+
+        scrambledLetters.forEach(l => {
+            l.x += (l.targetX - l.x) * 0.1;
+            l.y += (l.targetY - l.y) * 0.1;
+            l.scale += (1.0 - l.scale) * 0.2;
+        });
+
+        particles.forEach((p, i) => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.2;
+            p.life -= 0.02;
+            if (p.life <= 0) particles.splice(i, 1);
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, cw, ch);
+        
+        const bgGradient = ctx.createLinearGradient(0, 0, 0, ch);
+        bgGradient.addColorStop(0, '#120f2f');
+        bgGradient.addColorStop(0.55, '#1b1441');
+        bgGradient.addColorStop(1, '#25164d');
+        ctx.fillStyle = bgGradient;
+        ctx.fillRect(0, 0, cw, ch);
+
+        ctx.fillStyle = 'rgba(140, 244, 255, 0.08)';
+        for (let i = 0; i < cw; i += 42) {
+            ctx.fillRect(i, 0, 1, ch);
+        }
+        ctx.fillStyle = 'rgba(255, 113, 200, 0.07)';
+        for (let j = 0; j < ch; j += 42) {
+            ctx.fillRect(0, j, cw, 1);
+        }
+
+        for (let i = 0; i < 6; i++) {
+            const glowX = (cw / 5) * i + 20;
+            const glowY = ch * 0.18 + (i % 2) * 28;
+            const orb = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, 90);
+            orb.addColorStop(0, 'rgba(140, 244, 255, 0.16)');
+            orb.addColorStop(1, 'rgba(140, 244, 255, 0)');
+            ctx.fillStyle = orb;
+            ctx.beginPath();
+            ctx.arc(glowX, glowY, 90, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const timerWidth = Math.max((timeLeft / gameConfig.gameDuration) * cw, 0);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(0, 0, cw, 10);
+        const timerGradient = ctx.createLinearGradient(0, 0, Math.max(timerWidth, 1), 0);
+        timerGradient.addColorStop(0, '#8cf4ff');
+        timerGradient.addColorStop(1, '#ff71c8');
+        ctx.fillStyle = timerGradient;
+        ctx.fillRect(0, 0, timerWidth, 10);
+
+        ctx.font = "700 34px 'Audiowide'";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const wordWidth = currentWord.length * 50;
+        const startX = (cw - wordWidth) / 2 + 25;
+        
+        for(let i=0; i<currentWord.length; i++) {
+            const x = startX + i * 50;
+            const y = ch * 0.3;
+            
+            ctx.fillStyle = 'rgba(6, 8, 24, 0.44)';
+            ctx.strokeStyle = 'rgba(140, 244, 255, 0.32)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(x-22, y-28, 44, 56, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            const selIdx = selectedIndices[i];
+            if (selIdx !== undefined) {
+                const l = scrambledLetters[selIdx];
+                drawClayLetter(l.char, x, y, 0.8, l.color);
+            }
+        }
+
+        scrambledLetters.forEach((l, idx) => {
+            if (selectedIndices.includes(idx)) return;
+            drawClayLetter(l.char, l.x, l.y, l.scale, l.color, l.angle);
+        });
+
+        particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+    }
+
+    function drawClayLetter(char, x, y, scale, color, angle = 0) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.scale(scale, scale);
+
+        ctx.fillStyle = 'rgba(6, 8, 24, 0.55)';
+        ctx.font = "700 42px 'Rajdhani'";
+        ctx.fillText(char, 4, 7);
+
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = color;
+        ctx.font = "700 48px 'Rajdhani'";
+        ctx.fillText(char, 0, 0);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.font = "700 44px 'Rajdhani'";
+        ctx.fillText(char, -2, -3);
+        
+        ctx.restore();
+    }
+
+    function loop(time) {
+        try {
+            const dt = Math.min((time - lastTime) / 1000, 0.05);
+            lastTime = time;
+            update(dt);
+            draw();
+            requestAnimationFrame(loop);
+        } catch (e) {
+            requestAnimationFrame(loop);
+        }
+    }
+
+    // --- Initialization ---
+    function initGame() {
+        score = 0;
+        level = 1;
+        timeLeft = gameConfig.gameDuration || 60;
+        particles = [];
+        selectedIndices = [];
+        document.getElementById('score-val').innerText = score;
+        document.getElementById('level-val').innerText = level;
+        hideReactionCards();
+        nextWord();
+        setState('PLAYING');
+    }
+
+    const ro = new ResizeObserver(entries => {
+        for (let entry of entries) {
+            const { width, height } = entry.contentRect;
+            dpr = window.devicePixelRatio || 1;
+            cw = width;
+            ch = height;
+            canvas.width = cw * dpr;
+            canvas.height = ch * dpr;
+            canvas.style.width = cw + 'px';
+            canvas.style.height = ch + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            if (!initialized) {
+                const configData = JSON.parse(configEl.textContent);
+                Object.keys(configData).forEach(k => gameConfig[k] = configData[k].value);
+                initAudio();
+                initGame();
+                initialized = true;
+                requestAnimationFrame(loop);
+            } else {
+                layoutLetters();
+            }
+        }
+    });
+
+        window.addEventListener('DOMContentLoaded', () => {
+        ro.observe(canvas);
+        // [agent-note][stage4] repaired: scope gameplay taps to canvas so HUD/modal buttons keep native mobile tap behavior
+        canvas.addEventListener('pointerdown', (e) => {
+            activeInputPointerId = e.pointerId;
+            handleInput(e);
+        }, { passive: true });
+        canvas.addEventListener('touchstart', handleInput, { passive: true });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                bgm.pause();
+            } else {
+                syncBgm();
+            }
+        });
+        document.getElementById('restart-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            activeInputPointerId = null;
+            unlockAudio();
+            playSfx('sfx_restart', 0);
+            initGame();
+        });
+    });
+
+    // Hot Update Support
+    window.updateGameConfig = (key, val) => {
+        gameConfig[key] = val;
+        if (key === 'gameDuration') timeLeft = val;
+    };
+
+})();
+</script>
+</body>
+</html>

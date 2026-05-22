@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Collection
 
 SCRIPT_PATH = Path(__file__).resolve()
 TOOL_ROOT = SCRIPT_PATH.parents[1]
@@ -71,7 +71,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the gcloud commands without executing them.",
     )
+    parser.add_argument(
+        "--prune-remote",
+        action="store_true",
+        help="After per-item sync, remove stale remote gamezone prefixes so the destination mirrors local state.",
+    )
     return parser
+
+
+def normalize_gcs_root(destination: str) -> str:
+    return destination.rstrip("/")
 
 
 def build_rsync_command(source: Path, destination: str, project: str) -> list[str]:
@@ -81,7 +90,31 @@ def build_rsync_command(source: Path, destination: str, project: str) -> list[st
         "rsync",
         "-r",
         str(source),
-        destination,
+        normalize_gcs_root(destination),
+        "--project",
+        project,
+    ]
+
+
+def build_ls_command(destination: str, project: str) -> list[str]:
+    return [
+        "gcloud",
+        "storage",
+        "ls",
+        "--recursive",
+        f"{normalize_gcs_root(destination)}/**",
+        "--project",
+        project,
+    ]
+
+
+def build_rm_command(destination: str, item_name: str, project: str) -> list[str]:
+    return [
+        "gcloud",
+        "storage",
+        "rm",
+        "--recursive",
+        f"{normalize_gcs_root(destination)}/{item_name}",
         "--project",
         project,
     ]
@@ -121,8 +154,46 @@ def iter_top_level_items(root: Path, only_items: set[str]) -> list[Path]:
     return items
 
 
+def local_item_names(root: Path, only_items: set[str]) -> list[str]:
+    return [path.name for path in iter_top_level_items(root, only_items)]
+
+
+def parse_remote_item_names(stdout: str, destination_root: str) -> list[str]:
+    normalized_root = normalize_gcs_root(destination_root)
+    prefix = f"{normalized_root}/"
+    item_names: set[str] = set()
+
+    for raw_line in stdout.splitlines():
+        candidate = raw_line.strip()
+        if not candidate:
+            continue
+        candidate = candidate.rstrip("/")
+        if not candidate.startswith(prefix):
+            continue
+        relative = candidate[len(prefix) :].strip("/")
+        if not relative:
+            continue
+        item_name = relative.split("/", 1)[0]
+        if item_name.startswith("gamezone-"):
+            item_names.add(item_name)
+
+    return sorted(item_names)
+
+
+def list_remote_item_names(destination_root: str, project: str) -> list[str]:
+    result = run_command(build_ls_command(destination_root, project))
+    if result["returncode"] != 0:
+        if result["stdout"]:
+            print(result["stdout"])
+        if result["stderr"]:
+            print(result["stderr"], file=sys.stderr)
+        raise SystemExit(result["returncode"])
+    return parse_remote_item_names(result["stdout"], destination_root)
+
+
 def build_root_operation(target: str, source_root: Path, destination_root: str, project: str) -> dict[str, Any]:
     return {
+        "operation_kind": "sync",
         "target": target,
         "item_name": None,
         "source": str(source_root),
@@ -143,6 +214,7 @@ def build_per_item_operations(
         destination = f"{destination_root.rstrip('/')}/{item_path.name}"
         operations.append(
             {
+                "operation_kind": "sync",
                 "target": target,
                 "item_name": item_path.name,
                 "source": str(item_path),
@@ -167,22 +239,78 @@ def build_operations_for_target(
     return build_per_item_operations(target, source_root, destination_root, project, only_items)
 
 
+def build_prune_operations_from_item_names(
+    *,
+    target: str,
+    destination_root: str,
+    project: str,
+    local_names: Collection[str],
+    remote_names: Collection[str],
+) -> list[dict[str, Any]]:
+    stale_remote_names = sorted(set(remote_names) - set(local_names))
+    operations: list[dict[str, Any]] = []
+    for item_name in stale_remote_names:
+        operations.append(
+            {
+                "operation_kind": "prune",
+                "target": target,
+                "item_name": item_name,
+                "source": None,
+                "destination": f"{normalize_gcs_root(destination_root)}/{item_name}",
+                "command": build_rm_command(destination_root, item_name, project),
+            }
+        )
+    return operations
+
+
+def build_prune_operations_for_target(
+    *,
+    target: str,
+    source_root: Path,
+    destination_root: str,
+    project: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    local_names = local_item_names(source_root, set())
+    remote_names = list_remote_item_names(destination_root, project)
+    operations = build_prune_operations_from_item_names(
+        target=target,
+        destination_root=destination_root,
+        project=project,
+        local_names=local_names,
+        remote_names=remote_names,
+    )
+    return operations, {
+        "target": target,
+        "local_item_names": local_names,
+        "remote_item_names": remote_names,
+        "stale_remote_item_names": [operation["item_name"] for operation in operations],
+    }
+
+
 def print_stage_banner(title: str) -> None:
     print(f"[sync] {title}", flush=True)
 
 
 def print_operation_progress(index: int, total: int, operation: dict[str, Any], dry_run: bool) -> None:
+    operation_kind = operation.get("operation_kind") or "sync"
     target = operation["target"]
     item_name = operation["item_name"] or "<root>"
-    source = operation["source"]
+    source = operation.get("source")
     destination = operation["destination"]
     mode_label = "dry-run" if dry_run else "run"
-    print(
-        f"[sync] [{index}/{total}] {target} :: {item_name} :: {mode_label}\n"
-        f"[sync]         source: {source}\n"
-        f"[sync]         destination: {destination}",
-        flush=True,
-    )
+    if source:
+        print(
+            f"[sync] [{index}/{total}] {target} :: {item_name} :: {operation_kind} :: {mode_label}\n"
+            f"[sync]         source: {source}\n"
+            f"[sync]         destination: {destination}",
+            flush=True,
+        )
+    else:
+        print(
+            f"[sync] [{index}/{total}] {target} :: {item_name} :: {operation_kind} :: {mode_label}\n"
+            f"[sync]         destination: {destination}",
+            flush=True,
+        )
     print(f"[sync]         command: {' '.join(operation['command'])}", flush=True)
 
 
@@ -193,7 +321,13 @@ def main() -> None:
     obfuscated_root = Path(args.obfuscated_root).resolve()
     only_items = {item for item in args.only_item if item}
 
+    if args.prune_remote and args.mode != "per-item":
+        raise SystemExit("--prune-remote currently requires --mode per-item.")
+    if args.prune_remote and only_items:
+        raise SystemExit("--prune-remote cannot be combined with --only-item.")
+
     operations: list[dict[str, Any]] = []
+    prune_plans: list[dict[str, Any]] = []
 
     print_stage_banner(f"starting sync planning target={args.target} mode={args.mode} project={args.project}")
 
@@ -209,6 +343,16 @@ def main() -> None:
         )
         print_stage_banner(f"planned public operations: {len(public_ops)}")
         operations.extend(public_ops)
+        if args.prune_remote:
+            public_prune_ops, public_prune_plan = build_prune_operations_for_target(
+                target="public",
+                source_root=public_root,
+                destination_root=str(args.public_gcs),
+                project=str(args.project),
+            )
+            print_stage_banner(f"planned public prune operations: {len(public_prune_ops)}")
+            operations.extend(public_prune_ops)
+            prune_plans.append(public_prune_plan)
 
     if args.target in {"obfuscated", "both"}:
         validate_source_root(obfuscated_root, "obfuscated")
@@ -222,6 +366,16 @@ def main() -> None:
         )
         print_stage_banner(f"planned obfuscated operations: {len(obfuscated_ops)}")
         operations.extend(obfuscated_ops)
+        if args.prune_remote:
+            obfuscated_prune_ops, obfuscated_prune_plan = build_prune_operations_for_target(
+                target="obfuscated",
+                source_root=obfuscated_root,
+                destination_root=str(args.obfuscated_gcs),
+                project=str(args.project),
+            )
+            print_stage_banner(f"planned obfuscated prune operations: {len(obfuscated_prune_ops)}")
+            operations.extend(obfuscated_prune_ops)
+            prune_plans.append(obfuscated_prune_plan)
 
     print_stage_banner(f"total operations queued: {len(operations)}")
 
@@ -235,6 +389,7 @@ def main() -> None:
         if args.dry_run:
             results.append(
                 {
+                    "operation_kind": operation.get("operation_kind") or "sync",
                     "target": operation["target"],
                     "item_name": operation["item_name"],
                     "source": operation["source"],
@@ -248,6 +403,7 @@ def main() -> None:
         result = run_command(command)
         results.append(
             {
+                "operation_kind": operation.get("operation_kind") or "sync",
                 "target": operation["target"],
                 "item_name": operation["item_name"],
                 "source": operation["source"],
@@ -268,8 +424,11 @@ def main() -> None:
         "mode": args.mode,
         "project": str(args.project),
         "dry_run": bool(args.dry_run),
+        "prune_remote": bool(args.prune_remote),
         "only_items": sorted(only_items),
         "operation_count": len(results),
+        "sync_operation_count": sum(1 for result in results if result.get("operation_kind") == "sync"),
+        "prune_operation_count": sum(1 for result in results if result.get("operation_kind") == "prune"),
         "status": "dry_run" if args.dry_run else "passed",
     }
 
@@ -278,6 +437,7 @@ def main() -> None:
         json.dumps(
             {
                 "results": results,
+                "prune_plans": prune_plans,
                 "summary": summary,
             },
             indent=2,

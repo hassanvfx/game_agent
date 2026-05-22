@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Signal Surge: Trend Sync Control</title>
+    <!-- [agent-note][stage4] repaired: catalog-font-remap | title/display -> Audiowide | UI/body -> Rajdhani -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;600;700&display=swap">
+    <style>
+        :root {
+            --bg-deep: #070b17;
+            --bg-mid: #111c33;
+            --panel: rgba(14, 22, 42, 0.78);
+            --panel-strong: rgba(20, 31, 56, 0.92);
+            --line: rgba(132, 217, 255, 0.24);
+            --text: #f4fbff;
+            --muted: #8fb0d8;
+            --signal-cyan: #6be7ff;
+            --signal-violet: #9f7cff;
+            --signal-pink: #ff5db1;
+            --signal-gold: #ffd86b;
+            --signal-danger: #ff6f7d;
+        }
+
+        html, body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(107, 231, 255, 0.14), transparent 28%),
+                radial-gradient(circle at 20% 20%, rgba(159, 124, 255, 0.14), transparent 24%),
+                linear-gradient(180deg, var(--bg-mid), var(--bg-deep));
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            color: var(--text);
+        }
+
+        html, body, button {
+            touch-action: manipulation;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::before {
+            background:
+                linear-gradient(90deg, transparent 0 49.5%, rgba(107, 231, 255, 0.07) 49.5% 50.5%, transparent 50.5%),
+                linear-gradient(transparent 0 49.5%, rgba(159, 124, 255, 0.06) 49.5% 50.5%, transparent 50.5%);
+            background-size: 72px 72px;
+            opacity: 0.28;
+        }
+
+        body::after {
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 18%, transparent 82%, rgba(0,0,0,0.3));
+            mix-blend-mode: screen;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; position: relative; z-index: 1; }
+
+        .signal-shell {
+            position: relative;
+            isolation: isolate;
+            background:
+                radial-gradient(circle at 50% -10%, rgba(159, 124, 255, 0.24), transparent 32%),
+                linear-gradient(180deg, rgba(3, 7, 18, 0.2), rgba(3, 7, 18, 0.7));
+        }
+
+        .signal-shell::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 15% 12%, rgba(255, 216, 107, 0.08), transparent 16%),
+                radial-gradient(circle at 82% 18%, rgba(107, 231, 255, 0.12), transparent 22%),
+                radial-gradient(circle at 50% 100%, rgba(255, 93, 177, 0.08), transparent 28%);
+            pointer-events: none;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(18, 27, 49, 0.92), rgba(9, 14, 30, 0.82));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--line);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.08),
+                0 12px 32px rgba(0, 0, 0, 0.38),
+                0 0 18px rgba(107, 231, 255, 0.08);
+        }
+
+        .neon-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .neon-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(115deg, transparent 15%, rgba(255,255,255,0.12) 50%, transparent 85%);
+            transform: translateX(-120%);
+            animation: panelSweep 6s linear infinite;
+            pointer-events: none;
+            opacity: 0.55;
+        }
+
+        .signal-title,
+        .signal-floater {
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            letter-spacing: 0.06em;
+        }
+
+        .signal-callout {
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            letter-spacing: 0.08em;
+        }
+
+        .reaction-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 18;
+            overflow: hidden;
+        }
+
+        .reaction-gif {
+            position: absolute;
+            width: 92px;
+            height: 92px;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(7, 11, 23, 0.78);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+            opacity: 0;
+            transform: translateY(12px) scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+
+        .reaction-gif.active {
+            opacity: 0.9;
+            transform: translateY(0) scale(1);
+        }
+
+        .reaction-gif--success {
+            right: 16px;
+            bottom: 190px;
+        }
+
+        .reaction-gif--danger {
+            left: 16px;
+            top: 96px;
+        }
+
+        .reaction-gif-label {
+            position: absolute;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            padding: 4px 6px;
+            border-radius: 999px;
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            font-size: 10px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            background: rgba(5, 9, 20, 0.72);
+            color: #f4fbff;
+        }
+
+        .signal-status-ribbon {
+            position: absolute;
+            right: 12px;
+            top: 12px;
+            z-index: 22;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(7, 11, 23, 0.72);
+            border: 1px solid rgba(107, 231, 255, 0.22);
+            color: #6be7ff;
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0;
+            transform: translateY(-12px);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+        }
+
+        .signal-status-ribbon.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 640px) {
+            .reaction-gif {
+                width: 74px;
+                height: 74px;
+            }
+
+            .reaction-gif--success {
+                right: 10px;
+                bottom: 170px;
+            }
+
+            .reaction-gif--danger {
+                left: 10px;
+                top: 86px;
+            }
+
+            .signal-status-ribbon {
+                right: 10px;
+                top: 10px;
+                font-size: 10px;
+                padding: 7px 10px;
+            }
+        }
+
+        .hud-chip {
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 8px 18px rgba(0,0,0,0.26);
+        }
+
+        .chat-mask {
+            mask-image: linear-gradient(to bottom, transparent 0%, black 12%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 12%);
+        }
+
+        .chat-msg {
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            animation: slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .chat-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-right: 4px;
+            font-weight: 800;
+        }
+
+        .scanline-frame {
+            position: relative;
+        }
+
+        .scanline-frame::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 25%, transparent 75%, rgba(255,255,255,0.03));
+            pointer-events: none;
+            mix-blend-mode: screen;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px) scale(0.9); opacity: 0; }
+            to { transform: translateX(0) scale(1); opacity: 1; }
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: rgba(107, 231, 255, 0.4); box-shadow: 0 0 0 0 rgba(107, 231, 255, 0.32); }
+            70% { border-color: rgba(159, 124, 255, 0); box-shadow: 0 0 0 10px rgba(159, 124, 255, 0); }
+            100% { border-color: rgba(107, 231, 255, 0); box-shadow: 0 0 0 0 rgba(107, 231, 255, 0); }
+        }
+
+        @keyframes panelSweep {
+            0% { transform: translateX(-120%); }
+            100% { transform: translateX(120%); }
+        }
+
+        @keyframes signalPulse {
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.04); filter: brightness(1.18); }
+        }
+
+        .animate-pulse-border { animation: pulse-border 2s infinite; }
+        .signal-pulse { animation: signalPulse 2.4s ease-in-out infinite; }
+
+        ::-webkit-scrollbar { display: none; }
+        * { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; box-sizing: border-box; }
+
+        #gameCanvas {
+            touch-action: none;
+        }
+
+        @supports (padding: max(0px)) {
+            #hud {
+                padding-top: max(0.5rem, env(safe-area-inset-top));
+            }
+
+            #chat-container {
+                left: max(1rem, env(safe-area-inset-left));
+                right: max(1rem, env(safe-area-inset-right));
+                bottom: max(1rem, env(safe-area-inset-bottom));
+            }
+
+            #start-screen,
+            #game-over-screen {
+                padding:
+                    max(1rem, env(safe-area-inset-top))
+                    max(1rem, env(safe-area-inset-right))
+                    max(1rem, env(safe-area-inset-bottom))
+                    max(1rem, env(safe-area-inset-left));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="signal-shell relative w-full h-full overflow-hidden bg-slate-900">
+        <canvas id="gameCanvas"></canvas>
+        <div class="reaction-layer" aria-hidden="true">
+            <!-- [agent-note][stage3] resolved-gif: success/fail overlays -> catalogs/gifs.json -->
+            <div id="signal-status-ribbon" class="signal-status-ribbon">Signal boosted</div>
+            <div id="success-gif" class="reaction-gif reaction-gif--success">
+                <img src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="" class="w-full h-full object-cover rounded-[18px]">
+                <div class="reaction-gif-label">Trend spike</div>
+            </div>
+            <div id="danger-gif" class="reaction-gif reaction-gif--danger">
+                <img src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="" class="w-full h-full object-cover rounded-[18px]">
+                <div class="reaction-gif-label">Signal slip</div>
+            </div>
+        </div>
+        
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 flex flex-col pointer-events-none safe-area-inset">
+            
+            <!-- HUD Top -->
+            <div id="hud" class="absolute top-0 left-0 w-full p-2 flex flex-col gap-2 z-20 hidden">
+                <!-- Top Row: Resources -->
+                <div class="flex justify-between items-start w-full gap-2">
+                    
+                    <!-- Left: Money & Platforms -->
+                    <div class="flex flex-col gap-2 w-1/2">
+                        <!-- Money -->
+                        <div class="glass-panel neon-card hud-chip px-3 py-1.5 rounded-full flex items-center gap-2 w-fit">
+                            <span class="text-green-400 text-lg">💵</span>
+                            <span id="score" class="text-lg font-bold text-white tracking-wide font-mono">$0</span>
+                        </div>
+                        
+                        <!-- Active Platforms Bar -->
+                        <div class="glass-panel neon-card hud-chip p-1.5 rounded-xl flex flex-col w-fit min-w-[100px]">
+                            <span class="text-[9px] text-gray-400 uppercase font-bold mb-1 ml-1">Active Accounts</span>
+                            <div id="platforms-container" class="flex gap-1">
+                                <!-- Icons injected here -->
+                                <div class="w-6 h-6 rounded bg-purple-600 flex items-center justify-center text-xs">👾</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Followers & Trend -->
+                    <div class="flex flex-col items-end gap-2 w-1/2">
+                        <!-- Followers -->
+                        <div class="glass-panel neon-card hud-chip px-3 py-1.5 rounded-full flex items-center gap-2 w-fit border-blue-500/30">
+                            <span class="text-blue-400 text-lg">👥</span>
+                            <span id="followers" class="text-lg font-bold text-white tracking-wide font-mono">0</span>
+                        </div>
+
+                        <!-- Trend Indicator -->
+                        <div class="glass-panel neon-card hud-chip px-3 py-2 rounded-xl flex flex-col items-end border-purple-500/30 animate-pulse-border w-full max-w-[140px]">
+                            <span class="text-[9px] text-gray-400 uppercase font-bold mb-1">Trending</span>
+                            <div class="flex items-center gap-2 justify-end">
+                                <span id="trend-icon" class="text-xl">🎮</span>
+                                <div class="flex flex-col items-end overflow-hidden">
+                                    <span id="trend-name" class="text-xs font-black text-white leading-none whitespace-nowrap">Just Chatting</span>
+                                    <span class="text-[9px] text-purple-400 font-bold">2x Bonus</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hype Bar (Centered Top) -->
+                <div class="absolute top-20 left-1/2 transform -translate-x-1/2 w-2/3 max-w-[200px] glass-panel neon-card hud-chip p-2 rounded-full">
+                    <div class="flex justify-between items-center mb-1 px-1">
+                        <span class="text-[10px] font-black text-purple-300 uppercase tracking-wider">Hype</span>
+                        <span class="text-[10px] font-bold text-white" id="hype-text">100%</span>
+                    </div>
+                    <div class="h-2 bg-gray-800 rounded-full overflow-hidden border border-white/10 relative">
+                        <div id="hype-bar" class="h-full bg-gradient-to-r from-purple-500 to-pink-500 w-full transition-all duration-100"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHAT OVERLAY -->
+            <div id="chat-container" class="absolute bottom-4 left-4 right-4 h-40 flex flex-col justify-end pointer-events-none z-10 hidden">
+                <div class="chat-mask w-full h-full flex flex-col justify-end overflow-hidden p-2 space-y-1.5" id="chat-messages">
+                    <!-- Messages injected here -->
+                </div>
+            </div>
+
+            <!-- Start Screen -->
+            <div id="start-screen" class="absolute inset-0 flex items-center justify-center pointer-events-auto z-50 bg-slate-900/95 backdrop-blur-md">
+                <div class="glass-panel neon-card scanline-frame p-6 rounded-3xl text-center max-w-sm mx-4 shadow-2xl border-t border-white/10 relative overflow-hidden w-full">
+                    <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500"></div>
+                    <div class="absolute inset-x-6 top-6 h-20 rounded-full blur-2xl bg-cyan-400/15 pointer-events-none"></div>
+                    
+                    <div class="mb-3 text-6xl signal-pulse mt-4">🛰️</div>
+                    <div class="signal-callout text-cyan-300 text-xl mb-1">Catch the hype. Ride the signal.</div>
+                    <h1 class="signal-title text-3xl font-black text-white mb-2 leading-tight">SIGNAL SURGE<br><span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">TREND SYNC</span></h1>
+                    <p class="text-sm text-slate-300 mb-4">Pilot a neon broadcast avatar, sync with hot genres, and keep the crowd locked onto your stream.</p>
+                    
+                    <div class="bg-slate-800/80 p-4 rounded-xl border border-white/5 mb-6 text-left space-y-3 text-sm">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded bg-blue-500/20 flex items-center justify-center text-lg">🛰️</div>
+                            <div>
+                                <div class="text-white font-bold">Patch In Feeds</div>
+                                <div class="text-gray-400 text-xs">Catch access cards to widen the broadcast grid.</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center text-lg">✨</div>
+                            <div>
+                                <div class="text-white font-bold">Amplify Reach</div>
+                                <div class="text-gray-400 text-xs">More active feeds turn every good catch into bigger growth.</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center text-lg">🎯</div>
+                            <div>
+                                <div class="text-white font-bold">Lock the Trend</div>
+                                <div class="text-gray-400 text-xs">Snap up the hot signal to refill hype before the broadcast fades.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="start-btn" class="signal-title w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 text-white font-black py-4 px-8 rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all text-lg uppercase tracking-wide">
+                        Start Broadcast
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden absolute inset-0 flex items-center justify-center pointer-events-auto z-50 bg-black/95 backdrop-blur-xl">
+                <div class="glass-panel neon-card scanline-frame p-8 rounded-3xl text-center max-w-sm mx-4 w-full border border-purple-500/20">
+                    <h2 class="signal-title text-5xl font-black text-white mb-1">SIGNAL LOST</h2>
+                    <p class="text-purple-400 font-bold mb-6 uppercase tracking-widest text-xs">Broadcast Drifted Off Trend</p>
+                    
+                    <div class="bg-slate-800 rounded-2xl p-6 mb-6 border border-slate-700 space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                            <span class="text-gray-400 text-xs uppercase font-bold">Credits</span>
+                            <span class="text-green-400 font-black font-mono text-xl" id="finalScore">$0</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                            <span class="text-gray-400 text-xs uppercase font-bold">Reach</span>
+                            <span class="text-blue-400 font-black font-mono text-xl" id="finalFollowers">0</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400 text-xs uppercase font-bold">Feeds</span>
+                            <div id="final-platforms" class="flex gap-1"></div>
+                        </div>
+                    </div>
+
+                    <button id="restart-btn" class="signal-title w-full bg-white text-slate-900 font-bold py-4 px-8 rounded-2xl shadow-lg hover:bg-gray-200 active:scale-95 transition-all text-lg">
+                        Reconnect
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. CONFIG & ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3",
+            sfx: {
+                collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+                bonus: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                switch: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                levelup: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                warning: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                gameover: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3"
+            }
+        };
+
+        const GAMES_LIST = [
+            { name: "Block Craft", color: "#22c55e", icon: "⛏️" },
+            { name: "Space Sim", color: "#3b82f6", icon: "🚀" },
+            { name: "Horror", color: "#ef4444", icon: "👻" },
+            { name: "Shooter", color: "#f59e0b", icon: "🔫" },
+            { name: "RPG", color: "#a855f7", icon: "⚔️" },
+            { name: "Racing", color: "#ec4899", icon: "🏎️" }
+        ];
+
+        // Platforms to "Add Account"
+        const PLATFORMS = [
+            { id: 'twitch', name: 'Purple', color: '#9333ea', icon: '👾' },
+            { id: 'youtube', name: 'Red', color: '#ef4444', icon: '▶️' },
+            { id: 'tiktok', name: 'Tok', color: '#000000', icon: '🎵' },
+            { id: 'twitter', name: 'Blue', color: '#3b82f6', icon: '🐦' },
+            { id: 'insta', name: 'Cam', color: '#ec4899', icon: '📸' }
+        ];
+
+        const CHAT_DATA = {
+            users: [
+                { name: "NinjaFan", color: "#ef4444" },
+                { name: "CozyVibes", color: "#f9a8d4" },
+                { name: "SpeedRun", color: "#3b82f6" },
+                { name: "PixelArt", color: "#a855f7" },
+                { name: "Mod_Steve", color: "#22c55e", badge: "⚔️" },
+                { name: "Sub_Sarah", color: "#f59e0b", badge: "⭐" },
+                { name: "Lurker_01", color: "#94a3b8" },
+                { name: "ProGamer", color: "#fbbf24" }
+            ],
+            comments: {
+                generic: ["Hi youtube", "First", "Notice me", "Cool stream", "Hello from Brazil", "Is this live?", "Setup specs?", "What game is this?"],
+                hype: ["POG", "NICE", "PRO", "EZ CLAP", "Rich!", "Stonks 📈", "GIGACHAD", "Insane plays", "LETS GOOO"],
+                trend: ["Play the trend!", "Finally!", "My favorite game", "Switching it up!", "HYPE HYPE"],
+                account: ["New account!", "Multistreaming??", "Everywhere all at once!", "Notification squad", "Welcome new viewers!"]
+            }
+        };
+
+        /** 2. SYSTEMS */
+        
+        const audio = {
+            bgm: new Audio(ASSETS.bgm),
+            sfx: {},
+            pools: {},
+            enabled: false,
+            init: function() {
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                Object.keys(ASSETS.sfx).forEach(k => {
+                    const sample = new Audio(ASSETS.sfx[k]);
+                    sample.preload = 'auto';
+                    this.sfx[k] = sample;
+                    this.pools[k] = Array.from({ length: 3 }, () => {
+                        const channel = new Audio(ASSETS.sfx[k]);
+                        channel.preload = 'auto';
+                        return channel;
+                    });
+                });
+            },
+            unlock: function() {
+                if (this.enabled) return;
+                this.enabled = true;
+                this.bgm.load();
+                Object.values(this.sfx).forEach(sound => sound.load());
+            },
+            playBGM: function() {
+                if (!this.enabled) return;
+                this.bgm.play().catch(() => {});
+            },
+            stopBGM: function() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            },
+            playSFX: function(k, volume = 0.42) {
+                if (!this.enabled || !this.pools[k]) return;
+                const channel = this.pools[k].find(audioNode => audioNode.paused || audioNode.ended) || this.pools[k][0];
+                try { channel.currentTime = 0; } catch (_) {}
+                channel.volume = volume;
+                channel.play().catch(() => {});
+            }
+        };
+        audio.init();
+
+        const reactionUI = {
+            success: document.getElementById('success-gif'),
+            danger: document.getElementById('danger-gif'),
+            ribbon: document.getElementById('signal-status-ribbon'),
+            timers: {},
+            pulse(key, label) {
+                const node = this[key];
+                if (!node) return;
+                node.classList.add('active');
+                clearTimeout(this.timers[key]);
+                this.timers[key] = setTimeout(() => node.classList.remove('active'), 1500);
+                if (label && this.ribbon) {
+                    this.ribbon.textContent = label;
+                    this.ribbon.classList.add('active');
+                    clearTimeout(this.timers.ribbon);
+                    this.timers.ribbon = setTimeout(() => this.ribbon.classList.remove('active'), 1400);
+                }
+            }
+        };
+
+        const Chat = {
+            el: document.getElementById('chat-messages'),
+            timer: null,
+            
+            getUser: function() { return CHAT_DATA.users[Math.floor(Math.random() * CHAT_DATA.users.length)]; },
+
+            add: function(type, content, extra = {}) {
+                const user = this.getUser();
+                const msg = document.createElement('div');
+                msg.className = 'chat-msg flex items-start text-sm leading-tight';
+                
+                let innerHTML = '';
+                
+                if (type === 'donation') {
+                    msg.classList.add('bg-green-500/20', 'border-l-2', 'border-green-400', 'p-1', 'rounded-r');
+                    innerHTML = `
+                        <div class="flex flex-col w-full">
+                            <div class="flex items-center gap-1">
+                                <span class="font-bold text-green-300 text-xs">${user.name}</span>
+                                <span class="text-green-400 font-bold text-xs ml-auto">$${extra.amount}</span>
+                            </div>
+                            <span class="text-white/90 text-xs italic">"Keep streaming!"</span>
+                        </div>
+                    `;
+                } else if (type === 'system') {
+                    innerHTML = `
+                        <span class="font-bold text-purple-400 uppercase text-[10px] tracking-wider mr-2">SYSTEM</span>
+                        <span class="text-purple-200 font-bold">${content}</span>
+                    `;
+                } else {
+                    const badge = user.badge ? `<span class="chat-badge bg-gray-700 text-white">${user.badge}</span>` : '';
+                    const color = user.color || '#cbd5e1';
+                    innerHTML = `
+                        <div class="break-words w-full shadow-black drop-shadow-md">
+                            ${badge}
+                            <span class="font-bold mr-1" style="color:${color}">${user.name}:</span>
+                            <span class="text-white/90 font-medium">${content}</span>
+                        </div>
+                    `;
+                }
+
+                msg.innerHTML = innerHTML;
+                this.el.appendChild(msg);
+
+                if(this.el.children.length > 6) {
+                    this.el.removeChild(this.el.firstChild);
+                }
+            },
+
+            trigger: function(event, value) {
+                if (event === 'money') {
+                    this.add('donation', '', { amount: value });
+                } else if (event === 'trend') {
+                    this.add('system', `Audience ping: ${value}!`);
+                    setTimeout(() => this.react('trend'), 500);
+                } else if (event === 'account') {
+                    this.add('system', `Feed linked: ${value}!`);
+                    setTimeout(() => this.react('account'), 300);
+                }
+            },
+
+            react: function(category) {
+                const pool = CHAT_DATA.comments[category] || CHAT_DATA.comments.generic;
+                const txt = pool[Math.floor(Math.random() * pool.length)];
+                this.add('chat', txt);
+            },
+
+            startLoop: function() {
+                if(this.timer) clearInterval(this.timer);
+                this.timer = setInterval(() => {
+                    if(Math.random() > 0.4) this.react('generic');
+                }, 2500);
+            },
+            
+            stop: function() {
+                if(this.timer) clearInterval(this.timer);
+            }
+        };
+
+        /** 3. GAME STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        
+        let state = {
+            active: false,
+            score: 0,
+            followers: 0,
+            hype: 100,
+            activePlatforms: [], // Indices of PLATFORMS
+            trendIndex: 0,
+            trendTimer: 0,
+            difficulty: 1,
+            frameCount: 0
+        };
+
+        let player = { x: 0, y: 0, width: 80, height: 80, targetX: 0 };
+        let items = [];
+        let particles = [];
+        let floaters = [];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            player.y = height - 160;
+            if(!state.active) player.x = width/2 - player.width/2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        /** 4. GAME LOGIC */
+        
+        function changeTrend() {
+            let newIndex;
+            do {
+                newIndex = Math.floor(Math.random() * GAMES_LIST.length);
+            } while(newIndex === state.trendIndex);
+            
+            state.trendIndex = newIndex;
+            const game = GAMES_LIST[state.trendIndex];
+            
+            // UI Update
+            document.getElementById('trend-name').innerText = game.name;
+            document.getElementById('trend-icon').innerText = game.icon;
+            
+            // FX
+            audio.playSFX('switch');
+            Chat.trigger('trend', game.name);
+            
+            // Floater
+            floaters.push(new Floater(width/2, height/3, `${game.name} Spike!`, game.color));
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.life = 1.0;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8;
+                this.size = Math.random() * 4 + 2;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.04;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        class Floater {
+            constructor(x, y, text, color) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.life = 60;
+                this.vy = -2;
+            }
+            update() {
+                this.y += this.vy;
+                this.life--;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life/60);
+                ctx.fillStyle = this.color;
+                ctx.font = "700 24px Audiowide";
+                ctx.strokeStyle = "black";
+                ctx.lineWidth = 4;
+                ctx.textAlign = "center";
+                ctx.strokeText(this.text, this.x, this.y);
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        class Item {
+            constructor() {
+                this.size = 60;
+                this.x = Math.random() * (width - this.size);
+                this.y = -80;
+                this.speed = (5 + Math.random() * 3) * state.difficulty;
+                this.angle = 0;
+                this.spin = (Math.random() - 0.5) * 0.1;
+                
+                const rand = Math.random();
+                
+                // 5% chance for Account Card (if not all collected)
+                if (rand < 0.05 && state.activePlatforms.length < PLATFORMS.length) {
+                    this.type = 'account';
+                    // Find an uncollected platform
+                    const available = PLATFORMS.filter(p => !state.activePlatforms.includes(p));
+                    this.platform = available[Math.floor(Math.random() * available.length)];
+                    this.color = this.platform.color;
+                    this.icon = this.platform.icon;
+                } 
+                // 15% Money
+                else if (rand < 0.20) {
+                    this.type = 'money';
+                    this.val = 50;
+                    this.icon = '💰';
+                    this.color = '#facc15';
+                } 
+                // 80% Game
+                else {
+                    this.type = 'game';
+                    // 40% chance to be the TRENDING game
+                    if (Math.random() < 0.4) {
+                        this.gameIndex = state.trendIndex;
+                    } else {
+                        this.gameIndex = Math.floor(Math.random() * GAMES_LIST.length);
+                    }
+                    const g = GAMES_LIST[this.gameIndex];
+                    this.icon = g.icon;
+                    this.color = g.color;
+                }
+            }
+            update() {
+                this.y += this.speed;
+                this.angle += this.spin;
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x + this.size/2, this.y + this.size/2);
+                ctx.rotate(this.angle);
+                
+                if (this.type === 'account') {
+                    const cardGrad = ctx.createLinearGradient(-25, -35, 25, 35);
+                    cardGrad.addColorStop(0, '#f8fbff');
+                    cardGrad.addColorStop(1, '#d7ecff');
+                    ctx.fillStyle = cardGrad;
+                    ctx.beginPath();
+                    ctx.roundRect(-25, -35, 50, 70, 8);
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(107, 231, 255, 0.6)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.roundRect(-25, -35, 50, 24, 8);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = "600 24px Rajdhani";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(this.icon, 0, -19);
+
+                    ctx.strokeStyle = 'rgba(15, 23, 42, 0.18)';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(-16, 0);
+                    ctx.lineTo(16, 0);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = "700 16px Audiowide";
+                    ctx.fillText("LINK", 0, 16);
+                } 
+                else {
+                    ctx.fillStyle = '#0b1222';
+                    ctx.beginPath();
+                    ctx.roundRect(-27, -27, 54, 54, 10);
+                    ctx.fill();
+
+                    const cartGrad = ctx.createLinearGradient(-20, -15, 20, 25);
+                    cartGrad.addColorStop(0, '#0f172a');
+                    cartGrad.addColorStop(1, this.color);
+                    ctx.fillStyle = cartGrad;
+                    ctx.beginPath();
+                    ctx.roundRect(-20, -15, 40, 40, 6);
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    ctx.font = "28px Rajdhani";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = this.color;
+                    ctx.fillText(this.icon, 0, 5);
+                    ctx.shadowBlur = 0;
+
+                    ctx.strokeStyle = 'rgba(148, 247, 255, 0.35)';
+                    ctx.beginPath();
+                    ctx.moveTo(-14, -20);
+                    ctx.lineTo(14, -20);
+                    ctx.stroke();
+                }
+                
+                // Trend Glow
+                if (this.type === 'game' && this.gameIndex === state.trendIndex) {
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(-25, -25, 50, 50);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        function initGame() {
+            state.active = true;
+            state.score = 0;
+            state.followers = 100; // Start with some base followers
+            state.hype = 100;
+            state.difficulty = 1;
+            state.frameCount = 0;
+            state.trendTimer = 0;
+            state.activePlatforms = [PLATFORMS[0]]; // Start with Twitch-like
+            
+            items = [];
+            particles = [];
+            floaters = [];
+            
+            player.x = width/2 - player.width/2;
+            player.targetX = player.x;
+            
+            // Reset UI
+            Chat.el.innerHTML = '';
+            Chat.add('system', 'Signal online...');
+            Chat.startLoop();
+            reactionUI.pulse('success', 'Broadcast live');
+
+            changeTrend(); 
+            updateUI();
+            updatePlatformsUI();
+        }
+
+        function updatePlatformsUI() {
+            const container = document.getElementById('platforms-container');
+            container.innerHTML = '';
+            state.activePlatforms.forEach(p => {
+                const div = document.createElement('div');
+                div.className = `w-6 h-6 rounded flex items-center justify-center text-xs shadow-sm`;
+                div.style.backgroundColor = p.color;
+                div.innerText = p.icon;
+                container.appendChild(div);
+            });
+        }
+
+        function updateUI() {
+            document.getElementById('score').innerText = `$${Math.floor(state.score).toLocaleString()}`;
+            document.getElementById('followers').innerText = Math.floor(state.followers).toLocaleString();
+            document.getElementById('hype-text').innerText = Math.floor(state.hype) + '%';
+            document.getElementById('hype-bar').style.width = `${Math.max(0, state.hype)}%`;
+            
+            const hb = document.getElementById('hype-bar');
+            if (state.hype < 30) hb.className = "h-full bg-red-500 w-full transition-all duration-100 animate-pulse";
+            else hb.className = "h-full bg-gradient-to-r from-purple-500 to-pink-500 w-full transition-all duration-100";
+        }
+
+        function gameLoop() {
+            if(!state.active) return;
+            
+            ctx.clearRect(0, 0, width, height);
+            state.frameCount++;
+            
+            // 1. Difficulty & Decay
+            state.difficulty = 1 + (state.frameCount / 3600); 
+            
+            // Hype Decay
+            const decay = 0.08 + (state.difficulty * 0.03);
+            state.hype -= decay;
+            
+            if (state.hype <= 0) {
+                state.hype = 0;
+                gameOver();
+            } else if (state.hype < 26 && state.frameCount % 90 === 0) {
+                audio.playSFX('warning', 0.3);
+                reactionUI.pulse('danger', 'Hype critical');
+            }
+
+            // 2. Trend Switching
+            state.trendTimer++;
+            if (state.trendTimer > 600) { 
+                changeTrend();
+                state.trendTimer = 0;
+            }
+
+            // 3. Background
+            const trendColor = GAMES_LIST[state.trendIndex].color;
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#050914');
+            gradient.addColorStop(0.55, '#0d1630');
+            gradient.addColorStop(1, trendColor + '22');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const radialGlow = ctx.createRadialGradient(width / 2, height * 0.18, 10, width / 2, height * 0.18, width * 0.7);
+            radialGlow.addColorStop(0, trendColor + '33');
+            radialGlow.addColorStop(1, 'transparent');
+            ctx.fillStyle = radialGlow;
+            ctx.fillRect(0, 0, width, height);
+
+            for (let gx = 0; gx < width; gx += 54) {
+                ctx.strokeStyle = 'rgba(107, 231, 255, 0.08)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(gx, 0);
+                ctx.lineTo(gx, height);
+                ctx.stroke();
+            }
+            for (let gy = 0; gy < height; gy += 54) {
+                ctx.strokeStyle = 'rgba(159, 124, 255, 0.06)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(width, gy);
+                ctx.stroke();
+            }
+
+            // 4. Player Movement
+            player.x += (player.targetX - player.x) * 0.15;
+            
+            // Draw Streamer
+            ctx.save();
+            ctx.translate(player.x, player.y);
+
+            const bob = Math.sin(state.frameCount * 0.12) * 2;
+            ctx.translate(0, bob);
+
+            // Signal glow
+            ctx.shadowColor = trendColor;
+            ctx.shadowBlur = 26;
+            ctx.fillStyle = trendColor;
+            ctx.beginPath();
+            ctx.roundRect(4, 10, player.width - 8, player.height - 6, 28);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Outer shell
+            const shellGradient = ctx.createLinearGradient(0, 0, player.width, player.height);
+            shellGradient.addColorStop(0, '#7dd3fc');
+            shellGradient.addColorStop(0.45, trendColor);
+            shellGradient.addColorStop(1, '#7c3aed');
+            ctx.fillStyle = shellGradient;
+            ctx.beginPath();
+            ctx.roundRect(0, 0, player.width, player.height, 26);
+            ctx.fill();
+
+            // Screen/Face plate
+            const facePlate = ctx.createLinearGradient(0, 10, 0, player.height - 10);
+            facePlate.addColorStop(0, '#08111f');
+            facePlate.addColorStop(1, '#182742');
+            ctx.fillStyle = facePlate;
+            ctx.beginPath();
+            ctx.roundRect(8, 8, player.width - 16, player.height - 16, 20);
+            ctx.fill();
+
+            // Broadcast antenna
+            ctx.strokeStyle = '#94f7ff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(28, 4);
+            ctx.lineTo(18, -10);
+            ctx.moveTo(52, 4);
+            ctx.lineTo(62, -10);
+            ctx.stroke();
+            ctx.fillStyle = '#ffd86b';
+            ctx.beginPath();
+            ctx.arc(18, -10, 4, 0, Math.PI * 2);
+            ctx.arc(62, -10, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eye glow
+            const eyeY = 34;
+            ctx.fillStyle = '#dffcff';
+            ctx.shadowColor = '#6be7ff';
+            ctx.shadowBlur = 12;
+            if (state.hype < 20) {
+                ctx.beginPath();
+                ctx.arc(26, eyeY, 5, 0, Math.PI * 2);
+                ctx.arc(54, eyeY, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.ellipse(40, 56, 8, 10, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.ellipse(26, eyeY, 7, 6, 0, 0, Math.PI * 2);
+                ctx.ellipse(54, eyeY, 7, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(40, 47, 12, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+            }
+
+            // Cheeks + visor
+            ctx.fillStyle = 'rgba(255, 93, 177, 0.32)';
+            ctx.beginPath();
+            ctx.arc(18, 48, 5, 0, Math.PI * 2);
+            ctx.arc(62, 48, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(148, 247, 255, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(16, 22);
+            ctx.lineTo(64, 22);
+            ctx.stroke();
+
+            // Headphones
+            ctx.lineWidth = 7;
+            ctx.strokeStyle = '#27364f';
+            ctx.beginPath();
+            ctx.arc(40, 40, 47, Math.PI, 0);
+            ctx.stroke();
+
+            ctx.fillStyle = '#111827';
+            ctx.beginPath();
+            ctx.roundRect(-4, 24, 12, 28, 8);
+            ctx.roundRect(72, 24, 12, 28, 8);
+            ctx.fill();
+
+            // Equalizer chest
+            const bars = [16, 24, 12, 28, 18];
+            ctx.fillStyle = '#94f7ff';
+            bars.forEach((bar, idx) => {
+                ctx.fillRect(22 + idx * 7, 60 - bar / 6, 4, bar / 3);
+            });
+
+            ctx.restore();
+
+            // 5. Spawning
+            if (Math.random() < 0.03 * state.difficulty) items.push(new Item());
+
+            // 6. Items Loop
+            for (let i = items.length - 1; i >= 0; i--) {
+                let e = items[i];
+                e.update();
+                
+                // Collision
+                if (
+                    e.x < player.x + player.width &&
+                    e.x + e.size > player.x &&
+                    e.y < player.y + player.height &&
+                    e.y + e.size > player.y
+                ) {
+                    // HIT
+                    let hypeGain = 0;
+                    let scoreGain = 0;
+                    let followerGain = 0;
+                    let floatText = "";
+                    let floatColor = "#fff";
+
+                    // Multipliers
+                    const platformMult = state.activePlatforms.length; // More platforms = more reach
+                    const viewerMult = 1 + (state.followers / 2000); // More viewers = more money
+
+                    if (e.type === 'account') {
+                        // ADD ACCOUNT
+                        state.activePlatforms.push(e.platform);
+                        updatePlatformsUI();
+                        
+                        hypeGain = 20;
+                        followerGain = 500; // Big boost
+                        floatText = "NEW FEED!";
+                        floatColor = e.color;
+                        audio.playSFX('levelup', 0.45);
+                        Chat.trigger('account', e.platform.name);
+                        reactionUI.pulse('success', 'Feed linked');
+                        
+                        // Burst particles
+                        for(let k=0; k<12; k++) particles.push(new Particle(player.x + 40, player.y, e.color));
+
+                    } else if (e.type === 'money') {
+                        // MONEY
+                        scoreGain = Math.floor(e.val * viewerMult);
+                        hypeGain = 5;
+                        floatText = `+$${scoreGain}`;
+                        floatColor = "#facc15";
+                        Chat.trigger('money', scoreGain);
+                        audio.playSFX('collect', 0.3);
+                    } else {
+                        // GAME
+                        if (e.gameIndex === state.trendIndex) {
+                            // MATCH TREND
+                            hypeGain = 15;
+                            scoreGain = Math.floor(100 * viewerMult);
+                            followerGain = 50 * platformMult; // Gain followers faster with more platforms
+                            floatText = "SYNCED!";
+                            floatColor = e.color;
+                            audio.playSFX('bonus', 0.42);
+                            reactionUI.pulse('success', 'Trend synced');
+                            
+                            // Extra particles
+                            for(let k=0; k<8; k++) particles.push(new Particle(player.x + 40, player.y, e.color));
+                        } else {
+                            // NORMAL GAME
+                            hypeGain = 4;
+                            scoreGain = Math.floor(20 * viewerMult);
+                            followerGain = 10 * platformMult;
+                            floatText = `+${followerGain}👥`;
+                            floatColor = "#60a5fa";
+                            audio.playSFX('collect', 0.32);
+                        }
+                    }
+
+                    // Apply
+                    state.hype = Math.min(100, state.hype + hypeGain);
+                    state.score += scoreGain;
+                    state.followers += followerGain;
+                    
+                    floaters.push(new Floater(player.x + 40, player.y - 20, floatText, floatColor));
+                    items.splice(i, 1);
+                    continue;
+                }
+                
+                if (e.y > height) items.splice(i, 1);
+                else e.draw(ctx);
+            }
+
+            // 7. FX Loop
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw(ctx);
+                if(particles[i].life <= 0) particles.splice(i, 1);
+            }
+            
+            for (let i = floaters.length - 1; i >= 0; i--) {
+                floaters[i].update();
+                floaters[i].draw(ctx);
+                if(floaters[i].life <= 0) floaters.splice(i, 1);
+            }
+
+            updateUI();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            state.active = false;
+            audio.stopBGM();
+            audio.playSFX('gameover', 0.45);
+            Chat.stop();
+            Chat.react('bored'); // "Offline?"
+            reactionUI.pulse('danger', 'Signal lost');
+            
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('chat-container').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            
+            document.getElementById('finalScore').innerText = `$${Math.floor(state.score).toLocaleString()}`;
+            document.getElementById('finalFollowers').innerText = Math.floor(state.followers).toLocaleString();
+            
+            // Show collected platforms in Game Over
+            const finalPlat = document.getElementById('final-platforms');
+            finalPlat.innerHTML = '';
+            state.activePlatforms.forEach(p => {
+                const d = document.createElement('div');
+                d.className = 'w-6 h-6 rounded flex items-center justify-center text-xs';
+                d.style.backgroundColor = p.color;
+                d.innerText = p.icon;
+                finalPlat.appendChild(d);
+            });
+        }
+
+        /** 5. INPUT */
+        function handleInput(e) {
+            if(!state.active) return;
+            e.preventDefault();
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            player.targetX = cx - player.width/2;
+            // Clamp
+            if(player.targetX < 0) player.targetX = 0;
+            if(player.targetX > width - player.width) player.targetX = width - player.width;
+        }
+        canvas.addEventListener('touchmove', handleInput, {passive:false});
+        canvas.addEventListener('touchstart', handleInput, {passive:false});
+        canvas.addEventListener('mousemove', handleInput);
+
+        // Buttons
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', 0.4);
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('chat-container').classList.remove('hidden');
+            audio.playBGM();
+            initGame();
+            gameLoop();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', 0.36);
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('chat-container').classList.remove('hidden');
+            audio.playBGM();
+            initGame();
+            gameLoop();
+        });
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Signal Sweep: Code Search</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --paper: #08111f;
+        --ink: #f3fbff;
+        --ink-soft: #9fb8d4;
+        --highlight: #ffe66d;
+        --grade-red: #ff5678;
+        --teal: #78f3ff;
+        --panel: rgba(9, 19, 36, 0.82);
+        --panel-border: rgba(120, 243, 255, 0.34);
+        --grid-line: rgba(120, 243, 255, 0.15);
+        --shadow: rgba(2, 10, 20, 0.45);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(120, 243, 255, 0.12), transparent 35%),
+            linear-gradient(180deg, #091120 0%, #050913 100%);
+        font-family: 'Rajdhani', system-ui, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+            linear-gradient(transparent 0 96%, rgba(120, 243, 255, 0.06) 96% 100%),
+            linear-gradient(90deg, transparent 0 96%, rgba(120, 243, 255, 0.04) 96% 100%);
+        background-size: 100% 4px, 4px 100%;
+        opacity: 0.45;
+        mix-blend-mode: screen;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .glass {
+        background: linear-gradient(180deg, rgba(13, 26, 47, 0.88), rgba(7, 16, 30, 0.92));
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 12px 32px var(--shadow), inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .ink-text { color: var(--ink); }
+    .grade-text { color: var(--grade-red); font-family: 'Orbitron', 'Trebuchet MS', sans-serif; }
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background:
+            radial-gradient(circle at 50% 0%, rgba(120, 243, 255, 0.12), transparent 42%),
+            linear-gradient(180deg, #08111f 0%, #050913 100%);
+    }
+    #game-container::before,
+    #game-container::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+    #game-container::before {
+        background:
+            radial-gradient(circle at 18% 16%, rgba(120, 243, 255, 0.16), transparent 0 18%),
+            radial-gradient(circle at 84% 22%, rgba(255, 86, 120, 0.12), transparent 0 14%),
+            radial-gradient(circle at 50% 86%, rgba(255, 230, 109, 0.08), transparent 0 12%);
+    }
+    #game-container::after {
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+        opacity: 0.65;
+    }
+    #ui-layer { position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: space-between; padding: 1.1rem; pointer-events: none; }
+    #ui-layer > * { pointer-events: auto; }
+    #hud { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.8rem; width: 100%; transition: opacity 300ms; opacity: 0; }
+    #hud > div {
+        min-width: 7.2rem;
+        padding: 0.72rem 0.9rem 0.78rem;
+        border-radius: 1rem;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 10px 24px rgba(3, 12, 24, 0.28);
+    }
+    #hud .label {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.24em;
+        color: var(--ink-soft);
+        margin-bottom: 0.2rem;
+    }
+    #timer-val, #score-val {
+        font-size: clamp(1.7rem, 4vw, 2.35rem);
+        font-weight: 700;
+        line-height: 1;
+    }
+    #timer-val { color: var(--ink); font-family: 'Orbitron', 'Trebuchet MS', sans-serif; text-shadow: 0 0 18px rgba(120, 243, 255, 0.18); }
+    #score-val { color: var(--grade-red); font-family: 'Orbitron', 'Trebuchet MS', sans-serif; text-shadow: 0 0 18px rgba(255, 86, 120, 0.18); }
+    #tutorial { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; transition: opacity 500ms; }
+    #tutorial-card {
+        padding: 1rem 1.3rem;
+        border-radius: 1rem;
+        transform: rotate(-1deg);
+        width: min(88vw, 25rem);
+        position: relative;
+        overflow: hidden;
+    }
+    #tutorial-card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(120deg, transparent, rgba(120,243,255,0.12), transparent);
+        transform: translateX(-100%);
+        animation: sweepShine 4s linear infinite;
+    }
+    #tutorial-title {
+        color: var(--highlight);
+        font-size: clamp(1.6rem, 4vw, 2rem);
+        font-weight: 700;
+        margin: 0 0 0.35rem;
+        font-family: 'Orbitron', 'Trebuchet MS', sans-serif;
+        letter-spacing: 0.12em;
+    }
+    #tutorial-copy { color: var(--ink-soft); font-size: 1.05rem; margin: 0; line-height: 1.35; }
+    #game-over-screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(2, 8, 18, 0.7); backdrop-filter: blur(8px); }
+    #game-over-screen.hidden { display: none !important; }
+    #game-over-card {
+        position: relative;
+        width: min(100%, 24rem);
+        margin: 1rem;
+        padding: 1.7rem 1.35rem 1.35rem;
+        border-radius: 1.25rem;
+        text-align: center;
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 18px 38px rgba(0,0,0,0.34);
+    }
+    #grade-stamp {
+        position: absolute;
+        top: -1rem;
+        right: -0.8rem;
+        width: 5.1rem;
+        height: 5.1rem;
+        border-radius: 9999px;
+        background: radial-gradient(circle at 35% 35%, #ff94ab, var(--grade-red));
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.45rem;
+        font-weight: 700;
+        font-family: 'Orbitron', 'Trebuchet MS', sans-serif;
+        box-shadow: 0 12px 26px rgba(255, 86, 120, 0.35);
+    }
+    #game-over-title {
+        margin: 0 0 0.45rem;
+        font-size: clamp(1.9rem, 6vw, 2.4rem);
+        font-weight: 700;
+        color: var(--ink);
+        font-family: 'Orbitron', 'Trebuchet MS', sans-serif;
+        letter-spacing: 0.08em;
+    }
+    #game-over-subtitle {
+        margin: 0 0 1.15rem;
+        color: var(--ink-soft);
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.28em;
+    }
+    .results { margin: 0 0.3rem 1.3rem; }
+    .result-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border-bottom: 1px solid rgba(120, 243, 255, 0.14);
+        padding: 0 0 0.42rem;
+        margin-bottom: 0.7rem;
+        color: var(--ink-soft);
+        font-size: 1rem;
+    }
+    .result-row strong { color: var(--ink); font-family: 'Orbitron', 'Trebuchet MS', sans-serif; }
+    #restart-btn {
+        width: 100%;
+        border: 0;
+        border-radius: 0.95rem;
+        padding: 0.88rem 1rem;
+        background: linear-gradient(135deg, var(--teal), #57b8ff);
+        color: #05101d;
+        font-size: 1.15rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        box-shadow: 0 12px 22px rgba(87, 184, 255, 0.22);
+        transition: transform 180ms ease, filter 180ms ease;
+        cursor: pointer;
+        font-family: 'Rajdhani', system-ui, sans-serif;
+    }
+    #restart-btn:hover { transform: scale(1.02); filter: brightness(1.06); }
+    .hidden { display: none !important; }
+
+    @keyframes stamp {
+        0% { opacity: 0; transform: scale(3) rotate(-15deg); }
+        100% { opacity: 1; transform: scale(1) rotate(-15deg); }
+    }
+    @keyframes sweepShine {
+        0% { transform: translateX(-110%); }
+        100% { transform: translateX(110%); }
+    }
+    .stamp-anim { animation: stamp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+    @media (max-width: 640px) {
+        #ui-layer { padding: 0.85rem; }
+        #hud { gap: 0.55rem; }
+        #hud > div { min-width: 0; flex: 1 1 0; padding: 0.65rem 0.72rem 0.7rem; }
+        #hud .label { font-size: 0.64rem; letter-spacing: 0.16em; }
+        #timer-val, #score-val { font-size: clamp(1.35rem, 7vw, 1.8rem); }
+        #tutorial-card { padding: 0.9rem 1rem; width: min(90vw, 21rem); }
+        #tutorial-title { font-size: 1.32rem; }
+        #tutorial-copy { font-size: 0.95rem; }
+        #game-over-card { padding: 1.4rem 1rem 1rem; }
+        #grade-stamp { width: 4.1rem; height: 4.1rem; font-size: 1.95rem; right: -0.4rem; top: -0.5rem; }
+        #game-over-subtitle { font-size: 0.88rem; letter-spacing: 0.18em; }
+        .result-row { font-size: 0.95rem; }
+        #restart-btn { font-size: 1.02rem; padding: 0.82rem 0.95rem; }
+    }
+    #feedback-layer {
+        position: absolute;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 55;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.65rem;
+        pointer-events: none;
+    }
+    .feedback-badge {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        min-height: 4.5rem;
+        max-width: min(74vw, 15rem);
+        padding: 0.55rem;
+        border-radius: 1rem;
+        background: rgba(7, 16, 30, 0.8);
+        border: 1px solid rgba(120, 243, 255, 0.3);
+        box-shadow: 0 10px 28px rgba(2, 10, 20, 0.45);
+        opacity: 0;
+        transform: translateY(0.5rem) scale(0.96);
+        transition: opacity 220ms ease, transform 220ms ease;
+    }
+    .feedback-badge.is-active {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    .feedback-badge img {
+        width: 3.3rem;
+        height: 3.3rem;
+        border-radius: 0.8rem;
+        object-fit: cover;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.05);
+        flex: 0 0 auto;
+    }
+    .feedback-copy {
+        color: var(--ink);
+        font-size: 0.92rem;
+        line-height: 1.2;
+    }
+    .feedback-copy strong {
+        display: block;
+        color: var(--highlight);
+        font-family: 'Orbitron', 'Trebuchet MS', sans-serif;
+        font-size: 0.88rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 0.15rem;
+    }
+
+    @media (max-width: 640px) {
+        #feedback-layer {
+            right: 0.7rem;
+            bottom: 0.7rem;
+            gap: 0.45rem;
+        }
+        .feedback-badge {
+            min-height: 3.9rem;
+            max-width: min(70vw, 12.5rem);
+            padding: 0.45rem;
+        }
+        .feedback-badge img {
+            width: 2.7rem;
+            height: 2.7rem;
+        }
+        .feedback-copy {
+            font-size: 0.8rem;
+        }
+        .feedback-copy strong {
+            font-size: 0.78rem;
+        }
+    }
+</style>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "gridSize": { "type": "number", "label": "Grid Density", "value": 8, "min": 6, "max": 10 },
+    "timeLimit": { "type": "number", "label": "Time Limit (s)", "value": 90, "min": 30, "max": 180 },
+    "penColor": { "type": "color", "label": "Pen Color", "value": "#e53e3e" }
+}
+</script>
+
+<!-- Assets -->
+<audio id="bgm_main" data-editable="audio" data-label="Signal Sweep Ambience" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3" preload="auto" loop></audio>
+<audio id="sfx_correct" data-editable="audio" data-label="Confirmed Signal" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_wrong" data-editable="audio" data-label="False Alarm" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3" preload="auto"></audio>
+<audio id="sfx_start" data-editable="audio" data-label="Sweep Start" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_click" data-editable="audio" data-label="UI Confirm" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_win" data-editable="audio" data-label="Mission Complete" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_gameover" data-editable="audio" data-label="Sweep Failed" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3" preload="auto"></audio>
+<img id="asset_placeholder" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg==" hidden>
+
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <!-- HUD -->
+        <div id="hud">
+            <div>
+                <div class="label">Scan Window</div>
+                <div id="timer-val">00:00</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="label">Signals Tagged</div>
+                <div id="score-val">0/0</div>
+            </div>
+        </div>
+
+        <!-- Tutorial Hint -->
+        <div id="tutorial">
+            <div id="tutorial-card" class="glass">
+                <p id="tutorial-title">SCAN BRIEF</p>
+                <p id="tutorial-copy">Drag across hidden code words.<br>Tag every signal before time runs out.</p>
+            </div>
+        </div>
+
+        <div id="feedback-layer" aria-live="polite">
+            <!-- [agent-note][stage3] resolved-gif: success/fail feedback overlays -> catalogs/gifs.json -->
+            <div id="success-badge" class="feedback-badge">
+                <img src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Signal confirmed celebration">
+                <div class="feedback-copy"><strong>Signal locked</strong><span>Clean match added to the sweep log.</span></div>
+            </div>
+            <div id="fail-badge" class="feedback-badge">
+                <img src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp" alt="Confused false alarm reaction">
+                <div class="feedback-copy"><strong>False alarm</strong><span>Recenter and trace a cleaner line.</span></div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden">
+            <div id="game-over-card" class="glass">
+                <div class="stamp-anim hidden" id="grade-stamp">F</div>
+                
+                <h2 id="game-over-title">SCAN COMPLETE</h2>
+                <p id="game-over-subtitle">Mission Debrief</p>
+                
+                <div class="results">
+                    <div class="result-row">
+                        <span>Signals Tagged</span>
+                        <strong id="final-score">0</strong>
+                    </div>
+                    <div class="result-row">
+                        <span>Time Buffer</span>
+                        <strong id="final-time">0</strong>
+                    </div>
+                </div>
+                
+                <button id="restart-btn">
+                    Run Another Sweep
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * §0 System Constants & State
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+const dpr = window.devicePixelRatio || 1;
+
+// Logical Dimensions
+let cw = 0, ch = 0;
+let cx = 0, cy = 0;
+
+// Game State
+let gameState = 'INIT'; // INIT, PLAYING, GAMEOVER
+let initialized = false;
+let lastTime = 0;
+let timeLeft = 0;
+let foundCount = 0;
+let totalWords = 0;
+let frameCount = 0;
+
+// Config
+let gameConfig = { gridSize: 8, timeLimit: 90, penColor: '#e53e3e' };
+
+// Input
+const input = { 
+    active: false, 
+    startX: 0, startY: 0, 
+    currX: 0, currY: 0,
+    startCell: null,
+    currCell: null,
+    validSelection: false
+};
+
+// Audio
+let audioCtx = null;
+const audioBuffers = {};
+const sfxCooldowns = {};
+let feedbackTimer = null;
+
+// Grid System
+let grid = []; // 2D array of chars
+let gridOriginX = 0;
+let gridOriginY = 0;
+let cellSize = 0;
+let wordList = [];
+let foundWords = [];
+let particles = [];
+
+const WORD_POOL = [
+    "SIGNAL", "RADAR", "BEACON", "VECTOR", "STATIC", "PULSE",
+    "CIPHER", "SCAN", "TRACE", "GRID", "BURST", "LINK",
+    "RELAY", "NODE", "CRYPT", "CODE"
+];
+
+/**
+ * §1 Architecture & Lifecycle
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    parseConfig();
+    setupResizeObserver();
+    setupInput();
+    initAudioSystem();
+});
+
+function parseConfig() {
+    try {
+        const el = document.getElementById('game-config');
+        if (el && el.textContent) {
+            const defs = JSON.parse(el.textContent);
+            window.gameConfigDefs = defs;
+            for (const k in defs) gameConfig[k] = defs[k].value;
+        }
+    } catch(e) {
+        console.error('Config parse failed', e);
+    }
+    document.documentElement.style.setProperty('--grade-red', gameConfig.penColor);
+}
+
+function setupResizeObserver() {
+    const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            cw = width;
+            ch = height;
+            cx = cw / 2;
+            cy = ch / 2;
+            
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            if (!initialized) {
+                initialized = true;
+                initGame();
+                requestAnimationFrame(gameLoop);
+            } else {
+                // Recalculate layout on resize
+                calculateLayout();
+            }
+        }
+    });
+    ro.observe(canvas);
+}
+
+function setState(newState) {
+    gameState = newState;
+    const hud = document.getElementById('hud');
+    const goScreen = document.getElementById('game-over-screen');
+    const tutorial = document.getElementById('tutorial');
+    const stamp = document.getElementById('grade-stamp');
+    
+    if (newState === 'PLAYING') {
+        hud.style.opacity = '1';
+        goScreen.classList.add('hidden');
+        stamp.classList.add('hidden');
+        tutorial.style.opacity = '1';
+        setTimeout(() => tutorial.style.opacity = '0', 3000);
+    } else if (newState === 'GAMEOVER') {
+        document.getElementById('final-score').innerText = `${foundCount} / ${totalWords}`;
+        document.getElementById('final-time').innerText = Math.floor(timeLeft) + 's';
+        
+        // Calculate mission rank
+        const percent = foundCount / totalWords;
+        let grade = 'F';
+        if (percent === 1) grade = timeLeft > gameConfig.timeLimit * 0.3 ? 'A+' : 'A';
+        else if (percent > 0.8) grade = 'B';
+        else if (percent > 0.5) grade = 'C';
+        else if (percent > 0.2) grade = 'D';
+        
+        stamp.innerText = grade;
+        stamp.classList.remove('hidden');
+        
+        goScreen.classList.remove('hidden');
+        hud.style.opacity = '0';
+        playSfx(percent === 1 ? 'win' : 'gameover');
+        vibrate('heavy');
+    }
+    syncLoopState();
+}
+
+/**
+ * §2 Audio System
+ */
+function initAudioSystem() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    audioCtx = new AudioContext();
+    
+    const sfxList = [
+        { id: 'correct', el: 'sfx_correct' },
+        { id: 'wrong', el: 'sfx_wrong' },
+        { id: 'start', el: 'sfx_start' },
+        { id: 'click', el: 'sfx_click' },
+        { id: 'win', el: 'sfx_win' },
+        { id: 'gameover', el: 'sfx_gameover' }
+    ];
+    
+    sfxList.forEach(item => {
+        const el = document.getElementById(item.el);
+        if (el && el.src) {
+            fetch(el.src)
+                .then(r => r.arrayBuffer())
+                .then(data => audioCtx.decodeAudioData(data))
+                .then(buffer => { audioBuffers[item.id] = buffer; })
+                .catch(err => console.warn('Audio load fail', err));
+        }
+    });
+}
+
+function unlockAudio() {
+    if (!audioCtx) initAudioSystem();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    
+    const bgm = document.getElementById('bgm_main');
+    if (bgm) {
+        bgm.volume = 0.15;
+        if (bgm.paused) bgm.play().catch(() => {});
+    }
+}
+
+function playSfx(type) {
+    if (!audioCtx) return;
+    const nowMs = performance.now();
+    const cooldown = type === 'wrong' ? 220 : 90;
+    if (sfxCooldowns[type] && nowMs - sfxCooldowns[type] < cooldown) return;
+    sfxCooldowns[type] = nowMs;
+
+    if (!audioBuffers[type]) {
+        synthesizeSfx(type);
+        return;
+    }
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffers[type];
+    const gain = audioCtx.createGain();
+    gain.gain.value = ({
+        start: 0.18,
+        click: 0.16,
+        correct: 0.22,
+        wrong: 0.18,
+        win: 0.2,
+        gameover: 0.18
+    })[type] ?? 0.16;
+    source.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start(0);
+}
+
+function synthesizeSfx(type) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    
+    if (type === 'correct' || type === 'win' || type === 'start') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(type === 'win' ? 520 : 400, now);
+        osc.frequency.exponentialRampToValueAtTime(type === 'win' ? 980 : 800, now + 0.12);
+        gain.gain.setValueAtTime(0.09, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.16);
+        osc.start(now);
+        osc.stop(now + 0.16);
+    } else if (type === 'click') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(620, now);
+        osc.frequency.exponentialRampToValueAtTime(460, now + 0.08);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+    } else {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    }
+}
+
+function setFeedback(type) {
+    const successBadge = document.getElementById('success-badge');
+    const failBadge = document.getElementById('fail-badge');
+    if (!successBadge || !failBadge) return;
+
+    successBadge.classList.remove('is-active');
+    failBadge.classList.remove('is-active');
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+
+    const badge = type === 'success' ? successBadge : failBadge;
+    badge.classList.add('is-active');
+    feedbackTimer = setTimeout(() => badge.classList.remove('is-active'), 1400);
+}
+
+function syncLoopState() {
+    const bgm = document.getElementById('bgm_main');
+    if (!bgm) return;
+    if (gameState === 'PLAYING') {
+        if (!bgm.paused) return;
+        bgm.play().catch(() => {});
+    } else {
+        bgm.pause();
+    }
+}
+
+function vibrate(style) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate',
+            requestId: 'h5-' + Date.now(),
+            version: '1.0',
+            params: { style }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(style === 'heavy' ? 200 : 50);
+    }
+}
+
+/**
+ * §3 Input System
+ */
+function handleGlobalInput(e) {
+    unlockAudio();
+    if (gameState === 'GAMEOVER') return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const touchPoint = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || null;
+    const clientX = typeof e.clientX === 'number' ? e.clientX : (touchPoint ? touchPoint.clientX : 0);
+    const clientY = typeof e.clientY === 'number' ? e.clientY : (touchPoint ? touchPoint.clientY : 0);
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    
+    if (e.type === 'pointerdown' || e.type === 'touchstart') {
+        if (gameState === 'PLAYING' && !input.active) playSfx('start');
+        input.active = true;
+        input.startX = x;
+        input.startY = y;
+        input.currX = x;
+        input.currY = y;
+        
+        const cell = getCellAt(x, y);
+        if (cell) {
+            input.startCell = cell;
+            input.currCell = cell;
+            vibrate('light');
+        } else {
+            input.startCell = null;
+        }
+    } else if ((e.type === 'pointermove' || e.type === 'touchmove') && input.active) {
+        input.currX = x;
+        input.currY = y;
+        const cell = getCellAt(x, y);
+        if (cell) {
+            input.currCell = cell;
+        }
+    } else if (e.type === 'pointerup' || e.type === 'pointercancel' || e.type === 'touchend') {
+        if (input.active && input.startCell && input.currCell) {
+            checkSelection();
+        }
+        input.active = false;
+        input.startCell = null;
+        input.currCell = null;
+    }
+}
+
+function setupInput() {
+    const passive = { passive: false };
+    canvas.addEventListener('pointerdown', handleGlobalInput, passive);
+    window.addEventListener('pointermove', handleGlobalInput, passive);
+    window.addEventListener('pointerup', handleGlobalInput, passive);
+    window.addEventListener('pointercancel', handleGlobalInput, passive);
+    
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleGlobalInput(e); }, passive);
+    window.addEventListener('touchmove', (e) => { e.preventDefault(); handleGlobalInput(e); }, passive);
+    window.addEventListener('touchend', handleGlobalInput, passive);
+
+    document.getElementById('restart-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        unlockAudio();
+        playSfx('click');
+        restartGame();
+    });
+}
+
+/**
+ * §4 Game Logic
+ */
+function initGame() {
+    timeLeft = gameConfig.timeLimit;
+    foundCount = 0;
+    foundWords = [];
+    particles = [];
+    
+    generateGrid();
+    calculateLayout();
+    
+    document.getElementById('score-val').innerText = `0/${totalWords}`;
+    setState('PLAYING');
+}
+
+function restartGame() {
+    initGame();
+}
+
+function calculateLayout() {
+    const margin = 20;
+    const availableWidth = cw - margin * 2;
+    // Reserve space for word list at bottom (approx 30% of screen)
+    const availableHeight = ch * 0.65; 
+    
+    cellSize = Math.min(availableWidth / gameConfig.gridSize, availableHeight / gameConfig.gridSize);
+    gridOriginX = (cw - (cellSize * gameConfig.gridSize)) / 2;
+    gridOriginY = margin + 80; // Top margin for HUD
+}
+
+function generateGrid() {
+    const size = gameConfig.gridSize;
+    grid = Array(size).fill(null).map(() => Array(size).fill(''));
+    wordList = [];
+    
+    // Pick random words
+    const pool = [...WORD_POOL].sort(() => 0.5 - Math.random());
+    const targetCount = Math.min(6, Math.floor(size * 0.8)); // Scale words with size
+    
+    for (const word of pool) {
+        if (wordList.length >= targetCount) break;
+        if (placeWord(word)) {
+            wordList.push({ word, found: false });
+        }
+    }
+    
+    // Fill empty
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for(let y=0; y<size; y++) {
+        for(let x=0; x<size; x++) {
+            if (grid[y][x] === '') {
+                grid[y][x] = alphabet[Math.floor(Math.random() * alphabet.length)];
+            }
+        }
+    }
+    
+    totalWords = wordList.length;
+}
+
+function placeWord(word) {
+    const size = gameConfig.gridSize;
+    const directions = [
+        [1, 0], [0, 1], [1, 1], [1, -1] // H, V, D1, D2
+    ];
+    
+    // Try 50 times to place a word
+    for(let i=0; i<50; i++) {
+        const dir = directions[Math.floor(Math.random() * directions.length)];
+        const startX = Math.floor(Math.random() * size);
+        const startY = Math.floor(Math.random() * size);
+        
+        let fits = true;
+        for(let j=0; j<word.length; j++) {
+            const x = startX + j * dir[0];
+            const y = startY + j * dir[1];
+            
+            if (x < 0 || x >= size || y < 0 || y >= size) {
+                fits = false; break;
+            }
+            if (grid[y][x] !== '' && grid[y][x] !== word[j]) {
+                fits = false; break;
+            }
+        }
+        
+        if (fits) {
+            for(let j=0; j<word.length; j++) {
+                grid[startY + j * dir[1]][startX + j * dir[0]] = word[j];
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+function getCellAt(x, y) {
+    if (x < gridOriginX || x > gridOriginX + cellSize * gameConfig.gridSize) return null;
+    if (y < gridOriginY || y > gridOriginY + cellSize * gameConfig.gridSize) return null;
+    
+    const col = Math.floor((x - gridOriginX) / cellSize);
+    const row = Math.floor((y - gridOriginY) / cellSize);
+    return { c: col, r: row };
+}
+
+function getSelectedString() {
+    if (!input.startCell || !input.currCell) return null;
+    
+    const sc = input.startCell.c;
+    const sr = input.startCell.r;
+    const ec = input.currCell.c;
+    const er = input.currCell.r;
+    
+    const dx = ec - sc;
+    const dy = er - sr;
+    
+    // Check for valid 8-way direction
+    if (dx === 0 && dy === 0) return { str: grid[sr][sc], path: [[sc, sr]] };
+    
+    const steps = Math.max(Math.abs(dx), Math.abs(dy));
+    if (dx !== 0 && Math.abs(dx) !== steps) return null; // Not diagonal/straight
+    if (dy !== 0 && Math.abs(dy) !== steps) return null;
+    
+    const dirX = dx === 0 ? 0 : dx / steps;
+    const dirY = dy === 0 ? 0 : dy / steps;
+    
+    let str = "";
+    let path = [];
+    for(let i=0; i<=steps; i++) {
+        const c = sc + i * dirX;
+        const r = sr + i * dirY;
+        str += grid[r][c];
+        path.push([c, r]);
+    }
+    
+    return { str, path };
+}
+
+function checkSelection() {
+    const selection = getSelectedString();
+    if (!selection) return;
+    
+    const reverseStr = selection.str.split('').reverse().join('');
+    let match = wordList.find(w => !w.found && (w.word === selection.str || w.word === reverseStr));
+    
+    if (match) {
+        match.found = true;
+        foundCount++;
+        foundWords.push({ path: selection.path, color: gameConfig.penColor });
+        document.getElementById('score-val').innerText = `${foundCount}/${totalWords}`;
+        playSfx('correct');
+        setFeedback('success');
+        vibrate('medium');
+        spawnConfetti(input.currX, input.currY);
+        
+        if (foundCount >= totalWords) {
+            setTimeout(() => setState('GAMEOVER'), 1000);
+        }
+    } else {
+        playSfx('wrong');
+        setFeedback('fail');
+        vibrate('light');
+        // Shake effect
+        shakeTime = 0.3;
+    }
+}
+
+let shakeTime = 0;
+
+class Particle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 300;
+        this.vy = (Math.random() - 0.5) * 300;
+        this.life = 1.0;
+        this.color = Math.random() > 0.5 ? gameConfig.penColor : '#fef08a';
+        this.size = Math.random() * 5 + 2;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt * 2;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+function spawnConfetti(x, y) {
+    for(let i=0; i<15; i++) particles.push(new Particle(x, y));
+}
+
+/**
+ * §5 Main Loop & Render
+ */
+function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    frameCount++;
+
+    if (gameState === 'PLAYING') {
+        timeLeft -= dt;
+        if (timeLeft <= 0) {
+            timeLeft = 0;
+            setState('GAMEOVER');
+        }
+        
+        // Timer UI
+        const mins = Math.floor(timeLeft / 60);
+        const secs = Math.floor(timeLeft % 60);
+        document.getElementById('timer-val').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Particles
+    for(let i=particles.length-1; i>=0; i--) {
+        particles[i].update(dt);
+        if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+    
+    if (shakeTime > 0) shakeTime -= dt;
+
+    render();
+    requestAnimationFrame(gameLoop);
+}
+
+function render() {
+    // Clear
+    ctx.fillStyle = '#fdfbf7';
+    ctx.fillRect(0, 0, cw, ch);
+    
+    // Shake
+    ctx.save();
+    if (shakeTime > 0) {
+        const dx = (Math.random() - 0.5) * 10;
+        const dy = (Math.random() - 0.5) * 10;
+        ctx.translate(dx, dy);
+    }
+    
+    // Draw Grid Lines (Notebook style)
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let i=0; i<=gameConfig.gridSize; i++) {
+        const p = i * cellSize;
+        // Horiz
+        ctx.moveTo(gridOriginX, gridOriginY + p);
+        ctx.lineTo(gridOriginX + gameConfig.gridSize * cellSize, gridOriginY + p);
+        // Vert
+        ctx.moveTo(gridOriginX + p, gridOriginY);
+        ctx.lineTo(gridOriginX + p, gridOriginY + gameConfig.gridSize * cellSize);
+    }
+    ctx.stroke();
+    
+    // Draw Letters
+    ctx.font = `700 ${cellSize * 0.5}px "Rajdhani"`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#2d3748';
+    
+    for(let r=0; r<gameConfig.gridSize; r++) {
+        for(let c=0; c<gameConfig.gridSize; c++) {
+            const x = gridOriginX + c * cellSize + cellSize/2;
+            const y = gridOriginY + r * cellSize + cellSize/2;
+            ctx.fillText(grid[r][c], x, y);
+        }
+    }
+    
+    // Draw Found Words (Permanent Highlights)
+    foundWords.forEach(fw => {
+        drawSelectionPath(fw.path, 'rgba(120, 243, 255, 0.16)', gameConfig.penColor);
+    });
+    
+    // Draw Active Selection
+    if (input.active && input.startCell && input.currCell) {
+        const selection = getSelectedString();
+        if (selection) {
+            drawSelectionPath(selection.path, 'rgba(255, 230, 109, 0.35)', '#ffe66d');
+        }
+    }
+    
+    // Draw Word List
+    drawWordList();
+    
+    // Particles
+    particles.forEach(p => p.draw(ctx));
+    
+    ctx.restore();
+}
+
+function drawSelectionPath(path, fillColor, strokeColor) {
+    if (path.length === 0) return;
+    
+    const start = path[0];
+    const end = path[path.length-1];
+    
+    const x1 = gridOriginX + start[0] * cellSize + cellSize/2;
+    const y1 = gridOriginY + start[1] * cellSize + cellSize/2;
+    const x2 = gridOriginX + end[0] * cellSize + cellSize/2;
+    const y2 = gridOriginY + end[1] * cellSize + cellSize/2;
+    
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // Highlight fill
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineWidth = cellSize * 0.7;
+    ctx.strokeStyle = fillColor;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+    
+    // Thin stroke
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = strokeColor;
+    ctx.stroke();
+}
+
+function drawWordList() {
+    const listY = gridOriginY + gameConfig.gridSize * cellSize + 40;
+    const itemW = (cw - 40) / 3;
+    const itemH = 30;
+    
+    ctx.font = '600 16px "Rajdhani"';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    
+    wordList.forEach((w, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const x = 20 + col * itemW;
+        const y = listY + row * itemH;
+        
+        if (w.found) {
+            ctx.fillStyle = '#cbd5e0';
+            ctx.fillText(w.word, x, y);
+            // Strikethrough
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + ctx.measureText(w.word).width, y);
+            ctx.strokeStyle = gameConfig.penColor;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#4a5568';
+            ctx.fillText(w.word, x, y);
+        }
+    });
+}
+</script>
+</body>
+</html>

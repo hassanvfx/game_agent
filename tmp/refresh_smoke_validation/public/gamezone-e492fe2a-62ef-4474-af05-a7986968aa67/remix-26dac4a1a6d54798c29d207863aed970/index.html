@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+        <title>Orbit Courier</title>
+        <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+        <!-- [agent-note][stage3] resolved-font: primary=Audiowide secondary=Exo 2 accent=Press Start 2P via catalogs/fonts.json -->
+        <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600&family=Press+Start+2P&display=swap" rel="stylesheet">
+        <script>
+            tailwind.config = {
+                corePlugins: { preflight: true },
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['"Exo 2"', 'system-ui', 'sans-serif'],
+                            display: ['Audiowide', '"Exo 2"', 'sans-serif'],
+                            hud: ['"Press Start 2P"', 'monospace']
+                        }
+                    }
+                }
+            }
+        </script>
+        <style>
+            :root {
+                --bg-top: #140a2f;
+                --bg-bottom: #3b0764;
+                --panel-bg: rgba(12, 18, 38, 0.72);
+                --panel-border: rgba(117, 249, 255, 0.4);
+                --text-main: #f5fbff;
+                --text-soft: rgba(226, 247, 255, 0.78);
+                --aura-cyan: #67e8f9;
+                --aura-blue: #60a5fa;
+                --aura-violet: #c084fc;
+                --hazard: #fb7185;
+                --hazard-dark: #be123c;
+                --ground: #050816;
+                --ground-glow: #22d3ee;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            html, body {
+                width: 100%;
+                height: 100%;
+            }
+            body {
+                margin: 0;
+                overflow: hidden;
+                touch-action: manipulation;
+                font-family: 'Exo 2', system-ui, sans-serif;
+                background:
+                    radial-gradient(circle at top, rgba(103, 232, 249, 0.18), transparent 34%),
+                    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+                color: var(--text-main);
+            }
+            canvas { display: block; width: 100%; height: 100%; }
+            .glass-panel {
+                position: relative;
+                background:
+                    linear-gradient(180deg, rgba(14, 21, 44, 0.92), rgba(8, 12, 28, 0.78));
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+                border: 1px solid var(--panel-border);
+                box-shadow:
+                    0 14px 40px rgba(3, 7, 18, 0.58),
+                    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+                    0 0 22px rgba(34, 211, 238, 0.14);
+            }
+            .glass-panel::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                pointer-events: none;
+                background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), transparent 38%);
+            }
+            .neon-text {
+                text-shadow:
+                    0 0 10px rgba(255, 255, 255, 0.45),
+                    0 0 22px rgba(6, 182, 212, 0.44),
+                    0 0 40px rgba(168, 85, 247, 0.22);
+            }
+            .signal-card {
+                width: min(92vw, 28rem);
+                padding: clamp(1.5rem, 4vw, 2.5rem);
+                border-radius: 1.5rem;
+            }
+            .signal-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                border: 1px solid rgba(103, 232, 249, 0.34);
+                background: rgba(103, 232, 249, 0.1);
+                color: var(--text-soft);
+                border-radius: 999px;
+                padding: 0.45rem 0.85rem;
+                font-size: 0.85rem;
+                letter-spacing: 0.18em;
+                text-transform: uppercase;
+            }
+            .arcade-button {
+                font-family: 'Audiowide', 'Exo 2', sans-serif;
+                letter-spacing: 0.08em;
+                box-shadow:
+                    0 12px 24px rgba(8, 47, 73, 0.42),
+                    0 0 16px rgba(96, 165, 250, 0.28);
+            }
+            .arcade-button:active {
+                transform: scale(0.97);
+            }
+            .hud-panel {
+                min-width: 9rem;
+                padding: 0.65rem 0.9rem;
+                border-radius: 1rem;
+                background: rgba(9, 15, 31, 0.72);
+                border: 1px solid rgba(103, 232, 249, 0.32);
+                box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+                font-family: 'Press Start 2P', monospace;
+                font-size: 0.72rem;
+                line-height: 1.6;
+                text-transform: uppercase;
+            }
+            .hud-label {
+                display: block;
+                color: rgba(186, 230, 253, 0.88);
+                font-size: 0.56rem;
+                margin-bottom: 0.35rem;
+            }
+            .hint-banner {
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(9, 13, 28, 0.55);
+                border-radius: 999px;
+                padding: 0.45rem 0.9rem;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+            }
+            .feedback-marquee {
+                position: absolute;
+                top: 1rem;
+                left: 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.65rem;
+                max-width: min(72vw, 22rem);
+                padding: 0.7rem 0.9rem;
+                border-radius: 1rem;
+                border: 1px solid rgba(103, 232, 249, 0.28);
+                background: rgba(3, 7, 18, 0.62);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+                opacity: 0;
+                transform: translateY(-10px);
+                transition: opacity 180ms ease, transform 180ms ease;
+                overflow: hidden;
+            }
+            .feedback-marquee.active {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            .feedback-gif {
+                width: 3rem;
+                height: 3rem;
+                border-radius: 0.85rem;
+                object-fit: cover;
+                flex: 0 0 auto;
+                background: rgba(255, 255, 255, 0.06);
+            }
+            .feedback-copy {
+                min-width: 0;
+            }
+            .feedback-label {
+                display: block;
+                color: rgba(186, 230, 253, 0.88);
+                font-family: 'Press Start 2P', monospace;
+                font-size: 0.5rem;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                margin-bottom: 0.35rem;
+            }
+            .feedback-text {
+                display: block;
+                color: white;
+                font-weight: 600;
+                font-size: 0.95rem;
+                line-height: 1.2;
+            }
+            .pulse-ring {
+                position: absolute;
+                inset: auto auto 6.5rem 1.25rem;
+                width: 4rem;
+                height: 4rem;
+                border-radius: 999px;
+                border: 2px solid rgba(103, 232, 249, 0.55);
+                box-shadow: 0 0 18px rgba(34, 211, 238, 0.2);
+                opacity: 0;
+                transform: scale(0.7);
+                transition: opacity 140ms ease, transform 260ms ease;
+            }
+            .pulse-ring.active {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+            @media (max-width: 640px) {
+                .signal-card {
+                    width: min(92vw, 24rem);
+                    padding: 1.25rem;
+                    border-radius: 1.25rem;
+                }
+                #start-screen h1,
+                #game-over-screen h2 {
+                    font-size: clamp(2rem, 10vw, 2.75rem);
+                }
+                #start-screen p,
+                #game-over-screen .score-copy {
+                    font-size: 1rem;
+                }
+                #hud {
+                    top: 1rem;
+                    right: 1rem;
+                }
+            }
+        </style>
+    </head>
+<body>
+    <div id="game-container" class="relative group w-full h-full">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
+            
+            <div id="start-screen" class="signal-card glass-panel text-center pointer-events-auto hover:scale-[1.02] transition duration-300 transform">
+                <div class="signal-chip mb-5">⚡ Courier online</div>
+                <h1 class="text-5xl sm:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-300 to-purple-400 mb-4 drop-shadow-lg neon-text font-display tracking-[0.18em]">ORBIT COURIER</h1>
+                <p class="text-cyan-50/80 text-lg sm:text-xl mb-8">Guide the pulse-runner through signal spikes with perfectly timed vaults.</p>
+                <button id="start-btn" class="arcade-button bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-4 px-10 rounded-full transition-all hover:shadow-cyan-500/50">START DELIVERY</button>
+            </div>
+
+            <div id="game-over-screen" class="hidden signal-card glass-panel text-center pointer-events-auto">
+                <div class="signal-chip mb-5">☄️ Route interrupted</div>
+                <h2 class="text-4xl sm:text-5xl font-bold text-rose-400 mb-4 drop-shadow-md font-display tracking-[0.15em]">DELIVERY LOST</h2>
+                <div class="score-copy text-2xl sm:text-3xl text-white mb-8">Signals Cleared: <span id="finalScore" class="text-cyan-300">0</span></div>
+                <button id="restart-btn" class="arcade-button bg-white text-gray-900 font-bold py-3 px-8 rounded-full shadow-lg hover:bg-gray-200 transition">Retry Route</button>
+            </div>
+            
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+            <div id="hud" class="hud-panel absolute top-6 right-6 text-white hidden">
+                <span class="hud-label">Signals</span>
+                <span id="score">0</span>
+            </div>
+            
+            <!-- [agent-note][stage3] resolved-gif: fail+score feedback overlays via catalogs/gifs.json; keep compact off playfield -->
+            <div id="feedback-marquee" class="feedback-marquee pointer-events-none" aria-live="polite">
+                <img id="feedback-gif" class="feedback-gif" alt="Gameplay reaction">
+                <div class="feedback-copy">
+                    <span id="feedback-label" class="feedback-label">Signal Feed</span>
+                    <span id="feedback-text" class="feedback-text">Courier synced.</span>
+                </div>
+            </div>
+
+            <div id="pulse-ring" class="pulse-ring pointer-events-none" aria-hidden="true"></div>
+
+            <div id="controls-hint" class="hint-banner absolute bottom-10 text-white/60 text-xs hidden md:block">
+                [SPACE] Vault signal spikes
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3",
+                jump: "https://gamezone-virid.vercel.app/assets/audios/sfx/jump_01.mp3",
+                land: "https://gamezone-virid.vercel.app/assets/audios/sfx/land_02.mp3",
+                score: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3",
+                blocked: "https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3"
+            },
+            gifs: {
+                score: "https://i.giphy.com/10gLW3UdTnQzdu.webp",
+                fail: "https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+            }
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.unlocked = false;
+                this.activeClones = new Set();
+                this.lastPlayedAt = {};
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                this.volumes = {
+                    start: 0.55,
+                    jump: 0.45,
+                    land: 0.32,
+                    score: 0.5,
+                    fail: 0.6,
+                    blocked: 0.38
+                };
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    this.sfx[k] = new Audio(v);
+                    this.sfx[k].preload = 'auto';
+                }
+            }
+
+            unlock() {
+                this.unlocked = true;
+                const prime = [this.bgm, ...Object.values(this.sfx)];
+                prime.forEach(audioEl => {
+                    try {
+                        audioEl.load();
+                    } catch (_) {}
+                });
+            }
+
+            playBGM() {
+                if (!this.unlocked) return;
+                this.bgm.play().catch(() => {});
+            }
+            
+            stopBGM(reset = false) { 
+                this.bgm.pause(); 
+                if (reset) this.bgm.currentTime = 0; 
+            }
+
+            playSFX(key, cooldown = 0) {
+                const source = this.sfx[key];
+                if (!source || !this.unlocked) return;
+                const now = performance.now();
+                if (cooldown && this.lastPlayedAt[key] && now - this.lastPlayedAt[key] < cooldown) return;
+                this.lastPlayedAt[key] = now;
+                const clone = source.cloneNode();
+                clone.volume = this.volumes[key] ?? 0.5;
+                clone.play().catch(() => {});
+                this.activeClones.add(clone);
+                clone.addEventListener('ended', () => this.activeClones.delete(clone), { once: true });
+                clone.addEventListener('error', () => this.activeClones.delete(clone), { once: true });
+            }
+        }
+        
+        const audio = new AudioController();
+        const feedbackMarquee = document.getElementById('feedback-marquee');
+        const feedbackGif = document.getElementById('feedback-gif');
+        const feedbackLabel = document.getElementById('feedback-label');
+        const feedbackText = document.getElementById('feedback-text');
+        const pulseRing = document.getElementById('pulse-ring');
+        let feedbackTimer = null;
+
+        /** 3. GAME STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let frameCount = 0;
+        let gameSpeed = 6;
+        
+        // Player
+        let player = {
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40,
+            dy: 0,
+            jumpForce: 13,
+            grounded: false,
+            color: '#67e8f9',
+            trail: []
+        };
+        
+        // Physics
+        const gravity = 0.6;
+        const groundHeight = 100;
+        
+        // Obstacles
+        let obstacles = [];
+        
+        // Parallax
+        let mountains = [];
+        let stars = [];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            player.x = width * 0.15; // Player stays at 15% width
+            
+            // Re-generate background if needed
+            if(mountains.length === 0) generateBackground();
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function generateBackground() {
+            mountains = [];
+            stars = [];
+            // Generate Stars
+            for(let i=0; i<50; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * (height - groundHeight),
+                    size: Math.random() * 2,
+                    speed: Math.random() * 0.5 + 0.1
+                });
+            }
+            // Generate Mountains
+            let xOff = 0;
+            while(xOff < width * 2) {
+                const w = 100 + Math.random() * 200;
+                const h = 50 + Math.random() * 150;
+                mountains.push({ x: xOff, w: w, h: h });
+                xOff += w - 20; // Overlap
+            }
+        }
+
+        /** 5. GAME LOGIC */
+        function showFeedback(type, label, message) {
+            const gifUrl = ASSETS.gifs[type];
+            if (!gifUrl) return;
+            feedbackGif.src = gifUrl;
+            feedbackLabel.textContent = label;
+            feedbackText.textContent = message;
+            feedbackMarquee.classList.add('active');
+            clearTimeout(feedbackTimer);
+            feedbackTimer = setTimeout(() => {
+                feedbackMarquee.classList.remove('active');
+            }, 1400);
+        }
+
+        function triggerPulse() {
+            pulseRing.classList.remove('active');
+            void pulseRing.offsetWidth;
+            pulseRing.classList.add('active');
+            setTimeout(() => pulseRing.classList.remove('active'), 260);
+        }
+
+        function initGame() {
+            score = 0;
+            gameSpeed = 6;
+            frameCount = 0;
+            obstacles = [];
+            player.y = height - groundHeight - player.height;
+            player.dy = 0;
+            player.grounded = true;
+            player.trail = [];
+            document.getElementById('score').innerText = score;
+            feedbackMarquee.classList.remove('active');
+            generateBackground();
+        }
+
+        function jump() {
+            if (player.grounded) {
+                player.dy = -player.jumpForce;
+                player.grounded = false;
+                audio.playSFX('jump', 120);
+                triggerPulse();
+            } else {
+                audio.playSFX('blocked', 180);
+            }
+        }
+
+        function spawnObstacle() {
+            const minSpace = 60; // Minimum frames between obstacles
+            // Random chance to spawn, but increases with difficulty
+            if (frameCount % 90 === 0 || (Math.random() < 0.02 && frameCount % 40 !== 0)) {
+                // Ensure we don't spawn too close to the last one
+                const lastObstacle = obstacles[obstacles.length - 1];
+                if (!lastObstacle || (width - lastObstacle.x > 250)) {
+                    const type = Math.random();
+                    let obsH = 40 + Math.random() * 30;
+                    let obsW = 30 + Math.random() * 20;
+                    
+                    // Sometimes spawn a floating one? Keep it simple for now: Ground spikes
+                    obstacles.push({
+                        x: width,
+                        y: height - groundHeight - obsH,
+                        w: obsW,
+                        h: obsH,
+                        passed: false,
+                        color: '#f87171' // Red
+                    });
+                }
+            }
+        }
+
+        function update() {
+            // Physics
+            player.dy += gravity;
+            player.y += player.dy;
+
+            // Ground Collision
+            const floorY = height - groundHeight - player.height;
+            if (player.y > floorY) {
+                const wasAirborne = !player.grounded;
+                player.y = floorY;
+                player.dy = 0;
+                player.grounded = true;
+                if (wasAirborne) {
+                    audio.playSFX('land', 120);
+                }
+            }
+
+            // Trail Effect
+            if (frameCount % 3 === 0) {
+                player.trail.push({ x: player.x, y: player.y, alpha: 0.6 });
+            }
+            // Update trail
+            for (let i = 0; i < player.trail.length; i++) {
+                player.trail[i].x -= gameSpeed;
+                player.trail[i].alpha -= 0.05;
+            }
+            player.trail = player.trail.filter(t => t.alpha > 0);
+
+            // Obstacles
+            spawnObstacle();
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.x -= gameSpeed;
+
+                // Collision Detection (AABB)
+                // Shrink hit box slightly for forgiveness
+                const hitX = player.x + 5;
+                const hitY = player.y + 5;
+                const hitW = player.width - 10;
+                const hitH = player.height - 10;
+
+                if (
+                    hitX < obs.x + obs.w &&
+                    hitX + hitW > obs.x &&
+                    hitY < obs.y + obs.h &&
+                    hitY + hitH > obs.y
+                ) {
+                    gameOver();
+                }
+
+                // Scoring
+                if (!obs.passed && obs.x + obs.w < player.x) {
+                    obs.passed = true;
+                    score++;
+                    audio.playSFX('score', 90);
+                    showFeedback('score', 'Signal Boost', `Route streak +1 · ${score} cleared`);
+                    document.getElementById('score').innerText = score;
+                    
+                    // Difficulty Ramp
+                    if (score % 5 === 0) gameSpeed += 0.5;
+                }
+
+                // Cleanup
+                if (obs.x + obs.w < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // Background Parallax
+            mountains.forEach(m => {
+                m.x -= gameSpeed * 0.2;
+                if (m.x + m.w < 0) m.x = width + (width - (m.x+m.w)); // Wrap roughly
+                // Simple wrap fix: if it goes off screen, move to end of array logic
+                // Actually, for infinite scroll, let's just respawn at the right
+            });
+            // Fix mountain wrapping properly
+            if (mountains.length > 0 && mountains[0].x + mountains[0].w < -100) {
+                const first = mountains.shift();
+                let lastX = mountains[mountains.length-1].x + mountains[mountains.length-1].w;
+                first.x = lastX - 20;
+                mountains.push(first);
+            }
+
+            stars.forEach(s => {
+                s.x -= s.speed;
+                if(s.x < 0) s.x = width;
+            });
+        }
+
+        function draw() {
+            // Sky Gradient
+            const grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0, '#120728');
+            grad.addColorStop(0.55, '#3b0764');
+            grad.addColorStop(1, '#7c3aed');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+
+            // Aurora haze
+            const haze = ctx.createRadialGradient(width * 0.25, height * 0.16, 0, width * 0.25, height * 0.16, width * 0.6);
+            haze.addColorStop(0, 'rgba(103, 232, 249, 0.18)');
+            haze.addColorStop(0.45, 'rgba(96, 165, 250, 0.1)');
+            haze.addColorStop(1, 'rgba(96, 165, 250, 0)');
+            ctx.fillStyle = haze;
+            ctx.fillRect(0, 0, width, height);
+
+            // Stars
+            ctx.fillStyle = '#ffffff';
+            stars.forEach(s => {
+                ctx.globalAlpha = Math.random() * 0.45 + 0.35;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(103, 232, 249, 0.18)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size * 2.8, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+            ctx.globalAlpha = 1.0;
+
+            // Orbit lanes
+            ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 3; i++) {
+                const y = height * (0.18 + i * 0.12);
+                ctx.beginPath();
+                ctx.ellipse(width * 0.58, y, width * 0.42, 20 + i * 8, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Mountains (Far Parallax)
+            mountains.forEach((m, index) => {
+                const peakGrad = ctx.createLinearGradient(m.x, height - groundHeight - m.h, m.x, height - groundHeight);
+                peakGrad.addColorStop(0, index % 2 === 0 ? '#312e81' : '#1d4ed8');
+                peakGrad.addColorStop(1, '#0f172a');
+                ctx.fillStyle = peakGrad;
+                ctx.beginPath();
+                ctx.moveTo(m.x, height - groundHeight);
+                ctx.lineTo(m.x + m.w / 2, height - groundHeight - m.h);
+                ctx.lineTo(m.x + m.w, height - groundHeight);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(103, 232, 249, 0.12)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(m.x + m.w / 2, height - groundHeight - m.h);
+                ctx.lineTo(m.x + m.w * 0.72, height - groundHeight - m.h * 0.45);
+                ctx.stroke();
+            });
+
+            // Ground
+            const groundGrad = ctx.createLinearGradient(0, height - groundHeight, 0, height);
+            groundGrad.addColorStop(0, '#030712');
+            groundGrad.addColorStop(1, '#02040c');
+            ctx.fillStyle = groundGrad;
+            ctx.fillRect(0, height - groundHeight, width, groundHeight);
+            
+            // Ground Grid/Neon Line
+            ctx.strokeStyle = '#67e8f9';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#22d3ee';
+            ctx.shadowBlur = 16;
+            ctx.beginPath();
+            ctx.moveTo(0, height - groundHeight);
+            ctx.lineTo(width, height - groundHeight);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Moving grid lines on ground
+            ctx.strokeStyle = 'rgba(192, 132, 252, 0.45)';
+            ctx.lineWidth = 1.5;
+            let gridOffset = (frameCount * gameSpeed) % 100;
+            for (let i = 0; i < width + 100; i += 100) {
+                let x = i - gridOffset;
+                ctx.beginPath();
+                ctx.moveTo(x + 50, height - groundHeight);
+                ctx.lineTo(x - 100, height);
+                ctx.stroke();
+            }
+
+            // Player Trail
+            player.trail.forEach((t, index) => {
+                ctx.fillStyle = `rgba(103, 232, 249, ${t.alpha})`;
+                ctx.shadowColor = 'rgba(103, 232, 249, 0.3)';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.roundRect(t.x + index * 0.2, t.y + 4, player.width * 0.72, player.height * 0.72, 8);
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+
+            // Player - courier shard silhouette
+            const px = player.x;
+            const py = player.y;
+            const pw = player.width;
+            const ph = player.height;
+            const bodyGrad = ctx.createLinearGradient(px, py, px + pw, py + ph);
+            bodyGrad.addColorStop(0, '#ecfeff');
+            bodyGrad.addColorStop(0.45, player.color);
+            bodyGrad.addColorStop(1, '#2563eb');
+            ctx.fillStyle = bodyGrad;
+            ctx.shadowColor = 'rgba(103, 232, 249, 0.85)';
+            ctx.shadowBlur = 24;
+            ctx.beginPath();
+            ctx.moveTo(px + pw * 0.14, py + ph * 0.78);
+            ctx.lineTo(px + pw * 0.28, py + ph * 0.2);
+            ctx.lineTo(px + pw * 0.6, py + ph * 0.08);
+            ctx.lineTo(px + pw * 0.88, py + ph * 0.32);
+            ctx.lineTo(px + pw * 0.72, py + ph * 0.84);
+            ctx.lineTo(px + pw * 0.34, py + ph * 0.92);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = 0.9;
+            ctx.beginPath();
+            ctx.arc(px + pw * 0.58, py + ph * 0.35, pw * 0.07, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px + pw * 0.3, py + ph * 0.52);
+            ctx.lineTo(px + pw * 0.72, py + ph * 0.22);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Obstacles - hostile signal spikes
+            obstacles.forEach(obs => {
+                const spikeGrad = ctx.createLinearGradient(obs.x, obs.y, obs.x, obs.y + obs.h);
+                spikeGrad.addColorStop(0, '#fecdd3');
+                spikeGrad.addColorStop(0.2, obs.color);
+                spikeGrad.addColorStop(1, '#881337');
+                ctx.fillStyle = spikeGrad;
+                ctx.shadowColor = 'rgba(251, 113, 133, 0.7)';
+                ctx.shadowBlur = 18;
+                ctx.beginPath();
+                ctx.moveTo(obs.x, obs.y + obs.h);
+                ctx.lineTo(obs.x + obs.w / 2, obs.y);
+                ctx.lineTo(obs.x + obs.w, obs.y + obs.h);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(obs.x + obs.w / 2, obs.y + obs.h * 0.18);
+                ctx.lineTo(obs.x + obs.w * 0.26, obs.y + obs.h * 0.72);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            ctx.clearRect(0, 0, width, height);
+            
+            update();
+            draw();
+            
+            frameCount++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM(true);
+            audio.playSFX('fail');
+            showFeedback('fail', 'Signal Crash', `Route collapsed at ${score} cleared`);
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        /** 6. CONTROLS */
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+
+        function startGame() {
+            audio.unlock();
+            audio.playSFX('start');
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls-hint').classList.add('hidden');
+            gameActive = true;
+            initGame();
+            gameLoop();
+        }
+
+        function restartGame() {
+            audio.unlock();
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            audio.playSFX('start');
+            audio.playBGM();
+            gameActive = true;
+            initGame();
+            gameLoop();
+        }
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+
+        // Input Handling
+        function handleInput(e) {
+            if (!gameActive) return;
+            if (e.type === 'keydown') {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    jump();
+                }
+                return;
+            }
+            if (e.type === 'touchstart' || e.type === 'mousedown') {
+                jump();
+            }
+        }
+
+        window.addEventListener('keydown', handleInput);
+        // [agent-note][stage4] repaired: mobile-actionability | action: scope touch suppression to canvas so CTA taps still produce click
+        canvas.addEventListener('touchstart', (e) => {
+            if (!gameActive) return;
+            e.preventDefault();
+            handleInput(e);
+        }, { passive: false });
+        canvas.addEventListener('mousedown', handleInput);
+
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+/* Removed mirrored Tailwind CDN payload for stage-02 policy cleanup. */

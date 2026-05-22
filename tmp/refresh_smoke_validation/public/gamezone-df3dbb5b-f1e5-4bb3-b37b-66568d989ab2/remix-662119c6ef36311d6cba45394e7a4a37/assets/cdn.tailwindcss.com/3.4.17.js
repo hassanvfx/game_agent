@@ -1,0 +1,1 @@
+/* Stage 03 policy cleanup: disallowed tailwind CDN mirror reference removed. This local stub is intentionally inert because the game uses inline styles only. */

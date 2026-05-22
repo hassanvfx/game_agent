@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Kiosk Tycoon: Auto-Mart</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet" data-approved-font="catalog-audiowide">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet" data-approved-font="catalog-exo-2">
+    <style>
+        :root {
+            --bg-sky: #57c7ff;
+            --bg-haze: #bff5ff;
+            --panel: rgba(10, 24, 48, 0.76);
+            --panel-soft: rgba(255, 255, 255, 0.88);
+            --panel-border: rgba(255, 255, 255, 0.32);
+            --ink: #eafcff;
+            --ink-dark: #103054;
+            --accent-cyan: #7af7ff;
+            --accent-mint: #8cffbb;
+            --accent-sun: #ffd85e;
+            --accent-coral: #ff7e79;
+            --shadow-deep: rgba(5, 14, 33, 0.34);
+        }
+        html, body {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, var(--bg-haze) 0%, rgba(191, 245, 255, 0.65) 22%, transparent 45%),
+                linear-gradient(180deg, #7ae1ff 0%, var(--bg-sky) 42%, #36a7f0 100%);
+            font-family: 'Exo 2', system-ui, sans-serif;
+            color: var(--ink);
+        }
+        body {
+            padding-top: env(safe-area-inset-top);
+            padding-right: env(safe-area-inset-right);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.12), transparent 24%),
+                repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 22px);
+            opacity: 0.4;
+        }
+        canvas { display: block; touch-action: none; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        /* UI Layer */
+        #ui-layer { pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Glassmorphism */
+        .glass {
+            background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(218,244,255,0.82));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 14px 34px var(--shadow-deep);
+        }
+        
+        /* Animations */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); transform: scale(1); }
+            50% { box-shadow: 0 0 0 15px rgba(234, 179, 8, 0); transform: scale(1.02); }
+        }
+        .animate-pulse-glow { animation: pulse-glow 1.5s infinite; }
+        
+        .btn-press:active { transform: scale(0.95) !important; transition: transform 0.05s; }
+        .hidden { display: none !important; }
+        
+        /* Side Panel Transition */
+        .slide-panel { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .slide-closed { transform: translateX(120%); }
+        .slide-open { transform: translateX(0); }
+
+        /* Text Styles */
+        .stroke-text { color: #fff7cf; text-shadow: 0 4px 0 #0f4b7d, 0 0 18px rgba(122, 247, 255, 0.45); paint-order: stroke fill; }
+        .text-shadow { text-shadow: 0 2px 0 rgba(0,0,0,0.15); }
+        #game-container { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(4,15,38,0.08)); }
+        #hud .glass, #upgrade-btn, #passive-toast, #staff-panel {
+            border-color: rgba(122, 247, 255, 0.28);
+        }
+        #score-display, #lvl-badge, #upgrade-title, h1, h2 {
+            font-family: 'Audiowide', sans-serif;
+            letter-spacing: 0.02em;
+        }
+        #start-btn, #upgrade-btn, #staff-panel, #passive-toast {
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+        .reaction-gif {
+            position: absolute;
+            z-index: 55;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(12px) scale(0.94);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            filter: drop-shadow(0 12px 18px rgba(15, 23, 42, 0.3));
+        }
+        .reaction-gif.is-visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        #success-gif {
+            width: 96px;
+            right: 1rem;
+            bottom: 7rem;
+        }
+        #fail-gif {
+            width: 88px;
+            left: 1rem;
+            top: 5.5rem;
+        }
+        #score-display, #lvl-badge { color: #0c6f63; }
+        #upgrade-btn {
+            background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(219,244,255,0.86));
+        }
+        #start-screen {
+            background:
+                radial-gradient(circle at 50% 18%, rgba(255,255,255,0.42), transparent 28%),
+                linear-gradient(180deg, rgba(10, 30, 64, 0.22), rgba(3, 15, 35, 0.38));
+        }
+
+        @media (max-width: 640px) {
+            /* [agent-note][stage4] repaired: mobile-actionability | elements: #upgrade-btn, #staff-panel, #start-screen | action: compacted widths and safe-area spacing */
+            #ui-layer {
+                padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+            }
+            #upgrade-btn {
+                width: min(100%, 20rem);
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            #staff-panel {
+                width: min(100vw, 22rem);
+            }
+            #start-screen {
+                padding: 1rem;
+            }
+            #start-screen h1 {
+                font-size: clamp(2.75rem, 14vw, 4.5rem);
+            }
+            #start-btn {
+                width: min(100%, 18rem);
+                justify-content: center;
+                font-size: 1.25rem;
+            }
+            #success-gif {
+                width: 72px;
+                right: 0.5rem;
+                bottom: 6.25rem;
+            }
+            #fail-gif {
+                width: 68px;
+                left: 0.5rem;
+                top: 5rem;
+            }
+        }
+
+        /* Scrollbar for staff panel */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<!-- §6 Editable Config Protocol -->
+<script id="game-config" type="application/x-game-config">
+{
+    "difficulty": { "type": "number", "label": "Thirst Rate", "value": 1, "min": 0.5, "max": 3 },
+    "themeColor": { "type": "color", "label": "Awning Color", "value": "#ef4444" },
+    "staffColor": { "type": "color", "label": "Staff Uniform", "value": "#2dd4bf" },
+    "gameTitle": { "type": "text", "label": "Game Title", "value": "Kiosk Tycoon" }
+}
+</script>
+
+<!-- §4 Media Declaration -->
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/collect/fail/hit mapped via catalogs/audios.json -->
+<!-- [agent-note][stage3] resolved-gif: success/fail overlays mapped via catalogs/gifs.json -->
+<!-- [agent-note][stage3] resolved-font: title=Audiowide body=Exo 2 via catalogs/fonts.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3" preload="auto" loop></audio>
+<audio id="sfx_coin" data-editable="audio" data-label="Coin SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_upgrade" data-editable="audio" data-label="Upgrade SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_tap" data-editable="audio" data-label="Tap SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3" preload="auto"></audio>
+<audio id="sfx_fail" data-editable="audio" data-label="Fail SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+<audio id="sfx_staff_open" data-editable="audio" data-label="Menu Open SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+<audio id="sfx_staff_close" data-editable="audio" data-label="Menu Close SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3" preload="auto"></audio>
+<audio id="sfx_start" data-editable="audio" data-label="Start SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3" preload="auto"></audio>
+
+<!-- Game Container -->
+<div id="game-container" class="relative w-full h-full select-none overflow-hidden">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 z-50 flex flex-col justify-between p-4 pb-8 pointer-events-none">
+        
+        <!-- HUD Top -->
+        <div id="hud" class="flex justify-between items-start w-full transition-opacity duration-300 opacity-0 pointer-events-auto">
+            <!-- Score -->
+            <div class="glass rounded-full px-5 py-2 flex items-center gap-3 transform hover:scale-105 transition">
+                <div class="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm border-2 border-white">
+                    <span class="text-yellow-900 font-black text-xl">$</span>
+                </div>
+                <span id="score-display" class="text-3xl font-black text-green-800 tracking-tight text-shadow">0</span>
+            </div>
+            
+            <!-- Right Side Controls -->
+            <div class="flex flex-col gap-2 items-end">
+                <!-- Level Badge -->
+                <div class="glass rounded-2xl px-4 py-2 flex flex-col items-end bg-white/90 mb-2">
+                    <span class="text-[10px] font-bold text-green-600 uppercase tracking-wider">KIOSK LVL</span>
+                    <span id="lvl-badge" class="text-2xl font-black text-green-500">1</span>
+                </div>
+                
+                <!-- Staff Toggle Button -->
+                <button id="staff-toggle-btn" class="glass w-14 h-14 rounded-2xl flex items-center justify-center bg-purple-100 border-purple-200 shadow-lg btn-press relative">
+                    <div id="staff-alert" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-bounce hidden"></div>
+                    <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Passive Income Notification -->
+        <div id="passive-toast" class="absolute top-32 left-4 glass px-4 py-2 rounded-xl flex items-center gap-2 transition-transform duration-500 -translate-x-80 pointer-events-none">
+            <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-md">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-[10px] font-bold text-slate-500 uppercase">PASSIVE SALES</span>
+                <span class="text-sm font-black text-blue-600">+$<span id="passive-amt">0</span>/sec</span>
+            </div>
+        </div>
+
+        <!-- Upgrade Button (Bottom Center) -->
+        <div id="upgrade-container" class="w-full flex justify-center pointer-events-auto transition-transform duration-500 translate-y-64">
+            <button id="upgrade-btn" class="glass bg-white/95 px-6 py-3 rounded-2xl shadow-xl btn-press flex flex-col items-center gap-1 border-b-4 border-slate-200 w-80 transform transition-all duration-300 grayscale opacity-70">
+                <div class="flex items-center justify-between w-full mb-1">
+                    <span id="upgrade-label" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NEXT UNLOCK</span>
+                    <div id="upgrade-tag" class="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">NEW ITEM</div>
+                </div>
+                <div class="flex items-center gap-2 w-full justify-center">
+                    <span id="upgrade-title" class="text-lg font-black text-slate-700">SNACK SHELF</span>
+                </div>
+                <div id="cost-pill" class="bg-slate-500 w-full rounded-lg py-1.5 mt-1 flex items-center justify-center gap-1 shadow-inner transition-colors duration-300">
+                    <span class="text-white/80 font-bold text-sm">$</span>
+                    <span id="cost-display" class="text-white font-black text-xl">50</span>
+                </div>
+            </button>
+        </div>
+
+        <!-- Staff Side Panel -->
+        <div id="staff-panel" class="absolute top-0 right-0 bottom-0 w-80 md:w-96 bg-white/95 backdrop-blur-xl shadow-2xl z-50 slide-panel slide-closed pointer-events-auto flex flex-col border-l border-white/50">
+            <div class="p-6 bg-purple-50 border-b border-purple-100 flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-black text-purple-800">SNACK SQUAD</h2>
+                    <p class="text-xs text-purple-400 font-bold">Boost the mascot mart rush</p>
+                </div>
+                <button id="staff-close-btn" class="w-8 h-8 rounded-full bg-white text-purple-400 flex items-center justify-center hover:bg-purple-100 font-bold shadow-sm">✕</button>
+            </div>
+            
+            <div id="staff-list" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 pb-20">
+                <!-- Dynamic Content Injected Here -->
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 pointer-events-auto flex flex-col items-center justify-center z-50 bg-sky-100/60 backdrop-blur-md">
+            <div class="text-center mb-8 relative">
+                <div class="absolute -top-10 -left-10 w-20 h-20 bg-yellow-300 rounded-full blur-xl opacity-60 animate-pulse"></div>
+                <div class="inline-block bg-white p-8 rounded-[2rem] shadow-2xl mb-4 transform -rotate-2 border-4 border-white">
+                    <h1 class="text-5xl md:text-7xl font-black text-green-600 tracking-tighter leading-none stroke-text" style="-webkit-text-stroke: 0px;">
+                        SPARK<br>
+                        <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-yellow-300">MART</span>
+                    </h1>
+                </div>
+                <p class="text-slate-600 font-bold tracking-widest text-sm bg-white/60 inline-block px-4 py-1 rounded-full">TAP THE CROWD BEFORE THE SNACK STAR FIZZLES OUT</p>
+            </div>
+            <button id="start-btn" class="bg-green-500 text-white px-10 py-4 rounded-full text-2xl font-bold shadow-lg transform hover:scale-105 transition btn-press border-b-4 border-green-700 flex items-center gap-3">
+                <span>START SHIFT</span>
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </button>
+        </div>
+        <img id="success-gif" class="reaction-gif" src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="sales streak celebration">
+        <img id="fail-gif" class="reaction-gif" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp" alt="customer fail reaction">
+    </div>
+</div>
+
+<script>
+/**
+ * Game Configuration & State
+ */
+window.gameConfig = {
+    difficulty: 1,
+    themeColor: "#ef4444",
+    staffColor: "#2dd4bf",
+    gameTitle: "Kiosk Tycoon"
+};
+window.gameConfigDefs = {
+    "difficulty": { "type": "number", "label": "Thirst Rate", "value": 1, "min": 0.5, "max": 3 },
+    "themeColor": { "type": "color", "label": "Awning Color", "value": "#ef4444" },
+    "staffColor": { "type": "color", "label": "Staff Uniform", "value": "#2dd4bf" },
+    "gameTitle": { "type": "text", "label": "Game Title", "value": "Kiosk Tycoon" }
+};
+window.updateGameConfig = (key, val) => {
+    if (window.gameConfigDefs[key]) {
+        window.gameConfig[key] = val;
+        if (key === 'gameTitle') document.title = val;
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    
+    // --- Audio System ---
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+    const sounds = {};
+    let isMuted = false;
+
+    let bgmStarted = false;
+    let lastTapSound = 0;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new AudioContext();
+            loadSound('bgm_main', 'bgm');
+            loadSound('sfx_coin', 'coin');
+            loadSound('sfx_upgrade', 'upgrade');
+            loadSound('sfx_tap', 'tap');
+            loadSound('sfx_fail', 'fail');
+            loadSound('sfx_staff_open', 'staffOpen');
+            loadSound('sfx_staff_close', 'staffClose');
+            loadSound('sfx_start', 'start');
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function loadSound(id, key) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (key === 'bgm') {
+            sounds[key] = {
+                el,
+                play: () => {
+                    el.volume = 0.2;
+                    el.currentTime = 0;
+                    el.play().catch(() => {});
+                }
+            };
+        } else if (el.src) {
+            sounds[key] = {
+                el,
+                play: () => {
+                    const instance = el.cloneNode(true);
+                    instance.volume = Math.min(Number(el.dataset.volume || 1), 1);
+                    instance.play().catch(() => {});
+                    instance.addEventListener('ended', () => instance.remove(), { once: true });
+                }
+            };
+        } else {
+            sounds[key] = { fallback: true };
+        }
+    }
+
+    function showReaction(type) {
+        const successGif = document.getElementById('success-gif');
+        const failGif = document.getElementById('fail-gif');
+        const el = type === 'success' ? successGif : failGif;
+        const other = type === 'success' ? failGif : successGif;
+        if (!el || !other) return;
+        other.classList.remove('is-visible');
+        el.classList.remove('is-visible');
+        void el.offsetWidth;
+        el.classList.add('is-visible');
+        clearTimeout(el._hideTimer);
+        el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), type === 'success' ? 1400 : 1200);
+    }
+
+    function playSound(key) {
+        if (!audioCtx || isMuted) return;
+        const s = sounds[key];
+        
+        // Synth Fallbacks
+        if (!s || s.fallback) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            if (key === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start();
+                osc.stop(now + 0.1);
+            } else if (key === 'coin') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, now);
+                osc.frequency.setValueAtTime(2000, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start();
+                osc.stop(now + 0.2);
+            } else if (key === 'upgrade') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start();
+                osc.stop(now + 0.4);
+            } else if (key === 'hire') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start();
+                osc.stop(now + 0.3);
+            } else if (key === 'beep') {
+                // Self checkout beep
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(1500, now);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.setValueAtTime(0, now + 0.1);
+                osc.start();
+                osc.stop(now + 0.1);
+            } else if (key === 'fail') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.exponentialRampToValueAtTime(180, now + 0.18);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.22);
+                osc.start();
+                osc.stop(now + 0.22);
+            }
+            return;
+        }
+        
+        if (s.play) {
+            s.play();
+            return;
+        }
+    }
+
+    // --- Game State ---
+    let width, height, dpr;
+    let lastTime = 0;
+    let isPlaying = false;
+    let score = 0;
+    let shopLevel = 1;
+    let upgradeCost = 40;
+    let shake = 0;
+    let globalTime = 0;
+    
+    // Staff & Machine System
+    // Types: 'staff' (moves), 'machine' (static)
+    const staffSlots = [
+        { id: 0, type: 'staff', unlocked: false, hired: false, level: 1, baseCost: 150, unlockLevel: 2, name: "Junior Staff" },
+        { id: 1, type: 'staff', unlocked: false, hired: false, level: 1, baseCost: 400, unlockLevel: 3, name: "Senior Staff" },
+        { id: 2, type: 'machine', unlocked: false, hired: false, level: 1, baseCost: 1000, unlockLevel: 4, name: "Self Checkout" },
+        { id: 3, type: 'staff', unlocked: false, hired: false, level: 1, baseCost: 2500, unlockLevel: 5, name: "Manager" },
+        { id: 4, type: 'staff', unlocked: false, hired: false, level: 1, baseCost: 5000, unlockLevel: 7, name: "Expert Staff" },
+        { id: 5, type: 'machine', unlocked: false, hired: false, level: 1, baseCost: 8000, unlockLevel: 8, name: "Auto-Kiosk V2" }
+    ];
+    const staffEntities = [];
+    const machineEntities = [];
+
+    // Passive Income (from machines mostly)
+    let passiveRate = 0;
+
+    // Entities
+    const customers = [];
+    const particles = [];
+    const floaters = [];
+    let parkObjects = [];
+    let clouds = [];
+
+    // Colors
+    const PALETTE = {
+        sky: '#bae6fd',
+        grass: '#86efac',
+        path: '#fde68a',
+        wood: '#d97706',
+        woodDark: '#92400e',
+        woodLight: '#fbbf24',
+        awningRed: '#ef4444',
+        awningBlue: '#3b82f6',
+        skins: ['#fca5a5', '#fdba74', '#86efac', '#93c5fd', '#c4b5fd'],
+        hair: ['#1e293b', '#475569', '#94a3b8', '#fcd34d', '#78350f']
+    };
+
+    // --- Initialization ---
+    function resize() {
+        dpr = window.devicePixelRatio || 1;
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        initEnvironment();
+    }
+    window.addEventListener('resize', resize);
+
+    function initEnvironment() {
+        parkObjects = [];
+        clouds = [];
+        for(let i=0; i<6; i++) {
+            clouds.push({ x: Math.random()*width, y: Math.random()*(height*0.3), r: 30+Math.random()*40, speed: 5+Math.random()*10 });
+        }
+        for(let i=0; i<12; i++) {
+            parkObjects.push({
+                x: Math.random() * width,
+                y: height * 0.38,
+                size: 40 + Math.random() * 60,
+                color: Math.random() > 0.5 ? '#22c55e' : '#16a34a',
+                type: 'tree'
+            });
+        }
+    }
+
+    // --- UI Logic ---
+    function updateUpgradeUI() {
+        const btn = document.getElementById('upgrade-btn');
+        const costEl = document.getElementById('cost-display');
+        const costPill = document.getElementById('cost-pill');
+        const title = document.getElementById('upgrade-title');
+        const tag = document.getElementById('upgrade-tag');
+
+        let nextItem = "FASTER SERVICE";
+        if (shopLevel === 2) nextItem = "SNACK SHELF";
+        if (shopLevel === 3) nextItem = "EXPRESS SCANNER";
+        if (shopLevel === 4) nextItem = "COMBO BOARD";
+        if (shopLevel === 5) nextItem = "FREEZER CART";
+        if (shopLevel > 5) nextItem = "RUSH EXPANSION";
+
+        title.innerText = nextItem;
+        costEl.innerText = upgradeCost;
+
+        if (score >= upgradeCost) {
+            btn.classList.remove('grayscale', 'opacity-70');
+            btn.classList.add('animate-pulse-glow', 'border-yellow-400');
+            costPill.classList.remove('bg-slate-500');
+            costPill.classList.add('bg-green-500');
+            tag.innerText = "AVAILABLE";
+            tag.className = "bg-green-100 text-green-600 px-2 py-0.5 rounded-full text-[10px] font-bold";
+        } else {
+            btn.classList.add('grayscale', 'opacity-70');
+            btn.classList.remove('animate-pulse-glow', 'border-yellow-400');
+            costPill.classList.add('bg-slate-500');
+            costPill.classList.remove('bg-green-500');
+            tag.innerText = "LOCKED";
+            tag.className = "bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold";
+        }
+        
+        updateStaffUI();
+    }
+
+    function updateStaffUI() {
+        const list = document.getElementById('staff-list');
+        list.innerHTML = '';
+        
+        let hasNotification = false;
+
+        staffSlots.forEach(slot => {
+            // Check unlock
+            if (shopLevel >= slot.unlockLevel) slot.unlocked = true;
+            
+            const div = document.createElement('div');
+            const isMachine = slot.type === 'machine';
+            const icon = isMachine ? '🤖' : '👨‍🍳';
+            const bgColor = isMachine ? 'bg-blue-50' : 'bg-white';
+            const borderColor = isMachine ? 'border-blue-100' : 'border-slate-100';
+            
+            // Calculate costs
+            const hireCost = slot.baseCost;
+            const upgradeCost = Math.floor(slot.baseCost * Math.pow(1.5, slot.level));
+            
+            div.className = `${bgColor} rounded-xl p-3 border-2 shadow-sm flex items-center justify-between gap-2 transition-all ${slot.unlocked ? (isMachine ? 'border-blue-200 opacity-100' : 'border-purple-200 opacity-100') : 'border-slate-100 opacity-50 grayscale'}`;
+
+            if (!slot.unlocked) {
+                div.innerHTML = `
+                    <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xl">🔒</div>
+                    <div class="flex-1">
+                        <div class="text-xs font-black text-slate-400 uppercase tracking-wider">LOCKED</div>
+                        <div class="text-[10px] font-bold text-slate-300">REQ KIOSK LVL ${slot.unlockLevel}</div>
+                    </div>
+                `;
+            } else if (slot.hired) {
+                const canUpgrade = score >= upgradeCost;
+                if (canUpgrade) hasNotification = true;
+                
+                div.innerHTML = `
+                    <div class="w-12 h-12 ${isMachine ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'} rounded-xl flex flex-col items-center justify-center relative overflow-hidden">
+                        <span class="text-2xl z-10">${icon}</span>
+                        <div class="absolute bottom-0 w-full h-1 bg-black/10">
+                             <div class="h-full bg-green-400" style="width:${(slot.level/10)*100}%"></div>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1">
+                            <div class="text-sm font-black ${isMachine ? 'text-blue-800' : 'text-purple-800'} truncate">${slot.name}</div>
+                            <div class="bg-black/10 text-black/50 px-1.5 rounded text-[9px] font-bold">LVL ${slot.level}</div>
+                        </div>
+                        <div class="text-[10px] font-bold text-green-500">+${slot.level*10}% SPEED/INCOME</div>
+                    </div>
+                    <button class="flex flex-col items-center justify-center ${canUpgrade ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'} px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition min-w-[70px]" onclick="window.hireStaff(${slot.id})">
+                        <span class="text-[9px] font-bold uppercase">UPGRADE</span>
+                        <span class="text-xs font-black">$${upgradeCost}</span>
+                    </button>
+                `;
+            } else {
+                const canAfford = score >= hireCost;
+                if (canAfford) hasNotification = true;
+                
+                div.innerHTML = `
+                    <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-2xl">?</div>
+                    <div class="flex-1">
+                        <div class="text-sm font-black text-slate-700">${slot.name}</div>
+                        <div class="text-xs font-bold ${canAfford ? 'text-green-600' : 'text-red-400'}">$${hireCost}</div>
+                    </div>
+                    <button class="${canAfford ? 'bg-purple-500 text-white shadow-purple-200' : 'bg-slate-200 text-slate-400'} px-4 py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition" onclick="window.hireStaff(${slot.id})">
+                        ${isMachine ? 'BUY' : 'HIRE'}
+                    </button>
+                `;
+            }
+            list.appendChild(div);
+        });
+        
+        // Update notification dot
+        const alertDot = document.getElementById('staff-alert');
+        if (hasNotification) alertDot.classList.remove('hidden');
+        else alertDot.classList.add('hidden');
+    }
+
+    window.hireStaff = (id) => {
+        const slot = staffSlots[id];
+        if (!slot.unlocked) return;
+        
+        const cost = slot.hired ? Math.floor(slot.baseCost * Math.pow(1.5, slot.level)) : slot.baseCost;
+        
+        if (score >= cost) {
+            score -= cost;
+            
+            if (!slot.hired) {
+                // First hire/buy
+                slot.hired = true;
+                if (slot.type === 'staff') {
+                    staffEntities.push(new Staff(slot));
+                } else {
+                    machineEntities.push(new SelfCheckout(slot));
+                }
+                playSound('hire');
+            } else {
+                // Upgrade
+                slot.level++;
+                // Update entity stats
+                if (slot.type === 'staff') {
+                    const entity = staffEntities.find(e => e.config.id === id);
+                    if (entity) entity.syncStats();
+                } else {
+                    const entity = machineEntities.find(e => e.config.id === id);
+                    if (entity) entity.syncStats();
+                }
+                playSound('upgrade');
+            }
+            
+            playSound('coin');
+            showReaction('success');
+            document.getElementById('score-display').innerText = score;
+            
+            for(let i=0; i<20; i++) {
+                particles.push(new Particle(width/2, height/2, '#2dd4bf', 8));
+            }
+            
+            updateUpgradeUI();
+        } else {
+            playSound('fail');
+            showReaction('fail');
+        }
+    };
+
+    function doUpgrade() {
+        if (score >= upgradeCost) {
+            score -= upgradeCost;
+            shopLevel++;
+            upgradeCost = Math.floor(upgradeCost * 1.6);
+            
+            if (shopLevel >= 5) {
+                document.getElementById('passive-toast').classList.remove('-translate-x-80');
+            }
+
+            shake = 15;
+            playSound('upgrade');
+            showReaction('success');
+            for(let i=0; i<40; i++) {
+                particles.push(new Particle(width/2, height*0.5, ['#fbbf24', '#fff', '#ef4444'][Math.floor(Math.random()*3)], 8));
+            }
+
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('lvl-badge').innerText = shopLevel;
+            updateUpgradeUI();
+        } else {
+            playSound('fail');
+            showReaction('fail');
+        }
+    }
+
+    function spawnCustomer() {
+        const capacity = 2 + shopLevel + (machineEntities.length * 2); // Machines increase queue capacity
+        const active = customers.filter(c => c.state !== 'leave').length;
+        if (active < capacity && Math.random() < 0.03) {
+            customers.push(new Customer());
+        }
+    }
+
+    // --- Classes ---
+    class Staff {
+        constructor(config) {
+            this.config = config;
+            this.id = config.id;
+            // Position slots: 0=center-left, 1=center-right, 3=far-left, 4=far-right
+            const offset = (this.id % 2 === 0) ? -1 : 1;
+            const dist = Math.ceil((this.id + 1) / 2) * 30;
+            
+            this.homeX = width/2 + (offset * dist) - 20; 
+            this.y = height * 0.4 - 20;
+            this.x = this.homeX;
+            this.state = 'IDLE'; 
+            this.targetCustomer = null;
+            this.timer = 0;
+            this.bob = 0;
+            this.syncStats();
+        }
+
+        syncStats() {
+            // Speed increases with level
+            this.speed = 100 + (this.config.level * 15);
+            this.workTime = Math.max(0.2, 1.2 - (this.config.level * 0.1));
+        }
+
+        update(dt) {
+            this.bob += dt * 5;
+            
+            if (this.state === 'IDLE') {
+                const potential = customers.find(c => c.state === 'wait' && !c.isTargeted && !c.isBeingServed);
+                if (potential) {
+                    this.targetCustomer = potential;
+                    potential.isTargeted = true;
+                    this.state = 'WALK_TO';
+                    floaters.push(new Floater("!", this.x, this.y - 50, '#2dd4bf'));
+                }
+            }
+            else if (this.state === 'WALK_TO') {
+                if (!this.targetCustomer || this.targetCustomer.state === 'leave') {
+                    this.state = 'WALK_HOME';
+                    this.targetCustomer = null;
+                    return;
+                }
+                const dx = this.targetCustomer.x - this.x;
+                if (Math.abs(dx) < 5) {
+                    this.state = 'WORK';
+                    this.timer = 0;
+                } else {
+                    this.x += Math.sign(dx) * this.speed * dt;
+                }
+            }
+            else if (this.state === 'WORK') {
+                if (!this.targetCustomer || this.targetCustomer.state === 'leave') {
+                    this.state = 'WALK_HOME'; return;
+                }
+                this.timer += dt;
+                if (this.timer > this.workTime) {
+                    // Bonus income from staff level
+                    const bonus = 1 + (this.config.level * 0.1);
+                    this.targetCustomer.serve(bonus);
+                    this.state = 'WALK_HOME';
+                    this.targetCustomer = null;
+                }
+            }
+            else if (this.state === 'WALK_HOME') {
+                const dx = this.homeX - this.x;
+                if (Math.abs(dx) < 5) {
+                    this.x = this.homeX;
+                    this.state = 'IDLE';
+                } else {
+                    this.x += Math.sign(dx) * this.speed * dt;
+                }
+            }
+        }
+
+        draw(ctx) {
+            const bobY = Math.sin(this.bob) * 3;
+            const x = this.x;
+            const y = this.y + bobY;
+            const s = 0.8; 
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(s, s);
+
+            // Body
+            ctx.fillStyle = window.gameConfig.staffColor;
+            ctx.beginPath();
+            ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.lineTo(10, 40); ctx.lineTo(-10, 40);
+            ctx.fill();
+
+            // Head
+            ctx.fillStyle = '#fca5a5';
+            ctx.beginPath();
+            ctx.moveTo(0, -25); ctx.lineTo(12, -15); ctx.lineTo(12, 0); ctx.lineTo(0, 10); ctx.lineTo(-12, 0); ctx.lineTo(-12, -15);
+            ctx.fill();
+
+            // Hat
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.moveTo(-14, -15); ctx.lineTo(14, -15); ctx.lineTo(0, -35); ctx.fill();
+
+            // Level Badge
+            if (this.config.level > 1) {
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath(); ctx.arc(0, -40, 5, 0, Math.PI*2); ctx.fill();
+            }
+
+            // Arms (if working)
+            if (this.state === 'WORK') {
+                ctx.strokeStyle = '#fca5a5';
+                ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(-10, 10); ctx.lineTo(-20, 20 + Math.sin(this.bob*4)*5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(10, 10); ctx.lineTo(20, 20 - Math.sin(this.bob*4)*5); ctx.stroke();
+                
+                // Progress bar
+                ctx.fillStyle = '#fff'; ctx.fillRect(-15, -50, 30, 6);
+                ctx.fillStyle = '#22c55e'; ctx.fillRect(-15, -50, 30 * (this.timer/this.workTime), 6);
+            }
+
+            ctx.restore();
+        }
+    }
+
+    class SelfCheckout {
+        constructor(config) {
+            this.config = config;
+            // Place on far right of counter
+            this.x = width/2 + 120 + (config.id === 5 ? 40 : 0); 
+            this.y = height * 0.4 - 30;
+            this.cooldown = 0;
+            this.active = false;
+            this.syncStats();
+        }
+
+        syncStats() {
+            // Processing time reduces with level
+            this.processTime = Math.max(1.0, 4.0 - (this.config.level * 0.3));
+        }
+
+        update(dt) {
+            this.cooldown -= dt;
+            this.active = false;
+            
+            if (this.cooldown <= 0) {
+                // Find a customer waiting
+                const potential = customers.find(c => c.state === 'wait' && !c.isTargeted && !c.isBeingServed);
+                if (potential) {
+                    this.active = true; // Flash screen
+                    potential.isTargeted = true;
+                    // Instant serve after cooldown, but visual feedback first
+                    playSound('beep');
+                    
+                    // Laser beam effect
+                    ctx.save();
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(potential.x, potential.y - 50);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // Bonus income from machine level
+                    const bonus = 1 + (this.config.level * 0.05);
+                    potential.serve(bonus);
+                    
+                    this.cooldown = this.processTime;
+                }
+            }
+        }
+
+        draw(ctx) {
+            const x = this.x;
+            const y = this.y;
+            
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Machine Body
+            ctx.fillStyle = '#475569'; // Slate 600
+            ctx.fillRect(-15, -20, 30, 60);
+            
+            // Screen
+            ctx.fillStyle = this.active ? '#fff' : '#0ea5e9'; // Sky 500 or White flash
+            ctx.fillRect(-12, -15, 24, 20);
+            
+            // Stand
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(-5, 40, 10, 10);
+            
+            // Scanner Light
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath(); ctx.arc(0, 15, 3, 0, Math.PI*2); ctx.fill();
+            
+            // Label
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 8px Audiowide, sans-serif';
+            ctx.fillText('AUTO', -10, -25);
+            
+            // Level Star
+            if (this.config.level > 1) {
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath(); 
+                ctx.moveTo(0, -35); ctx.lineTo(3, -30); ctx.lineTo(0, -25); ctx.lineTo(-3, -30); 
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+    }
+
+    class Customer {
+        constructor() {
+            this.x = width/2 + (Math.random()-0.5) * width * 0.8;
+            this.y = height + 100;
+            this.targetX = width/2 + (Math.random()-0.5) * (200 + shopLevel * 10);
+            this.targetY = height * 0.4 + 100 + Math.random() * 40;
+            this.state = 'walk';
+            this.speed = 150 + Math.random() * 50;
+            this.color = PALETTE.skins[Math.floor(Math.random()*PALETTE.skins.length)];
+            this.hair = PALETTE.hair[Math.floor(Math.random()*PALETTE.hair.length)];
+            this.patience = 5;
+            this.progress = 0;
+            this.scale = 1;
+            this.isTargeted = false;
+            this.isBeingServed = false;
+        }
+        update(dt) {
+            const horizon = height * 0.4;
+            const depth = (this.y - horizon) / (height - horizon);
+            this.scale = 0.5 + depth * 0.5;
+
+            if (this.state === 'walk') {
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const dist = Math.sqrt(dx*dx+dy*dy);
+                if (dist < 5) this.state = 'wait';
+                else {
+                    this.x += (dx/dist) * this.speed * dt;
+                    this.y += (dy/dist) * this.speed * dt;
+                }
+            } else if (this.state === 'wait') {
+                this.patience -= dt * window.gameConfig.difficulty;
+                if (this.patience <= 0) {
+                    this.state = 'leave';
+                    playSound('fail');
+                    showReaction('fail');
+                    floaters.push(new Floater("CUSTOMER LEFT!", this.x, this.y - 100*this.scale, '#ef4444'));
+                }
+            } else if (this.state === 'leave') {
+                this.y += this.speed * dt;
+                this.x += (this.x - width/2) * dt * 0.5;
+                if (this.y > height + 100) return true;
+            }
+            return false;
+        }
+        serve(multiplier = 1) {
+            if (this.state !== 'wait') return false;
+            this.state = 'leave';
+            this.isBeingServed = true;
+            
+            const baseVal = 10 + shopLevel * 2;
+            const val = Math.floor(baseVal * multiplier);
+            
+            score += val;
+            document.getElementById('score-display').innerText = score;
+            updateUpgradeUI();
+            playSound('coin');
+            showReaction('success');
+            floaters.push(new Floater(`+$${val}`, this.x, this.y - 100*this.scale, '#fbbf24'));
+            return true;
+        }
+        tap() {
+            if (this.state === 'wait') {
+                this.progress += 0.35;
+                const now = performance.now();
+                if (now - lastTapSound > 90) {
+                    playSound('tap');
+                    lastTapSound = now;
+                }
+                particles.push(new Particle(this.x, this.y - 80*this.scale, '#bae6fd', 5));
+                if (this.progress >= 1) {
+                    this.serve(1);
+                }
+            }
+        }
+        draw(ctx) {
+            const s = this.scale;
+            const w = 40 * s;
+            const h = 90 * s;
+            const cx = this.x;
+            const cy = this.y;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.beginPath(); ctx.ellipse(cx, cy, w/1.5, 5*s, 0, 0, Math.PI*2); ctx.fill();
+
+            // Body
+            ctx.fillStyle = this.color;
+            ctx.fillRect(cx - w/2, cy - h, w, h*0.6);
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(cx - w/2, cy - h*0.4, w, h*0.4);
+
+            // Head
+            ctx.fillStyle = '#ffe4e6';
+            ctx.beginPath(); ctx.arc(cx, cy - h, w/1.8, 0, Math.PI*2); ctx.fill();
+            
+            // Hair
+            ctx.fillStyle = this.hair;
+            ctx.beginPath(); ctx.arc(cx, cy - h - 5*s, w/2, Math.PI, 0); ctx.fill();
+
+            // Patience Bar
+            if (this.state === 'wait') {
+                const barW = 50 * s;
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(cx - barW/2, cy - h - 30*s, barW, 6*s);
+                ctx.fillStyle = this.patience < 2 ? '#ef4444' : '#22c55e';
+                ctx.fillRect(cx - barW/2, cy - h - 30*s, barW * (this.patience/5), 6*s);
+            }
+        }
+    }
+
+    class Particle {
+        constructor(x, y, color, size) {
+            this.x = x; this.y = y; this.color = color; this.size = size;
+            this.vx = (Math.random()-0.5)*300; this.vy = -Math.random()*400;
+            this.life = 1; this.g = 800;
+        }
+        update(dt) {
+            this.vy += this.g * dt;
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.life -= dt * 2;
+            return this.life <= 0;
+        }
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.fillStyle = this.color;
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.size*this.life, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    class Floater {
+        constructor(text, x, y, color) {
+            this.text = text; this.x = x; this.y = y; this.color = color;
+            this.life = 1; this.vy = -50;
+        }
+        update(dt) {
+            this.y += this.vy * dt;
+            this.life -= dt;
+            return this.life <= 0;
+        }
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.font = "900 24px Audiowide, sans-serif";
+            ctx.fillStyle = this.color;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.strokeText(this.text, this.x, this.y);
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    // --- Drawing ---
+    function drawKiosk(ctx) {
+        const horizon = height * 0.4;
+        const cx = width / 2;
+        const scale = 1 + (shopLevel-1) * 0.05;
+        const w = 220 * scale;
+        const h = 180;
+        const x = cx - w/2;
+        const y = horizon - 50;
+
+        // Back Wall
+        ctx.fillStyle = PALETTE.woodDark;
+        ctx.fillRect(x + 20, y, 20, 100);
+        ctx.fillRect(x + w - 40, y, 20, 100);
+
+        if (shopLevel >= 2) {
+            ctx.fillStyle = '#b45309';
+            ctx.fillRect(x + 40, y + 40, w - 80, 10);
+            for(let i=0; i<5; i++) {
+                ctx.fillStyle = ['#ef4444', '#3b82f6', '#f59e0b'][i%3];
+                ctx.fillRect(x + 50 + i*25*scale, y + 25, 15*scale, 15);
+            }
+        }
+
+        // Draw Staff & Machines (Behind Counter)
+        staffEntities.forEach(s => s.draw(ctx));
+        machineEntities.forEach(m => m.draw(ctx));
+
+        // Counter
+        ctx.fillStyle = PALETTE.wood;
+        ctx.fillRect(x, y + 100, w, 80);
+        ctx.fillStyle = PALETTE.woodLight;
+        ctx.fillRect(x - 10, y + 90, w + 20, 20);
+
+        const items = 3 + Math.min(5, shopLevel);
+        for(let i=0; i<items; i++) {
+            const ix = x + 20 + i * (w/items);
+            ctx.fillStyle = PALETTE.awningBlue;
+            ctx.beginPath();
+            ctx.moveTo(ix, y + 90);
+            ctx.lineTo(ix + 15, y + 90);
+            ctx.lineTo(ix + 12, y + 65);
+            ctx.lineTo(ix + 3, y + 65);
+            ctx.fill();
+        }
+
+        // Awning
+        const segs = 8;
+        const sw = (w + 40) / segs;
+        for(let i=0; i<segs; i++) {
+            ctx.fillStyle = i % 2 === 0 ? '#fff' : window.gameConfig.themeColor;
+            ctx.beginPath();
+            ctx.moveTo(x - 20 + i*sw, y - 20);
+            ctx.lineTo(x - 20 + (i+1)*sw, y - 20);
+            ctx.lineTo(x - 20 + (i+1)*sw, y + 40);
+            ctx.arc(x - 20 + (i+0.5)*sw, y + 40, sw/2, 0, Math.PI);
+            ctx.lineTo(x - 20 + i*sw, y + 40);
+            ctx.fill();
+        }
+    }
+
+    function gameLoop(t) {
+        requestAnimationFrame(gameLoop);
+        const dt = Math.min((t - lastTime) / 1000, 0.1);
+        lastTime = t;
+        globalTime += dt;
+
+        if (isPlaying) {
+            spawnCustomer();
+            staffEntities.forEach(s => s.update(dt));
+            machineEntities.forEach(m => m.update(dt));
+            
+            // Calculate total passive income from machine levels + shop level
+            let totalPassive = 0;
+            if (shopLevel >= 5) totalPassive += 5;
+            // Machines contribute to passive income too if idle? No, they process customers.
+            // But let's add a small purely passive drip for having machines
+            machineEntities.forEach(m => totalPassive += m.config.level * 2);
+            
+            if (totalPassive > 0) {
+                passiveRate = totalPassive;
+                document.getElementById('passive-amt').innerText = passiveRate;
+                // Add passive income every second
+                if (Math.floor(globalTime) > Math.floor(globalTime - dt)) {
+                    score += passiveRate;
+                    document.getElementById('score-display').innerText = score;
+                    updateUpgradeUI();
+                }
+            }
+        }
+
+        let sx = 0, sy = 0;
+        if (shake > 0) {
+            sx = (Math.random()-0.5)*shake;
+            sy = (Math.random()-0.5)*shake;
+            shake *= 0.9;
+        }
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        
+        ctx.fillStyle = PALETTE.sky;
+        ctx.fillRect(0, 0, width, height);
+        
+        // Parallax Clouds
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        clouds.forEach(c => {
+            c.x += c.speed * dt;
+            if (c.x > width + c.r) c.x = -c.r;
+            ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
+        });
+
+        const horizon = height * 0.4;
+        ctx.fillStyle = PALETTE.grass;
+        ctx.fillRect(0, horizon, width, height - horizon);
+        
+        ctx.fillStyle = PALETTE.path;
+        ctx.beginPath();
+        ctx.moveTo(width/2 - 150, horizon + 80);
+        ctx.lineTo(width/2 + 150, horizon + 80);
+        ctx.lineTo(width + 100, height);
+        ctx.lineTo(-100, height);
+        ctx.fill();
+
+        parkObjects.forEach(o => {
+            ctx.fillStyle = o.color;
+            ctx.beginPath(); ctx.arc(o.x, o.y, o.size, Math.PI, 0); ctx.fill();
+        });
+
+        drawKiosk(ctx);
+
+        customers.sort((a,b) => a.y - b.y);
+        for(let i=customers.length-1; i>=0; i--) {
+            if (customers[i].update(dt)) customers.splice(i, 1);
+            else customers[i].draw(ctx);
+        }
+
+        particles.forEach(p => p.draw(ctx));
+        floaters.forEach(f => f.draw(ctx));
+        for(let i=particles.length-1; i>=0; i--) if(particles[i].update(dt)) particles.splice(i,1);
+        for(let i=floaters.length-1; i>=0; i--) if(floaters[i].update(dt)) floaters.splice(i,1);
+
+        ctx.restore();
+    }
+
+    // --- Interaction ---
+    function handleTap(e) {
+        if (!isPlaying) return;
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const tx = e.clientX - rect.left;
+        const ty = e.clientY - rect.top;
+
+        const sorted = [...customers].sort((a,b) => b.y - a.y);
+        for (let c of sorted) {
+            const s = c.scale;
+            if (tx > c.x - 40*s && tx < c.x + 40*s && ty > c.y - 100*s && ty < c.y) {
+                c.tap();
+                return;
+            }
+        }
+    }
+
+    // UI Events
+    const staffPanel = document.getElementById('staff-panel');
+    document.getElementById('staff-toggle-btn').addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        initAudio();
+        playSound('staffOpen');
+        staffPanel.classList.remove('slide-closed');
+        staffPanel.classList.add('slide-open');
+        updateStaffUI();
+    });
+    document.getElementById('staff-close-btn').addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        initAudio();
+        playSound('staffClose');
+        staffPanel.classList.remove('slide-open');
+        staffPanel.classList.add('slide-closed');
+    });
+
+    document.getElementById('start-btn').addEventListener('pointerdown', () => {
+        isPlaying = true;
+        initAudio();
+        playSound('start');
+        if (!bgmStarted) {
+            playSound('bgm');
+            bgmStarted = true;
+        }
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('opacity-0');
+        document.getElementById('upgrade-container').classList.remove('translate-y-64');
+        resize();
+        spawnCustomer();
+    });
+
+    document.getElementById('upgrade-btn').addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        initAudio();
+        doUpgrade();
+        const btn = e.currentTarget;
+        btn.style.transform = 'scale(0.95)';
+        setTimeout(() => btn.style.transform = '', 100);
+    });
+
+    canvas.addEventListener('pointerdown', handleTap, {passive:false});
+    
+    updateUpgradeUI();
+    resize();
+    requestAnimationFrame(gameLoop);
+});
+</script>
+</body>
+</html>

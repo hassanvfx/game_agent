@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Night Sniper</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <script>
+        tailwind.config = {
+            corePlugins: { preflight: true },
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Exo 2', 'system-ui', 'sans-serif'],
+                        display: ['Orbitron', 'system-ui', 'sans-serif'],
+                        arcade: ['Press Start 2P', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- [agent-note][stage4] repaired: catalog-font-plumbing | action: split approved font imports and removed non-catalog dependency drift -->
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #040814;
+            --bg-bottom: #101d36;
+            --panel: rgba(10, 18, 34, 0.82);
+            --panel-edge: rgba(103, 232, 249, 0.26);
+            --hud-glow: rgba(34, 211, 238, 0.24);
+            --signal: #67e8f9;
+            --signal-strong: #22d3ee;
+            --target: #fb7185;
+            --target-hot: #f43f5e;
+            --success: #4ade80;
+            --text: #f8fbff;
+            --muted: rgba(226, 232, 240, 0.78);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(34, 211, 238, 0.1), transparent 34%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text);
+            cursor: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(14, 26, 46, 0.92), rgba(8, 14, 28, 0.88));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-edge);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+                0 18px 44px rgba(0, 0, 0, 0.48),
+                0 0 22px rgba(34, 211, 238, 0.1);
+        }
+
+        .pointer-events-auto { cursor: default; }
+
+        .scan-card {
+            position: relative;
+            overflow: hidden;
+            max-width: min(92vw, 28rem);
+            width: calc(100% - 2rem);
+            border-radius: 1.25rem;
+        }
+
+        .scan-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(135deg, rgba(34, 211, 238, 0.12), transparent 44%),
+                linear-gradient(315deg, rgba(251, 113, 133, 0.12), transparent 50%);
+            pointer-events: none;
+        }
+
+        .scan-frame {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .scan-frame::before,
+        .scan-frame::after {
+            content: "";
+            position: absolute;
+            width: 3.25rem;
+            height: 3.25rem;
+            border: 2px solid rgba(103, 232, 249, 0.9);
+            filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.35));
+        }
+
+        .scan-frame::before {
+            top: 0.9rem;
+            left: 0.9rem;
+            border-right: 0;
+            border-bottom: 0;
+            border-top-left-radius: 0.75rem;
+        }
+
+        .scan-frame::after {
+            right: 0.9rem;
+            bottom: 0.9rem;
+            border-left: 0;
+            border-top: 0;
+            border-bottom-right-radius: 0.75rem;
+        }
+
+        .signal-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 999px;
+            border: 1px solid rgba(103, 232, 249, 0.25);
+            background: rgba(8, 17, 31, 0.66);
+            color: var(--signal);
+            font-size: 0.9rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            box-shadow: 0 0 14px rgba(34, 211, 238, 0.14);
+        }
+
+        .emoji-avatar {
+            width: clamp(4.75rem, 20vw, 6.5rem);
+            height: clamp(4.75rem, 20vw, 6.5rem);
+            margin: 0 auto 1rem;
+            border-radius: 1.5rem;
+            display: grid;
+            place-items: center;
+            font-size: clamp(2.4rem, 10vw, 3.4rem);
+            background:
+                radial-gradient(circle at 35% 30%, rgba(255,255,255,0.28), transparent 30%),
+                linear-gradient(180deg, rgba(20, 32, 56, 0.96), rgba(8, 15, 28, 0.96));
+            border: 1px solid rgba(103, 232, 249, 0.34);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.04) inset,
+                0 0 28px rgba(34, 211, 238, 0.16),
+                0 16px 28px rgba(0,0,0,0.38);
+            animation: avatarPulse 2.8s ease-in-out infinite;
+        }
+
+        .primary-btn {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(103, 232, 249, 0.28);
+            background: linear-gradient(180deg, #10b981, #059669);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.05) inset,
+                0 0 18px rgba(16, 185, 129, 0.28);
+        }
+
+        .primary-btn::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: translateX(-120%);
+            transition: transform 180ms ease;
+        }
+
+        .primary-btn:hover::after { transform: translateX(120%); }
+
+        .hud-chip {
+            background: rgba(5, 10, 22, 0.72);
+            border: 1px solid rgba(103, 232, 249, 0.2);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03) inset,
+                0 0 16px rgba(34, 211, 238, 0.12);
+            border-radius: 0.9rem;
+            padding: 0.45rem 0.75rem;
+        }
+
+        .hud-label {
+            font-family: 'Press Start 2P', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            line-height: 1.5;
+        }
+
+        .tap-hint {
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(5, 10, 22, 0.44);
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+        }
+
+        .feedback-overlay {
+            position: absolute;
+            right: 1rem;
+            bottom: 1rem;
+            width: min(26vw, 8rem);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(103, 232, 249, 0.28);
+            background: rgba(3, 7, 18, 0.6);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.34);
+            opacity: 0;
+            transform: translateY(16px) scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            z-index: 30;
+        }
+
+        .feedback-overlay.visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+
+        .status-ping {
+            position: absolute;
+            top: 4.75rem;
+            right: 1rem;
+            min-width: 8.5rem;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.9rem;
+            background: rgba(4, 10, 20, 0.72);
+            border: 1px solid rgba(103, 232, 249, 0.22);
+            box-shadow: 0 0 18px rgba(34, 211, 238, 0.12);
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+
+        .status-ping.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .status-title {
+            display: block;
+            color: var(--signal);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.56rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .status-copy {
+            display: block;
+            margin-top: 0.3rem;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        @keyframes avatarPulse {
+            0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 0 28px rgba(34, 211, 238, 0.16), 0 16px 28px rgba(0,0,0,0.38); }
+            50% { transform: translateY(-3px) scale(1.03); box-shadow: 0 0 38px rgba(34, 211, 238, 0.22), 0 18px 32px rgba(0,0,0,0.42); }
+        }
+
+        @media (max-width: 640px) {
+            #start-screen,
+            #game-over-screen {
+                padding: 1.4rem;
+            }
+
+            .feedback-overlay {
+                width: 4.75rem;
+                right: 0.75rem;
+                bottom: 0.9rem;
+            }
+
+            .status-ping {
+                top: 4.5rem;
+                right: 0.75rem;
+                min-width: 7.5rem;
+                padding: 0.5rem 0.65rem;
+            }
+
+            .status-copy {
+                font-size: 0.76rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="relative group w-full h-full">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- [agent-note][stage3] resolved-gif: hit/fail feedback -> catalogs/gifs.json -->
+        <img id="reaction-gif" class="feedback-overlay" alt="Reaction feedback overlay">
+        <div id="status-ping" class="status-ping">
+            <span class="status-title">Signal Feed</span>
+            <span id="status-copy" class="status-copy">Tracker Idle</span>
+        </div>
+        
+        <div id="hud" class="absolute top-0 left-0 w-full h-full pointer-events-none hidden">
+            <div class="absolute top-4 left-4 text-xl sm:text-3xl font-bold text-cyan-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] hud-chip">
+                <span class="hud-label text-[0.72rem] sm:text-sm">Tags</span>
+                <span id="score" class="block text-2xl sm:text-3xl text-white leading-none">0</span>
+            </div>
+            <div class="absolute top-4 right-4 text-xl sm:text-2xl font-bold text-rose-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] hud-chip text-right">
+                <span class="hud-label text-[0.72rem] sm:text-sm">Missed</span>
+                <span class="block text-2xl sm:text-3xl text-white leading-none"><span id="lives">3</span>/3</span>
+            </div>
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-slate-200/80 text-xs sm:text-sm tap-hint">
+                <span class="hud-label text-[0.68rem] sm:text-xs">Tap To Tag</span>
+            </div>
+        </div>
+
+        <div id="ui-layer" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none z-50">
+            <div id="start-screen" class="scan-card glass-panel p-6 sm:p-10 text-center pointer-events-auto hover:scale-[1.02] transition duration-300 border-t-4 border-cyan-400">
+                <div class="scan-frame"></div>
+                <div class="relative z-10">
+                    <div class="signal-badge mb-4 mx-auto w-fit">Live Grid</div>
+                    <div class="emoji-avatar" aria-hidden="true">🛰️</div>
+                    <h1 class="text-4xl sm:text-6xl font-black text-white mb-2 tracking-[0.12em] uppercase" style="font-family: 'Orbitron', system-ui, sans-serif;">Night Watch</h1>
+                    <p class="text-cyan-300 text-lg sm:text-xl mb-8 tracking-[0.18em] uppercase">Tag rogue signals before they fade</p>
+                    <button id="start-btn" class="primary-btn text-white font-bold py-3 sm:py-4 px-8 sm:px-12 rounded-xl transition text-base sm:text-xl tracking-[0.22em] uppercase w-full sm:w-auto">Scan In</button>
+                </div>
+            </div>
+
+            <div id="game-over-screen" class="hidden scan-card glass-panel p-6 sm:p-10 text-center pointer-events-auto border-t-4 border-rose-500">
+                <div class="scan-frame"></div>
+                <div class="relative z-10">
+                    <div class="emoji-avatar mb-3" aria-hidden="true">📡</div>
+                    <h2 class="text-4xl sm:text-5xl font-black text-rose-400 mb-2 uppercase tracking-[0.12em]" style="font-family: 'Orbitron', system-ui, sans-serif;">Signal Lost</h2>
+                    <div class="text-xl sm:text-2xl text-white mb-8 tracking-[0.12em] uppercase">Signals Tagged: <span id="finalScore" class="text-emerald-300">0</span></div>
+                    <button id="restart-btn" class="primary-btn bg-white text-slate-900 font-bold py-3 px-8 sm:px-10 rounded-xl shadow-lg hover:bg-slate-100 transition uppercase tracking-[0.2em] w-full sm:w-auto">Rescan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3",
+            sfx: {
+                shoot: "https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3",
+                hit: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3",
+                score: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3",
+                over: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3"
+            },
+            gifs: {
+                hit: "https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp",
+                fail: "https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+            }
+        };
+
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.26;
+                this.bgm.preload = 'auto';
+                this.pools = {};
+
+                Object.entries(ASSETS.sfx).forEach(([key, url]) => {
+                    const base = new Audio(url);
+                    base.preload = 'auto';
+                    base.volume = this.getVolume(key);
+                    this.pools[key] = [base];
+                });
+            }
+
+            getVolume(key) {
+                return {
+                    shoot: 0.42,
+                    hit: 0.5,
+                    score: 0.55,
+                    fail: 0.46,
+                    start: 0.5,
+                    over: 0.52
+                }[key] ?? 0.45;
+            }
+
+            unlock() {
+                this.enabled = true;
+            }
+
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM(reset = true) {
+                this.bgm.pause();
+                if (reset) this.bgm.currentTime = 0;
+            }
+
+            playSFX(key) {
+                if (!this.enabled || !this.pools[key]) return;
+                const pool = this.pools[key];
+                let audio = pool.find(item => item.paused || item.ended);
+                if (!audio && pool.length < 3) {
+                    audio = new Audio(ASSETS.sfx[key]);
+                    audio.preload = 'auto';
+                    audio.volume = this.getVolume(key);
+                    pool.push(audio);
+                }
+                if (!audio) {
+                    audio = pool[0];
+                    audio.pause();
+                }
+                try {
+                    audio.currentTime = 0;
+                    audio.play().catch(() => {});
+                } catch (_) {}
+            }
+        }
+
+        const audio = new AudioController();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const reactionGif = document.getElementById('reaction-gif');
+        const statusPing = document.getElementById('status-ping');
+        const statusCopy = document.getElementById('status-copy');
+
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let lives = 0;
+        let maxLives = 3;
+        let frameCount = 0;
+        let mouseX = 0;
+        let mouseY = 0;
+        let recoilX = 0;
+        let recoilY = 0;
+        let shakeDuration = 0;
+        let targets = [];
+        let particles = [];
+        let buildings = [];
+        let feedbackTimer = null;
+        let statusTimer = null;
+        let warningCooldown = 0;
+
+        function showStatus(message) {
+            statusCopy.textContent = message;
+            statusPing.classList.add('visible');
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => statusPing.classList.remove('visible'), 950);
+        }
+
+        function showReaction(kind) {
+            reactionGif.src = ASSETS.gifs[kind];
+            reactionGif.classList.add('visible');
+            clearTimeout(feedbackTimer);
+            feedbackTimer = setTimeout(() => reactionGif.classList.remove('visible'), 900);
+        }
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            generateCity();
+        }
+        window.addEventListener('resize', resize);
+
+        window.addEventListener('mousemove', e => {
+            if (!gameActive) return;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        canvas.addEventListener('touchmove', e => {
+            if (!gameActive) return;
+            e.preventDefault();
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        }, { passive: false });
+
+        window.addEventListener('mousedown', shoot);
+        canvas.addEventListener('touchstart', (e) => {
+            if (!gameActive) return;
+            e.preventDefault();
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+            shoot();
+        }, { passive: false });
+
+        function generateCity() {
+            buildings = [];
+            const count = Math.ceil(width / 100) + 2;
+            for (let i = 0; i < count; i++) {
+                const bw = 100 + Math.random() * 80;
+                const bh = height * (0.3 + Math.random() * 0.4);
+                buildings.push({
+                    x: i * 100 - 50,
+                    y: height - bh,
+                    w: bw,
+                    h: bh,
+                    windows: []
+                });
+
+                const rows = Math.floor(bh / 40);
+                const cols = Math.floor(bw / 30);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (Math.random() > 0.3) {
+                            buildings[i].windows.push({
+                                x: buildings[i].x + 10 + c * 25,
+                                y: buildings[i].y + 10 + r * 35,
+                                w: 15,
+                                h: 25,
+                                lit: Math.random() > 0.7
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        function spawnTarget() {
+            if (buildings.length === 0) return;
+            const b = buildings[Math.floor(Math.random() * buildings.length)];
+            if (b.windows.length === 0) return;
+            const w = b.windows[Math.floor(Math.random() * b.windows.length)];
+
+            const exists = targets.some(t => Math.abs(t.x - w.x) < 20 && Math.abs(t.y - w.y) < 20);
+            if (!exists) {
+                targets.push({
+                    x: w.x + w.w / 2,
+                    y: w.y + w.h / 2,
+                    radius: 15,
+                    maxTime: 180 - Math.min(score * 2, 100),
+                    timer: 180 - Math.min(score * 2, 100),
+                    active: true
+                });
+            }
+        }
+
+        function shoot() {
+            if (!gameActive) return;
+
+            audio.playSFX('shoot');
+
+            shakeDuration = 5;
+            recoilX = (Math.random() - 0.5) * 10;
+            recoilY = (Math.random() - 0.5) * 10;
+
+            let hit = false;
+            for (let i = targets.length - 1; i >= 0; i--) {
+                const t = targets[i];
+                const dx = t.x - mouseX;
+                const dy = t.y - mouseY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < t.radius + 10) {
+                    hit = true;
+                    score++;
+                    document.getElementById('score').innerText = score;
+                    audio.playSFX('hit');
+                    audio.playSFX('score');
+                    showReaction('hit');
+                    showStatus('Signal Tagged');
+
+                    for (let p = 0; p < 10; p++) {
+                        particles.push({
+                            x: t.x,
+                            y: t.y,
+                            vx: (Math.random() - 0.5) * 10,
+                            vy: (Math.random() - 0.5) * 10,
+                            life: 30,
+                            color: '#4ade80'
+                        });
+                    }
+
+                    targets.splice(i, 1);
+                    break;
+                }
+            }
+
+            if (!hit && warningCooldown <= 0) {
+                showStatus('Tracking...');
+                warningCooldown = 15;
+            }
+        }
+
+        function initGame() {
+            score = 0;
+            lives = 0;
+            targets = [];
+            particles = [];
+            frameCount = 0;
+            warningCooldown = 0;
+            mouseX = width / 2;
+            mouseY = height / 2;
+            reactionGif.classList.remove('visible');
+            statusPing.classList.remove('visible');
+            document.getElementById('score').innerText = score;
+            document.getElementById('lives').innerText = lives;
+            resize();
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail');
+            audio.playSFX('over');
+            showReaction('fail');
+            showStatus('Grid Offline');
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+            document.body.style.cursor = 'default';
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            frameCount++;
+            if (warningCooldown > 0) warningCooldown--;
+
+            if (shakeDuration > 0) {
+                shakeDuration--;
+                const shakeIntensity = shakeDuration * 2;
+                ctx.setTransform(1, 0, 0, 1, (Math.random() - 0.5) * shakeIntensity, (Math.random() - 0.5) * shakeIntensity);
+            } else {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#020617');
+            gradient.addColorStop(0.55, '#0b1730');
+            gradient.addColorStop(1, '#111f3d');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const moonGlow = ctx.createRadialGradient(width * 0.78, height * 0.18, 6, width * 0.78, height * 0.18, 140);
+            moonGlow.addColorStop(0, 'rgba(103, 232, 249, 0.45)');
+            moonGlow.addColorStop(0.18, 'rgba(186, 230, 253, 0.3)');
+            moonGlow.addColorStop(1, 'rgba(103, 232, 249, 0)');
+            ctx.fillStyle = moonGlow;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 50; i++) {
+                const sx = ((i * 137) % width);
+                const sy = ((i * 63) % (height / 2));
+                ctx.globalAlpha = 0.25 + Math.sin(frameCount * 0.05 + i) * 0.18;
+                ctx.beginPath();
+                ctx.arc(sx, sy, 1 + (i % 2), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+
+            ctx.fillStyle = '#081221';
+            buildings.forEach((b, buildingIndex) => {
+                const buildingGradient = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+                buildingGradient.addColorStop(0, buildingIndex % 2 === 0 ? '#162640' : '#101c31');
+                buildingGradient.addColorStop(1, '#050b15');
+                ctx.fillStyle = buildingGradient;
+                ctx.fillRect(b.x, b.y, b.w, b.h);
+
+                ctx.strokeStyle = 'rgba(103, 232, 249, 0.05)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+
+                b.windows.forEach(w => {
+                    ctx.fillStyle = w.lit ? '#fef08a' : '#102238';
+                    if (w.lit && Math.random() > 0.995) ctx.fillStyle = '#15243a';
+                    ctx.fillRect(w.x, w.y, w.w, w.h);
+
+                    if (w.lit) {
+                        ctx.fillStyle = 'rgba(103, 232, 249, 0.12)';
+                        ctx.fillRect(w.x - 1, w.y - 1, w.w + 2, w.h + 2);
+                    }
+                });
+            });
+
+            targets.forEach((t, i) => {
+                t.timer--;
+                const scale = t.timer / t.maxTime;
+                const bodyRadius = t.radius * scale;
+
+                ctx.fillStyle = 'rgba(251, 113, 133, 0.16)';
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, bodyRadius + 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#fb7185';
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, bodyRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#ffe4e6';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, bodyRadius * 0.56, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(t.x + bodyRadius * 0.18, t.y - bodyRadius * 0.18, Math.max(2, bodyRadius * 0.15), 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, bodyRadius + Math.sin(frameCount * 0.2) * 5, 0, Math.PI * 2);
+                ctx.stroke();
+
+                if (t.timer <= 0) {
+                    lives++;
+                    document.getElementById('lives').innerText = lives;
+                    audio.playSFX('fail');
+                    showReaction('fail');
+                    showStatus('Signal Escaped');
+                    targets.splice(i, 1);
+                    if (lives >= maxLives) gameOver();
+                }
+            });
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            ctx.globalAlpha = 1.0;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, width, height);
+            ctx.arc(mouseX, mouseY, 150, 0, Math.PI * 2, true);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fill();
+
+            ctx.strokeStyle = '#67e8f9';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(mouseX - 150, mouseY);
+            ctx.lineTo(mouseX + 150, mouseY);
+            ctx.moveTo(mouseX, mouseY - 150);
+            ctx.lineTo(mouseX, mouseY + 150);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.42)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(mouseX, mouseY, 112, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#22d3ee';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(mouseX, mouseY, 148, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.font = "12px 'Press Start 2P', monospace";
+            ctx.fillStyle = '#67e8f9';
+            ctx.fillText(`DIST: ${(Math.random() * 1000).toFixed(1)}m`, mouseX + 80, mouseY + 80);
+            ctx.fillText(`WIND: ${(Math.random() * 10).toFixed(1)}`, mouseX - 120, mouseY + 80);
+
+            ctx.restore();
+
+            if (frameCount % 100 === 0) {
+                spawnTarget();
+                if (score > 5 && Math.random() > 0.5) spawnTarget();
+                if (score > 15 && Math.random() > 0.5) spawnTarget();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function beginRun() {
+            audio.unlock();
+            audio.playSFX('start');
+            audio.playBGM();
+            showStatus('Grid Online');
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.body.style.cursor = 'none';
+            gameActive = true;
+            resize();
+            initGame();
+            gameLoop();
+        }
+
+        document.getElementById('start-btn').addEventListener('click', beginRun);
+        document.getElementById('restart-btn').addEventListener('click', beginRun);
+
+        resize();
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Signal Sprint: Night Shift Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-dark: #07111f;
+    --bg-panel: rgba(8, 16, 31, 0.94);
+    --panel-strong: rgba(11, 24, 44, 0.92);
+    --text-primary: #f4fbff;
+    --text-secondary: #8bb3c7;
+    --accent: #22d3ee;
+    --accent-strong: #8b5cf6;
+    --signal-gold: #facc15;
+    --msg-user: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(139, 92, 246, 0.24));
+    --msg-ai: transparent;
+    --edge: rgba(130, 236, 255, 0.18);
+    --shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
+  }
+  
+  /* Base Reset & Font */
+  body, html { 
+    width: 100%; height: 100%; margin: 0; padding: 0; 
+    background:
+      radial-gradient(circle at top, rgba(34, 211, 238, 0.16), transparent 36%),
+      radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.18), transparent 28%),
+      linear-gradient(180deg, #08101d 0%, #050913 100%);
+    color: var(--text-primary);
+    font-family: 'Rajdhani', system-ui, sans-serif; 
+    overflow: hidden; /* Prevent body scroll, handle in containers */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Critical Input Fixes */
+  input, textarea { 
+    -webkit-user-select: text !important; 
+    user-select: text !important; 
+    touch-action: manipulation !important;
+  }
+  
+  /* Canvas Layer */
+  canvas { 
+    position: absolute; inset: 0; z-index: 0; 
+    width: 100%; height: 100%; 
+    opacity: 0.4; /* Dimmed for chat readability */
+    transition: opacity 0.5s ease;
+  }
+  
+  /* UI Layer */
+  #ui-layer { 
+    position: absolute; inset: 0; z-index: 10; 
+    display: flex; flex-direction: column;
+    pointer-events: none; /* Allow clicks to pass to canvas where appropriate */
+  }
+  
+  /* Chat Interface */
+  #chat-container {
+    flex: 1; display: flex; flex-direction: column;
+    pointer-events: auto; /* Re-enable pointer events for chat */
+    background:
+      linear-gradient(to bottom, rgba(6, 12, 24, 0.74), rgba(3, 8, 18, 0.96)),
+      linear-gradient(135deg, rgba(34, 211, 238, 0.05), rgba(139, 92, 246, 0.04));
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Header */
+  header {
+    padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+    background: linear-gradient(180deg, rgba(11, 21, 39, 0.96), rgba(8, 15, 29, 0.88));
+    border-bottom: 1px solid var(--edge);
+    display: flex; align-items: center; gap: 12px;
+    z-index: 20;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+  .avatar-circle {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.32), rgba(10, 18, 34, 0.96));
+    overflow: hidden; border: 1px solid rgba(139, 92, 246, 0.28);
+    position: relative;
+    box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14), 0 0 18px rgba(34, 211, 238, 0.22);
+  }
+  .avatar-circle::after {
+    content: '';
+    position: absolute;
+    inset: -18%;
+    border-radius: 50%;
+    border: 1px dashed rgba(250, 204, 21, 0.28);
+    animation: pulseRing 5s linear infinite;
+  }
+  .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+  .profile-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .profile-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .profile-title { font-family: 'Audiowide', sans-serif; font-size: 14px; font-weight: 400; letter-spacing: 0.06em; text-shadow: 0 0 16px rgba(34, 211, 238, 0.2); }
+  .profile-badge { background: rgba(34,211,238,0.16); color: #9aefff; font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(34,211,238,0.3); text-transform: uppercase; letter-spacing: 0.12em; box-shadow: inset 0 0 12px rgba(34, 211, 238, 0.1); }
+  .profile-subtitle { font-size: 12px; color: var(--text-secondary); }
+  
+  /* Messages */
+  #msg-list {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    padding: 20px 16px 92px;
+    display: flex; flex-direction: column; gap: 24px;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  .msg-group { display: flex; gap: 12px; width: 100%; opacity: 0; animation: fadeIn 0.3s forwards; }
+  .msg-group.user { flex-direction: row-reverse; }
+  
+  .msg-avatar {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.24), rgba(10, 18, 34, 0.94));
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 14px rgba(34, 211, 238, 0.12);
+  }
+  .msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  
+  .msg-content {
+    max-width: 85%; display: flex; flex-direction: column; gap: 4px;
+  }
+  
+  .sender-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 2px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .user .sender-name { text-align: right; }
+  
+  .bubble {
+    padding: 10px 14px; border-radius: 18px;
+    font-size: 15px; line-height: 1.6;
+    word-wrap: break-word; white-space: pre-wrap;
+  }
+  .user .bubble { 
+    background: var(--msg-user); color: var(--text-primary);
+    border-top-right-radius: 4px;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    box-shadow: var(--shadow);
+  }
+  .ai .bubble { 
+    background: transparent; color: var(--text-primary);
+    padding: 0; /* AI text looks like raw text in C.AI */
+    text-shadow: 0 0 12px rgba(34, 211, 238, 0.08);
+  }
+  
+  /* Rich Text Styles */
+  .bubble em { color: #94a3b8; font-style: italic; }
+  .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); animation: blink 1s infinite; vertical-align: middle; }
+  
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Input Area */
+  #input-area {
+    padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(8, 15, 29, 0.86), rgba(6, 12, 24, 0.98));
+    border-top: 1px solid var(--edge);
+    display: flex; align-items: flex-end; gap: 10px;
+    z-index: 20;
+    box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.2);
+  }
+  
+  #chat-input {
+    flex: 1; background: rgba(20, 31, 54, 0.88); border: 1px solid rgba(130, 236, 255, 0.14);
+    border-radius: 24px; color: white;
+    padding: 10px 16px; font-size: 16px; font-family: 'Rajdhani', system-ui, sans-serif;
+    max-height: 120px; min-height: 44px;
+    resize: none; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  #chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12); background: rgba(22, 36, 60, 0.95); }
+  
+  #send-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--signal-gold), #22d3ee); color: #0b1020;
+    border: none; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+    transition: transform 0.1s, opacity 0.2s, box-shadow 0.2s, filter 0.2s;
+    box-shadow: 0 10px 18px rgba(34, 211, 238, 0.22);
+  }
+  #send-btn:disabled { opacity: 0.5; cursor: default; }
+  #send-btn:active:not(:disabled) { transform: scale(0.95); }
+  #send-btn:hover:not(:disabled),
+  #send-btn:focus-visible:not(:disabled) { box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.18), 0 14px 24px rgba(34, 211, 238, 0.28); filter: brightness(1.05); }
+
+  .feedback-stack {
+    position: absolute;
+    right: 12px;
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    z-index: 18;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+  }
+
+  .feedback-gif {
+    width: min(34vw, 130px);
+    max-width: 130px;
+    border-radius: 18px;
+    border: 1px solid rgba(130, 236, 255, 0.18);
+    background: rgba(8, 15, 29, 0.78);
+    box-shadow: 0 16px 28px rgba(0, 0, 0, 0.24);
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+    transition: opacity 0.24s ease, transform 0.24s ease;
+  }
+
+  .feedback-gif.show {
+    opacity: 0.96;
+    transform: translateY(0) scale(1);
+  }
+
+  .status-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(8, 16, 31, 0.84);
+    border: 1px solid rgba(130, 236, 255, 0.18);
+    color: var(--text-primary);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    opacity: 0.92;
+  }
+
+  .status-chip .status-label {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #9aefff;
+  }
+
+  .status-chip .status-value {
+    font-weight: 600;
+    color: #facc15;
+  }
+  
+  /* Utility */
+  .hidden { display: none !important; }
+  .glass-panel { background: rgba(24,24,27,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); }
+
+  /* [agent-note][stage2] preserve: chat-layout | reason: already mobile-safe, styling only */
+  /* [agent-note][stage3] resolved-font: title -> Audiowide, ui/body -> Rajdhani from catalogs/fonts.json */
+  /* [agent-note][stage3] resolved-audio: click/type/route/error + ambient loop -> catalogs/audios.json */
+  /* [agent-note][stage3] resolved-gif: route-confirm + idle-chat-feedback -> catalogs/gifs.json */
+  @keyframes pulseRing {
+    from { transform: rotate(0deg) scale(0.94); opacity: 0.45; }
+    to { transform: rotate(360deg) scale(1.06); opacity: 0.1; }
+  }
+
+  @media (max-width: 560px) {
+    .feedback-stack {
+      right: 8px;
+      bottom: calc(88px + env(safe-area-inset-bottom));
+      gap: 8px;
+    }
+
+    .feedback-gif {
+      width: min(30vw, 96px);
+      border-radius: 14px;
+    }
+
+    .status-chip {
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+
+    .profile-title {
+      font-size: 13px;
+    }
+  }
+</style>
+
+<!-- Game Config -->
+<script id="game-config" type="application/x-game-config">
+{
+  "heroSpeed": { "type": "number", "label": "Hero Speed", "value": 5, "min": 1, "max": 10 },
+  "themeColor": { "type": "color", "label": "Accent Color", "value": "#22d3ee" }
+}
+</script>
+</head>
+<body>
+
+<!-- Assets -->
+<div id="assets" style="display:none">
+  <!-- Reusing user asset for avatar -->
+  <img id="asset_player" data-editable="image" data-label="Signal Runner Sprite" src="assets/ui-avatars.com/api-name_User_background_22d3ee_color_fff.svg">
+  <!-- BGM -->
+  <audio id="bgm_main" data-editable="audio" data-label="BGM" src="" preload="auto" loop></audio>
+  <!-- SFX -->
+  <audio id="sfx_click" data-editable="audio" data-label="UI Click SFX" src="" preload="auto"></audio>
+  <audio id="sfx_type" data-editable="audio" data-label="Typing SFX" src="" preload="auto"></audio>
+  <audio id="sfx_route" data-editable="audio" data-label="Route Confirm SFX" src="" preload="auto"></audio>
+  <audio id="sfx_error" data-editable="audio" data-label="Blocked Action SFX" src="" preload="auto"></audio>
+  <!-- GIF feedback -->
+  <img id="gif_route" alt="Route confirmed feedback" src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20120%20120%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20x2%3D%221%22%20y1%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2322d3ee%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%238b5cf6%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%22120%22%20height%3D%22120%22%20rx%3D%2222%22%20fill%3D%22%2308111f%22/%3E%3Ccircle%20cx%3D%2260%22%20cy%3D%2260%22%20r%3D%2238%22%20fill%3D%22none%22%20stroke%3D%22url(%23g)%22%20stroke-width%3D%228%22%20stroke-dasharray%3D%2210%208%22/%3E%3Ccircle%20cx%3D%2260%22%20cy%3D%2228%22%20r%3D%228%22%20fill%3D%22%23facc15%22/%3E%3Cpath%20d%3D%22M28%2082%20L50%2060%20L64%2074%20L92%2046%22%20fill%3D%22none%22%20stroke%3D%22%23f4fbff%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E">
+  <img id="gif_chat" alt="Channel activity feedback" src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20120%20120%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22c%22%20x1%3D%220%22%20x2%3D%221%22%20y1%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23facc15%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2322d3ee%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%22120%22%20height%3D%22120%22%20rx%3D%2222%22%20fill%3D%22%2308111f%22/%3E%3Cpath%20d%3D%22M24%2032%20h72%22%20stroke%3D%22url(%23c)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M24%2060%20h52%22%20stroke%3D%22%23f4fbff%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M24%2088%20h66%22%20stroke%3D%22url(%23c)%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22/%3E%3Ccircle%20cx%3D%2292%22%20cy%3D%2260%22%20r%3D%229%22%20fill%3D%22%238b5cf6%22/%3E%3C/svg%3E">
+</div>
+
+<!-- Main Container -->
+<div id="game-container" class="relative w-full h-full">
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="ui-layer">
+    <div id="chat-container">
+      <header>
+        <div class="avatar-circle">
+          <img id="header-avatar" src="">
+        </div>
+        <div class="profile-meta">
+          <div class="profile-row">
+            <span class="profile-title">Signal Sprint</span>
+            <span class="profile-badge">arcade relay</span>
+          </div>
+          <span class="profile-subtitle">@night_shift_guide • tap the field to reroute the runner</span>
+        </div>
+      </header>
+      
+      <div id="msg-list">
+        <!-- Initial Greeting -->
+        <div class="msg-group ai">
+          <div class="msg-avatar"><img class="ai-avatar-src" src=""></div>
+          <div class="msg-content">
+            <div class="sender-name">Guide</div>
+            <div class="bubble">
+              *The neon courier paces across the grid while the relay beacon hums overhead.*
+              <br><br>
+              Send a message to brief the guide, or tap the field to redirect the runner's route.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="feedback-stack" aria-hidden="true">
+        <img id="feedback-route" class="feedback-gif" src="" alt="">
+        <img id="feedback-chat" class="feedback-gif" src="" alt="">
+        <div class="status-chip">
+          <span class="status-label">channel</span>
+          <span id="status-text" class="status-value">standby</span>
+        </div>
+      </div>
+      
+      <div id="input-area">
+        <textarea id="chat-input" rows="1" placeholder="Type a message for the guide..." autocomplete="off" aria-label="Chat with the guide"></textarea>
+        <button id="send-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- §2 System Invariants ---
+const CONFIG_DEFAULT = { heroSpeed: 5, themeColor: '#22d3ee' };
+window.gameConfig = { ...CONFIG_DEFAULT };
+try {
+  const raw = JSON.parse(document.getElementById('game-config').textContent);
+  for (const k in raw) window.gameConfig[k] = raw[k].value;
+} catch(e){}
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let dpr = 1;
+let cw = 0, ch = 0;
+let gameState = 'INIT';
+let lastTime = 0;
+let initialized = false;
+
+// --- Audio System (Web Audio API) ---
+let audioCtx = null;
+const sfxBuffers = {};
+const activeSfxCooldowns = new Map();
+const bgm = document.getElementById('bgm_main');
+
+const audioManifest = {
+  click: { elementId: 'sfx_click', volume: 0.52, cooldown: 90 },
+  type: { elementId: 'sfx_type', volume: 0.2, cooldown: 85 },
+  route: { elementId: 'sfx_route', volume: 0.42, cooldown: 140 },
+  error: { elementId: 'sfx_error', volume: 0.34, cooldown: 180 }
+};
+
+function ensureAudioContext() {
+  if (audioCtx) return audioCtx;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch (e) {
+    audioCtx = null;
+  }
+  return audioCtx;
+}
+
+async function loadSfx(id, url) {
+  const ctxRef = ensureAudioContext();
+  if (!ctxRef) return;
+  try {
+    const res = await fetch(url);
+    const buf = await res.arrayBuffer();
+    sfxBuffers[id] = await ctxRef.decodeAudioData(buf);
+  } catch(e) {
+    console.warn('SFX Load Fail', id);
+  }
+}
+
+function playSfx(id, pitch = 1) {
+  const now = performance.now();
+  const config = audioManifest[id] || {};
+  const nextAllowedAt = activeSfxCooldowns.get(id) || 0;
+  if (now < nextAllowedAt) return;
+
+  const ctxRef = ensureAudioContext();
+  if (!ctxRef) return;
+  if (ctxRef.state === 'suspended') ctxRef.resume().catch(() => {});
+  const buf = sfxBuffers[id];
+  if (buf) {
+    const src = ctxRef.createBufferSource();
+    const gain = ctxRef.createGain();
+    src.buffer = buf;
+    src.playbackRate.value = pitch;
+    gain.gain.value = config.volume ?? 0.35;
+    src.connect(gain);
+    gain.connect(ctxRef.destination);
+    src.start(0);
+    activeSfxCooldowns.set(id, now + (config.cooldown ?? 120));
+  }
+}
+
+function unlockAudio() {
+  const ctxRef = ensureAudioContext();
+  if (ctxRef && ctxRef.state === 'suspended') {
+    ctxRef.resume().catch(() => {});
+  }
+  bgm.volume = 0.2;
+  bgm.play().catch(()=>{});
+}
+
+function handleVisibilityAudio() {
+  if (document.hidden) {
+    bgm.pause();
+  } else if (initialized) {
+    unlockAudio();
+  }
+}
+
+function vibrate(style) {
+  if (navigator.vibrate) navigator.vibrate(style === 'heavy' ? 40 : 15);
+  window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+    action: 'vibrate', requestId: 'h5-'+Date.now(), version: '1.0', params: { style }
+  });
+}
+
+// --- Game Logic (Visual Backdrop) ---
+const world = {
+  avatar: { x: 0, y: 0, tx: 0, ty: 0, state: 'IDLE', mood: 'NEUTRAL' },
+  particles: []
+};
+
+const routeFeedback = document.getElementById('feedback-route');
+const chatFeedback = document.getElementById('feedback-chat');
+const statusText = document.getElementById('status-text');
+const feedbackTimers = { route: 0, chat: 0 };
+
+function setStatus(text) {
+  statusText.textContent = text;
+}
+
+function flashGif(kind, duration = 1600) {
+  const target = kind === 'route' ? routeFeedback : chatFeedback;
+  clearTimeout(feedbackTimers[kind]);
+  target.classList.add('show');
+  feedbackTimers[kind] = setTimeout(() => {
+    target.classList.remove('show');
+  }, duration);
+}
+
+function initGame() {
+  if (initialized) return;
+  initialized = true;
+  
+  // Load SFX
+  Object.entries(audioManifest).forEach(([id, config]) => {
+    const element = document.getElementById(config.elementId);
+    if (element) loadSfx(id, element.src);
+  });
+  
+  // Set initial avatar pos
+  world.avatar.x = cw / 2;
+  world.avatar.y = ch / 2;
+  world.avatar.tx = cw / 2;
+  world.avatar.ty = ch / 2;
+
+  // Sync Avatars
+  const assetSrc = document.getElementById('asset_player').src;
+  document.getElementById('header-avatar').src = assetSrc;
+  document.querySelectorAll('.ai-avatar-src').forEach(el => el.src = assetSrc);
+
+  routeFeedback.src = document.getElementById('gif_route').src;
+  chatFeedback.src = document.getElementById('gif_chat').src;
+
+  gameState = 'PLAYING';
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+  
+  bgm.volume = 0.2;
+  setStatus('live');
+}
+
+function update(dt) {
+  const av = world.avatar;
+  
+  // Smooth movement towards target
+  const dx = av.tx - av.x;
+  const dy = av.ty - av.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  
+  if (dist > 2) {
+    const speed = window.gameConfig.heroSpeed * 60 * dt;
+    av.x += (dx/dist) * Math.min(dist, speed);
+    av.y += (dy/dist) * Math.min(dist, speed);
+    av.state = 'WALK';
+  } else {
+    av.state = 'IDLE';
+    // Idle breathing
+    av.y += Math.sin(lastTime * 0.002) * 0.2;
+  }
+
+  // Random wandering if idle for too long
+  if (av.state === 'IDLE' && Math.random() < 0.005) {
+    const margin = 100;
+    av.tx = margin + Math.random() * (cw - margin*2);
+    av.ty = margin + Math.random() * (ch - margin*2);
+  }
+
+  // Particles
+  for (let i = world.particles.length - 1; i >= 0; i--) {
+    let p = world.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    if (p.life <= 0) world.particles.splice(i, 1);
+  }
+}
+
+function draw() {
+  // Clear with dark theme
+  ctx.fillStyle = '#0f0f11';
+  ctx.fillRect(0, 0, cw, ch);
+  
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  const step = 60;
+  const offX = Math.floor(lastTime * 0.01) % step;
+  const offY = Math.floor(lastTime * 0.01) % step;
+  
+  for(let x=offX; x<cw; x+=step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ch); ctx.stroke(); }
+  for(let y=offY; y<ch; y+=step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cw,y); ctx.stroke(); }
+
+  // Avatar
+  const av = world.avatar;
+  const img = document.getElementById('asset_player');
+  const size = 80;
+  
+  ctx.save();
+  ctx.translate(av.x, av.y);
+
+  const idlePulse = 0.5 + Math.sin(lastTime * 0.004) * 0.5;
+  const facing = Math.atan2(av.ty - av.y, av.tx - av.x || 1);
+  
+  ctx.save();
+  ctx.rotate(facing * 0.08);
+  const halo = ctx.createRadialGradient(0, 0, 8, 0, 0, size * 0.9);
+  halo.addColorStop(0, 'rgba(34,211,238,0.40)');
+  halo.addColorStop(0.55, 'rgba(139,92,246,0.18)');
+  halo.addColorStop(1, 'rgba(34,211,238,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.92, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(250, 204, 21, ${0.18 + idlePulse * 0.22})`;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 10]);
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.shadowColor = window.gameConfig.themeColor;
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = window.gameConfig.themeColor;
+  
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.beginPath();
+    ctx.arc(0, 0, size/2, 0, Math.PI*2);
+    ctx.clip();
+    ctx.drawImage(img, -size/2, -size/2, size, size);
+  } else {
+    ctx.beginPath(); ctx.arc(0, 0, size/2, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Particles
+  world.particles.forEach(p => {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color || '#fff';
+    if (p.char) {
+      ctx.font = '20px Audiowide';
+      ctx.fillText(p.char, p.x, p.y);
+    } else {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    }
+  });
+  ctx.globalAlpha = 1;
+}
+
+function gameLoop(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.1);
+  lastTime = time;
+  
+  if (gameState === 'PLAYING') {
+    update(dt);
+    draw();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// --- Chat System (Roleplay Engine) ---
+const msgList = document.getElementById('msg-list');
+const chatInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+
+let isGenerating = false;
+
+function scrollToBottom() {
+  msgList.scrollTop = msgList.scrollHeight;
+}
+
+function spawnParticle(char) {
+  const av = world.avatar;
+  for(let i=0; i<3; i++) {
+    world.particles.push({
+      x: av.x, y: av.y - 40,
+      vx: (Math.random()-0.5)*50, vy: -50 - Math.random()*50,
+      life: 1.5, char: char
+    });
+  }
+}
+
+const USER_AVATAR_DATA_URI = 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="signalUser" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="32" fill="url(#signalUser)"/>
+  <circle cx="32" cy="24" r="12" fill="#07111f"/>
+  <path d="M14 54c3-10 14-14 18-14s15 4 18 14" fill="#07111f"/>
+  <circle cx="46" cy="18" r="6" fill="#8b5cf6" opacity="0.9"/>
+</svg>
+`);
+function addMessage(text, isUser) {
+  const group = document.createElement('div');
+  group.className = `msg-group ${isUser ? 'user' : 'ai'}`;
+  
+  const avatarDiv = document.createElement('div');
+  avatarDiv.className = 'msg-avatar';
+  const img = document.createElement('img');
+  img.src = isUser 
+    ? USER_AVATAR_DATA_URI 
+    : document.getElementById('asset_player').src;
+  avatarDiv.appendChild(img);
+  
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'msg-content';
+  
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'sender-name';
+  nameDiv.innerText = isUser ? 'Operator' : 'Guide';
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  
+  if (isUser) {
+    bubble.innerText = text;
+    contentDiv.append(nameDiv, bubble);
+    group.append(avatarDiv, contentDiv);
+    msgList.appendChild(group);
+    playSfx('click', 1.15);
+    flashGif('chat', 1200);
+    setStatus('message sent');
+    scrollToBottom();
+  } else {
+    // AI Stream preparation
+    contentDiv.append(nameDiv, bubble);
+    group.append(avatarDiv, contentDiv);
+    msgList.appendChild(group);
+    streamText(bubble, text);
+  }
+}
+
+function formatRP(text) {
+  // Convert *text* to <em>text</em>
+  return text.replace(/\*(.*?)\*/g, '<em>*$1*</em>');
+}
+
+function streamText(element, fullText) {
+  isGenerating = true;
+  let index = 0;
+  const speed = 30; // ms per char
+  
+  element.innerHTML = '<span class="cursor"></span>';
+  setStatus('relay typing');
+  
+  const interval = setInterval(() => {
+    const current = fullText.substring(0, index + 1);
+    element.innerHTML = formatRP(current) + '<span class="cursor"></span>';
+    
+    // Scroll to bottom periodically
+    if (index % 5 === 0) scrollToBottom();
+    
+    // Typing sound occasionally
+    if (index % 3 === 0) playSfx('type', 0.92 + Math.random()*0.16);
+    
+    index++;
+    if (index >= fullText.length) {
+      clearInterval(interval);
+      element.innerHTML = formatRP(fullText); // Remove cursor
+      isGenerating = false;
+      playSfx('route', 1.0);
+      flashGif('chat', 1500);
+      setStatus('relay clear');
+      vibrate('light');
+    }
+  }, speed);
+}
+
+// Simple relay-chat logic
+function getResponse(input) {
+  const lower = input.toLowerCase();
+  
+  if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
+    spawnParticle('👋');
+    return "*The guide glances up from the glowing lane markers.* Shift check received. The runner is active and the channel is clear.";
+  }
+  if (lower.includes('name') || lower.includes('who are you')) {
+    return "I'm the night-shift guide. Keep the relay moving, keep the route clean, and the runner will stay on pace.";
+  }
+  if (lower.includes('route') || lower.includes('tap') || lower.includes('move')) {
+    spawnParticle('🛰️');
+    return "*A cyan waypoint flashes on the grid.* Tap anywhere on the field and the runner will drift toward that signal.";
+  }
+  if (lower.includes('fast') || lower.includes('speed') || lower.includes('quick')) {
+    spawnParticle('⚡');
+    return "The runner already moves at sprint pace. Your job is to keep the relay focused and the lane adjustments steady.";
+  }
+  
+  const fallbacks = [
+    "*The guide watches the beacon pulse.* Copy that. Keep feeding the relay and the runner will stay in motion.",
+    "*Static crackles softly across the channel.* The grid is quiet tonight, but the signal is holding.",
+    "Understood. Message traffic keeps the shift alive.",
+    "*The runner circles the lane and waits for the next ping.* Send another prompt when you're ready.",
+    "Route note logged. Tap the field if you want to pull the runner somewhere new.",
+    "*The guide nods toward the glowing canvas.* We stay on task, one signal at a time."
+  ];
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+}
+
+function handleSend() {
+  const text = chatInput.value.trim();
+  if (!text || isGenerating) {
+    if (!text) {
+      playSfx('error', 1);
+      setStatus('empty ping');
+    }
+    return;
+  }
+  
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  addMessage(text, true);
+  
+  // AI Delay
+  setTimeout(() => {
+    const reply = getResponse(text);
+    addMessage(reply, false);
+  }, 800 + Math.random() * 1000);
+}
+
+// Listeners
+chatInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = (this.scrollHeight) + 'px';
+});
+
+chatInput.addEventListener('focus', () => {
+  unlockAudio();
+  setStatus('input open');
+});
+
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    handleSend();
+  }
+});
+
+sendBtn.addEventListener('click', handleSend);
+
+// Global Input Handler (Strict)
+function handleGlobalInput(e) {
+  unlockAudio();
+  
+  // CRITICAL: Do NOT block inputs
+  if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(e.target.tagName)) return;
+  
+  // Only handle canvas clicks for effects
+  if (e.target === canvas) {
+    e.preventDefault(); // Prevent scroll on canvas only
+    // Move avatar to tap
+    const rect = canvas.getBoundingClientRect();
+    world.avatar.tx = (e.clientX - rect.left) * (cw / rect.width);
+    world.avatar.ty = (e.clientY - rect.top) * (ch / rect.height);
+    
+    // Visual feedback
+    world.particles.push({
+      x: world.avatar.tx, y: world.avatar.ty,
+      vx: 0, vy: 0, life: 0.5, r: 5, color: window.gameConfig.themeColor
+    });
+
+    playSfx('route', 0.96);
+    flashGif('route', 1500);
+    setStatus('route locked');
+  }
+}
+
+// --- Resize & Init ---
+const ro = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const cr = entry.contentRect;
+    cw = cr.width;
+    ch = cr.height;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!initialized) initGame();
+  }
+});
+
+document.addEventListener('visibilitychange', handleVisibilityAudio);
+
+document.addEventListener('DOMContentLoaded', () => {
+  dpr = window.devicePixelRatio || 1;
+  ro.observe(canvas);
+  
+  // Use capture phase to ensure we catch it, but filter carefully
+  window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+  
+  // Ensure input focus works on iOS
+  chatInput.addEventListener('touchstart', (e) => {
+    e.stopPropagation(); // Stop it from reaching global handler
+  }, { passive: true });
+});
+</script>
+</body>
+</html>

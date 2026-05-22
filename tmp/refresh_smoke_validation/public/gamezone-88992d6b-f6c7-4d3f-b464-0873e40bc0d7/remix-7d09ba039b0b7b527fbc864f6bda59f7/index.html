@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Neon Load Shift</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg-main: #0a1020;
+        --bg-floor: #131c2f;
+        --panel-bg: rgba(11, 20, 38, 0.72);
+        --panel-border: rgba(125, 247, 255, 0.3);
+        --panel-shadow: rgba(0, 0, 0, 0.35);
+        --theme-cyan: #7df7ff;
+        --theme-pink: #ff4dc4;
+        --theme-gold: #ffd36e;
+        --theme-violet: #8570ff;
+        --text-white: #f8fbff;
+        --text-yellow: #ffd36e;
+        --text-red: #ff6a7e;
+        --text-orange: #ffae57;
+        --text-green: #71f0a5;
+        --overlay: rgba(4, 8, 16, 0.84);
+        --floor-glow: rgba(125, 247, 255, 0.18);
+        --grid-line: rgba(133, 112, 255, 0.16);
+    }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(133, 112, 255, 0.22), transparent 34%),
+            radial-gradient(circle at bottom, rgba(255, 77, 196, 0.12), transparent 28%),
+            var(--bg-main);
+        font-family: 'Exo 2', system-ui, sans-serif;
+    }
+
+    body.shake {
+        animation: shake 0.5s infinite;
+    }
+
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background:
+            radial-gradient(circle at 50% 8%, rgba(125, 247, 255, 0.12), transparent 24%),
+            linear-gradient(180deg, #0b1120 0%, #09111d 45%, #070b14 100%);
+        user-select: none;
+        overflow: hidden;
+    }
+
+    #game-container::before,
+    #game-container::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    #game-container::before {
+        background:
+            radial-gradient(circle at 20% 18%, rgba(125, 247, 255, 0.16), transparent 0 18%),
+            radial-gradient(circle at 82% 14%, rgba(255, 77, 196, 0.16), transparent 0 16%),
+            radial-gradient(circle at 50% 0%, rgba(255, 211, 110, 0.12), transparent 0 24%);
+        opacity: 0.9;
+    }
+
+    #game-container::after {
+        background:
+            linear-gradient(180deg, transparent 0%, transparent 70%, rgba(125, 247, 255, 0.08) 100%);
+        mix-blend-mode: screen;
+    }
+
+    #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding:
+            max(16px, env(safe-area-inset-top))
+            max(16px, env(safe-area-inset-right))
+            max(16px, env(safe-area-inset-bottom))
+            max(16px, env(safe-area-inset-left));
+        pointer-events: none;
+        box-sizing: border-box;
+    }
+
+    .hidden { display: none !important; }
+
+    .glass {
+        background: linear-gradient(180deg, rgba(18, 30, 54, 0.82), rgba(8, 13, 25, 0.88));
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--panel-border);
+        box-shadow:
+            0 8px 28px var(--panel-shadow),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .neon-text { text-shadow: 0 0 6px rgba(125, 247, 255, 0.85), 0 0 14px rgba(125, 247, 255, 0.45); }
+    .neon-text-pink { text-shadow: 0 0 6px rgba(255, 77, 196, 0.82), 0 0 14px rgba(255, 77, 196, 0.42); }
+
+    #hud {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        width: 100%;
+        transition: opacity 0.2s;
+    }
+
+    .hud-column {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .hud-score {
+        color: var(--text-white);
+        font-family: 'Orbitron', sans-serif;
+        font-size: clamp(1.2rem, 3.4vw, 2rem);
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+
+    .hud-status {
+        font-family: 'Press Start 2P', monospace;
+        font-size: clamp(0.68rem, 1.8vw, 0.9rem);
+        font-weight: 400;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-top: 6px;
+    }
+
+    .status-safe { color: var(--text-green); }
+    .status-warning { color: var(--text-orange); }
+    .status-critical {
+        color: var(--text-red);
+        animation: pulse 0.8s infinite alternate;
+    }
+
+    .hud-meter {
+        padding: 10px 14px;
+        border-radius: 999px;
+    }
+
+    .hud-meter-text {
+        color: var(--theme-gold);
+        font-family: 'Press Start 2P', monospace;
+        font-size: clamp(0.68rem, 1.9vw, 0.9rem);
+        font-weight: 400;
+        text-transform: uppercase;
+    }
+
+    #game-over-screen {
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(circle at center, rgba(255, 77, 196, 0.16), transparent 30%),
+            var(--overlay);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+        text-align: center;
+        padding:
+            max(20px, env(safe-area-inset-top))
+            max(20px, env(safe-area-inset-right))
+            max(20px, env(safe-area-inset-bottom))
+            max(20px, env(safe-area-inset-left));
+        box-sizing: border-box;
+    }
+
+    .game-over-title {
+        margin: 0 0 8px;
+        color: var(--text-red);
+        font-family: 'Orbitron', sans-serif;
+        font-size: clamp(2.6rem, 10vw, 5rem);
+        line-height: 0.94;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+    }
+
+    .game-over-subtitle {
+        margin: 0 0 28px;
+        color: var(--text-white);
+        font-family: 'Press Start 2P', monospace;
+        font-size: clamp(0.72rem, 2.3vw, 1rem);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        line-height: 1.6;
+    }
+
+    .game-over-card {
+        padding: 24px;
+        border-radius: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        max-width: min(90vw, 420px);
+        width: min(90vw, 420px);
+    }
+
+    .final-score {
+        margin: 0;
+        color: var(--theme-cyan);
+        font-family: 'Press Start 2P', monospace;
+        font-size: clamp(0.72rem, 2.3vw, 0.98rem);
+        text-transform: uppercase;
+        line-height: 1.8;
+    }
+
+    .restart-btn {
+        border: 1px solid rgba(255, 255, 255, 0.75);
+        border-radius: 12px;
+        background: linear-gradient(90deg, var(--theme-pink), var(--theme-violet));
+        color: #fff;
+        font-family: 'Exo 2', system-ui, sans-serif;
+        font-size: clamp(1rem, 3vw, 1.35rem);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        padding: 14px 24px;
+        cursor: pointer;
+        transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+        text-transform: uppercase;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+
+    .restart-btn:hover,
+    .restart-btn:active {
+        transform: scale(1.05);
+        filter: brightness(1.08);
+        box-shadow: 0 12px 30px rgba(133, 112, 255, 0.34);
+    }
+
+    @keyframes shake {
+        0% { transform: translate(1px, 1px) rotate(0deg); }
+        10% { transform: translate(-1px, -2px) rotate(-1deg); }
+        20% { transform: translate(-3px, 0px) rotate(1deg); }
+        30% { transform: translate(3px, 2px) rotate(0deg); }
+        40% { transform: translate(1px, -1px) rotate(1deg); }
+        50% { transform: translate(-1px, 2px) rotate(-1deg); }
+        60% { transform: translate(-3px, 1px) rotate(0deg); }
+        70% { transform: translate(3px, 1px) rotate(-1deg); }
+        80% { transform: translate(-1px, -1px) rotate(1deg); }
+        90% { transform: translate(1px, 2px) rotate(0deg); }
+        100% { transform: translate(1px, -2px) rotate(-1deg); }
+    }
+
+    @keyframes pulse {
+        from { opacity: 0.7; }
+        to { opacity: 1; }
+    }
+
+    #feedback-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 35;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .feedback-gif {
+        position: absolute;
+        width: clamp(90px, 18vw, 160px);
+        opacity: 0;
+        transform: scale(0.72);
+        transition: opacity 0.22s ease, transform 0.22s ease;
+        filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.35));
+    }
+
+    .feedback-gif.visible {
+        opacity: 0.92;
+        transform: scale(1);
+    }
+
+    #pickup-gif {
+        right: 16px;
+        bottom: 116px;
+    }
+
+    #fail-gif {
+        left: 50%;
+        top: 18%;
+        transform: translateX(-50%) scale(0.72);
+        width: clamp(140px, 28vw, 220px);
+    }
+
+    #fail-gif.visible {
+        transform: translateX(-50%) scale(1);
+    }
+
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    @media (max-width: 640px) {
+        #ui-layer {
+            padding: 12px;
+        }
+
+        .hud-meter {
+            padding: 8px 12px;
+        }
+
+        .game-over-card {
+            padding: 20px;
+        }
+
+        #pickup-gif {
+            right: 10px;
+            bottom: 104px;
+        }
+
+        #fail-gif {
+            top: 22%;
+            width: clamp(120px, 34vw, 180px);
+        }
+
+        .hud-score {
+            font-size: clamp(1rem, 6vw, 1.35rem);
+        }
+
+        .hud-status,
+        .hud-meter-text,
+        .game-over-subtitle,
+        .final-score {
+            letter-spacing: 0.06em;
+        }
+    }
+</style>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "sensitivity": { "type": "number", "label": "Deck Sensitivity", "value": 2.5, "min": 1, "max": 5 },
+    "gravity": { "type": "number", "label": "Gravity Force", "value": 8, "min": 1, "max": 20 },
+    "growthRate": { "type": "number", "label": "Cargo Gain", "value": 0.02, "min": 0.0, "max": 0.1 },
+    "themeColor": { "type": "color", "label": "Signal Color", "value": "#00F0FF" }
+}
+</script>
+
+<!-- Assets -->
+<!-- [agent-note][stage4] resolved-font: body/title/retro-ui use approved catalogs/fonts.json URLs (Exo 2, Orbitron, Press Start 2P) -->
+<!-- [agent-note][stage3] resolved-audio: loop/collect/warning/fail/ui -> catalogs/audios.json -->
+<!-- [agent-note][stage3] resolved-gif: pickup/fail feedback -> catalogs/gifs.json -->
+<img id="asset_ref" data-editable="image" data-label="Reference Poster" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" hidden>
+<audio id="bgm_main" data-editable="audio" data-label="Gameplay Music" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_collect" data-editable="audio" data-label="Cargo Pickup" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_warning" data-editable="audio" data-label="Balance Warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+<audio id="sfx_snap" data-editable="audio" data-label="Load Crash" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3" preload="auto"></audio>
+<audio id="sfx_restart" data-editable="audio" data-label="Restart Confirm" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3" preload="auto"></audio>
+
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="feedback-layer" aria-hidden="true">
+        <img
+            id="pickup-gif"
+            class="feedback-gif"
+            alt=""
+            src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp">
+        <img
+            id="fail-gif"
+            class="feedback-gif"
+            alt=""
+            src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp">
+    </div>
+    
+    <div id="ui-layer">
+        <!-- HUD -->
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+        <div id="hud">
+            <div class="hud-column">
+                <span class="hud-score neon-text">🤖 LOAD: <span id="score-val">0</span>kg</span>
+                <span class="hud-status status-safe" id="status-text">CENTERED</span>
+            </div>
+            <div class="glass hud-meter">
+                <span class="hud-meter-text neon-text-pink">CORE: <span id="gains-val">100</span>%</span>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden">
+            <h1 class="game-over-title neon-text-pink">CORE<br>SPILLED</h1>
+            <p class="game-over-subtitle">THE DELIVERY BOT LOST ITS BALANCE</p>
+            <div class="glass game-over-card">
+                <p class="final-score">FINAL LOAD: <span id="final-score">0</span>kg</p>
+                <button id="restart-btn" class="restart-btn">
+                    STABILIZE AND RUN AGAIN
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// §0 System Invariants & Config
+const CONFIG = {
+    sensitivity: 2.5,
+    gravity: 8,
+    growthRate: 0.02,
+    themeColor: "#00F0FF"
+};
+
+// Load Config
+try {
+    const rawConfig = JSON.parse(document.getElementById('game-config').textContent);
+    for (const key in rawConfig) CONFIG[key] = rawConfig[key].value;
+    window.gameConfigDefs = rawConfig;
+    window.gameConfig = CONFIG;
+} catch (e) { console.error("Config parse failed", e); }
+
+// Globals
+let canvas, ctx;
+let cw = 0, ch = 0;
+let dpr = 1;
+let gameState = 'INIT'; // INIT, PLAYING, GAMEOVER
+let lastTime = 0;
+let initialized = false;
+let ro;
+
+// Audio System
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const sfxBuffers = {};
+const lastSfxPlay = {};
+const bgmEl = document.getElementById('bgm_main');
+const pickupGifEl = document.getElementById('pickup-gif');
+const failGifEl = document.getElementById('fail-gif');
+let gifTimers = {};
+let audioEnabled = false;
+let lastWarningTime = 0;
+
+// Game State
+let physics = {
+    angle: 0,       // Radians, 0 is up
+    angVel: 0,
+    baseX: 0,       // 0 to cw
+    targetBaseX: 0,
+    mass: 100,      // Score
+    scale: 1.0      // Visual & Physics multiplier
+};
+
+let shakes = []; // Falling cargo crates
+let particles = [];
+let gameTime = 0;
+let difficultyMultiplier = 1;
+
+// §1 Audio Implementation
+async function initAudio() {
+    const loadBuffer = async (id) => {
+        const el = document.getElementById(id);
+        if (!el || !el.src) return;
+
+        const srcUrl = new URL(el.src, window.location.href);
+        if (srcUrl.origin !== window.location.origin) return;
+
+        try {
+            const res = await fetch(srcUrl.href);
+            const arrayBuffer = await res.arrayBuffer();
+            sfxBuffers[id] = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) { console.warn(`SFX ${id} failed`, e); }
+    };
+    await Promise.all([
+        loadBuffer('sfx_collect'),
+        loadBuffer('sfx_warning'),
+        loadBuffer('sfx_snap'),
+        loadBuffer('sfx_restart')
+    ]);
+}
+
+function showFeedbackGif(type, duration = 900) {
+    const el = type === 'fail' ? failGifEl : pickupGifEl;
+    if (!el) return;
+    clearTimeout(gifTimers[type]);
+    el.classList.add('visible');
+    gifTimers[type] = setTimeout(() => {
+        el.classList.remove('visible');
+    }, duration);
+}
+
+function playSfx(id, options = {}) {
+    if (!audioEnabled) return;
+    const { volume = 0.4, cooldown = 0 } = options;
+    const now = performance.now();
+    if (cooldown && lastSfxPlay[id] && now - lastSfxPlay[id] < cooldown) return;
+    lastSfxPlay[id] = now;
+
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const buffer = sfxBuffers[id];
+    if (buffer) {
+        const source = audioCtx.createBufferSource();
+        const gain = audioCtx.createGain();
+        source.buffer = buffer;
+        gain.gain.value = volume;
+        source.connect(gain);
+        gain.connect(audioCtx.destination);
+        source.start(0);
+        return;
+    }
+
+    const mediaEl = document.getElementById(id);
+    if (mediaEl instanceof HTMLAudioElement && mediaEl.src) {
+        const clone = mediaEl.cloneNode();
+        clone.volume = Math.min(volume, 1);
+        clone.play().catch(() => {});
+        return;
+    }
+
+    // Fallback Synthesis
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    if (id === 'sfx_collect') {
+        osc.frequency.setValueAtTime(420, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+    } else if (id === 'sfx_warning') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(240, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(180, audioCtx.currentTime + 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.18);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.18);
+    } else if (id === 'sfx_restart') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(520, audioCtx.currentTime + 0.14);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.14);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.14);
+    } else {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.45);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.45);
+    }
+}
+
+function vibrate(type) {
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+        params: { style: type }
+    });
+}
+
+function syncBgmVolume() {
+    bgmEl.volume = gameState === 'GAMEOVER' ? 0.22 : 0.32;
+}
+
+function unlockAudio() {
+    audioEnabled = true;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    syncBgmVolume();
+    bgmEl.play().catch(() => {});
+}
+
+function pauseBgm() {
+    bgmEl.pause();
+}
+
+// §2 Lifecycle
+document.addEventListener('DOMContentLoaded', () => {
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d', { alpha: false });
+    
+    initAudio();
+
+    ro = new ResizeObserver(entries => {
+        const entry = entries[0];
+        const { width, height } = entry.contentRect;
+        resize(width, height);
+    });
+    ro.observe(canvas);
+    
+    // Input
+    window.addEventListener('pointerdown', handleInput, { passive: false });
+    window.addEventListener('pointermove', handleInput, { passive: false });
+    window.addEventListener('pointerup', handleInput, { passive: false });
+    window.addEventListener('pointercancel', handleInput, { passive: false });
+    document.getElementById('restart-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleInput(e);
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            pauseBgm();
+        } else if (audioEnabled && gameState === 'PLAYING') {
+            syncBgmVolume();
+            bgmEl.play().catch(() => {});
+        }
+    });
+});
+
+function resize(w, h) {
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cw = w;
+    ch = h;
+
+    if (!initialized) {
+        initGame();
+        initialized = true;
+        requestAnimationFrame(loop);
+    } else {
+        // Clamp base to new width
+        physics.baseX = Math.min(Math.max(physics.baseX, 0), cw);
+        physics.targetBaseX = Math.min(Math.max(physics.targetBaseX, 0), cw);
+    }
+}
+
+function initGame() {
+    gameState = 'PLAYING';
+    gameTime = 0;
+    difficultyMultiplier = 1;
+    
+    physics = {
+        angle: 0,
+        angVel: 0,
+        baseX: cw / 2,
+        targetBaseX: cw / 2,
+        mass: 60, // Starting load
+        scale: 1.0
+    };
+    
+    shakes = [];
+    particles = [];
+    
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('hud').style.opacity = '1';
+    document.body.classList.remove('shake');
+    failGifEl?.classList.remove('visible');
+    syncBgmVolume();
+    playSfx('sfx_restart', { volume: 0.34, cooldown: 150 });
+    unlockAudio();
+}
+
+// §3 Game Logic
+function handleInput(e) {
+    unlockAudio();
+    if (e.type === 'click' && e.target.id === 'restart-btn') {
+        initGame();
+        return;
+    }
+    
+    if (gameState === 'GAMEOVER') {
+        if (e.type === 'pointerdown' && gameTime > 1.0) { // Cooldown prevents accidental restart
+             initGame();
+        }
+        return;
+    }
+    
+    if (gameState === 'PLAYING') {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        
+        if (e.type === 'pointerdown' || e.type === 'pointermove') {
+            physics.targetBaseX = Math.max(0, Math.min(x, cw));
+        }
+    }
+}
+
+function update(dt) {
+    if (gameState !== 'PLAYING') return;
+
+    gameTime += dt;
+    difficultyMultiplier = 1 + (gameTime / 30); // Increases over 30s
+
+    // 1. Base Movement (Deck Shift)
+    const prevBaseX = physics.baseX;
+    const lerpFactor = 15 * dt; // Smooth response
+    physics.baseX += (physics.targetBaseX - physics.baseX) * lerpFactor;
+    
+    // Calculate effective acceleration (game feel approximation)
+    // Moving base RIGHT (positive vel) creates torque to rotate LEFT (negative angle)
+    const baseVel = (physics.baseX - prevBaseX) / dt;
+    const baseAccelForce = baseVel * CONFIG.sensitivity * 2.0; 
+
+    // 2. Inverted Pendulum Physics
+    // Torque = Gravity * sin(angle) - BaseAccel * cos(angle)
+    // Gravity pulls it down (increases angle magnitude)
+    // Base movement counters it
+    
+    // Scale gravity by "top heaviness" (scale)
+    const effectiveGravity = CONFIG.gravity * Math.sqrt(physics.scale); 
+    const torque = (effectiveGravity * Math.sin(physics.angle)) - (baseAccelForce * Math.cos(physics.angle) * 0.05);
+    
+    // Damping
+    physics.angVel += torque * dt;
+    physics.angVel *= 0.98; // Air resistance
+    physics.angle += physics.angVel * dt;
+
+    // 3. Growth & Stats
+    physics.scale += CONFIG.growthRate * 0.1 * dt; // Passive cargo growth
+    physics.mass += dt * 5; // Score is survival time basically
+    
+    // 4. Fail Condition
+    if (Math.abs(physics.angle) > 0.8) { // ~45 degrees
+        die();
+    }
+
+    // 5. Entities (Cargo Drops)
+    if (Math.random() < 0.01 * difficultyMultiplier) {
+        spawnShake();
+    }
+    
+    shakes.forEach((s, i) => {
+        s.y += s.speed * dt;
+        s.rot += s.rotSpeed * dt;
+        
+        // Collision with stack top
+        const bodyHeight = 250 * physics.scale;
+        const topX = physics.baseX + Math.sin(physics.angle) * bodyHeight;
+        const topY = ch - 100 - Math.cos(physics.angle) * bodyHeight;
+        
+        const dx = s.x - topX;
+        const dy = s.y - topY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 60 * physics.scale) {
+            collectShake(s, i);
+        } else if (s.y > ch + 50) {
+            shakes.splice(i, 1);
+        }
+    });
+
+    // 6. Particles
+    particles.forEach((p, i) => {
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+
+    // 7. HUD Update
+    document.getElementById('score-val').innerText = Math.floor(physics.mass);
+    document.getElementById('gains-val').innerText = Math.floor(physics.scale * 100);
+    
+    const statusEl = document.getElementById('status-text');
+    const angleDeg = Math.abs(physics.angle * 180 / Math.PI);
+    if (angleDeg > 30) {
+        statusEl.innerText = "TIPPING!";
+        statusEl.className = "hud-status status-critical";
+        if (gameTime - lastWarningTime > 1.1) {
+            playSfx('sfx_warning', { volume: 0.18, cooldown: 900 });
+            lastWarningTime = gameTime;
+        }
+        if (Math.random() < 0.3) spawnSweat();
+    } else if (angleDeg > 15) {
+        statusEl.innerText = "SWAYING";
+        statusEl.className = "hud-status status-warning";
+    } else {
+        statusEl.innerText = "CENTERED";
+        statusEl.className = "hud-status status-safe";
+    }
+}
+
+function spawnShake() {
+    shakes.push({
+        x: Math.random() * (cw - 40) + 20,
+        y: -50,
+        speed: 150 + Math.random() * 100,
+        type: Math.random() > 0.8 ? 'PRIORITY' : 'STANDARD',
+        rot: 0,
+        rotSpeed: (Math.random() - 0.5) * 5
+    });
+}
+
+function collectShake(s, index) {
+    shakes.splice(index, 1);
+    playSfx('sfx_collect', {
+        volume: s.type === 'PRIORITY' ? 0.42 : 0.28,
+        cooldown: 80
+    });
+    if (s.type === 'PRIORITY') {
+        playSfx('sfx_restart', { volume: 0.2, cooldown: 140 });
+    }
+    showFeedbackGif('pickup', s.type === 'PRIORITY' ? 1050 : 680);
+    vibrate('light');
+    
+    const bonus = s.type === 'PRIORITY' ? 0.2 : 0.05;
+    physics.scale += bonus;
+    physics.mass += s.type === 'PRIORITY' ? 50 : 10;
+    
+    // Popup Text
+    createParticle(s.x, s.y, s.type === 'PRIORITY' ? "BIG LOAD!" : "LOCKED IN!", true);
+}
+
+function spawnSweat() {
+    const bodyHeight = 250 * physics.scale;
+    const topX = physics.baseX + Math.sin(physics.angle) * bodyHeight;
+    const topY = ch - 100 - Math.cos(physics.angle) * bodyHeight;
+    createParticle(topX + (Math.random()-0.5)*40, topY + (Math.random()-0.5)*40, null, false);
+}
+
+function createParticle(x, y, text, isText) {
+        if (isText) {
+            particles.push({
+                x, y, vx: 0, vy: -50, life: 1.0, text, isText: true,
+                color: '#FFF', size: 20
+            });
+    } else {
+        particles.push({
+            x, y, vx: (Math.random()-0.5)*100, vy: Math.random()*100 + 50, life: 0.5, isText: false,
+            color: '#00F0FF', size: Math.random()*5 + 2
+        });
+    }
+}
+
+function die() {
+    gameState = 'GAMEOVER';
+    playSfx('sfx_snap', { volume: 0.45, cooldown: 400 });
+    showFeedbackGif('fail', 1800);
+    vibrate('heavy');
+    document.body.classList.add('shake');
+    document.getElementById('game-over-screen').classList.remove('hidden');
+    document.getElementById('final-score').innerText = Math.floor(physics.mass);
+    document.getElementById('hud').style.opacity = '0';
+    syncBgmVolume();
+}
+
+// §4 Rendering
+function draw() {
+    // Background Grid
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, ch);
+    skyGradient.addColorStop(0, '#0b1120');
+    skyGradient.addColorStop(0.55, '#0a1630');
+    skyGradient.addColorStop(1, '#070b14');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.save();
+    const halo = ctx.createRadialGradient(cw * 0.5, ch * 0.16, 10, cw * 0.5, ch * 0.16, Math.max(cw * 0.4, 220));
+    halo.addColorStop(0, 'rgba(125, 247, 255, 0.16)');
+    halo.addColorStop(0.55, 'rgba(133, 112, 255, 0.08)');
+    halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.restore();
+    
+    // Retro Grid
+    ctx.strokeStyle = 'rgba(133, 112, 255, 0.22)';
+    ctx.lineWidth = 1;
+    const gridSize = 50;
+    const offset = (gameTime * 50) % gridSize;
+    
+    ctx.beginPath();
+    for (let i = -5; i <= 5; i++) {
+        const x = cw/2 + i * (cw/4);
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, ch);
+    }
+    for (let y = offset; y < ch; y += gridSize) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(cw, y);
+    }
+    ctx.stroke();
+
+    // Draw Floor
+    const floorGradient = ctx.createLinearGradient(0, ch - 100, 0, ch);
+    floorGradient.addColorStop(0, '#18243c');
+    floorGradient.addColorStop(1, '#0b1220');
+    ctx.fillStyle = floorGradient;
+    ctx.fillRect(0, ch - 100, cw, 100);
+    ctx.fillStyle = 'rgba(125, 247, 255, 0.22)';
+    ctx.fillRect(0, ch - 100, cw, 10);
+    ctx.fillStyle = CONFIG.themeColor;
+    ctx.fillRect(0, ch - 100, cw, 4);
+
+    // Draw Player
+    drawLoader();
+
+    // Draw Cargo Drops
+    shakes.forEach(s => {
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.rot);
+        
+        const crateGradient = ctx.createLinearGradient(-16, -16, 16, 16);
+        crateGradient.addColorStop(0, s.type === 'PRIORITY' ? '#ffe69a' : '#edf7ff');
+        crateGradient.addColorStop(1, s.type === 'PRIORITY' ? '#ffb347' : '#7df7ff');
+        ctx.fillStyle = crateGradient;
+        ctx.strokeStyle = s.type === 'PRIORITY' ? '#7a3f00' : '#0c2948';
+        ctx.lineWidth = 2;
+        
+        ctx.beginPath();
+        ctx.roundRect(-16, -16, 32, 32, 7);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = s.type === 'PRIORITY' ? '#fff7d1' : '#123b63';
+        ctx.beginPath();
+        ctx.moveTo(-8, 0);
+        ctx.lineTo(8, 0);
+        ctx.moveTo(0, -8);
+        ctx.lineTo(0, 8);
+        ctx.stroke();
+        
+        ctx.restore();
+    });
+
+    // Draw Particles
+    particles.forEach(p => {
+        ctx.save();
+        if (p.isText) {
+            ctx.font = `${28 * (p.life + 0.5)}px Orbitron`;
+            ctx.fillStyle = `rgba(255, 255, 255, ${p.life})`;
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 3;
+            ctx.textAlign = 'center';
+            ctx.strokeText(p.text, p.x, p.y);
+            ctx.fillText(p.text, p.x, p.y);
+        } else {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.fill();
+        }
+        ctx.restore();
+    });
+}
+
+function drawLoader() {
+    const scale = physics.scale;
+    const baseX = physics.baseX;
+    const baseY = ch - 100;
+    const angle = physics.angle;
+    
+    const legLen = 80;
+    const waistX = baseX;
+    const waistY = baseY - legLen;
+    
+    ctx.save();
+    
+    // Support struts
+    ctx.strokeStyle = '#5fd8ff';
+    ctx.lineWidth = 8 * scale;
+    ctx.lineCap = 'round';
+    
+    ctx.beginPath();
+    ctx.moveTo(baseX - 20*scale, baseY);
+    ctx.lineTo(waistX - 10*scale, waistY);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(baseX + 20*scale, baseY);
+    ctx.lineTo(waistX + 10*scale, waistY);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(baseX - 24*scale, baseY);
+    ctx.lineTo(waistX - 13*scale, waistY);
+    ctx.moveTo(baseX + 24*scale, baseY);
+    ctx.lineTo(waistX + 13*scale, waistY);
+    ctx.stroke();
+    
+    // Base platform
+    const chassisGradient = ctx.createLinearGradient(waistX - 20*scale, waistY, waistX + 20*scale, waistY);
+    chassisGradient.addColorStop(0, '#ff4dc4');
+    chassisGradient.addColorStop(1, '#8570ff');
+    ctx.fillStyle = chassisGradient;
+    ctx.fillRect(waistX - 20*scale, waistY - 10*scale, 40*scale, 20*scale);
+    ctx.fillStyle = '#0d1320';
+    ctx.fillRect(waistX - 8*scale, waistY - 4*scale, 16*scale, 8*scale);
+    
+    // Stack pivot
+    ctx.translate(waistX, waistY);
+    ctx.rotate(angle);
+    
+    // Cargo tower
+    const towerGradient = ctx.createLinearGradient(0, 0, 0, -190 * scale);
+    towerGradient.addColorStop(0, '#93f3ff');
+    towerGradient.addColorStop(0.55, '#f4fbff');
+    towerGradient.addColorStop(1, '#ffd36e');
+    ctx.fillStyle = towerGradient;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-80 * scale, -180 * scale);
+    ctx.lineTo(80 * scale, -180 * scale);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(7, 17, 32, 0.32)';
+    ctx.lineWidth = 3 * scale;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-80 * scale, -180 * scale);
+    ctx.lineTo(80 * scale, -180 * scale);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Strap line
+    ctx.strokeStyle = 'rgba(12, 41, 72, 0.34)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -20 * scale);
+    ctx.lineTo(0, -160 * scale);
+    ctx.stroke();
+
+    // Face panel
+    ctx.fillStyle = '#0f1b2d';
+    ctx.fillRect(-24 * scale, -120 * scale, 48 * scale, 32 * scale);
+    ctx.fillStyle = Math.abs(angle) > 0.32 ? '#ff6a7e' : '#71f0a5';
+    ctx.beginPath();
+    ctx.arc(-10 * scale, -104 * scale, 5 * scale, 0, Math.PI * 2);
+    ctx.arc(10 * scale, -104 * scale, 5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(125, 247, 255, 0.5)';
+    ctx.lineWidth = 3 * scale;
+    ctx.beginPath();
+    if (Math.abs(angle) > 0.32) {
+        ctx.moveTo(-12 * scale, -92 * scale);
+        ctx.lineTo(12 * scale, -92 * scale);
+    } else {
+        ctx.arc(0, -92 * scale, 12 * scale, 0.1 * Math.PI, 0.9 * Math.PI);
+    }
+    ctx.stroke();
+    
+    // Beacon
+    ctx.fillStyle = '#ffe59f';
+    ctx.beginPath();
+    ctx.arc(0, -195 * scale, 15 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 211, 110, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, -195 * scale, 26 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Side rails
+    ctx.strokeStyle = '#d7f8ff';
+    ctx.lineWidth = 25 * scale;
+    
+    ctx.beginPath();
+    ctx.moveTo(-80 * scale, -170 * scale);
+    ctx.lineTo(-120 * scale, -220 * scale);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(80 * scale, -170 * scale);
+    ctx.lineTo(120 * scale, -220 * scale);
+    ctx.stroke();
+    
+    ctx.restore();
+}
+
+function loop(timestamp) {
+    if (!initialized) return;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    
+    update(dt);
+    draw();
+    
+    requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

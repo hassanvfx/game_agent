@@ -1,0 +1,143 @@
+{
+  "game_id": "gamezone-fad2cd22-0d5b-40de-a929-fe2885704bf7",
+  "run_id": null,
+  "remix_id": "remix-318ca7142836331bc4ac6e5f52a52f09",
+  "remix_parent_id": null,
+  "root_game_id": "gamezone-fad2cd22-0d5b-40de-a929-fe2885704bf7",
+  "lineage_depth": 0,
+  "aggregated_at": "2026-05-17T04:58:41Z",
+  "recreation_prompt_markdown": "Create a mobile-first single-screen arcade game called **Arcade Vault Rush** with a sleek neon cyber-vault theme and a polished casual score-chase feel. The entire experience should play on one screen using a full-screen canvas for gameplay and a lightweight overlay UI for menus and HUD. The player should not move a character around; instead, the core interaction is **direct tapping/clicking on falling loot** before it slips off the bottom of the screen.\n\nUse a futuristic visual presentation: deep navy-to-purple gradients, faint drifting light particles, subtle scrolling grid lines, glowing cyan accents, warm gold highlights, and glassy semi-transparent UI panels. The typography should feel arcade-styled and readable on phones. Include a **start screen** with the game title, a short pitch, and a visible breakdown of loot values; an **in-game HUD** with current score, three lives, and a mute/unmute button; and a **game-over screen** that shows the final recovered score and a restart button.\n\nThe gameplay loop should be immediate and readable:\n- Start a run.\n- Spawn loot from random horizontal positions above the screen.\n- Let loot fall downward continuously.\n- The player taps loot to collect it before it exits the bottom boundary.\n- Collected loot adds score and disappears instantly.\n- Missed loot costs one life.\n- The run ends after three misses.\n- The player restarts and tries to beat their score.\n\nInclude **four weighted loot types** with different values, frequencies, movement feel, and visual silhouettes:\n- a common **credit chip / coin** worth **10**\n- a common-to-uncommon **cash bill or crate** worth **100**\n- a rarer **gold bar** worth **500**\n- a rare premium **vault core / diamond** worth **1000**\n\nMake the valuable items less common and more exciting to hit. Give each item a distinct glow color and slightly different shape and drift behavior. A forgiving hitbox is important so the game feels responsive on touch screens.\n\nFeedback is a signature part of the experience. On successful taps:\n- play a crisp collection sound\n- spawn floating score text like `+100`\n- remove the item immediately\n- update the score HUD\n- trigger stronger celebratory feedback for the 500 and 1000 point items, such as flashy banners, animated overlays, or special audio stingers\n\nOn misses:\n- remove the item once it leaves the bottom of the screen\n- subtract one life\n- play a fail sound\n- flash an alert banner such as \u201cDROP MISSED\u201d or \u201cLAST LIFE\u201d\n- add a subtle screen shake or impact response\n\nProgression should be survival-based rather than level-based. The run becomes harder over time by increasing fall speed and increasing spawn frequency whenever the player reaches score milestones. The escalation should feel noticeable but fair, turning the game into a tense reflex test as the screen gets busier. Background music should loop during active play, and UI/button sounds should support start, restart, mute, success, warning, and fail moments.\n\nOverall, the tone should feel **fast, flashy, rewarding, and tense**, like a compact arcade high-score game designed for quick mobile sessions. Prioritize smooth touch input, readable effects, satisfying audiovisual feedback, and a clean one-more-run replay loop.",
+  "blueprint_markdown": "# Blueprint\n\n## High-level code structure\nThis game is implemented as a single self-contained HTML document with inline CSS and JavaScript.\n\n- **HTML layer**\n  - Full-screen `<canvas>` used for all gameplay rendering.\n  - Overlay UI layer containing:\n    - start screen\n    - HUD with score, lives, and mute toggle\n    - animated status banner\n    - success/failure GIF overlays\n    - game-over screen\n- **CSS layer**\n  - Mobile-first, arcade/neon visual styling\n  - glassmorphism HUD and menu panels\n  - responsive positioning for HUD, banners, and feedback GIFs\n  - touch-friendly interaction sizing\n- **JavaScript layer**\n  - `CONFIG`: gameplay tuning, item definitions, remote audio URLs, remote GIF URLs\n  - `AudioSys`: background music, sound effects, mute/unlock behavior\n  - `Feedback`: transient GIF and banner feedback system\n  - `Entity`: falling loot objects with weighted spawning, movement, drawing, and hit testing\n  - `Particle`: floating score/difficulty text effects\n  - `Game`: main state container, input handling, HUD updates, spawning, difficulty scaling, rendering, and loop\n\n## Game loop / state model\nThe game uses a classic `requestAnimationFrame` loop.\n\n### Main flow\n1. Load page and initialize systems.\n2. Show start screen while canvas background animates.\n3. On start:\n   - reset score, lives, speed, spawn rate, thresholds, entities, and particles\n   - hide menu and show HUD\n   - begin music and active play\n4. During each frame:\n   - increment frame counter\n   - spawn new falling entities based on `spawnRate`\n   - update each entity position\n   - remove and penalize missed entities\n   - update floating particles\n   - draw background grid, stars, loot, and particles\n5. If lives reach zero:\n   - stop active play\n   - stop BGM\n   - show fail feedback and game-over screen\n\n### State model\nCore mutable state is centralized in the `Game` object:\n\n- `active`: whether a run is in progress\n- `score`: accumulated value from tapped loot\n- `lives`: remaining misses before failure\n- `speed`: base falling speed\n- `spawnRate`: frame interval between spawns\n- `nextThreshold`: next score milestone for difficulty increase\n- `entities`: active falling loot objects\n- `particles`: active feedback text particles\n- `frame`: global frame counter\n\n## Player goals\nThe player\u2019s immediate goal is to tap falling loot before it exits the bottom of the screen.\n\nThe scoring hierarchy encourages prioritizing rarer, higher-value targets:\n- Credit Chip: 10\n- Cash Crate/Bill: 100\n- Gold Bar: 500\n- Vault Core/Diamond: 1000\n\nThe fail condition is missing 3 drops total. The long-form goal is therefore:\n- survive as long as possible\n- maintain accuracy under increasing speed/spawn pressure\n- maximize total recovered score\n\n## Interaction pattern\nThe interaction model is direct and simple:\n\n- **Primary input**: tap/click on falling objects\n- **Secondary input**: tap sound button to mute/unmute\n- **Menu input**: tap start/restart buttons\n\nThe game does not involve movement controls, drag mechanics, aiming reticles, or keyboard dependencies. It is a **single-screen reflex tapping game**.\n\n### Hit behavior\n- Input checks entities from topmost/latest backward through the array.\n- A hit grants score, spawns a score particle, removes the entity, and plays collection feedback.\n- High-value pickups trigger extra reward effects.\n\n### Miss behavior\n- If an entity falls below the screen:\n  - the player loses one life\n  - fail sound and fail GIF/banner feedback play\n  - a screen shake effect briefly triggers\n  - game over occurs at zero lives\n\n## Core systems\n### 1. Falling item spawn system\nItems spawn on a timed interval and are chosen by weighted randomness:\n- copper: common, low value\n- bill: common/uncommon, medium value\n- gold: less common, high value\n- diamond: rare, highest value\n\n### 2. Difficulty escalation system\nDifficulty increases every 2000 score:\n- falling speed increases\n- spawn interval decreases toward a minimum\n- warning audio and alert messaging signal escalation\n\nThis creates a survival score-chase loop.\n\n### 3. Rendering system\nCanvas rendering includes:\n- animated gradient backdrop\n- moving decorative particles/stars\n- scrolling grid lines\n- custom-drawn loot silhouettes\n- floating particle text\n\n### 4. Feedback system\nPlayer feedback is layered and immediate:\n- score text particles\n- sound effects\n- animated reward/failure GIF overlays\n- temporary status banners\n- visual life indicators\n- mild camera/body shake on misses\n\n### 5. UI state transitions\nThe game switches between:\n- start screen\n- in-run HUD\n- game-over screen\n\nTransitions are handled by toggling classes and updating DOM text.\n\n## Inferred genre / gameplay shape\nThis appears to be a **casual arcade reflex game** with strong overlap across:\n- clicker/tapper-style interaction\n- survival score attack structure\n- wave/escalation pressure\n- mobile-first single-screen arcade design\n\nIt is not a progression-heavy management or narrative game. It is best understood as a **reaction-based loot-catching tap arcade game** where the player taps descending valuables under rising time pressure.\n\n## Gameplay heuristic\nA likely optimal player heuristic is:\n\n1. Tap everything possible to avoid life loss.\n2. Prioritize larger-value items when multiple objects are on screen.\n3. Stay visually centered and scan upper-to-lower lanes rapidly.\n4. Expect difficulty spikes every major score threshold.\n5. Preserve lives early because later spawn density makes recovery harder.\n\n## Confidence notes\nConfidence is high on the core loop because the logic is explicit in code:\n- falling objects\n- tap hit detection\n- three-life fail state\n- escalating speed/spawn rate\n- score chase structure\n\nConfidence is moderate on labeling the exact subgenre because the category universe does not include a precise \u201carcade tapping catcher\u201d category, so classification must map to the closest available mechanic families.",
+  "semantic_tags": {
+    "game_title": "Arcade Vault Rush",
+    "tags": {
+      "theme": [
+        "cyberpunk",
+        "neon arcade",
+        "vault recovery",
+        "futuristic loot",
+        "retro-futurist UI"
+      ],
+      "setting": [
+        "abstract digital vault",
+        "high-tech security space",
+        "single-screen arcade field",
+        "sci-fi interface backdrop"
+      ],
+      "characters": [
+        "neon courier",
+        "player as remote recovery operator",
+        "no continuously rendered playable avatar"
+      ],
+      "mechanics": [
+        "tap falling objects",
+        "score attack",
+        "three-life failure state",
+        "weighted random spawns",
+        "difficulty escalation by score threshold",
+        "particle score feedback",
+        "miss penalty",
+        "endless survival run",
+        "single-screen reflex play",
+        "mobile-first touch controls"
+      ],
+      "mood": [
+        "energetic",
+        "tense",
+        "flashy",
+        "rewarding",
+        "arcadey",
+        "fast-paced"
+      ],
+      "similar_games": [
+        "Fruit Ninja",
+        "Coin Dozer",
+        "timed arcade tapper games",
+        "catch-the-falling-object mobile arcade games"
+      ],
+      "similar_franchises": [
+        "WarioWare",
+        "Geometry Wars presentation vibe",
+        "Temple Run score-chase pacing"
+      ]
+    }
+  },
+  "semantic_tags_source_mode": "split-json-legacy",
+  "identity": {
+    "title": "Arcade Vault Rush",
+    "premise": "A neon-styled arcade score attack game where the player taps falling valuables before they slip off-screen and trigger security failure.",
+    "interaction_model": "Single-screen touch/click tapping on falling targets, with start/restart buttons and a mute toggle.",
+    "objective": "Recover as much score as possible by tapping descending loot and avoid missing more than three items.",
+    "progression": "Score rises from collected loot, difficulty ramps every 2000 points through faster falling speed and denser spawns, and the run ends after three misses.",
+    "theme": "Retro-futurist cyber vault recovery with glowing currency, security alerts, and arcade UI flair.",
+    "mood": "Fast, punchy, flashy, tense, and rewarding.",
+    "likely_audience": "Casual mobile players, arcade score-chasers, and players who enjoy quick reflex-based touch games.",
+    "confidence_notes": [
+      "High confidence in the core loop: falling item tapping, score accumulation, miss-based lives, and escalating difficulty are explicit in code.",
+      "Moderate confidence in genre naming because the provided category universe does not include a precise 'arcade tapping catcher' label.",
+      "Presentation cues such as neon visuals, synth-like UI styling, reward banners, and GIF reactions are directly implemented."
+    ],
+    "recreation_prompt": "Create a mobile-first single-screen arcade tapping game called Arcade Vault Rush set in a neon cyber vault. The player does not control a character directly; instead, they tap falling loot before it drops off the bottom of the screen. Use a full-screen canvas with a futuristic gradient background, faint moving stars, and scrolling grid lines, plus an overlaid HUD showing score, three lives, and a sound toggle. Include a start screen, a game-over screen, and flashy reward/failure overlays. Spawn four weighted loot types that fall from random horizontal positions: a common low-value credit chip worth 10, a medium-value cash crate or bill worth 100, a rarer gold bar worth 500, and a rare vault core or diamond worth 1000. Make each type visually distinct, slightly animated, and tappable with a forgiving hit area. When tapped, remove the item, add its value to the score, show floating score particles, and play satisfying collection audio; high-value pickups should trigger extra celebratory feedback like banners or animated reaction overlays. If an item reaches the bottom of the screen, deduct one life, play a failure cue, flash an alert banner, and add a small screen-shake effect. End the run after three misses and show the final score with a restart button. Increase difficulty over time by making items fall faster and spawn more frequently at score thresholds, so the game becomes a reflex-based survival score chase. Keep controls simple and touch-friendly, with readable arcade typography, bright cyan/gold/orange/emerald highlights, glassy UI panels, and a polished energetic tone."
+  },
+  "identity_source_mode": "split-json-legacy",
+  "mechanics_classification": {
+    "game_title": "Arcade Vault Rush",
+    "selected_top_5": [
+      {
+        "rank": 1,
+        "category": "Clicker game",
+        "score": 0.83,
+        "reasoning": "The core interaction is repeated direct tapping on on-screen targets for immediate reward, making this the closest fit in the available category set even though the game is more reflex-arcade than idle clicker.",
+        "confidence": "high"
+      },
+      {
+        "rank": 2,
+        "category": "Wave defense game",
+        "score": 0.69,
+        "reasoning": "The player survives against continuous incoming objects, preventing losses by removing threats before they cross a failure boundary, which resembles a minimalist defense loop.",
+        "confidence": "medium"
+      },
+      {
+        "rank": 3,
+        "category": "Endless runner",
+        "score": 0.52,
+        "reasoning": "The run is endless until failure, score-based, and difficulty ramps over time, matching the survival escalation structure even though the player is tapping targets instead of steering a runner.",
+        "confidence": "medium"
+      },
+      {
+        "rank": 4,
+        "category": "Lane runner game",
+        "score": 0.38,
+        "reasoning": "Falling objects occupy implied horizontal lanes/positions and demand rapid target selection across the screen, but there is no lane switching avatar, so this is only a loose structural match.",
+        "confidence": "low"
+      },
+      {
+        "rank": 5,
+        "category": "Satisfying simulator",
+        "score": 0.31,
+        "reasoning": "The game strongly emphasizes satisfying audiovisual feedback through particles, glow, score pops, reward banners, and celebratory effects on valuable pickups.",
+        "confidence": "low"
+      }
+    ],
+    "uncertainty_notes": [
+      "The category universe does not include a direct label for a tap-to-catch arcade score attack game.",
+      "Some selected matches reflect structural overlap rather than exact genre identity.",
+      "A more precise external label would be arcade reflex tapper, score attack catcher, or falling-object tapping game."
+    ]
+  },
+  "mechanics_classification_source_mode": "split-json-legacy",
+  "screenshots_png": [],
+  "screenshots_jpg": [
+    "screenshots/01.jpg",
+    "screenshots/02.jpg"
+  ],
+  "deploy": {
+    "remix_uuid": "remix-318ca7142836331bc4ac6e5f52a52f09",
+    "source_output_dir": "games/raw/gamezone-fad2cd22-0d5b-40de-a929-fe2885704bf7",
+    "format_version": "1.0.0",
+    "normalized_screenshot_sources": [
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-fad2cd22-0d5b-40de-a929-fe2885704bf7/playwright_after_start.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-fad2cd22-0d5b-40de-a929-fe2885704bf7/playwright_initial.png"
+    ]
+  }
+}

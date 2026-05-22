@@ -1,0 +1,1 @@
+/* Removed unused mirrored Tailwind bundle for pipeline policy compliance. */

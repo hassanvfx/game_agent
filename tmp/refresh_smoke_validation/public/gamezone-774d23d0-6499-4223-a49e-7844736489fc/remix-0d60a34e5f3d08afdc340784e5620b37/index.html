@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Neon Bus Rush</title>
+    <!-- [agent-note][stage3] resolved-font: display/ui -> Orbitron + Exo 2 from catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+            --neon-cyan: #00f3ff;
+            --neon-pink: #bc13fe;
+            --neon-yellow: #fde047;
+            --neon-green: #00ff9d;
+            --bg-dark: #050510;
+            --bg-deep: #09091c;
+            --panel-bg: rgba(8, 12, 32, 0.76);
+            --panel-border: rgba(0, 243, 255, 0.42);
+            --text-soft: #c9d5f2;
+            --danger: #ff4d6d;
+            --font-ui: 'Exo 2', system-ui, sans-serif;
+            --font-display: 'Orbitron', 'Exo 2', system-ui, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(0, 243, 255, 0.08), transparent 35%),
+                radial-gradient(circle at bottom, rgba(188, 19, 254, 0.12), transparent 40%),
+                linear-gradient(180deg, #03030b 0%, var(--bg-deep) 100%);
+            font-family: var(--font-ui);
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            color: white;
+        }
+
+        #app {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            background:
+                radial-gradient(circle at 50% 0%, rgba(0, 243, 255, 0.08), transparent 28%),
+                linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0));
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .hidden { display: none !important; }
+
+        /* UI Overlay */
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 16px var(--safe-bottom) 16px;
+            z-index: 20;
+        }
+
+        .interactive {
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .interactive:active {
+            transform: scale(0.95);
+            opacity: 0.9;
+        }
+
+        /* HUD Elements */
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .leaderboard {
+            background: linear-gradient(180deg, rgba(18, 14, 44, 0.88), rgba(5, 8, 25, 0.8));
+            border: 1px solid rgba(188, 19, 254, 0.65);
+            padding: 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            width: 120px;
+            box-shadow: 0 0 18px rgba(188, 19, 254, 0.18);
+            backdrop-filter: blur(6px);
+        }
+        .lb-header {
+            font-size: 10px;
+            text-align: center;
+            color: #67e8f9;
+            border-bottom: 1px solid rgba(103, 232, 249, 0.25);
+            margin-bottom: 4px;
+            padding-bottom: 4px;
+            letter-spacing: 0.18em;
+            font-family: var(--font-display);
+        }
+        .lb-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+        }
+        .lb-row.me {
+            color: var(--neon-yellow);
+            font-weight: bold;
+        }
+        .lb-row.other {
+            color: #d1d5db;
+        }
+
+        .status-panel {
+            text-align: right;
+            background: linear-gradient(180deg, rgba(8, 12, 32, 0.78), rgba(8, 10, 24, 0.64));
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            padding: 8px 10px;
+            box-shadow: 0 0 18px rgba(0, 243, 255, 0.12);
+            backdrop-filter: blur(6px);
+        }
+        .score-display {
+            font-size: 2.75rem;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.35), 0 0 22px rgba(0, 243, 255, 0.18);
+            line-height: 0.95;
+            font-family: var(--font-display);
+        }
+        .score-unit {
+            font-size: 0.75rem;
+            font-style: normal;
+            color: var(--text-soft);
+            letter-spacing: 0.14em;
+        }
+        .speed-display {
+            font-size: 0.8rem;
+            color: #fde047;
+            margin-top: 4px;
+            letter-spacing: 0.1em;
+        }
+        .health-track {
+            width: 96px;
+            height: 8px;
+            background: rgba(31, 41, 55, 0.8);
+            margin-top: 8px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.14);
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.35);
+        }
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #ff9a5a);
+            width: 100%;
+            transition: width 0.2s ease;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+        }
+
+        /* Controls */
+        .controls-area {
+            margin-top: auto;
+            height: 180px;
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            padding-bottom: 10px;
+            width: 100%;
+            position: relative;
+        }
+
+        .pedal {
+            width: 80px;
+            height: 120px;
+            background: linear-gradient(180deg, rgba(18, 28, 54, 0.92), rgba(5, 11, 27, 0.9));
+            border: 2px solid rgba(0, 243, 255, 0.9);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            box-shadow: 0 0 12px rgba(0, 243, 255, 0.26), inset 0 0 10px rgba(255,255,255,0.04);
+            transition: all 0.1s;
+            position: relative;
+            overflow: hidden;
+        }
+        .pedal::before {
+            content: "";
+            position: absolute;
+            inset: 6px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            pointer-events: none;
+        }
+        .pedal.brake { 
+            border-color: #ff4d6d; 
+            box-shadow: 0 0 12px rgba(255, 77, 109, 0.28), inset 0 0 10px rgba(255,255,255,0.04); 
+        }
+        .pedal.active { 
+            background: linear-gradient(180deg, #67f4ff, #00b9d2); 
+            color: black; 
+            transform: translateY(2px);
+        }
+        .pedal.brake.active { 
+            background: linear-gradient(180deg, #ff7b93, #ff375f); 
+            color: white; 
+        }
+
+        /* Steering Slider */
+        .slider-track {
+            flex: 1;
+            height: 50px;
+            background:
+                linear-gradient(90deg, rgba(188, 19, 254, 0.08), rgba(0, 243, 255, 0.08)),
+                rgba(255, 255, 255, 0.08);
+            border-radius: 25px;
+            position: relative;
+            border: 2px solid rgba(188, 19, 254, 0.75);
+            box-shadow: 0 0 12px rgba(188, 19, 254, 0.25);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        .slider-thumb {
+            width: 44px;
+            height: 44px;
+            background: radial-gradient(circle at 35% 35%, #fff6a3, var(--neon-yellow));
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px rgba(253, 224, 71, 0.6);
+            pointer-events: none;
+            border: 2px solid rgba(255,255,255,0.5);
+        }
+
+        /* Screens */
+        #start-screen, #game-over-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            background:
+                radial-gradient(circle at top, rgba(0, 243, 255, 0.14), transparent 28%),
+                radial-gradient(circle at bottom, rgba(188, 19, 254, 0.18), transparent 36%),
+                rgba(5, 5, 16, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            padding: 24px;
+            box-sizing: border-box;
+        }
+        
+        .title-text {
+            font-size: clamp(2.7rem, 9vw, 4rem);
+            line-height: 0.94;
+            background: linear-gradient(180deg, #fff59d 0%, #7df9ff 38%, #ff77ff 100%);
+            -webkit-background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 0 12px rgba(0,243,255,0.24));
+            margin-bottom: 0.5rem;
+            font-family: var(--font-display);
+            letter-spacing: 0.06em;
+        }
+
+        .subtitle-text {
+            font-size: 0.875rem;
+            color: #f9a8d4;
+            letter-spacing: 0.28em;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .name-input {
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(0, 243, 255, 0.8);
+            color: white;
+            text-align: center;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            width: 12rem;
+            font-family: inherit;
+            box-shadow: inset 0 0 18px rgba(0, 243, 255, 0.08);
+            user-select: text;
+            -webkit-user-select: text;
+            touch-action: manipulation;
+        }
+        .name-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(103, 232, 249, 0.8);
+        }
+
+        .instructions {
+            font-size: 0.9rem;
+            color: var(--text-soft);
+            max-width: 230px;
+            margin-bottom: 1.5rem;
+            line-height: 1.45;
+            background: var(--panel-bg);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 0.8rem 1rem;
+            box-shadow: 0 0 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(180deg, #fff07c, var(--neon-yellow));
+            color: #121212;
+            font-size: 1.1rem;
+            padding: 0.95rem 2.6rem;
+            border-radius: 9999px;
+            font-weight: 700;
+            border: 2px solid rgba(255,255,255,0.95);
+            box-shadow: 0 0 20px rgba(253, 224, 71, 0.45);
+            text-transform: uppercase;
+            margin-top: 1rem;
+            font-family: var(--font-display);
+            letter-spacing: 0.06em;
+        }
+
+        .lang-btn {
+            position: fixed;
+            top: var(--safe-top);
+            left: 16px;
+            z-index: 100;
+            background: rgba(4, 10, 26, 0.72);
+            border: 1px solid rgba(255,255,255,0.55);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 12px;
+            backdrop-filter: blur(4px);
+            font-family: inherit;
+            box-shadow: 0 0 12px rgba(0, 243, 255, 0.15);
+        }
+        
+        /* Boarding Indicator */
+        #boarding-msg {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--neon-green);
+            font-size: 1.35rem;
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(0, 255, 157, 0.55);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(3, 14, 10, 0.58);
+            border: 1px solid rgba(0, 255, 157, 0.35);
+            border-radius: 14px;
+            padding: 12px 16px;
+            backdrop-filter: blur(6px);
+            font-family: var(--font-display);
+            letter-spacing: 0.05em;
+        }
+        .progress-bar {
+            width: 150px;
+            height: 10px;
+            background: rgba(0,0,0,0.45);
+            border: 1px solid rgba(255,255,255,0.55);
+            margin-top: 5px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #52ffb4, #00ff9d);
+            width: 0%;
+            transition: width 0.1s linear;
+            box-shadow: 0 0 10px rgba(0, 255, 157, 0.6);
+        }
+
+        .game-over-title {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: #ff738f;
+            margin-bottom: 0.5rem;
+            font-family: var(--font-display);
+            text-shadow: 0 0 16px rgba(255, 77, 109, 0.24);
+        }
+        .game-over-score {
+            font-size: 1.15rem;
+            color: #fff;
+            margin-bottom: 1.5rem;
+            letter-spacing: 0.04em;
+        }
+        .final-score {
+            color: var(--neon-yellow);
+        }
+
+        /* Scanlines */
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.03), rgba(188, 19, 254, 0.03));
+            background-size: 100% 4px, 100% 100%;
+            pointer-events: none;
+            z-index: 30;
+            opacity: 0.32;
+            mix-blend-mode: screen;
+        }
+
+        .reaction-overlay {
+            position: absolute;
+            right: 12px;
+            bottom: calc(var(--safe-bottom) + 196px);
+            width: min(28vw, 108px);
+            aspect-ratio: 1;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(5, 8, 20, 0.72);
+            box-shadow: 0 0 18px rgba(0, 243, 255, 0.16);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(10px) scale(0.95);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 24;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+
+        .reaction-overlay.show {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .reaction-overlay img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .reaction-overlay.crash {
+            border-color: rgba(255, 77, 109, 0.45);
+            box-shadow: 0 0 20px rgba(255, 77, 109, 0.28);
+        }
+
+        .reaction-overlay.pickup {
+            border-color: rgba(0, 255, 157, 0.42);
+            box-shadow: 0 0 20px rgba(0, 255, 157, 0.24);
+        }
+
+        @media (max-width: 640px) {
+            .reaction-overlay {
+                right: 10px;
+                bottom: calc(var(--safe-bottom) + 188px);
+                width: 86px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<button id="btn-lang" class="lang-btn interactive">EN</button>
+
+<div id="app">
+    <canvas id="game-canvas"></canvas>
+    <div class="scanlines"></div>
+    <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+    <!-- [agent-note][stage3] resolved-gif: pickup/crash reactions -> catalogs/gifs.json -->
+    <div id="reaction-overlay" class="reaction-overlay" aria-hidden="true">
+        <img id="reaction-gif" alt="" />
+    </div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="ui-layer hidden">
+        <!-- Top HUD -->
+        <div class="hud-top">
+            <!-- Leaderboard -->
+            <div class="leaderboard">
+                <div class="lb-header">ONLINE</div>
+                <div id="lb-content">
+                    <!-- Rows injected by JS -->
+                </div>
+            </div>
+            
+            <!-- Stats -->
+            <div class="status-panel">
+                <div class="score-display">
+                    <span id="score-val">0</span> <span class="score-unit" data-i18n="riders">RIDERS</span>
+                </div>
+                <div class="speed-display">
+                    <span data-i18n="speed">SPEED</span>: <span id="speed-val">0</span>
+                </div>
+                <div class="health-track">
+                    <div id="health-bar" class="health-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Boarding Message -->
+        <div id="boarding-msg">
+            <span data-i18n="boarding">PICKUP IN PROGRESS...</span>
+            <div class="progress-bar"><div id="board-fill" class="progress-fill"></div></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-area">
+            <div id="btn-brake" class="pedal brake interactive">
+                <span data-i18n="stop">BRAKE</span>
+            </div>
+            
+            <div id="steering-area" class="slider-track interactive">
+                <div id="steering-thumb" class="slider-thumb"></div>
+            </div>
+            
+            <div id="btn-gas" class="pedal interactive">
+                <span data-i18n="go">THRUST</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <div class="title-text">NEON<br>BUS RUSH</div>
+        <div class="subtitle-text" data-i18n="subtitle">ARCADE PICKUP CIRCUIT</div>
+        
+        <input type="text" id="player-name" placeholder="CALLSIGN" class="name-input">
+        
+        <div class="instructions">
+            <p data-i18n="instruct">Steer through traffic, brake inside green pickup zones, and load riders before rivals do.</p>
+        </div>
+
+        <button id="btn-start" class="btn-primary interactive">
+            <span data-i18n="play">START RUN</span>
+        </button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="hidden">
+        <div class="game-over-title" data-i18n="crashed">ROUTE ENDED</div>
+        <div class="game-over-score">
+            <span data-i18n="passengers">RIDERS MOVED</span>: <span id="final-score" class="final-score">0</span>
+        </div>
+        <button id="btn-restart" class="btn-primary interactive">
+            <span data-i18n="restart">RUN AGAIN</span>
+        </button>
+    </div>
+</div>
+
+<script type="module">
+/* 
+    NEON BUS RUSH
+    Single-file HTML5 Game
+*/
+
+// --- LOCALIZATION ---
+const Loc = {
+    lang: 'en',
+    data: {
+        en: {
+            speed: "SPEED",
+            riders: "RIDERS",
+            boarding: "PICKUP IN PROGRESS...",
+            stop: "BRAKE",
+            go: "THRUST",
+            subtitle: "ARCADE PICKUP CIRCUIT",
+            instruct: "Steer through traffic, brake inside green pickup zones, and load riders before rivals do.",
+            play: "START RUN",
+            crashed: "ROUTE ENDED",
+            passengers: "RIDERS MOVED",
+            restart: "RUN AGAIN",
+            you: "YOU"
+        }
+    },
+    toggle: function() {
+        this.lang = 'en';
+        this.update();
+        document.getElementById('btn-lang').innerText = "EN";
+    },
+    t: function(key) { return this.data.en[key] || key; },
+    update: function() {
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            el.innerText = this.t(el.getAttribute('data-i18n'));
+        });
+        document.getElementById('player-name').placeholder = "CALLSIGN";
+    }
+};
+
+// --- AUDIO ---
+const AudioSys = {
+    ctx: null,
+    gain: null,
+    loopGain: null,
+    loopOscs: [],
+    loopStarted: false,
+    lastPlayed: {},
+    cooldowns: {
+        pickup: 140,
+        crash: 280,
+        ui: 100,
+        warn: 1000,
+        blocked: 220,
+        start: 200,
+        over: 500
+    },
+    catalog: {
+        sfx: {
+            pickup: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3',
+            crash: 'https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3',
+            warning: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3',
+            blocked: 'https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3',
+            ui: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3',
+            start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3',
+            gameOver: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3'
+        },
+        loop: 'https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3'
+    },
+    players: {},
+    init: function() {
+        try {
+            if (!this.ctx) {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.gain = this.ctx.createGain();
+                this.gain.gain.value = 0.42;
+                this.gain.connect(this.ctx.destination);
+
+                this.loopGain = this.ctx.createGain();
+                this.loopGain.gain.value = 0.08;
+                this.loopGain.connect(this.gain);
+            }
+            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+            this.preparePlayers();
+        } catch (err) {
+            this.ctx = null;
+        }
+    },
+    preparePlayers: function() {
+        Object.entries(this.catalog.sfx).forEach(([key, url]) => {
+            if (!this.players[key]) {
+                const audio = new Audio(url);
+                audio.preload = 'auto';
+                audio.crossOrigin = 'anonymous';
+                this.players[key] = audio;
+            }
+        });
+
+        if (!this.players.loop) {
+            const loop = new Audio(this.catalog.loop);
+            loop.preload = 'auto';
+            loop.crossOrigin = 'anonymous';
+            loop.loop = true;
+            loop.volume = 0.2;
+            this.players.loop = loop;
+        }
+    },
+    allowed: function(name) {
+        const now = performance.now();
+        const wait = this.cooldowns[name] ?? 120;
+        if (now - (this.lastPlayed[name] || 0) < wait) return false;
+        this.lastPlayed[name] = now;
+        return true;
+    },
+    playCatalog: function(name, volume = 0.45) {
+        this.preparePlayers();
+        if (!this.players[name] || !this.allowed(name)) return;
+        try {
+            const base = this.players[name];
+            const audio = base.cloneNode();
+            audio.volume = volume;
+            audio.play().catch(() => {});
+        } catch (err) {}
+    },
+    playTone: function(freq, type, dur, vol=0.1) {
+        if (!this.ctx || !this.gain) return;
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        g.gain.setValueAtTime(vol, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        o.connect(g);
+        g.connect(this.gain);
+        o.start();
+        o.stop(this.ctx.currentTime + dur);
+    },
+    startLoop: function() {
+        this.init();
+        this.preparePlayers();
+
+        if (this.players.loop) {
+            this.players.loop.play().catch(() => {});
+        }
+
+        if (!this.ctx || this.loopStarted || !this.loopGain) return;
+        const baseFreqs = [64, 96, 144];
+        this.loopOscs = baseFreqs.map((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = idx === 0 ? 'sawtooth' : 'triangle';
+            osc.frequency.value = freq;
+            gain.gain.value = idx === 0 ? 0.018 : 0.012;
+            osc.connect(gain);
+            gain.connect(this.loopGain);
+            osc.start();
+            return { osc, gain, freq };
+        });
+        this.loopStarted = true;
+    },
+    updateLoop: function(speed, active) {
+        if (!this.ctx || !this.loopStarted || !this.loopGain) return;
+        const targetGain = active ? 0.08 + (speed / C.maxSpeed) * 0.06 : 0.02;
+        this.loopGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.12);
+        this.loopOscs.forEach((node, idx) => {
+            const spread = idx * 20;
+            node.osc.frequency.setTargetAtTime(node.freq + spread + speed * (0.02 + idx * 0.008), this.ctx.currentTime, 0.16);
+        });
+        if (this.players.loop) {
+            this.players.loop.volume = Math.min(0.2, 0.12 + (speed / C.maxSpeed) * 0.08);
+        }
+    },
+    stopLoop: function() {
+        if (this.players.loop) this.players.loop.pause();
+        if (!this.ctx || !this.loopStarted || !this.loopGain) return;
+        this.loopGain.gain.setTargetAtTime(0.001, this.ctx.currentTime, 0.16);
+    },
+    pickup: function() {
+        this.playCatalog('pickup', 0.42);
+        this.playTone(880, 'triangle', 0.08, 0.06);
+        setTimeout(() => this.playTone(1320, 'sine', 0.16, 0.05), 45);
+    },
+    crash: function() {
+        this.playCatalog('crash', 0.48);
+        this.playTone(92, 'sawtooth', 0.45, 0.18);
+    },
+    warning: function() {
+        this.playCatalog('warning', 0.34);
+        this.playTone(460, 'square', 0.08, 0.05);
+    },
+    blocked: function() {
+        this.playCatalog('blocked', 0.34);
+        this.playTone(180, 'square', 0.08, 0.05);
+    },
+    uiTap: function() {
+        this.playCatalog('ui', 0.24);
+        this.playTone(620, 'sine', 0.06, 0.04);
+    },
+    startRun: function() {
+        this.playCatalog('start', 0.38);
+        this.playTone(440, 'square', 0.16, 0.05);
+        setTimeout(() => this.playTone(660, 'triangle', 0.16, 0.04), 60);
+    },
+    gameOver: function() {
+        this.playCatalog('gameOver', 0.42);
+        this.playTone(160, 'sawtooth', 0.3, 0.09);
+        setTimeout(() => this.playTone(120, 'triangle', 0.45, 0.05), 90);
+    }
+};
+
+const ReactionFx = {
+    el: null,
+    img: null,
+    timer: null,
+    catalog: {
+        pickup: 'https://i.giphy.com/WOORRezUTVbs9iST3f.webp',
+        crash: 'https://i.giphy.com/rtxxvAkfoOALPS75m2.webp'
+    },
+    init: function() {
+        this.el = document.getElementById('reaction-overlay');
+        this.img = document.getElementById('reaction-gif');
+    },
+    show: function(type) {
+        if (!this.el || !this.img || !this.catalog[type]) return;
+        this.img.src = this.catalog[type];
+        this.img.alt = type === 'pickup' ? 'pickup celebration' : 'crash reaction';
+        this.el.className = `reaction-overlay show ${type}`;
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.hide(), type === 'pickup' ? 1400 : 1200);
+    },
+    hide: function() {
+        if (!this.el) return;
+        this.el.className = 'reaction-overlay';
+    }
+};
+
+// --- GAME CONFIG & STATE ---
+const C = {
+    laneCount: 4,
+    laneWidth: 0, // calc on resize
+    roadW: 0,
+    width: 0, height: 0,
+    maxSpeed: 800,
+    accel: 400,
+    brake: 1200,
+    friction: 150
+};
+
+const Game = {
+    active: false,
+    playerName: "Player",
+    score: 0,
+    health: 100,
+    roadY: 0,
+    speed: 0,
+    
+    // Entities
+    player: { x: 0.5, w: 0, h: 0, lane: 1 }, // x is 0-1 normalized to road width
+    cars: [],
+    bots: [],
+    stops: [],
+    particles: [],
+    
+    // Input
+    input: { steer: 0, gas: false, brake: false },
+    
+    // Boarding State
+    boarding: { active: false, timer: 0, duration: 1.5, stopRef: null },
+    
+    // Leaderboard
+    lbData: [],
+    
+    init: function(name) {
+        this.playerName = name || "Driver";
+        this.score = 0;
+        this.health = 100;
+        this.speed = 0;
+        this.roadY = 0;
+        this.active = true;
+        this.boarding = { active: false, timer: 0, duration: 1.5, stopRef: null };
+        
+        this.cars = [];
+        this.bots = [];
+        this.stops = [];
+        this.particles = [];
+        
+        this.resize();
+        
+        // Spawn initial bots
+        const botNames = ["Speedy", "Neo", "Glitch", "Turbo", "Viper", "Flux"];
+        for(let i=0; i<4; i++) {
+            this.bots.push({
+                name: botNames[i % botNames.length],
+                x: Math.random(),
+                y: -500 - Math.random() * 1000,
+                speed: 300 + Math.random() * 200,
+                lane: Math.floor(Math.random() * C.laneCount),
+                score: Math.floor(Math.random() * 50),
+                color: `hsl(${Math.random()*360}, 80%, 60%)`,
+                targetLane: -1,
+                laneTimer: 0
+            });
+        }
+        
+        // Initial Traffic
+        for(let i=0; i<5; i++) this.spawnCar();
+    },
+    
+    resize: function() {
+        C.width = window.innerWidth;
+        C.height = window.innerHeight;
+        C.laneWidth = Math.min(C.width / C.laneCount, 100);
+        C.roadW = C.laneWidth * C.laneCount;
+        
+        this.player.w = C.laneWidth * 0.5;
+        this.player.h = this.player.w * 2.2;
+    },
+    
+    spawnCar: function() {
+        this.cars.push({
+            lane: Math.floor(Math.random() * C.laneCount),
+            y: -1000 - Math.random() * 2000,
+            speed: 150 + Math.random() * 100,
+            color: '#555'
+        });
+    },
+    
+    spawnStop: function() {
+        // Pickup bays appear on the rightmost lane.
+        const lane = C.laneCount - 1; 
+        this.stops.push({
+            y: -1500,
+            lane: lane,
+            h: 300,
+            used: false
+        });
+    },
+    
+    update: function(dt) {
+        if (!this.active) return;
+        
+        // --- Player Physics ---
+        if (this.input.gas && !this.boarding.active) this.speed += C.accel * dt;
+        else if (this.input.brake) this.speed -= C.brake * dt;
+        else this.speed -= C.friction * dt;
+        
+        this.speed = Math.max(0, Math.min(this.speed, C.maxSpeed));
+        this.roadY += this.speed * dt;
+        
+        // Steering
+        if (!this.boarding.active) {
+            const steerSpeed = 2.0;
+            this.player.x += this.input.steer * steerSpeed * dt;
+            this.player.x = Math.max(0.1, Math.min(0.9, this.player.x));
+        }
+        
+        // Determine Player Lane (approx)
+        this.player.lane = Math.floor(this.player.x * C.laneCount);
+        
+        // --- Spawning ---
+        if (Math.random() < 0.01) this.spawnCar();
+        if (Math.random() < 0.005 && this.stops.length < 2) this.spawnStop();
+        
+        const roadLeft = (C.width - C.roadW) / 2;
+        const playerScreenY = C.height - 250;
+        const pX = roadLeft + this.player.x * C.roadW - this.player.w/2;
+        
+        // --- Pickup Bays & Boarding ---
+        let nearStop = false;
+        
+        this.stops.forEach(stop => {
+            stop.y += this.speed * dt;
+            
+            const stopLeft = roadLeft + stop.lane * C.laneWidth;
+            const inLane = (pX + this.player.w/2 > stopLeft && pX + this.player.w/2 < stopLeft + C.laneWidth);
+            const inY = (playerScreenY > stop.y && playerScreenY < stop.y + stop.h);
+            
+            if (inLane && inY && !stop.used) {
+                nearStop = true;
+                if (this.speed < 50 && Math.abs(this.speed) > -1) {
+                    if (!this.boarding.active) {
+                        this.boarding.active = true;
+                        this.boarding.timer = 0;
+                        this.boarding.stopRef = stop;
+                        document.getElementById('boarding-msg').style.display = 'flex';
+                        AudioSys.blocked();
+                    }
+                }
+            }
+            
+            if (stop.y > C.height + 200) stop.remove = true;
+        });
+        this.stops = this.stops.filter(s => !s.remove);
+        
+        // Boarding Logic
+        if (this.boarding.active) {
+            if (this.speed > 50 || !nearStop) {
+                this.boarding.active = false;
+                document.getElementById('boarding-msg').style.display = 'none';
+            } else {
+                this.speed = 0;
+                this.boarding.timer += dt;
+                const pct = Math.min(100, (this.boarding.timer / this.boarding.duration) * 100);
+                document.getElementById('board-fill').style.width = pct + '%';
+                
+                if (Math.random() < 0.3) {
+                    this.particles.push({
+                        x: pX + this.player.w + 10,
+                        y: playerScreenY + Math.random() * this.player.h,
+                        vx: -50 - Math.random()*50,
+                        vy: 0,
+                        life: 0.5,
+                        color: '#fff'
+                    });
+                }
+                
+                if (this.boarding.timer >= this.boarding.duration) {
+                    this.score += 10 + Math.floor(Math.random()*5);
+                    this.boarding.active = false;
+                    this.boarding.stopRef.used = true;
+                    this.boarding.stopRef.color = '#333';
+                    document.getElementById('boarding-msg').style.display = 'none';
+                    AudioSys.pickup();
+                    ReactionFx.show('pickup');
+                }
+            }
+        }
+        
+        // --- Traffic Logic ---
+        this.cars.forEach(car => {
+            car.y += (this.speed - car.speed) * dt;
+            
+            const cX = roadLeft + car.lane * C.laneWidth + (C.laneWidth - this.player.w)/2;
+            
+            if (Math.abs(pX - cX) < this.player.w * 0.8 &&
+                Math.abs(0 - car.y) < this.player.h * 0.8) {
+                this.health -= 20;
+                car.y += 300;
+                this.speed *= 0.5;
+                UI.shake();
+                AudioSys.crash();
+                ReactionFx.show('crash');
+            }
+            
+            if (car.y > 500) car.remove = true;
+            if (car.y < -3000) car.remove = true;
+        });
+        this.cars = this.cars.filter(c => !c.remove);
+        
+        // --- Bot Logic ---
+        this.bots.forEach(bot => {
+            bot.y += (this.speed - bot.speed) * dt;
+            
+            bot.laneTimer -= dt;
+            if (bot.laneTimer < 0) {
+                if (Math.random() < 0.3) {
+                    bot.targetLane = Math.floor(Math.random() * C.laneCount);
+                    bot.laneTimer = 2 + Math.random() * 3;
+                }
+            }
+            
+            if (bot.targetLane !== -1) {
+                if (bot.lane < bot.targetLane) bot.lane += 2 * dt;
+                else if (bot.lane > bot.targetLane) bot.lane -= 2 * dt;
+                
+                if (Math.abs(bot.lane - bot.targetLane) < 0.1) {
+                    bot.lane = bot.targetLane;
+                    bot.targetLane = -1;
+                }
+            }
+            
+            if (Math.random() < 0.01) bot.score += 1;
+            
+            if (bot.y > 600) {
+                bot.y = -1000 - Math.random() * 1000;
+                bot.score += 5;
+            }
+            if (bot.y < -2500) bot.y = -500;
+        });
+        
+        // --- Particles ---
+        this.particles.forEach(p => {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+        });
+        this.particles = this.particles.filter(p => p.life > 0);
+        
+        // --- Game Over Check ---
+        if (this.health <= 0) {
+            this.endGame();
+        }
+        
+        if (this.health <= 35) {
+            AudioSys.warning();
+        }
+
+        AudioSys.updateLoop(this.speed, this.active);
+
+        // --- UI Updates ---
+        this.updateLeaderboard();
+        document.getElementById('score-val').innerText = this.score;
+        document.getElementById('speed-val').innerText = Math.floor(this.speed / 10);
+        document.getElementById('health-bar').style.width = this.health + '%';
+    },
+    
+    updateLeaderboard: function() {
+        let all = [...this.bots, { name: this.playerName, score: this.score, isMe: true }];
+        all.sort((a,b) => b.score - a.score);
+        
+        const lbEl = document.getElementById('lb-content');
+        let html = '';
+        all.slice(0, 5).forEach((p, i) => {
+            const cls = p.isMe ? 'lb-row me' : 'lb-row other';
+            const name = p.isMe ? Loc.t('you') : p.name;
+            html += `<div class="${cls}"><span>${i+1}. ${name}</span><span>${p.score}</span></div>`;
+        });
+        lbEl.innerHTML = html;
+    },
+    
+    render: function(ctx) {
+        ctx.fillStyle = "#050510";
+        ctx.fillRect(0, 0, C.width, C.height);
+        
+        const roadLeft = (C.width - C.roadW) / 2;
+        const playerScreenY = C.height - 250;
+        
+        ctx.fillStyle = "#0a0a1a";
+        ctx.fillRect(roadLeft, 0, C.roadW, C.height);
+        
+        ctx.strokeStyle = "rgba(188, 19, 254, 0.2)";
+        ctx.lineWidth = 2;
+        const gridOff = this.roadY % 100;
+        
+        ctx.strokeStyle = "rgba(0, 243, 255, 0.3)";
+        ctx.setLineDash([40, 60]);
+        ctx.lineDashOffset = -this.roadY;
+        for(let i=1; i<C.laneCount; i++) {
+            const x = roadLeft + i * C.laneWidth;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, C.height);
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        
+        this.stops.forEach(stop => {
+            const x = roadLeft + stop.lane * C.laneWidth + 5;
+            const y = playerScreenY + stop.y;
+            const w = C.laneWidth - 10;
+            
+            ctx.fillStyle = stop.used ? "rgba(50,50,50,0.5)" : "rgba(0, 255, 157, 0.2)";
+            ctx.fillRect(x, y, w, stop.h);
+            ctx.strokeStyle = stop.used ? "#555" : "#00ff9d";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, stop.h);
+            
+            if (!stop.used) {
+                ctx.fillStyle = "#c6fff0";
+                ctx.font = "700 11px 'Exo 2', sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("PICKUP", x + w/2, y + stop.h/2);
+            }
+        });
+        
+        this.bots.forEach(bot => {
+            const x = roadLeft + bot.lane * C.laneWidth + (C.laneWidth - this.player.w)/2;
+            const y = playerScreenY + bot.y;
+            this.drawBus(ctx, x, y, this.player.w, this.player.h, bot.color, false, bot.name);
+        });
+        
+        this.cars.forEach(car => {
+            const x = roadLeft + car.lane * C.laneWidth + (C.laneWidth - this.player.w)/2;
+            const y = playerScreenY + car.y;
+            ctx.fillStyle = car.color;
+            ctx.fillRect(x, y, this.player.w, this.player.h * 0.6);
+            ctx.fillStyle = "#f00";
+            ctx.fillRect(x+2, y+this.player.h*0.6-5, 5, 5);
+            ctx.fillRect(x+this.player.w-7, y+this.player.h*0.6-5, 5, 5);
+        });
+        
+        const pX = roadLeft + this.player.x * C.roadW - this.player.w/2;
+        this.drawBus(ctx, pX, playerScreenY, this.player.w, this.player.h, '#fde047', true, this.playerName);
+        
+        ctx.fillStyle = "#fff";
+        this.particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+    },
+    
+    drawBus: function(ctx, x, y, w, h, color, isPlayer, label) {
+        if (isPlayer) {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 18;
+        }
+        
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = isPlayer ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.18)";
+        ctx.fillRect(x + 3, y + 3, w - 6, h * 0.1);
+
+        ctx.fillStyle = "#08111d";
+        ctx.fillRect(x + 3, y + 7, w - 6, h * 0.19);
+        ctx.fillRect(x + 4, y + h * 0.32, w - 8, h * 0.34);
+
+        ctx.fillStyle = isPlayer ? "rgba(0, 243, 255, 0.16)" : "rgba(255,255,255,0.08)";
+        ctx.fillRect(x + 4, y + h * 0.68, w - 8, h * 0.18);
+
+        ctx.fillStyle = this.input.brake && isPlayer ? "#ff375f" : "#880000";
+        ctx.fillRect(x + 2, y + h - 6, 8, 5);
+        ctx.fillRect(x + w - 10, y + h - 6, 8, 5);
+
+        ctx.fillStyle = "#0b0b16";
+        ctx.fillRect(x + 4, y + h - 10, w - 8, 4);
+
+        if (isPlayer) {
+            ctx.fillStyle = "rgba(255,255,255,0.75)";
+            ctx.beginPath();
+            ctx.arc(x + w / 2, y + h * 0.18, Math.max(4, w * 0.12), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        if (label) {
+            ctx.fillStyle = "#fff";
+            ctx.font = "700 10px 'Exo 2', sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(label, x + w/2, y - 10);
+        }
+    },
+    
+    endGame: function() {
+        this.active = false;
+        AudioSys.stopLoop();
+        AudioSys.gameOver();
+        document.getElementById('final-score').innerText = this.score;
+        document.getElementById('ui-layer').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    }
+};
+
+// --- UI CONTROLLER ---
+const UI = {
+    init: function() {
+        Loc.update();
+        ReactionFx.init();
+        
+        document.getElementById('btn-lang').onclick = () => {
+            AudioSys.init();
+            Loc.toggle();
+            AudioSys.uiTap();
+        };
+        
+        document.getElementById('btn-start').onclick = () => {
+            const name = document.getElementById('player-name').value;
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('ui-layer').classList.remove('hidden');
+            AudioSys.init();
+            AudioSys.startRun();
+            AudioSys.startLoop();
+            Game.init(name);
+            this.loop();
+        };
+        
+        document.getElementById('btn-restart').onclick = () => {
+            AudioSys.init();
+            AudioSys.uiTap();
+            AudioSys.startLoop();
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('ui-layer').classList.remove('hidden');
+            Game.init(Game.playerName);
+        };
+        
+        this.bindPedal('btn-gas', 'gas');
+        this.bindPedal('btn-brake', 'brake');
+        this.bindSlider();
+        
+        window.addEventListener('resize', () => Game.resize());
+    },
+    
+    loop: function() {
+        const now = performance.now();
+        const dt = Math.min((now - (this.lastTime || now)) / 1000, 0.1);
+        this.lastTime = now;
+        
+        Game.update(dt);
+        
+        const cvs = document.getElementById('game-canvas');
+        const ctx = cvs.getContext('2d');
+        cvs.width = C.width;
+        cvs.height = C.height;
+        Game.render(ctx);
+        
+        if (Game.active || document.getElementById('game-over-screen').classList.contains('hidden')) {
+            requestAnimationFrame(() => this.loop());
+        }
+    },
+    
+    bindPedal: function(id, key) {
+        const el = document.getElementById(id);
+        const on = (e) => {
+            if (e.cancelable) e.preventDefault();
+            Game.input[key] = true;
+            el.classList.add('active');
+        };
+        const off = (e) => {
+            if (e.cancelable) e.preventDefault();
+            Game.input[key] = false;
+            el.classList.remove('active');
+        };
+        el.addEventListener('pointerdown', on);
+        el.addEventListener('pointerup', off);
+        el.addEventListener('pointerleave', off);
+        el.addEventListener('pointercancel', off);
+    },
+    
+    bindSlider: function() {
+        const area = document.getElementById('steering-area');
+        const thumb = document.getElementById('steering-thumb');
+        let active = false;
+        
+        const move = (e) => {
+            if(!active) return;
+            const rect = area.getBoundingClientRect();
+            let x = (e.clientX - rect.left) / rect.width;
+            x = Math.max(0, Math.min(1, x));
+            
+            Game.input.steer = (x - 0.5) * 2; 
+            thumb.style.left = (x * 100) + '%';
+        };
+        
+        area.addEventListener('pointerdown', (e) => { 
+            active=true; 
+            area.setPointerCapture(e.pointerId); 
+            move(e); 
+        });
+        area.addEventListener('pointermove', move);
+        
+        const end = () => { 
+            active=false; 
+            Game.input.steer = 0; 
+            thumb.style.left = '50%'; 
+        };
+        area.addEventListener('pointerup', end);
+        area.addEventListener('pointercancel', end);
+    },
+    
+    shake: function() {
+        const app = document.getElementById('app');
+        app.style.transform = `translate(${Math.random()*10-5}px, ${Math.random()*10-5}px)`;
+        setTimeout(() => app.style.transform = 'none', 100);
+        navigator.vibrate?.(200);
+    }
+};
+
+window.onload = () => UI.init();
+</script>
+</body>
+</html>

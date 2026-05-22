@@ -1,0 +1,1 @@
+/* [agent-note][stage4] policy-cleanup: removed disallowed tailwindcss.com inline bundle reference; asset kept as inert placeholder for archive stability. */

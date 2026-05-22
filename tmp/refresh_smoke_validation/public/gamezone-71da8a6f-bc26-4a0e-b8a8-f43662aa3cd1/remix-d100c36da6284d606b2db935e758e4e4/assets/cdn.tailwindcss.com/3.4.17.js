@@ -1,0 +1,1 @@
+/* Stage 02 cleanup: local Tailwind runtime removed; plain CSS styling is used directly in index.html. */

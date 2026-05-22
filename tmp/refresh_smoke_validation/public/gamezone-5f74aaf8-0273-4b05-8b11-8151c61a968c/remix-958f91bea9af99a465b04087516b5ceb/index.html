@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Pocket Signal AI</title>
+<!-- [agent-note][stage3] resolved-font: title/ui -> Audiowide + Rajdhani from catalogs/fonts.json -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;600;700&family=Material+Symbols+Rounded" rel="stylesheet">
+<style>
+    :root {
+        --bg: #07111f;
+        --bg-glow: rgba(69, 211, 255, 0.18);
+        --panel: rgba(9, 23, 43, 0.72);
+        --panel-border: rgba(113, 227, 255, 0.28);
+        --text: #ebf8ff;
+        --muted: #9cb7d2;
+        --muted-light: #78a3c7;
+        --accent: #61d6ff;
+        --accent-strong: #8d7bff;
+        --signal-gold: #ffd66b;
+        --bubble-ai: rgba(7, 16, 31, 0.82);
+        --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.22);
+        --shadow-blue: 0 14px 28px rgba(97, 214, 255, 0.22);
+        --shadow-send: 0 12px 28px rgba(97, 214, 255, 0.38);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(141, 123, 255, 0.22), transparent 35%),
+            radial-gradient(circle at 20% 20%, var(--bg-glow), transparent 30%),
+            linear-gradient(180deg, #08101d 0%, #09172a 48%, #050c15 100%);
+        font-family: 'Rajdhani', system-ui, sans-serif;
+    }
+
+    body {
+        color: var(--text);
+        letter-spacing: 0.01em;
+    }
+
+    canvas {
+        display: block;
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        touch-action: none;
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        isolation: isolate;
+    }
+
+    #game-container::before,
+    #game-container::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    #game-container::before {
+        background:
+            linear-gradient(120deg, rgba(97, 214, 255, 0.08), transparent 28%, transparent 72%, rgba(255, 214, 107, 0.08)),
+            repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 8px);
+        mix-blend-mode: screen;
+        opacity: 0.85;
+    }
+
+    #game-container::after {
+        inset: 0.6rem;
+        border: 1px solid rgba(97, 214, 255, 0.12);
+        border-radius: 1.5rem;
+        box-shadow: inset 0 0 30px rgba(97, 214, 255, 0.08);
+    }
+
+    #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        pointer-events: none;
+    }
+
+    .glass {
+        background: linear-gradient(180deg, rgba(11, 27, 49, 0.86), rgba(6, 18, 34, 0.76));
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid var(--panel-border);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 34px rgba(0, 0, 0, 0.22);
+    }
+
+    .header-bar {
+        height: 4rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1rem;
+        flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .header-bar::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(97, 214, 255, 0.55), transparent);
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .avatar-shell {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 999px;
+        background:
+            radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.95), rgba(97, 214, 255, 0.85) 48%, rgba(36, 71, 120, 0.95));
+        overflow: hidden;
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        box-shadow: 0 0 0 3px rgba(97, 214, 255, 0.15), 0 0 18px rgba(97, 214, 255, 0.32);
+        position: relative;
+    }
+
+    .avatar-shell::after {
+        content: "";
+        position: absolute;
+        inset: -18%;
+        background: conic-gradient(from 180deg, transparent, rgba(255, 255, 255, 0.65), transparent 42%);
+        animation: avatarSweep 4.8s linear infinite;
+        pointer-events: none;
+    }
+
+    .avatar-shell img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .name-stack h1 {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.15;
+        font-weight: 400;
+        color: var(--text);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-family: 'Audiowide', system-ui, sans-serif;
+        text-shadow: 0 0 12px rgba(97, 214, 255, 0.25);
+    }
+
+    .status-row {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 0.15rem;
+        font-size: 0.7rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+    }
+
+    .status-dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: #6fffb0;
+        flex: 0 0 auto;
+        box-shadow: 0 0 12px rgba(111, 255, 176, 0.85);
+        animation: pulseSignal 1.7s ease-in-out infinite;
+    }
+
+    .icon-button {
+        width: 2rem;
+        height: 2rem;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(11, 28, 49, 0.92);
+        color: var(--muted-light);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 0 1px rgba(97, 214, 255, 0.18), 0 8px 20px rgba(0, 0, 0, 0.18);
+        cursor: pointer;
+        transition: transform 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+    }
+
+    .icon-button:hover,
+    .icon-button:focus-visible {
+        color: var(--text);
+        background: rgba(15, 39, 68, 0.96);
+        box-shadow: 0 0 0 1px rgba(97, 214, 255, 0.4), 0 0 16px rgba(97, 214, 255, 0.28);
+        outline: none;
+    }
+
+    .icon-button:active { transform: scale(0.95); }
+
+    #chat-history {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        pointer-events: auto;
+        position: relative;
+    }
+
+    #chat-history::-webkit-scrollbar { display: none; }
+    #chat-history { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .day-stamp {
+        text-align: center;
+        font-size: 0.72rem;
+        color: var(--signal-gold);
+        margin: 1rem 0;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-family: 'Audiowide', system-ui, sans-serif;
+        text-shadow: 0 0 10px rgba(255, 214, 107, 0.3);
+    }
+
+    .input-wrap {
+        padding: 1rem;
+        flex-shrink: 0;
+        pointer-events: auto;
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    #chat-form {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    #msg-input {
+        flex: 1;
+        border: 1px solid rgba(97, 214, 255, 0.14);
+        border-radius: 999px;
+        padding: 0.9rem 1rem;
+        background: rgba(4, 13, 25, 0.92);
+        color: var(--text);
+        outline: none;
+        box-shadow: inset 0 1px 10px rgba(0, 0, 0, 0.22);
+        transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+        font: inherit;
+        min-width: 0;
+    }
+
+    #msg-input:focus {
+        background: rgba(7, 20, 37, 0.98);
+        box-shadow: 0 0 0 2px rgba(97, 214, 255, 0.35), inset 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+
+    #msg-input::placeholder {
+        color: rgba(156, 183, 210, 0.72);
+    }
+
+    #btn-send {
+        width: 3rem;
+        height: 3rem;
+        border: 0;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+        color: #03111f;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow-send);
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease, filter 0.15s ease;
+        flex: 0 0 auto;
+    }
+
+    #btn-send:hover,
+    #btn-send:focus-visible {
+        filter: brightness(1.08);
+        outline: none;
+    }
+
+    #btn-send:active { transform: scale(0.9); }
+    #btn-send:disabled {
+        opacity: 0.5;
+        transform: none;
+        cursor: default;
+    }
+
+    .send-icon {
+        width: 1.25rem;
+        height: 1.25rem;
+        transform: translateX(2px);
+    }
+
+    .bubble {
+        max-width: 80%;
+        padding: 0.75rem 1rem;
+        font-size: 0.92rem;
+        line-height: 1.5;
+        box-shadow: var(--shadow-soft);
+        animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        word-break: break-word;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .bubble::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(125deg, rgba(255, 255, 255, 0.12), transparent 45%);
+        pointer-events: none;
+        opacity: 0.5;
+    }
+
+    .bubble-user {
+        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 78%, #ffffff 22%), color-mix(in srgb, var(--accent-strong) 72%, #0b1730 28%));
+        color: #03111f;
+        border-radius: 18px 18px 4px 18px;
+        align-self: flex-end;
+        box-shadow: var(--shadow-blue);
+        font-weight: 600;
+    }
+
+    .bubble-ai {
+        background: var(--bubble-ai);
+        color: var(--text);
+        border-radius: 18px 18px 18px 4px;
+        align-self: flex-start;
+        border-color: rgba(97, 214, 255, 0.16);
+    }
+
+    .typing-indicator {
+        width: 4rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.25rem;
+    }
+
+    .signal-burst,
+    .signal-mood {
+        position: absolute;
+        z-index: 12;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.35));
+    }
+
+    .signal-burst {
+        right: 0.9rem;
+        top: 4.6rem;
+        width: min(28vw, 7rem);
+        aspect-ratio: 1;
+        object-fit: contain;
+        transform: scale(0.85);
+    }
+
+    .signal-burst.is-visible {
+        opacity: 0.92;
+        transform: scale(1);
+    }
+
+    .signal-mood {
+        left: 0.9rem;
+        bottom: calc(5.4rem + env(safe-area-inset-bottom, 0px));
+        width: min(34vw, 8.25rem);
+        max-height: 6.5rem;
+        border-radius: 1rem;
+        object-fit: cover;
+        border: 1px solid rgba(97, 214, 255, 0.24);
+        background: rgba(6, 16, 30, 0.7);
+        box-shadow: 0 10px 28px rgba(3, 8, 16, 0.34);
+        transform: translateY(10px);
+    }
+
+    .signal-mood.is-visible {
+        opacity: 0.94;
+        transform: translateY(0);
+    }
+
+    .typing-dot {
+        width: 6px;
+        height: 6px;
+        background: var(--signal-gold);
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(255, 214, 107, 0.45);
+        animation: bounce 1.4s infinite ease-in-out both;
+    }
+
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+    .sr-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .pointer-auto { pointer-events: auto; }
+
+    .material-symbols-rounded {
+        font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+        font-size: 1.2rem;
+        line-height: 1;
+    }
+
+    @keyframes pulseSignal {
+        0%, 100% { transform: scale(0.92); opacity: 0.7; }
+        50% { transform: scale(1.1); opacity: 1; }
+    }
+
+    @keyframes avatarSweep {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @keyframes bounce {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
+    }
+
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 480px) {
+        .name-stack h1 { font-size: 0.95rem; }
+        .bubble { max-width: 86%; font-size: 0.85rem; }
+        #msg-input { padding: 0.85rem 0.95rem; }
+        .signal-burst {
+            width: min(26vw, 5.5rem);
+            right: 0.55rem;
+            top: 4.35rem;
+        }
+        .signal-mood {
+            width: min(31vw, 6rem);
+            left: 0.6rem;
+            bottom: calc(5.15rem + env(safe-area-inset-bottom, 0px));
+        }
+    }
+</style>
+</head>
+<body>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "aiName": { "type": "text", "label": "Signal Name", "value": "Echo" },
+    "themeColor": { "type": "color", "label": "Signal Color", "value": "#60a5fa" },
+    "typingSpeed": { "type": "number", "label": "Reply Delay (ms)", "value": 1500, "min": 500, "max": 5000 }
+}
+</script>
+
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-audio: loop/send/receive/toggle/error -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM Signal Loop" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="none" loop></audio>
+<audio id="sfx_send" data-editable="audio" data-label="SFX UI Click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_receive" data-editable="audio" data-label="SFX Success Response" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_toggle_on" data-editable="audio" data-label="SFX Resume Signal" src="https://gamezone-virid.vercel.app/assets/audios/ui/resume_01.mp3" preload="auto"></audio>
+<audio id="sfx_toggle_off" data-editable="audio" data-label="SFX Pause Signal" src="https://gamezone-virid.vercel.app/assets/audios/ui/pause_01.mp3" preload="auto"></audio>
+<audio id="sfx_error" data-editable="audio" data-label="SFX Empty Input" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+<!-- [agent-note][stage3] resolved-gif: send-burst + response-mood -> catalogs/gifs.json -->
+<img id="asset_icon" data-editable="image" data-label="AI Icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI1MCIgZmlsbD0iI2UzZTdlYiIvPjxyZWN0IHg9IjMwIiB5PSIzNSIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzM3NDE1MSIvPjxyZWN0IHg9IjYwIiB5PSIzNSIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiByeD0iMiIgZmlsbD0iIzM3NDE1MSIvPjxwYXRoIGQ9Ik0zNSA2NSBRNTAgODAgNjUgNjUiIHN0cm9rZT0iIzM3NDE1MSIgc3Ryb2tlLXdpZHRoPSI1IiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4=" hidden>
+<img id="gif_send_burst" src="https://i.giphy.com/MFPZ483I4x41W.webp" alt="" hidden>
+<img id="gif_signal_mood" src="https://i.giphy.com/CITHEXm15BmhHVGZHq.webp" alt="" hidden>
+
+<!-- Game Container -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <img id="signal-burst" class="signal-burst" src="" alt="" aria-hidden="true">
+    <img id="signal-mood" class="signal-mood" src="" alt="" aria-hidden="true">
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <!-- Header -->
+        <!-- [agent-note][stage2] preserve: header-and-input-placement | reason: already mobile-safe, restyled only -->
+        <div class="header-bar glass pointer-auto">
+            <div class="header-left">
+                <div class="avatar-shell">
+                    <img id="ui-ai-avatar" src="" alt="Signal avatar">
+                </div>
+                <div class="name-stack">
+                    <h1 id="ui-ai-name">Echo</h1>
+                    <div class="status-row">
+                        <span class="status-dot"></span>
+                        <span>Signal live</span>
+                    </div>
+                </div>
+            </div>
+            <button id="btn-music" class="icon-button" type="button" aria-label="Toggle soundtrack">
+                <span class="material-symbols-rounded" aria-hidden="true">graphic_eq</span>
+            </button>
+        </div>
+
+        <!-- Chat Area -->
+        <div id="chat-history">
+            <div class="day-stamp">Today</div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-wrap glass">
+            <form id="chat-form">
+                <label class="sr-label" for="msg-input">Send a message to the signal</label>
+                <input type="text" id="msg-input" autocomplete="off" placeholder="Ping the signal..." aria-label="Message input">
+                <button type="submit" id="btn-send" aria-label="Send message">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="send-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- Configuration & State ---
+window.gameConfigDefs = {
+    "aiName": { "type": "text", "label": "Signal Name", "value": "Echo" },
+    "themeColor": { "type": "color", "label": "Signal Color", "value": "#60a5fa" },
+    "typingSpeed": { "type": "number", "label": "Reply Delay (ms)", "value": 1500, "min": 500, "max": 5000 }
+};
+window.gameConfig = {
+    aiName: "Echo",
+    themeColor: "#60a5fa",
+    typingSpeed: 1500
+};
+
+window.updateGameConfig = (key, val) => {
+    if (window.gameConfigDefs[key]) {
+        window.gameConfig[key] = val;
+        applyConfig();
+    }
+};
+
+function applyConfig() {
+    document.getElementById('ui-ai-name').innerText = window.gameConfig.aiName;
+    document.documentElement.style.setProperty('--accent', window.gameConfig.themeColor);
+    const bubbles = document.querySelectorAll('.bubble-user');
+    bubbles.forEach((bubble) => {
+        bubble.style.background = window.gameConfig.themeColor;
+    });
+}
+
+// --- Audio System ---
+class AudioManager {
+    constructor() {
+        this.ctx = null;
+        this.unlocked = false;
+        this.bgmPlaying = false;
+        this.lastPlayedAt = new Map();
+    }
+
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.unlockEvents = ['pointerdown', 'keydown', 'touchstart'];
+            this.unlockHandler = this.unlock.bind(this);
+            this.unlockEvents.forEach((eventName) => document.addEventListener(eventName, this.unlockHandler, { passive: false }));
+        }
+    }
+
+    unlock() {
+        if (this.unlocked) return;
+        this.init();
+        this.ctx.resume().then(() => {
+            this.unlocked = true;
+            this.unlockEvents.forEach((eventName) => document.removeEventListener(eventName, this.unlockHandler));
+            this.playBgm();
+        }).catch(() => {});
+    }
+
+    playBgm() {
+        if (this.bgmPlaying) return;
+        const bgm = document.getElementById('bgm_main');
+        if (bgm) {
+            bgm.volume = 0.2;
+            bgm.play().then(() => { this.bgmPlaying = true; }).catch(() => {});
+        }
+    }
+
+    toggleBgm() {
+        const bgm = document.getElementById('bgm_main');
+        if (bgm) {
+            if (bgm.paused) {
+                bgm.play().then(() => {
+                    this.bgmPlaying = true;
+                    this.playSfx('sfx_toggle_on', 'chime', 120);
+                }).catch(() => {});
+                return true;
+            } else {
+                bgm.pause();
+                this.bgmPlaying = false;
+                this.playSfx('sfx_toggle_off', 'pop', 120);
+                return false;
+            }
+        }
+        return false;
+    }
+
+    playSfx(id, fallbackType = 'beep', cooldown = 0) {
+        this.init();
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+
+        const now = performance.now();
+        const lastPlayed = this.lastPlayedAt.get(id) || 0;
+        if (cooldown && now - lastPlayed < cooldown) return;
+        this.lastPlayedAt.set(id, now);
+
+        const el = document.getElementById(id);
+        if (el) {
+            el.currentTime = 0;
+            el.volume = id === 'sfx_error' ? 0.48 : 0.55;
+            el.play().catch(() => this.synthesize(fallbackType));
+        } else {
+            this.synthesize(fallbackType);
+        }
+    }
+
+    synthesize(type) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        if (type === 'pop') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        } else if (type === 'chime') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.5);
+        } else {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(240, this.ctx.currentTime);
+            gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.18);
+        }
+    }
+}
+
+const audio = new AudioManager();
+
+// --- Visuals & Canvas ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let width, height;
+let particles = [];
+let bgShapes = [];
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    bgShapes = [];
+    for (let i = 0; i < 10; i++) {
+        bgShapes.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: 60 + Math.random() * 180,
+            dx: (Math.random() - 0.5) * 0.35,
+            dy: (Math.random() - 0.5) * 0.35,
+            color: i % 3 === 0
+                ? `hsla(${190 + Math.random() * 20}, 100%, 62%, 0.09)`
+                : i % 3 === 1
+                    ? `hsla(${248 + Math.random() * 18}, 95%, 70%, 0.08)`
+                    : `hsla(${42 + Math.random() * 10}, 100%, 70%, 0.06)`
+        });
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 4;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.life = 1.0;
+        this.decay = 0.02 + Math.random() * 0.03;
+        this.color = color;
+        this.size = 3 + Math.random() * 4;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+        this.size *= 0.95;
+    }
+
+    draw(context) {
+        context.globalAlpha = this.life;
+        context.fillStyle = this.color;
+        context.beginPath();
+        context.arc(this.x, this.y, Math.max(0, this.size), 0, Math.PI * 2);
+        context.fill();
+        context.globalAlpha = 1.0;
+    }
+}
+
+function spawnParticles(x, y, color) {
+    for (let i = 0; i < 12; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+function loop() {
+    requestAnimationFrame(loop);
+
+    const backdrop = ctx.createLinearGradient(0, 0, 0, height);
+    backdrop.addColorStop(0, '#07111f');
+    backdrop.addColorStop(0.52, '#09172a');
+    backdrop.addColorStop(1, '#040a13');
+    ctx.fillStyle = backdrop;
+    ctx.fillRect(0, 0, width, height);
+
+    const horizonGlow = ctx.createRadialGradient(width * 0.5, height * 0.12, 30, width * 0.5, height * 0.12, width * 0.6);
+    horizonGlow.addColorStop(0, 'rgba(141, 123, 255, 0.18)');
+    horizonGlow.addColorStop(0.35, 'rgba(97, 214, 255, 0.12)');
+    horizonGlow.addColorStop(1, 'rgba(7, 17, 31, 0)');
+    ctx.fillStyle = horizonGlow;
+    ctx.fillRect(0, 0, width, height);
+
+    bgShapes.forEach((shape) => {
+        shape.x += shape.dx;
+        shape.y += shape.dy;
+        if (shape.x < -shape.r) shape.x = width + shape.r;
+        if (shape.x > width + shape.r) shape.x = -shape.r;
+        if (shape.y < -shape.r) shape.y = height + shape.r;
+        if (shape.y > height + shape.r) shape.y = -shape.r;
+
+        ctx.fillStyle = shape.color;
+        ctx.beginPath();
+        ctx.arc(shape.x, shape.y, shape.r, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const particle = particles[i];
+        particle.update();
+        particle.draw(ctx);
+        if (particle.life <= 0) particles.splice(i, 1);
+    }
+}
+
+// --- Chat Logic ---
+const chatHistory = document.getElementById('chat-history');
+const chatForm = document.getElementById('chat-form');
+const msgInput = document.getElementById('msg-input');
+const sendBtn = document.getElementById('btn-send');
+const signalBurst = document.getElementById('signal-burst');
+const signalMood = document.getElementById('signal-mood');
+const signalBurstAsset = document.getElementById('gif_send_burst');
+const signalMoodAsset = document.getElementById('gif_signal_mood');
+let isAiTyping = false;
+let gifTimers = [];
+
+// Level 1 thematic reframe: the same chat toy now reads as a live signal console.
+const patterns = [
+    { re: /hello|hi|hey|greetings/i, resp: ["Signal received.", "Hello, operator. How is your channel today?", "Ping confirmed. Good to see you."] },
+    { re: /how are you|how are u/i, resp: ["Core systems are steady inside this tiny console.", "Signal strength is strong. How are you holding up?"] },
+    { re: /name|who are you/i, resp: ["I'm Echo, your pocket signal.", "Just a friendly voice bouncing back through the console."] },
+    { re: /game|play/i, resp: ["This channel is simple: you send, I answer.", "Every ping keeps the signal alive."] },
+    { re: /love|like/i, resp: ["That kind of energy carries far.", "Keep talking. I'm tuned in.", "Good signals spread fast."] },
+    { re: /sad|bad|unhappy/i, resp: ["Copy that. Stay on the line and let it out.", "Signal wobble detected. Take one slow breath."] },
+    { re: /bye|goodbye/i, resp: ["Channel closing. Catch you soon.", "Stay safe out there.", "Signal will be here when you return."] },
+    { re: /\?/, resp: ["Good question. I'm scanning for a reply.", "Hard to say. What does your readout suggest?", "Interesting signal..."] }
+];
+const defaults = ["Reading you.", "Go on.", "Interesting signal.", "Still listening.", "Copy that.", "Message logged."];
+
+function getAiResponse(input) {
+    for (const pattern of patterns) {
+        if (pattern.re.test(input)) return pattern.resp[Math.floor(Math.random() * pattern.resp.length)];
+    }
+    return defaults[Math.floor(Math.random() * defaults.length)];
+}
+
+function clearGifTimer(timerId) {
+    window.clearTimeout(timerId);
+}
+
+function triggerGif(el, src, visibleMs = 1600) {
+    if (!el || !src) return;
+    el.src = src;
+    el.classList.add('is-visible');
+    const timerId = window.setTimeout(() => {
+        el.classList.remove('is-visible');
+    }, visibleMs);
+    gifTimers.push(timerId);
+}
+
+function addMessage(text, isUser) {
+    const div = document.createElement('div');
+    div.className = `bubble ${isUser ? 'bubble-user' : 'bubble-ai'}`;
+    if (isUser) div.style.background = window.gameConfig.themeColor;
+    div.innerText = text;
+    chatHistory.appendChild(div);
+    scrollToBottom();
+
+    if (isUser) {
+        const rect = sendBtn.getBoundingClientRect();
+        spawnParticles(rect.left + rect.width / 2, rect.top + rect.height / 2, window.gameConfig.themeColor);
+        triggerGif(signalBurst, signalBurstAsset.src, 1100);
+    } else {
+        audio.playSfx('sfx_receive', 'chime', 120);
+        triggerGif(signalMood, signalMoodAsset.src, 1700);
+    }
+}
+
+function showTyping() {
+    if (isAiTyping) return;
+    isAiTyping = true;
+
+    const div = document.createElement('div');
+    div.id = 'typing-indicator';
+    div.className = 'bubble bubble-ai typing-indicator';
+    div.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+    chatHistory.appendChild(div);
+    scrollToBottom();
+}
+
+function removeTyping() {
+    const el = document.getElementById('typing-indicator');
+    if (el) el.remove();
+    isAiTyping = false;
+}
+
+function scrollToBottom() {
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+}
+
+function handleSubmit(e) {
+    e.preventDefault();
+    const text = msgInput.value.trim();
+    if (!text) {
+        audio.playSfx('sfx_error', 'beep', 160);
+        triggerGif(signalMood, signalMoodAsset.src, 1200);
+        return;
+    }
+
+    audio.playSfx('sfx_send', 'pop', 80);
+    msgInput.value = '';
+    addMessage(text, true);
+
+    setTimeout(() => {
+        showTyping();
+        setTimeout(() => {
+            removeTyping();
+            addMessage(getAiResponse(text), false);
+        }, window.gameConfig.typingSpeed);
+    }, 600);
+}
+
+// --- Initialization ---
+window.addEventListener('DOMContentLoaded', () => {
+    resize();
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(loop);
+
+    chatForm.addEventListener('submit', handleSubmit);
+
+    const avatarImg = document.getElementById('asset_icon');
+    document.getElementById('ui-ai-avatar').src = avatarImg.src;
+    document.getElementById('btn-music').style.color = '#61d6ff';
+
+    signalBurst.src = signalBurstAsset.src;
+    signalMood.src = signalMoodAsset.src;
+
+    document.getElementById('btn-music').addEventListener('click', (e) => {
+        audio.unlock();
+        const playing = audio.toggleBgm();
+        e.currentTarget.style.color = playing ? '#61d6ff' : '#78a3c7';
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+        audio.unlock();
+        const rect = canvas.getBoundingClientRect();
+        spawnParticles(e.clientX - rect.left, e.clientY - rect.top, '#93c5fd');
+    });
+
+    setTimeout(() => {
+        addMessage(`Signal open. I'm ${window.gameConfig.aiName}. Send a ping whenever you're ready.`, false);
+    }, 1000);
+
+    applyConfig();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+/* Stage 02 cleanup: unused mirrored Tailwind CDN asset removed to satisfy policy and because this game uses inline CSS utilities instead. */

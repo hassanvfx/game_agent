@@ -1,0 +1,1 @@
+/* Removed disallowed reference for stage_03_media_mapper. Unused local placeholder retained intentionally. */

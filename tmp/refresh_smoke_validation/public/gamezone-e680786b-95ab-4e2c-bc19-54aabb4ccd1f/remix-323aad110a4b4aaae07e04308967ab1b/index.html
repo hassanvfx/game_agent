@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Package Dash 3D</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <script src="assets/cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { 
+            theme: { extend: { colors: { 'brand-blue': '#4facfe', 'brand-purple': '#00f2fe' } } },
+            corePlugins: { preflight: true } 
+        }
+    </script>
+    <style>
+        :root {
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+            --safe-top: env(safe-area-inset-top, 20px);
+            --bg-top: #0a1026;
+            --bg-bottom: #23124f;
+            --panel: rgba(15, 22, 54, 0.72);
+            --panel-strong: rgba(28, 40, 88, 0.88);
+            --panel-soft: rgba(255, 255, 255, 0.1);
+            --stroke: rgba(140, 246, 255, 0.45);
+            --glow: rgba(86, 234, 255, 0.28);
+            --text-main: #f5fbff;
+            --text-soft: #c7d7ff;
+            --coin: #ffd55a;
+            --mint: #72f0d1;
+            --danger: #ff7b9f;
+            --violet: #8f7cff;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Orbitron', sans-serif; 
+            background:
+                radial-gradient(circle at top, rgba(123, 92, 255, 0.24), transparent 35%),
+                radial-gradient(circle at 20% 80%, rgba(86, 234, 255, 0.16), transparent 28%),
+                linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+            color: var(--text-main);
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+        
+        /* Neon courier UI */
+        .glass-panel {
+            background: linear-gradient(180deg, var(--panel), rgba(10, 16, 38, 0.78));
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            border: 1px solid var(--stroke);
+            box-shadow:
+                0 14px 34px rgba(4, 8, 25, 0.45),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 0 18px var(--glow);
+        }
+
+        .glass-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent 40%);
+            opacity: 0.8;
+        }
+
+        .btn {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            touch-action: manipulation;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn:active { transform: scale(0.96); filter: brightness(0.94); }
+
+        .btn::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.22) 50%, transparent 80%);
+            transform: translateX(-120%);
+            transition: transform 0.5s ease;
+            pointer-events: none;
+        }
+
+        .btn:hover::after,
+        .btn:focus-visible::after {
+            transform: translateX(120%);
+        }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .pop-in { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #3b82f6;
+            width: 40px;
+            height: 40px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Joystick */
+        #joystick-area {
+            position: absolute;
+            bottom: max(30px, var(--safe-bottom));
+            left: 30px;
+            width: 140px;
+            height: 140px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(4px);
+            touch-action: none;
+        }
+        #joystick-knob {
+            width: 60px;
+            height: 60px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            pointer-events: none;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .level-card {
+            background: linear-gradient(180deg, rgba(18, 27, 64, 0.92), rgba(24, 16, 60, 0.92));
+            color: var(--text-main);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border: 1px solid rgba(114, 240, 209, 0.22);
+            box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+        .level-card:active {
+            transform: scale(0.98);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.22);
+            border-color: rgba(255, 213, 90, 0.4);
+        }
+
+        /* Custom Scroll container mask */
+        .scroll-mask {
+            mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+            -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+        }
+
+        #main-menu h1,
+        #main-menu h2,
+        #play-btn,
+        #community-btn,
+        #go-title,
+        #next-level-btn,
+        #publish-btn {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        #main-menu::before,
+        #game-over-screen::before,
+        #level-selector-screen::before,
+        #customize-screen::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at top, rgba(114, 240, 209, 0.18), transparent 30%),
+                linear-gradient(180deg, rgba(3, 8, 25, 0.05), rgba(3, 8, 25, 0.45));
+        }
+
+        #main-menu .glass-panel,
+        #game-over-screen .glass-panel,
+        #customize-screen .glass-panel,
+        #level-selector-screen .glass-panel,
+        #hud .glass-panel,
+        #editor-ui .glass-panel {
+            position: relative;
+            overflow: hidden;
+        }
+
+        #main-menu h1 {
+            color: #aef9ff;
+            text-shadow: 0 0 18px rgba(86, 234, 255, 0.55), 0 6px 18px rgba(0,0,0,0.35);
+        }
+
+        #main-menu h2 {
+            color: var(--coin);
+            text-shadow: 0 0 14px rgba(255, 213, 90, 0.45), 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        #hud .glass-panel {
+            color: var(--text-main);
+        }
+
+        #score,
+        #level-display,
+        #go-msg {
+            color: var(--coin);
+            text-shadow: 0 0 10px rgba(255, 213, 90, 0.3);
+        }
+
+        #level-label,
+        #creator-tag {
+            color: var(--text-soft);
+        }
+
+        #loading-text,
+        #customize-screen h2,
+        #game-over-screen p,
+        #level-selector-screen p,
+        #editor-ui span {
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        #joystick-area {
+            background: radial-gradient(circle, rgba(114, 240, 209, 0.16), rgba(10, 16, 38, 0.5));
+            border-color: rgba(114, 240, 209, 0.4);
+            box-shadow: 0 0 18px rgba(114, 240, 209, 0.18);
+        }
+
+        #joystick-knob {
+            background: linear-gradient(180deg, #f8fdff, #aef9ff);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2), 0 0 14px rgba(86, 234, 255, 0.25);
+        }
+
+        #reaction-fx,
+        #status-badge {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.92);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #reaction-fx.show,
+        #status-badge.show {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        #status-badge {
+            color: #f5fbff;
+            background: linear-gradient(180deg, rgba(28, 40, 88, 0.92), rgba(12, 18, 42, 0.92));
+        }
+
+        #status-badge.success {
+            color: #72f0d1;
+        }
+
+        #status-badge.fail {
+            color: #ff7b9f;
+        }
+
+        @media (max-width: 640px) {
+            #reaction-fx {
+                width: 88px;
+                height: 88px;
+                right: 12px;
+                top: max(92px, calc(var(--safe-top) + 44px));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <div id="fx-overlay" class="pointer-events-none absolute inset-0 z-[45]">
+        <!-- [agent-note][stage3] resolved-gif: fail+win feedback mapped from catalogs/gifs.json -->
+        <div id="status-badge" class="hidden absolute top-[max(18px,var(--safe-top))] left-1/2 -translate-x-1/2 glass-panel px-4 py-2 rounded-full text-sm font-bold tracking-[0.2em] uppercase">Ready</div>
+        <div id="reaction-fx" class="hidden absolute right-3 top-[max(84px,var(--safe-top))] w-28 h-28 rounded-3xl overflow-hidden border border-white/20 shadow-2xl bg-black/30 backdrop-blur-md">
+            <img id="reaction-gif" alt="reaction effect" class="w-full h-full object-cover opacity-90" />
+        </div>
+    </div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col font-sans">
+        
+        <!-- Main Menu -->
+        <div id="main-menu" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-auto z-50 bg-black/10 backdrop-blur-[2px]">
+            <div class="glass-panel p-8 rounded-[2rem] text-center flex flex-col gap-4 max-w-sm w-full mx-6 pop-in shadow-2xl border-white/60">
+                <div class="animate-float mb-2">
+                    <h1 class="text-6xl font-bold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.2)] mb-0 leading-none tracking-tight" style="-webkit-text-stroke: 2px #3b82f6;">PACKAGE</h1>
+                    <h2 class="text-4xl font-bold text-yellow-300 drop-shadow-[0_2px_2px_rgba(0,0,0,0.3)] tracking-wide" style="-webkit-text-stroke: 1px #d97706;">DASH 3D</h2>
+                </div>
+                
+                <div class="flex flex-col gap-3 w-full mt-4">
+                    <button id="play-btn" class="btn bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 rounded-2xl text-xl shadow-lg border-b-4 border-orange-600 flex items-center justify-center gap-2">
+                        <span>⭐</span> START DELIVERY
+                    </button>
+                    <!-- Updated Button with Arrow -->
+                    <button id="community-btn" class="btn bg-gradient-to-r from-blue-400 to-indigo-500 text-white font-bold py-4 rounded-2xl text-xl shadow-lg border-b-4 border-indigo-600 flex items-center justify-center gap-2 relative overflow-hidden group">
+                        <span class="relative z-10">COURIER ROUTES ➜</span>
+                        <div class="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 mt-2">
+                    <button id="editor-btn" class="btn bg-white text-gray-700 font-bold py-3 rounded-xl shadow-md border-b-4 border-gray-300 text-sm hover:bg-gray-50">
+                        🔨 EDIT ROUTE
+                    </button>
+                    <button id="customize-btn" class="btn bg-white text-gray-700 font-bold py-3 rounded-xl shadow-md border-b-4 border-gray-300 text-sm hover:bg-gray-50">
+                        🎨 VAN
+                    </button>
+                </div>
+            </div>
+            <div class="absolute bottom-6 text-white/80 text-xs font-bold drop-shadow-md">v2.1 Remake</div>
+        </div>
+
+        <!-- Level Selector Screen -->
+        <div id="level-selector-screen" class="hidden absolute inset-0 flex flex-col items-center pointer-events-auto bg-black/30 z-50 backdrop-blur-md pt-safe">
+            <div class="w-full max-w-md flex-1 flex flex-col overflow-hidden pop-in bg-white/90 shadow-2xl rounded-t-[2rem] mt-12">
+                <div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center shadow-lg z-10 rounded-t-[2rem]">
+                    <h2 class="text-3xl font-bold text-white drop-shadow-sm flex items-center justify-center gap-2">
+                        <span>🌎</span> COMMUNITY
+                    </h2>
+                    <p class="text-indigo-100 text-sm font-semibold opacity-80">Run routes built by other couriers</p>
+                </div>
+                
+                <div id="level-list" class="flex-1 overflow-y-auto p-4 no-scrollbar bg-gray-50">
+                    <!-- Levels injected here via JS -->
+                </div>
+
+                <div class="p-4 bg-white border-t border-gray-100 text-center shadow-[0_-4px_20px_rgba(0,0,0,0.05)] pb-safe">
+                    <button id="back-from-selector-btn" class="btn bg-gray-200 text-gray-700 font-bold py-3 px-10 rounded-full shadow-sm">
+                        BACK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-screen" class="hidden absolute inset-0 flex flex-col justify-center items-center pointer-events-auto bg-black/70 z-[60] backdrop-blur-sm">
+            <div class="spinner mb-4"></div>
+            <h2 id="loading-text" class="text-white font-bold text-2xl tracking-widest">LOADING</h2>
+        </div>
+
+        <!-- Customization -->
+        <div id="customize-screen" class="hidden absolute inset-0 flex justify-center items-center pointer-events-auto bg-black/40 z-50 backdrop-blur-sm">
+            <div class="glass-panel p-6 rounded-3xl text-center w-80 pop-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Van Color</h2>
+                <div class="flex flex-wrap gap-4 justify-center mb-8" id="color-picker"></div>
+                <button id="back-from-custom-btn" class="btn bg-gray-800 text-white font-bold py-3 px-10 rounded-full shadow-lg">DONE</button>
+            </div>
+        </div>
+
+        <!-- HUD (Gameplay) -->
+        <div id="hud" class="hidden absolute top-0 left-0 right-0 p-4 flex justify-between items-start pointer-events-none z-40 pt-safe">
+            <div class="flex flex-col gap-2 items-start">
+                <div class="glass-panel px-4 py-2 rounded-full text-gray-800 font-bold text-lg flex items-center gap-2 shadow-lg border-white/50">
+                    <span class="text-2xl drop-shadow-sm">🪙</span> <span id="score" class="text-xl">0</span>
+                </div>
+                <div id="creator-tag" class="hidden glass-panel px-3 py-1 rounded-full text-white text-xs font-bold shadow-lg bg-indigo-500 border-none">
+                    By: <span id="creator-name">Unknown</span>
+                </div>
+            </div>
+            
+            <div class="flex gap-3">
+                <div class="glass-panel px-4 py-2 rounded-full text-gray-800 font-bold text-lg shadow-lg border-white/50">
+                    <span id="level-label" class="text-gray-500 text-sm mr-1">STOP</span><span id="level-display" class="text-xl">1</span>
+                </div>
+                <button id="pause-btn" class="pointer-events-auto glass-panel w-12 h-12 rounded-full flex items-center justify-center text-gray-700 font-bold shadow-lg active:scale-90 transition bg-white">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Editor UI -->
+        <div id="editor-ui" class="hidden absolute inset-0 pointer-events-none z-30">
+            <div class="absolute top-4 left-4 right-4 flex justify-center pointer-events-auto pt-safe">
+                <div class="glass-panel p-2 rounded-2xl flex gap-3 shadow-xl">
+                    <button class="editor-tool btn w-12 h-12 rounded-xl bg-gray-100 border-2 border-blue-500 text-2xl flex items-center justify-center" data-type="1">🧱</button>
+                    <button class="editor-tool btn w-12 h-12 rounded-xl bg-gray-100 border-2 border-transparent text-2xl flex items-center justify-center" data-type="2">🚩</button>
+                    <button class="editor-tool btn w-12 h-12 rounded-xl bg-gray-100 border-2 border-transparent text-2xl flex items-center justify-center" data-type="3">🪙</button>
+                    <button class="editor-tool btn w-12 h-12 rounded-xl bg-red-100 border-2 border-transparent text-2xl flex items-center justify-center" data-type="0">❌</button>
+                </div>
+            </div>
+
+            <div class="absolute top-28 left-0 right-0 text-center pointer-events-none">
+                <span class="bg-black/50 text-white px-4 py-1.5 rounded-full text-xs font-bold backdrop-blur-md shadow-sm">
+                    Tap to Build • Joystick to Pan
+                </span>
+            </div>
+
+            <div class="absolute bottom-8 left-0 right-0 flex justify-center gap-4 pointer-events-auto pb-safe">
+                <button id="save-play-btn" class="btn bg-green-500 text-white font-bold py-3 px-8 rounded-full shadow-lg border-b-4 border-green-700">TEST LEVEL</button>
+                <button id="exit-editor-btn" class="btn bg-red-500 text-white font-bold py-3 px-8 rounded-full shadow-lg border-b-4 border-red-700">EXIT</button>
+            </div>
+        </div>
+
+        <!-- Game Over / Win -->
+        <div id="game-over-screen" class="hidden absolute inset-0 flex justify-center items-center pointer-events-auto bg-black/60 z-50 backdrop-blur-sm">
+            <div class="glass-panel p-8 rounded-[2rem] text-center max-w-sm mx-6 pop-in shadow-2xl">
+                <h2 id="go-title" class="text-4xl font-bold text-gray-800 mb-2 drop-shadow-sm">DELIVERED!</h2>
+                <div class="bg-white/50 rounded-xl p-4 mb-6">
+                    <p class="text-gray-500 text-sm uppercase tracking-bold">Tips</p>
+                    <p id="go-msg" class="text-4xl font-bold text-indigo-600">1000</p>
+                </div>
+                
+                <div class="flex flex-col gap-3 w-full">
+                    <button id="publish-btn" class="hidden btn bg-blue-500 text-white font-bold py-4 px-8 rounded-2xl shadow-lg border-b-4 border-blue-700 animate-pulse">
+                        🌎 PUBLISH ROUTE
+                    </button>
+                    <button id="next-level-btn" class="btn bg-green-500 text-white font-bold py-4 px-8 rounded-2xl shadow-lg border-b-4 border-green-700 hidden">
+                        NEXT STOP ➜
+                    </button>
+                    <button id="restart-btn" class="btn bg-white text-gray-800 font-bold py-4 px-8 rounded-2xl shadow-lg border-b-4 border-gray-200">
+                        RETRY RUN
+                    </button>
+                    <button id="menu-btn" class="btn bg-gray-200 text-gray-600 font-bold py-4 px-8 rounded-2xl shadow-lg">
+                        MENU
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Controls -->
+        <div id="mobile-controls" class="hidden absolute inset-0 pointer-events-none z-40">
+            <div id="joystick-area" class="pointer-events-auto">
+                <div id="joystick-knob"></div>
+            </div>
+            
+            <button id="jump-btn" class="pointer-events-auto absolute w-24 h-24 bg-gradient-to-b from-yellow-400 to-orange-500 rounded-full border-4 border-white/50 text-white font-bold text-xl shadow-xl active:scale-95 transition flex items-center justify-center" style="bottom: max(40px, var(--safe-bottom)); right: 30px;">
+                HOP
+            </button>
+        </div>
+    </div>
+
+    <script>
+    /* 
+       PACKAGE DASH 3D - REMAKE
+       - Mobile-first, Portrait, Touch-only.
+       - Requirement: "Name with an arrow to play more custom levels".
+    */
+
+    // --- CONFIG & STATE ---
+    const CONFIG = {
+        tileSize: 2,
+        playerSpeed: 11,
+        jumpForce: 15,
+        gravity: 38,
+        camOffset: { x: -9, y: 10, z: 9 },
+        colors: [0xffaa00, 0x333333, 0xffffff, 0xff9999, 0x9999ff, 0x55cc55, 0xff00ff, 0x00ffff],
+        creators: ["PixelCat", "MeowMaster", "LunaDev", "GarfieldFan", "CodeKitty", "Purrfect", "NyanBoi", "Katze", "MiauMiau", "Felix"]
+    };
+
+    const ASSETS = {
+        bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+        sfx: {
+            collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+            win: "https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3",
+            fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3",
+            pop: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+            jump: "https://gamezone-virid.vercel.app/assets/audios/sfx/jump_02.mp3",
+            land: "https://gamezone-virid.vercel.app/assets/audios/sfx/land_02.mp3",
+            menu: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3",
+            pause: "https://gamezone-virid.vercel.app/assets/audios/ui/pause_01.mp3",
+            resume: "https://gamezone-virid.vercel.app/assets/audios/ui/resume_01.mp3"
+        },
+        gifs: {
+            win: "https://i.giphy.com/ye080RbECtcCnkrSyD.webp",
+            fail: "https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+        }
+    };
+
+    let state = {
+        mode: 'MENU', 
+        actionState: 'IDLE',
+        gameMode: 'ADVENTURE',
+        levelIdx: 0,
+        score: 0,
+        currentCreator: null,
+        catColor: CONFIG.colors[0],
+        editor: { grid: {}, tool: 1, camPos: new THREE.Vector3(0, 0, 0) },
+        input: { x: 0, y: 0, jump: false }
+    };
+
+    // Three.js Globals
+    let scene, camera, renderer, clock;
+    let player, levelGroup, itemGroup, editorPreviewMesh;
+    let raycaster = new THREE.Raycaster();
+    let pointer = new THREE.Vector2();
+    let playerVel = new THREE.Vector3();
+    let isGrounded = false;
+    let celebrateTimer = 0;
+    let wasGroundedLastFrame = false;
+
+    const uiFx = {
+        reactionEl: null,
+        reactionImg: null,
+        badgeEl: null,
+        timers: [],
+        init() {
+            this.reactionEl = document.getElementById('reaction-fx');
+            this.reactionImg = document.getElementById('reaction-gif');
+            this.badgeEl = document.getElementById('status-badge');
+        },
+        clearTimers() {
+            this.timers.forEach(clearTimeout);
+            this.timers = [];
+        },
+        hideAll() {
+            this.clearTimers();
+            this.reactionEl?.classList.remove('show');
+            this.badgeEl?.classList.remove('show', 'success', 'fail');
+            this.reactionEl?.classList.add('hidden');
+            this.badgeEl?.classList.add('hidden');
+        },
+        showBadge(text, tone = 'success', duration = 1200) {
+            if (!this.badgeEl) return;
+            this.badgeEl.textContent = text;
+            this.badgeEl.classList.remove('hidden', 'success', 'fail');
+            this.badgeEl.classList.add(tone);
+            requestAnimationFrame(() => this.badgeEl.classList.add('show'));
+            const timer = setTimeout(() => {
+                this.badgeEl.classList.remove('show', 'success', 'fail');
+                this.badgeEl.classList.add('hidden');
+            }, duration);
+            this.timers.push(timer);
+        },
+        showReaction(kind, duration = 1800) {
+            if (!this.reactionEl || !this.reactionImg || !ASSETS.gifs[kind]) return;
+            this.reactionImg.src = ASSETS.gifs[kind];
+            this.reactionEl.classList.remove('hidden');
+            requestAnimationFrame(() => this.reactionEl.classList.add('show'));
+            const timer = setTimeout(() => {
+                this.reactionEl.classList.remove('show');
+                this.reactionEl.classList.add('hidden');
+            }, duration);
+            this.timers.push(timer);
+        }
+    };
+
+    // --- AUDIO SYSTEM ---
+    const audio = {
+        bgm: null,
+        sfx: {},
+        unlocked: false,
+        lastPlayed: new Map(),
+        init: () => {
+            if (audio.bgm) return;
+            audio.bgm = new Audio(ASSETS.bgm);
+            audio.bgm.loop = true;
+            audio.bgm.volume = 0.2;
+            for (let k in ASSETS.sfx) {
+                const clip = new Audio(ASSETS.sfx[k]);
+                clip.preload = 'auto';
+                clip.volume = ['win', 'fail'].includes(k) ? 0.55 : 0.42;
+                audio.sfx[k] = clip;
+            }
+        },
+        unlock: () => {
+            audio.unlocked = true;
+            if (!audio.bgm) audio.init();
+        },
+        playBGM: () => {
+            audio.unlock();
+            if (!audio.bgm) audio.init();
+            audio.bgm.play().catch(() => {});
+        },
+        stopBGM: () => {
+            if (!audio.bgm) return;
+            audio.bgm.pause();
+            audio.bgm.currentTime = 0;
+        },
+        pauseBGM: () => {
+            if (audio.bgm) audio.bgm.pause();
+        },
+        playSFX: (k, cooldown = 90) => {
+            audio.unlock();
+            const base = audio.sfx[k];
+            if (!base) return;
+            const now = performance.now();
+            const last = audio.lastPlayed.get(k) ?? 0;
+            if (now - last < cooldown) return;
+            audio.lastPlayed.set(k, now);
+            const s = base.cloneNode();
+            s.volume = base.volume;
+            s.play().catch(() => {});
+        }
+    };
+
+    // --- LEVEL GENERATION ---
+    function mulberry32(a) {
+        return function() {
+            var t = a += 0x6D2B79F5;
+            t = Math.imul(t ^ t >>> 15, t | 1);
+            t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        }
+    }
+
+    function generateLevel(idx, isCommunity = false) {
+        const grid = [];
+        const rng = isCommunity ? mulberry32(idx) : Math.random;
+        const len = isCommunity ? 20 + Math.floor(rng() * 30) : 10 + idx * 4;
+        const gapChance = isCommunity ? 0.25 : 0.15;
+        
+        grid.push({x:0, y:0, z:0, type:1});
+        grid.push({x:1, y:0, z:0, type:1});
+        
+        let cx = 1, cz = 0, cy = 0;
+        for(let i=0; i<len; i++) {
+            if(rng()>0.5) cx++; else cz += (rng()>0.5?1:-1);
+            if(isCommunity && rng() > 0.7) cy += (rng()>0.5?1:-1);
+
+            if(rng() > gapChance) {
+                grid.push({x:cx, y:cy, z:cz, type:1});
+                if(rng() > 0.6) grid.push({x:cx, y:cy+1, z:cz, type:3});
+            }
+        }
+        grid.push({x:cx+1, y:cy, z:cz, type:2});
+        return grid;
+    }
+
+    // --- ENGINE INIT ---
+    function init() {
+        const container = document.getElementById('game-container');
+        scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x090f24);
+            scene.fog = new THREE.Fog(0x16113a, 18, 72);
+
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const hemiLight = new THREE.HemisphereLight(0x8cf0ff, 0x120d30, 0.95);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfff1d2, 0.95);
+        dirLight.position.set(30, 50, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.left = -40;
+        dirLight.shadow.camera.right = 40;
+        dirLight.shadow.camera.top = 40;
+        dirLight.shadow.camera.bottom = -40;
+        scene.add(dirLight);
+
+        levelGroup = new THREE.Group();
+        itemGroup = new THREE.Group();
+        scene.add(levelGroup);
+        scene.add(itemGroup);
+
+        const geo = new THREE.BoxGeometry(CONFIG.tileSize, 1, CONFIG.tileSize);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.4 });
+        editorPreviewMesh = new THREE.Mesh(geo, mat);
+        editorPreviewMesh.visible = false;
+        scene.add(editorPreviewMesh);
+
+        clock = new THREE.Clock();
+        uiFx.init();
+
+        window.addEventListener('resize', onResize);
+        const canvas = renderer.domElement;
+        canvas.addEventListener('pointerdown', onPointerDown);
+        canvas.addEventListener('pointermove', onPointerMove);
+
+        createPlayer();
+        animate();
+    }
+
+    function createPlayer() {
+        if(player) scene.remove(player);
+        player = new THREE.Group();
+
+        // Courier mascot body
+        const mat = new THREE.MeshPhongMaterial({ color: state.catColor, shininess: 60 });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.78, 0.78), mat);
+        body.position.y = 0.46;
+        body.castShadow = true;
+        player.add(body);
+
+        const stripeMat = new THREE.MeshPhongMaterial({ color: 0xeffcff, emissive: 0x56eaff, emissiveIntensity: 0.18 });
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.62, 0.82), stripeMat);
+        stripe.position.set(0.08, 0.46, 0);
+        player.add(stripe);
+
+        const facePlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.34, 0.56), new THREE.MeshPhongMaterial({ color: 0xfff2da }));
+        facePlate.position.set(0.42, 0.42, 0);
+        player.add(facePlate);
+
+        // Ears
+        const earGeo = new THREE.ConeGeometry(0.16, 0.34, 4);
+        const earMat = new THREE.MeshPhongMaterial({ color: 0x2b215f, shininess: 25 });
+        const e1 = new THREE.Mesh(earGeo, earMat);
+        e1.position.set(0.22, 0.94, 0.23); e1.rotation.y = 0.55;
+        player.add(e1);
+        const e2 = new THREE.Mesh(earGeo, earMat);
+        e2.position.set(0.22, 0.94, -0.23); e2.rotation.y = -0.55;
+        player.add(e2);
+
+        const innerEarMat = new THREE.MeshBasicMaterial({ color: 0xff96ba });
+        const in1 = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 4), innerEarMat);
+        in1.position.set(0.22, 0.9, 0.23); in1.rotation.y = 0.55;
+        player.add(in1);
+        const in2 = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 4), innerEarMat);
+        in2.position.set(0.22, 0.9, -0.23); in2.rotation.y = -0.55;
+        player.add(in2);
+
+        // Face details
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.075), new THREE.MeshBasicMaterial({ color: 0xff7b9f }));
+        nose.position.set(0.57, 0.37, 0);
+        player.add(nose);
+
+        const eyeGeo = new THREE.SphereGeometry(0.1);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x101433 });
+        const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+        eye1.position.set(0.53, 0.48, 0.16);
+        player.add(eye1);
+        const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+        eye2.position.set(0.53, 0.48, -0.16);
+        player.add(eye2);
+
+        const eyeSparkMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const sparkle1 = new THREE.Mesh(new THREE.SphereGeometry(0.03), eyeSparkMat);
+        sparkle1.position.set(0.59, 0.53, 0.16);
+        player.add(sparkle1);
+        const sparkle2 = new THREE.Mesh(new THREE.SphereGeometry(0.03), eyeSparkMat);
+        sparkle2.position.set(0.59, 0.53, -0.16);
+        player.add(sparkle2);
+
+        // Delivery pack
+        const packMat = new THREE.MeshPhongMaterial({ color: 0x8f7cff, emissive: 0x2b215f, emissiveIntensity: 0.24 });
+        const pack = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.42), packMat);
+        pack.position.set(-0.12, 0.72, 0);
+        pack.castShadow = true;
+        player.add(pack);
+
+        const badge = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.45), new THREE.MeshBasicMaterial({ color: 0x72f0d1 }));
+        badge.position.set(-0.02, 0.72, 0);
+        player.add(badge);
+
+        // Tail
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.68), new THREE.MeshPhongMaterial({ color: 0x2b215f }));
+        tail.position.set(-0.52, 0.58, 0);
+        tail.rotation.z = -0.35;
+        player.add(tail);
+
+        scene.add(player);
+        player.visible = false;
+    }
+
+    function buildLevel(data, isCommunity = false, seed = 0) {
+        levelGroup.clear();
+        itemGroup.clear();
+
+        const geo = new THREE.BoxGeometry(CONFIG.tileSize, 1, CONFIG.tileSize);
+        const rng = isCommunity ? mulberry32(seed) : Math.random;
+        
+        // Neon courier route colors
+        const hue = isCommunity ? rng() : 0.58;
+        const col = new THREE.Color().setHSL(hue, 0.72, 0.56);
+        const matPlat = new THREE.MeshPhongMaterial({
+            color: col,
+            emissive: new THREE.Color().setHSL(hue, 0.58, 0.18),
+            shininess: 40
+        });
+        const matGoal = new THREE.MeshPhongMaterial({ color: 0xff7b9f, emissive: 0x6d1c43, emissiveIntensity: 0.5 });
+        
+        const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+        const coinMat = new THREE.MeshPhongMaterial({ color: 0xffd55a, emissive: 0xb87800, emissiveIntensity: 0.5, shininess: 90 });
+        coinGeo.rotateX(Math.PI/2);
+
+        data.forEach(d => {
+            const x = d.x * CONFIG.tileSize;
+            const y = d.y * CONFIG.tileSize; 
+            const z = d.z * CONFIG.tileSize;
+
+            if(d.type === 1 || d.type === 2) {
+                const m = new THREE.Mesh(geo, d.type===2 ? matGoal : matPlat);
+                m.position.set(x, y-0.5, z);
+                m.receiveShadow = true;
+                m.userData = { type: d.type };
+                levelGroup.add(m);
+            } else if(d.type === 3) {
+                const c = new THREE.Mesh(coinGeo, coinMat);
+                c.position.set(x, y+1, z);
+                c.castShadow = true;
+                c.userData = { type: 3, active: true };
+                itemGroup.add(c);
+            }
+        });
+    }
+
+    function resetPlayer() {
+        player.position.set(0, 5, 0);
+        playerVel.set(0, 0, 0);
+        player.rotation.set(0, 0, 0);
+        player.visible = true;
+        state.actionState = 'PLAYING';
+        
+        camera.position.copy(player.position).add(new THREE.Vector3(CONFIG.camOffset.x, CONFIG.camOffset.y, CONFIG.camOffset.z));
+        camera.lookAt(player.position);
+    }
+
+    // --- GAME LOOP ---
+    function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        if(state.mode === 'PLAY') {
+            updatePhysics(dt);
+            updateCamera(dt);
+            updateItems(dt);
+        } else if(state.mode === 'EDITOR') {
+            updateEditor(dt);
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    function updatePhysics(dt) {
+        if(state.actionState === 'CELEBRATING') {
+            player.rotation.y += 8 * dt;
+            player.position.y += Math.sin(clock.elapsedTime * 15) * 0.03;
+            celebrateTimer -= dt;
+            if(celebrateTimer <= 0) showGameOver();
+            return;
+        }
+
+        if(state.actionState === 'FALLING') {
+            playerVel.y -= CONFIG.gravity * dt;
+            player.position.y += playerVel.y * dt;
+            player.rotation.x += 5 * dt;
+            if(player.position.y < -40) showGameOver();
+            return;
+        }
+
+        // Movement
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        fwd.y = 0; fwd.normalize();
+        const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+
+        const move = new THREE.Vector3();
+        if(Math.abs(state.input.x) > 0.05) move.addScaledVector(right, state.input.x);
+        if(Math.abs(state.input.y) > 0.05) move.addScaledVector(fwd, -state.input.y);
+
+        if(move.length() > 0.1) {
+            move.normalize().multiplyScalar(CONFIG.playerSpeed * dt);
+            player.position.add(move);
+            const angle = Math.atan2(move.x, move.z);
+            // Smooth rotation
+            const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), angle + Math.PI/2);
+            player.quaternion.slerp(q, 15 * dt);
+        }
+
+        // Gravity
+        playerVel.y -= CONFIG.gravity * dt;
+        
+        // Jump
+        if(state.input.jump && isGrounded) {
+            playerVel.y = CONFIG.jumpForce;
+            isGrounded = false;
+            state.input.jump = false;
+            audio.playSFX('jump', 120);
+        }
+
+        player.position.y += playerVel.y * dt;
+
+        // Collision
+        const origin = player.position.clone();
+        origin.y += 0.5;
+        raycaster.set(origin, new THREE.Vector3(0, -1, 0));
+        const hits = raycaster.intersectObjects(levelGroup.children);
+
+        isGrounded = false;
+        if(hits.length > 0) {
+            const hit = hits[0];
+            if(hit.distance < 0.9 && playerVel.y <= 0) {
+                player.position.y = hit.point.y + 0.4;
+                playerVel.y = 0;
+                isGrounded = true;
+
+                if(!wasGroundedLastFrame) {
+                    audio.playSFX('land', 120);
+                }
+
+                if(hit.object.userData.type === 2) triggerWin();
+            }
+        }
+
+        wasGroundedLastFrame = isGrounded;
+
+        if(player.position.y < -15) triggerFail();
+    }
+
+    function updateCamera(dt) {
+        const target = player.position.clone().add(new THREE.Vector3(CONFIG.camOffset.x, CONFIG.camOffset.y, CONFIG.camOffset.z));
+        camera.position.lerp(target, 4 * dt);
+        camera.lookAt(player.position);
+    }
+
+    function updateItems(dt) {
+        if(state.actionState !== 'PLAYING') return;
+        itemGroup.children.forEach(c => {
+            if(!c.userData.active) return;
+            c.rotation.y += 3 * dt;
+            c.position.y += Math.sin(clock.elapsedTime * 4) * 0.005;
+            
+            if(c.position.distanceTo(player.position) < 1.2) {
+                c.userData.active = false;
+                c.visible = false;
+                state.score += 100;
+                audio.playSFX('collect');
+                updateHUD();
+            }
+        });
+    }
+
+    // --- EDITOR LOGIC ---
+    function updateEditor(dt) {
+        const speed = 25 * dt;
+        state.editor.camPos.x += state.input.x * speed;
+        state.editor.camPos.z += state.input.y * speed; 
+        camera.position.set(state.editor.camPos.x, 20, state.editor.camPos.z);
+        camera.lookAt(state.editor.camPos.x, 0, state.editor.camPos.z);
+    }
+
+    function onPointerDown(e) { handleEditorPaint(e); }
+    function onPointerMove(e) { if(e.isPrimary && e.buttons === 1) handleEditorPaint(e); }
+
+    function handleEditorPaint(e) {
+        if(state.mode !== 'EDITOR') return;
+        if(e.target !== renderer.domElement) return;
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(pointer, camera);
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const target = new THREE.Vector3();
+        raycaster.ray.intersectPlane(plane, target);
+
+        if(target) {
+            const gx = Math.round(target.x / CONFIG.tileSize);
+            const gz = Math.round(target.z / CONFIG.tileSize);
+            const key = `${gx},${gz}`;
+
+            if(state.editor.tool === 0) {
+                if(state.editor.grid[key]) {
+                    delete state.editor.grid[key];
+                    rebuildEditorScene();
+                    audio.playSFX('pop');
+                }
+            } else {
+                const existing = state.editor.grid[key];
+                if(!existing || existing.type !== state.editor.tool) {
+                    state.editor.grid[key] = { x: gx, y: 0, z: gz, type: state.editor.tool };
+                    rebuildEditorScene();
+                    audio.playSFX('pop');
+                }
+            }
+        }
+    }
+
+    function rebuildEditorScene() {
+        const arr = Object.values(state.editor.grid);
+        buildLevel(arr);
+    }
+
+    // --- UI FUNCTIONS ---
+    function updateHUD() {
+        document.getElementById('score').innerText = state.score;
+        const lvlDisplay = document.getElementById('level-display');
+        const lvlLabel = document.getElementById('level-label');
+        const creatorTag = document.getElementById('creator-tag');
+
+        if (state.gameMode === 'COMMUNITY') {
+            lvlLabel.innerText = "ROUTE";
+            lvlDisplay.innerText = "#" + (8000 + state.levelIdx);
+            creatorTag.classList.remove('hidden');
+            document.getElementById('creator-name').innerText = state.currentCreator || "Anon";
+        } else if (state.gameMode === 'EDITOR_TEST') {
+            lvlLabel.innerText = "TEST";
+            lvlDisplay.innerText = "";
+            creatorTag.classList.add('hidden');
+        } else {
+            lvlLabel.innerText = "STOP";
+            lvlDisplay.innerText = state.levelIdx + 1;
+            creatorTag.classList.add('hidden');
+        }
+    }
+
+    function setMode(mode) {
+        state.mode = mode;
+        ['main-menu', 'hud', 'editor-ui', 'game-over-screen', 'mobile-controls', 'customize-screen', 'loading-screen', 'level-selector-screen'].forEach(id => {
+            document.getElementById(id).classList.add('hidden');
+        });
+
+        if(mode === 'MENU') {
+            document.getElementById('main-menu').classList.remove('hidden');
+            player.visible = false;
+            levelGroup.clear();
+            itemGroup.clear();
+            audio.pauseBGM();
+            uiFx.hideAll();
+        } 
+        else if(mode === 'PLAY') {
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('mobile-controls').classList.remove('hidden');
+            document.getElementById('jump-btn').classList.remove('hidden'); 
+            audio.playBGM();
+            uiFx.hideAll();
+            resetPlayer();
+        }
+        else if(mode === 'EDITOR') {
+            document.getElementById('editor-ui').classList.remove('hidden');
+            document.getElementById('mobile-controls').classList.remove('hidden');
+            document.getElementById('jump-btn').classList.add('hidden'); 
+            
+            state.editor.camPos.set(0,0,0);
+            state.editor.grid = {};
+            buildLevel([]);
+            player.visible = false;
+        }
+        else if(mode === 'GAMEOVER') {
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            audio.pauseBGM();
+        }
+        else if(mode === 'SELECTOR') {
+            document.getElementById('level-selector-screen').classList.remove('hidden');
+            renderCommunityLevels();
+        }
+    }
+
+    function triggerWin() {
+        if(state.actionState !== 'PLAYING') return;
+        state.actionState = 'CELEBRATING';
+        celebrateTimer = 1.5; 
+        audio.playSFX('win', 240);
+        uiFx.showBadge('Delivered', 'success', 1600);
+        uiFx.showReaction('win', 1900);
+    }
+
+    function triggerFail() {
+        if(state.actionState !== 'PLAYING') return;
+        state.actionState = 'FALLING';
+        audio.playSFX('fail', 240);
+        uiFx.showBadge('Missed Drop', 'fail', 1600);
+        uiFx.showReaction('fail', 1900);
+    }
+
+    function showGameOver() {
+        state.mode = 'GAMEOVER';
+        document.getElementById('mobile-controls').classList.add('hidden');
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.remove('hidden');
+
+        const title = document.getElementById('go-title');
+        const msg = document.getElementById('go-msg');
+        const nextBtn = document.getElementById('next-level-btn');
+        const publishBtn = document.getElementById('publish-btn');
+        
+        publishBtn.classList.add('hidden');
+        nextBtn.classList.add('hidden');
+
+        if(state.actionState === 'CELEBRATING') {
+            title.innerText = "DELIVERY DONE!";
+            title.className = "text-4xl font-bold text-green-500 mb-2 drop-shadow-sm";
+            msg.innerText = `${state.score}`;
+            
+            if(state.gameMode === 'EDITOR_TEST') {
+                title.innerText = "ROUTE VERIFIED!";
+                publishBtn.classList.remove('hidden');
+            } else if (state.gameMode === 'COMMUNITY') {
+                nextBtn.innerText = "BACK TO ROUTES ➜";
+                nextBtn.classList.remove('hidden');
+                nextBtn.onclick = () => setMode('SELECTOR');
+            } else {
+                nextBtn.innerText = "NEXT STOP ➜";
+                nextBtn.classList.remove('hidden');
+                nextBtn.onclick = () => {
+                    state.score = 0;
+                    state.levelIdx++;
+                    buildLevel(generateLevel(state.levelIdx, false), false);
+                    setMode('PLAY');
+                    updateHUD();
+                };
+            }
+        } else {
+            title.innerText = "MISSED DROP!";
+            title.className = "text-4xl font-bold text-red-500 mb-2 drop-shadow-sm";
+            msg.innerText = `${state.score}`;
+        }
+    }
+
+    // --- COMMUNITY LIST LOGIC ---
+    function renderCommunityLevels() {
+        const list = document.getElementById('level-list');
+        list.innerHTML = '';
+
+        // Generate mock levels
+        for(let i=0; i<15; i++) {
+            const id = 8000 + i;
+            const creator = CONFIG.creators[i % CONFIG.creators.length];
+            const difficulty = Math.floor(Math.random() * 3) + 1;
+            const stars = "⭐".repeat(difficulty);
+
+            const card = document.createElement('div');
+            card.className = 'level-card group cursor-pointer';
+            // Added explicit "PLAY ➜" button as requested
+            card.innerHTML = `
+                <div class="flex flex-col">
+                    <span class="font-bold text-gray-800 text-lg">Route #${id}</span>
+                    <span class="text-xs text-gray-500 font-bold uppercase tracking-wide">by ${creator}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-yellow-500 text-xs">${stars}</div>
+                    <button class="bg-indigo-500 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-md group-active:scale-95 transition">
+                        ➜
+                    </button>
+                </div>
+            `;
+            card.onclick = () => startSpecificCommunityLevel(i, creator);
+            list.appendChild(card);
+        }
+
+        // "Load More" button at bottom as requested
+        const loadMore = document.createElement('div');
+        loadMore.className = 'py-4 text-center';
+        loadMore.innerHTML = `
+            <button class="text-indigo-600 font-bold text-sm bg-indigo-100 px-6 py-2 rounded-full hover:bg-indigo-200 transition">
+                LOAD MORE ROUTES ➜
+            </button>
+        `;
+        loadMore.onclick = () => {
+             audio.playSFX('menu', 120);
+             loadMore.innerHTML = `<span class="text-gray-400 text-xs">Loading...</span>`;
+             setTimeout(() => renderCommunityLevels(), 500); // Just refresh list for demo
+        };
+        list.appendChild(loadMore);
+    }
+
+    function startSpecificCommunityLevel(idx, creator) {
+        audio.playSFX('menu', 120);
+        document.getElementById('level-selector-screen').classList.add('hidden');
+        document.getElementById('loading-text').innerText = "LOADING ROUTE";
+        document.getElementById('loading-screen').classList.remove('hidden');
+        
+        setTimeout(() => {
+            document.getElementById('loading-screen').classList.add('hidden');
+            state.gameMode = 'COMMUNITY';
+            state.levelIdx = idx;
+            state.currentCreator = creator;
+            state.score = 0;
+            buildLevel(generateLevel(idx, true), true, idx);
+            setMode('PLAY');
+            updateHUD();
+        }, 800);
+    }
+
+    // --- INPUT HANDLERS ---
+    const joyArea = document.getElementById('joystick-area');
+    const joyKnob = document.getElementById('joystick-knob');
+    let joyTouchId = null;
+    let joyCenter = { x:0, y:0 };
+
+    joyArea.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        joyArea.setPointerCapture(e.pointerId);
+        joyTouchId = e.pointerId;
+        const r = joyArea.getBoundingClientRect();
+        joyCenter = { x: r.left + r.width/2, y: r.top + r.height/2 };
+        handleJoyMove(e.clientX, e.clientY);
+    });
+
+    joyArea.addEventListener('pointermove', e => {
+        if(e.pointerId === joyTouchId) {
+            e.preventDefault();
+            handleJoyMove(e.clientX, e.clientY);
+        }
+    });
+
+    joyArea.addEventListener('pointerup', e => {
+        if(e.pointerId === joyTouchId) {
+            joyTouchId = null;
+            joyKnob.style.transform = `translate(-50%, -50%)`;
+            state.input.x = 0;
+            state.input.y = 0;
+        }
+    });
+
+    function handleJoyMove(cx, cy) {
+        const maxR = 40;
+        let dx = cx - joyCenter.x;
+        let dy = cy - joyCenter.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if(dist > maxR) {
+            dx = (dx/dist) * maxR;
+            dy = (dy/dist) * maxR;
+        }
+        joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        state.input.x = dx / maxR;
+        state.input.y = dy / maxR;
+    }
+
+    const jumpBtn = document.getElementById('jump-btn');
+    const doJump = (e) => { e.preventDefault(); state.input.jump = true; };
+    jumpBtn.addEventListener('touchstart', doJump);
+    jumpBtn.addEventListener('mousedown', doJump);
+
+    document.getElementById('play-btn').addEventListener('click', () => {
+        audio.playSFX('resume', 140);
+        audio.playBGM();
+        state.gameMode = 'ADVENTURE';
+        state.levelIdx = 0;
+        state.score = 0;
+        buildLevel(generateLevel(0, false), false);
+        setMode('PLAY');
+        updateHUD();
+    });
+
+    // Main Menu "Community Levels" button
+    document.getElementById('community-btn').addEventListener('click', () => {
+        audio.playSFX('menu', 140);
+        audio.playBGM();
+        setMode('SELECTOR');
+    });
+
+    document.getElementById('back-from-selector-btn').addEventListener('click', () => {
+        audio.playSFX('pause', 140);
+        setMode('MENU');
+    });
+
+    document.getElementById('editor-btn').addEventListener('click', () => {
+        audio.playSFX('menu', 140);
+        audio.playBGM();
+        setMode('EDITOR');
+    });
+
+    document.getElementById('save-play-btn').addEventListener('click', () => {
+        state.gameMode = 'EDITOR_TEST';
+        state.score = 0;
+        rebuildEditorScene(); 
+        setMode('PLAY');
+        updateHUD();
+    });
+
+    document.getElementById('exit-editor-btn').addEventListener('click', () => setMode('MENU'));
+    document.getElementById('menu-btn').addEventListener('click', () => setMode('MENU'));
+    
+    document.getElementById('restart-btn').addEventListener('click', () => {
+        state.score = 0;
+        if(state.gameMode === 'EDITOR_TEST') {
+            rebuildEditorScene();
+        } else if (state.gameMode === 'COMMUNITY') {
+            buildLevel(generateLevel(state.levelIdx, true), true, state.levelIdx);
+        } else {
+            buildLevel(generateLevel(state.levelIdx, false), false);
+        }
+        setMode('PLAY');
+        updateHUD();
+    });
+
+    document.getElementById('publish-btn').addEventListener('click', () => {
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('loading-text').innerText = "UPLOADING";
+        document.getElementById('loading-screen').classList.remove('hidden');
+        
+        setTimeout(() => {
+            document.getElementById('loading-screen').classList.add('hidden');
+            alert("Route Published! ID: #9999");
+            setMode('MENU');
+        }, 1500);
+    });
+
+    document.querySelectorAll('.editor-tool').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.editor-tool').forEach(b => {
+                b.classList.remove('border-blue-500');
+                b.classList.add('border-transparent');
+            });
+            const target = e.currentTarget;
+            target.classList.remove('border-transparent');
+            target.classList.add('border-blue-500');
+            state.editor.tool = parseInt(target.dataset.type);
+        });
+    });
+
+    const picker = document.getElementById('color-picker');
+    CONFIG.colors.forEach(c => {
+        const d = document.createElement('div');
+        d.className = 'w-12 h-12 rounded-full cursor-pointer border-4 border-white shadow-md transform hover:scale-110 transition';
+        d.style.backgroundColor = '#' + c.toString(16).padStart(6, '0');
+        d.onclick = () => {
+            state.catColor = c;
+            createPlayer();
+            audio.playSFX('pop', 100);
+        };
+        picker.appendChild(d);
+    });
+
+    document.getElementById('customize-btn').addEventListener('click', () => {
+        audio.playSFX('menu', 120);
+        document.getElementById('main-menu').classList.add('hidden');
+        document.getElementById('customize-screen').classList.remove('hidden');
+    });
+    document.getElementById('back-from-custom-btn').addEventListener('click', () => {
+        audio.playSFX('pause', 120);
+        document.getElementById('customize-screen').classList.add('hidden');
+        document.getElementById('main-menu').classList.remove('hidden');
+    });
+
+    document.getElementById('pause-btn').addEventListener('click', () => {
+        audio.playSFX('pause', 120);
+        setMode('MENU');
+    });
+
+    function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Start
+    init();
+    </script>
+</body>
+</html>

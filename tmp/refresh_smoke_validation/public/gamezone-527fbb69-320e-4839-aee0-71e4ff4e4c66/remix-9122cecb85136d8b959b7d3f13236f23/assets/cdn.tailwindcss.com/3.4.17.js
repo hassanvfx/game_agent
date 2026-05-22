@@ -1,0 +1,1 @@
+/* Local stub retained to remove disallowed production CDN bundle reference for this workspace. */

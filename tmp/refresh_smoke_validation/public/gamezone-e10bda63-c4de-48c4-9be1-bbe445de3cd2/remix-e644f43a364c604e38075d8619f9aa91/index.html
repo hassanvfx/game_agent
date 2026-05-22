@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Citadel Watch</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sky-top: #130f2c;
+            --sky-bottom: #23184b;
+            --field-dark: #182d29;
+            --field-mid: #24453c;
+            --field-glow: #2f6b56;
+            --panel-bg: rgba(13, 19, 41, 0.82);
+            --panel-border: rgba(127, 225, 208, 0.34);
+            --panel-highlight: rgba(255, 222, 118, 0.25);
+            --text-main: #eef7ff;
+            --text-soft: #b8d3e5;
+            --accent-gold: #ffd86f;
+            --accent-cyan: #7ef0da;
+            --accent-blue: #7cb8ff;
+            --danger: #ff6b7f;
+            --shadow-deep: rgba(2, 6, 20, 0.58);
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: auto;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(124, 184, 255, 0.14), transparent 35%),
+                linear-gradient(180deg, var(--sky-top), var(--sky-bottom) 45%, #0f1626 100%);
+            color: var(--text-main);
+        }
+        #game-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 52%, rgba(126, 240, 218, 0.15), transparent 18%),
+                radial-gradient(circle at 50% 52%, rgba(255, 216, 111, 0.09), transparent 30%);
+            mix-blend-mode: screen;
+        }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(18, 27, 54, 0.92), rgba(10, 16, 36, 0.86));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                0 8px 32px 0 var(--shadow-deep),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                0 0 0 1px rgba(255, 216, 111, 0.06);
+        }
+        .hero-card {
+            transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .hero-card:hover, .hero-card.selected {
+            transform: translateY(-5px);
+            border-color: var(--accent-gold);
+            background: linear-gradient(180deg, rgba(255,255,255,0.13), rgba(126, 240, 218, 0.1));
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32), 0 0 20px rgba(255, 216, 111, 0.16);
+        }
+        .title-font { font-family: 'Russo One', system-ui, sans-serif; }
+        .hud-font { font-family: 'Press Start 2P', cursive; }
+        .ui-font { font-family: 'Exo 2', system-ui, sans-serif; }
+        .feedback-badge {
+            min-width: 112px;
+            min-height: 112px;
+            opacity: 0;
+            transform: translateY(10px) scale(0.94);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+        }
+        .feedback-badge.active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-badge img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 10px 28px rgba(0,0,0,0.34);
+        }
+        .feedback-badge span {
+            position: absolute;
+            left: 50%;
+            bottom: -1.1rem;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 0.65rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent-gold);
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
+        }
+        .ui-chip {
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .start-shell {
+            max-height: min(92vh, 860px);
+            overflow-y: auto;
+        }
+        .ember-dot {
+            box-shadow: 0 0 12px currentColor;
+        }
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        /* Custom Scrollbar for chat simulation */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="relative w-full h-full bg-green-900">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col">
+            
+            <!-- HUD (Top) -->
+            <div id="hud" class="hidden w-full p-4 flex justify-between items-start">
+                <div class="flex flex-col gap-2">
+                    <div class="glass-panel px-4 py-2 rounded-full text-white font-bold flex items-center gap-2">
+                        <div class="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
+                        <span>Wave: <span id="wave-display">1</span></span>
+                    </div>
+                    <div class="glass-panel px-4 py-2 rounded-full text-white font-bold text-sm">
+                        Score: <span id="score-display">0</span>
+                    </div>
+                </div>
+                
+                <!-- Tower Health -->
+                <div class="glass-panel px-6 py-3 rounded-xl flex flex-col items-center">
+                    <span class="text-xs text-gray-300 uppercase tracking-wider mb-1">Tower Integrity</span>
+                    <div class="w-48 h-4 bg-gray-700 rounded-full overflow-hidden border border-gray-600">
+                        <div id="tower-hp-bar" class="h-full bg-blue-500 transition-all duration-300" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <!-- Simulated Chat (Multiplayer feel) -->
+                <div class="glass-panel w-48 h-32 rounded-xl p-2 flex flex-col justify-end text-xs text-white/80 overflow-hidden">
+                    <div id="chat-box" class="flex flex-col gap-1">
+                        <span class="text-yellow-300">Command: Watch starting...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Start / Character Select Screen -->
+            <div id="start-screen" class="absolute inset-0 flex flex-col justify-center items-center bg-black/60 backdrop-blur-sm pointer-events-auto z-50">
+                <div class="glass-panel start-shell p-6 md:p-8 rounded-3xl text-center max-w-4xl w-[90%] border border-white/10">
+                    <h1 class="title-font text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-200 to-cyan-300 mb-2 drop-shadow-sm tracking-[0.12em]">CITADEL WATCH</h1>
+                    <p class="text-cyan-100 text-base md:text-lg mb-8 tracking-[0.32em] uppercase">Hold the crystal core through every wave</p>
+                    
+                    <h3 class="text-white text-xl mb-4">Choose Your Defender</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                        <!-- Knight -->
+                        <div class="hero-card p-4 rounded-xl bg-gray-800/50" onclick="selectHero('knight', this)">
+                            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-red-400 to-orange-500 mx-auto mb-3 border-4 border-red-950/50 shadow-lg flex items-center justify-center text-2xl ember-dot text-white">⚔️</div>
+                            <h4 class="text-white font-bold text-xl">Captain Valora</h4>
+                            <p class="text-red-300 text-sm">Frontline Guard</p>
+                            <div class="mt-2 text-xs text-gray-400">High endurance, close-range sweep</div>
+                        </div>
+                        
+                        <!-- Ranger -->
+                        <div class="hero-card p-4 rounded-xl bg-gray-800/50 selected" onclick="selectHero('ranger', this)">
+                            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 mx-auto mb-3 border-4 border-emerald-950/50 shadow-lg flex items-center justify-center text-2xl ember-dot text-white">🏹</div>
+                            <h4 class="text-white font-bold text-xl">Scout Elara</h4>
+                            <p class="text-green-300 text-sm">Outer Wall Archer</p>
+                            <div class="mt-2 text-xs text-gray-400">Fast, long range, rapid volleys</div>
+                        </div>
+                        
+                        <!-- Mage -->
+                        <div class="hero-card p-4 rounded-xl bg-gray-800/50" onclick="selectHero('mage', this)">
+                            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-fuchsia-400 to-violet-500 mx-auto mb-3 border-4 border-violet-950/50 shadow-lg flex items-center justify-center text-2xl ember-dot text-white">✨</div>
+                            <h4 class="text-white font-bold text-xl">Warden Lyra</h4>
+                            <p class="text-purple-300 text-sm">Arcane Sentinel</p>
+                            <div class="mt-2 text-xs text-gray-400">Heavy bursts, slower arcane shots</div>
+                        </div>
+                    </div>
+
+                     <button id="start-btn" class="w-full bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 hover:from-sky-400 hover:to-emerald-300 text-slate-950 font-bold py-4 px-8 rounded-xl shadow-xl transform transition hover:scale-[1.02] text-xl title-font tracking-[0.18em]">
+                        START THE WATCH
+                    </button>
+                    <p class="mt-4 text-gray-400 text-xs">2 Support wardens linked: <span class="text-green-400">Ready</span></p>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden absolute inset-0 flex flex-col justify-center items-center bg-black/80 z-50 pointer-events-auto">
+                <div class="glass-panel p-10 rounded-3xl text-center animate-bounce-in">
+                     <h2 class="title-font text-5xl font-bold text-rose-400 mb-2 tracking-[0.16em]">DEFEAT</h2>
+                    <p class="text-gray-300 mb-6">The citadel core was overrun.</p>
+                    <div class="hud-font text-lg leading-relaxed text-amber-100 mb-8">Waves Held: <span id="final-wave">0</span></div>
+                    <button id="restart-btn" class="bg-white text-gray-900 font-bold py-3 px-10 rounded-full shadow-lg hover:bg-gray-200 transition">Try Again</button>
+                </div>
+            </div>
+            
+            <!-- [agent-note][stage3] resolved-gif: hit-and-defeat-feedback -> catalogs/gifs.json -->
+            <div id="feedback-strip" class="absolute right-3 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-4 pointer-events-none">
+                <div id="hit-gif-badge" class="feedback-badge relative">
+                    <img src="https://i.giphy.com/roB5nN2qNNfhUKcprN.webp" alt="Combat impact feedback">
+                    <span class="hud-font">impact</span>
+                </div>
+                <div id="defeat-gif-badge" class="feedback-badge relative">
+                    <img src="https://i.giphy.com/ye080RbECtcCnkrSyD.webp" alt="Wave clear celebration feedback">
+                    <span class="hud-font">clear</span>
+                </div>
+            </div>
+
+            <!-- Mobile Controls Hint -->
+            <div id="controls-hint" class="hidden absolute bottom-8 left-1/2 transform -translate-x-1/2 text-white/50 text-sm pointer-events-none ui-font">
+                Use WASD or drag to move • Auto-fire
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS & CONFIG */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3",
+                select: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                cast: "https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3",
+                hit: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3",
+                defeat: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_defeat_01.mp3",
+                wave: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3",
+                warning: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3"
+            },
+            gifs: {
+                impact: "https://i.giphy.com/roB5nN2qNNfhUKcprN.webp",
+                clear: "https://i.giphy.com/ye080RbECtcCnkrSyD.webp"
+            }
+        };
+
+        let selectedClass = 'ranger'; // Default
+
+        // Expose selection function to global scope for HTML onclick
+        window.selectHero = (heroClass, el) => {
+            selectedClass = heroClass;
+            audio.playSFX('select');
+            document.querySelectorAll('.hero-card').forEach(c => {
+                c.classList.remove('selected');
+                c.style.borderColor = 'transparent';
+                c.style.background = 'rgba(31, 41, 55, 0.5)';
+            });
+            el.classList.add('selected');
+            el.style.borderColor = '#fbbf24';
+            el.style.background = 'rgba(255, 255, 255, 0.1)';
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                this.cooldowns = { hit: 90, cast: 110, defeat: 150, warning: 1500 };
+                this.lastPlayedAt = {};
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const audio = new Audio(v);
+                    audio.volume = ['warning', 'wave', 'fail'].includes(k) ? 0.52 : 0.4;
+                    audio.preload = 'auto';
+                    this.sfx[k] = audio;
+                }
+            }
+            unlock() {
+                this.enabled = true;
+            }
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.play().catch(() => {});
+            }
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+            playSFX(key) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const now = Date.now();
+                const cooldown = this.cooldowns[key] || 0;
+                if (cooldown && now - (this.lastPlayedAt[key] || 0) < cooldown) return;
+                const clone = this.sfx[key].cloneNode();
+                clone.volume = this.sfx[key].volume;
+                clone.play().catch(() => {});
+                this.lastPlayedAt[key] = now;
+            }
+        }
+        const audio = new AudioController();
+        const feedbackTimers = {};
+        let loopHandle = null;
+        let lastWarningAt = 0;
+        let lastKnownWave = 1;
+
+        function flashFeedback(id, duration = 900) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('active');
+            clearTimeout(feedbackTimers[id]);
+            feedbackTimers[id] = setTimeout(() => el.classList.remove('active'), duration);
+        }
+
+
+        /** 3. GAME ENGINE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let gameActive = false;
+        let frameCount = 0;
+        
+        // Game State
+        let wave = 1;
+        let score = 0;
+        let tower = { x: 0, y: 0, hp: 1000, maxHp: 1000, radius: 40 };
+        let player = { x: 0, y: 0, class: 'ranger', hp: 100, maxHp: 100, speed: 4, range: 200, cooldown: 0, maxCooldown: 30, color: '#10b981' };
+        let allies = [];
+        let enemies = [];
+        let projectiles = [];
+        let particles = [];
+        let damageNumbers = [];
+
+        // Input
+        const keys = {};
+        const mouse = { x: 0, y: 0, down: false };
+        let joystick = { active: false, originX: 0, originY: 0, x: 0, y: 0 };
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            tower.x = width / 2;
+            tower.y = height / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        /** 4. CLASSES & ENTITIES */
+        
+        class Ally {
+            constructor(type, name) {
+                this.type = type;
+                this.name = name;
+                this.x = tower.x + (Math.random() - 0.5) * 100;
+                this.y = tower.y + (Math.random() - 0.5) * 100;
+                this.hp = 100;
+                this.target = null;
+                this.cooldown = 0;
+                
+                if (type === 'knight') {
+                    this.color = '#ef4444';
+                    this.range = 60;
+                    this.speed = 3;
+                    this.maxCooldown = 40;
+                    this.damage = 35;
+                } else if (type === 'mage') {
+                    this.color = '#a855f7';
+                    this.range = 250;
+                    this.speed = 2;
+                    this.maxCooldown = 50;
+                    this.damage = 40;
+                }
+            }
+
+            update() {
+                // Simple AI: Find nearest enemy
+                let nearest = null;
+                let minDist = Infinity;
+                
+                enemies.forEach(e => {
+                    const d = Math.hypot(e.x - this.x, e.y - this.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearest = e;
+                    }
+                });
+
+                if (nearest) {
+                    // Move towards enemy if out of range, else stop and shoot
+                    if (minDist > this.range) {
+                        const angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
+                        this.x += Math.cos(angle) * this.speed;
+                        this.y += Math.sin(angle) * this.speed;
+                    } else {
+                        // Attack
+                        if (this.cooldown <= 0) {
+                            attack(this, nearest);
+                            this.cooldown = this.maxCooldown;
+                        }
+                    }
+                } else {
+                    // Return to tower patrol
+                    const dToTower = Math.hypot(tower.x - this.x, tower.y - this.y);
+                    if (dToTower > 150) {
+                        const angle = Math.atan2(tower.y - this.y, tower.x - this.x);
+                        this.x += Math.cos(angle) * this.speed;
+                        this.y += Math.sin(angle) * this.speed;
+                    }
+                }
+
+                if (this.cooldown > 0) this.cooldown--;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath(); ctx.ellipse(0, 10, 10, 5, 0, 0, Math.PI*2); ctx.fill();
+
+                // Body
+                ctx.fillStyle = this.color;
+                ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
+                
+                // Name
+                ctx.fillStyle = 'white';
+                ctx.font = '600 10px "Exo 2"';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.name, 0, -18);
+                
+                ctx.restore();
+            }
+        }
+
+        class Enemy {
+            constructor(wave) {
+                // Spawn at edge
+                const side = Math.floor(Math.random() * 4);
+                if (side === 0) { this.x = Math.random() * width; this.y = -50; } // Top
+                else if (side === 1) { this.x = width + 50; this.y = Math.random() * height; } // Right
+                else if (side === 2) { this.x = Math.random() * width; this.y = height + 50; } // Bottom
+                else { this.x = -50; this.y = Math.random() * height; } // Left
+
+                this.hp = 20 + (wave * 5);
+                this.maxHp = this.hp;
+                this.speed = 1 + (wave * 0.1);
+                this.radius = 15;
+                this.damage = 5 + wave;
+                this.attackCooldown = 0;
+            }
+
+            update() {
+                // Move to tower
+                const angle = Math.atan2(tower.y - this.y, tower.x - this.x);
+                this.x += Math.cos(angle) * this.speed;
+                this.y += Math.sin(angle) * this.speed;
+
+                // Collision with tower
+                const dist = Math.hypot(tower.x - this.x, tower.y - this.y);
+                if (dist < tower.radius + this.radius) {
+                    if (this.attackCooldown <= 0) {
+                        tower.hp -= this.damage;
+                        addDamageNumber(tower.x, tower.y - 20, -this.damage, 'red');
+                        this.attackCooldown = 60;
+                        createParticles(this.x, this.y, 3, '#gray');
+                        if (Date.now() - lastWarningAt > 1800) {
+                            audio.playSFX('warning');
+                            lastWarningAt = Date.now();
+                        }
+                    }
+                }
+                if (this.attackCooldown > 0) this.attackCooldown--;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                // Goblin/Orc look
+                ctx.fillStyle = '#4ade80'; // Bright green skin
+                ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
+                
+                // Eyes
+                ctx.fillStyle = 'red';
+                ctx.beginPath(); ctx.arc(-5, -2, 3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(5, -2, 3, 0, Math.PI*2); ctx.fill();
+
+                // HP Bar
+                const hpPct = this.hp / this.maxHp;
+                ctx.fillStyle = 'red';
+                ctx.fillRect(-10, -20, 20, 4);
+                ctx.fillStyle = '#0f0';
+                ctx.fillRect(-10, -20, 20 * hpPct, 4);
+
+                ctx.restore();
+            }
+        }
+
+        function attack(attacker, target) {
+            if (attacker.type === 'knight' || (attacker === player && player.class === 'knight')) {
+                // Melee Cleave
+                createParticles(target.x, target.y, 5, '#fff');
+                target.hp -= attacker.damage || 30; // Player damage logic handled elsewhere usually but simplifying
+                addDamageNumber(target.x, target.y, attacker.damage || 30);
+                audio.playSFX('cast');
+                audio.playSFX('hit');
+                flashFeedback('hit-gif-badge', 520);
+            } else {
+                // Projectile
+                audio.playSFX('cast');
+                projectiles.push({
+                    x: attacker.x,
+                    y: attacker.y,
+                    vx: 0, vy: 0,
+                    target: target,
+                    speed: 8,
+                    damage: attacker.damage || 20,
+                    color: attacker.color || 'yellow',
+                    homing: true
+                });
+            }
+        }
+
+        function createParticles(x, y, count, color) {
+            for(let i=0; i<count; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 30,
+                    color: color
+                });
+            }
+        }
+
+        function addDamageNumber(x, y, amt, color='white') {
+            damageNumbers.push({
+                x: x, y: y,
+                text: Math.abs(amt),
+                life: 40,
+                color: color
+            });
+        }
+
+        function addChatMessage(msg, color='text-white') {
+            const box = document.getElementById('chat-box');
+            const el = document.createElement('div');
+            el.className = color;
+            el.innerText = msg;
+            box.appendChild(el);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        /** 5. MAIN LOGIC */
+        function initGame() {
+            tower.hp = tower.maxHp;
+            score = 0;
+            wave = 1;
+            enemies = [];
+            projectiles = [];
+            particles = [];
+            damageNumbers = [];
+            
+            // Setup Player
+            player.x = tower.x;
+            player.y = tower.y + 50;
+            
+            if (selectedClass === 'knight') {
+                player.class = 'knight'; player.hp = 200; player.maxHp = 200; player.range = 70; player.maxCooldown = 25; player.damage = 50; player.color = '#ef4444';
+            } else if (selectedClass === 'ranger') {
+                player.class = 'ranger'; player.hp = 120; player.maxHp = 120; player.range = 300; player.maxCooldown = 15; player.damage = 25; player.color = '#10b981';
+            } else {
+                player.class = 'mage'; player.hp = 100; player.maxHp = 100; player.range = 250; player.maxCooldown = 40; player.damage = 60; player.color = '#a855f7';
+            }
+
+            // Setup Allies (Simulate Multiplayer)
+            allies = [];
+            // If player is Knight, add Ranger + Mage. If Ranger, add Knight + Mage, etc.
+            const pool = [
+                { type: 'knight', name: 'P2 (Bot)' },
+                { type: 'mage', name: 'P3 (Bot)' }
+            ];
+            // Simple logic: just add a Knight and a Mage bot for diversity if player is Ranger
+            if (selectedClass === 'knight') pool[0] = { type: 'ranger', name: 'P2 (Bot)' }; // Swap knight for ranger
+            if (selectedClass === 'mage') pool[1] = { type: 'ranger', name: 'P3 (Bot)' }; // Swap mage for ranger
+
+            pool.forEach(p => allies.push(new Ally(p.type, p.name)));
+
+            // Update UI
+            document.getElementById('wave-display').innerText = wave;
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('chat-box').innerHTML = '<div class="text-yellow-300">Command: Watch live.</div>';
+
+            setTimeout(() => addChatMessage("Warden Two: East lane covered.", "text-blue-300"), 1000);
+            setTimeout(() => addChatMessage("Warden Three: Keep the core intact.", "text-purple-300"), 2000);
+        }
+
+        function spawnEnemies() {
+            // Spawn rate based on wave
+            if (frameCount % Math.max(20, 100 - (wave * 5)) === 0) {
+                enemies.push(new Enemy(wave));
+            }
+        }
+
+        function update() {
+            if (!gameActive) return;
+            frameCount++;
+
+            // Player Movement
+            let dx = 0, dy = 0;
+            if (keys['w'] || keys['ArrowUp']) dy = -1;
+            if (keys['s'] || keys['ArrowDown']) dy = 1;
+            if (keys['a'] || keys['ArrowLeft']) dx = -1;
+            if (keys['d'] || keys['ArrowRight']) dx = 1;
+
+            if (joystick.active) {
+                dx = joystick.x;
+                dy = joystick.y;
+            }
+
+            // Normalize vector
+            if (dx !== 0 || dy !== 0) {
+                const len = Math.hypot(dx, dy);
+                dx /= len; dy /= len;
+                player.x += dx * player.speed;
+                player.y += dy * player.speed;
+            }
+
+            // Clamp Player to screen
+            player.x = Math.max(20, Math.min(width - 20, player.x));
+            player.y = Math.max(20, Math.min(height - 20, player.y));
+
+            // Player Auto Attack
+            if (player.cooldown <= 0) {
+                let nearest = null;
+                let minDist = player.range;
+                enemies.forEach(e => {
+                    const d = Math.hypot(e.x - player.x, e.y - player.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearest = e;
+                    }
+                });
+                if (nearest) {
+                    attack(player, nearest);
+                    flashFeedback('hit-gif-badge', 420);
+                    player.cooldown = player.maxCooldown;
+                }
+            }
+            if (player.cooldown > 0) player.cooldown--;
+
+            // Update Allies
+            allies.forEach(a => a.update());
+
+            // Spawn & Update Enemies
+            spawnEnemies();
+            enemies.forEach((e, i) => {
+                e.update();
+                if (e.hp <= 0) {
+                    enemies.splice(i, 1);
+                    score += 10;
+                    createParticles(e.x, e.y, 8, '#4ade80');
+                    audio.playSFX('defeat');
+                    flashFeedback('defeat-gif-badge', 880);
+                    document.getElementById('score-display').innerText = score;
+                }
+            });
+
+            // Update Projectiles
+            projectiles.forEach((p, i) => {
+                if (p.homing && p.target && enemies.includes(p.target)) {
+                    const angle = Math.atan2(p.target.y - p.y, p.target.x - p.x);
+                    p.x += Math.cos(angle) * p.speed;
+                    p.y += Math.sin(angle) * p.speed;
+                    
+                    if (Math.hypot(p.target.x - p.x, p.target.y - p.y) < 10) {
+                        p.target.hp -= p.damage;
+                        addDamageNumber(p.target.x, p.target.y, p.damage);
+                        audio.playSFX('hit');
+                        projectiles.splice(i, 1);
+                    }
+                } else {
+                    // Just fly straight if target dead
+                    projectiles.splice(i, 1);
+                }
+            });
+
+            // Wave Logic
+            if (score > wave * 200) {
+                wave++;
+                audio.playSFX('wave');
+                flashFeedback('defeat-gif-badge', 1200);
+                document.getElementById('wave-display').innerText = wave;
+                addChatMessage(`Command: Wave ${wave} incoming!`, 'text-red-400');
+                tower.hp = Math.min(tower.hp + 200, tower.maxHp); // Heal tower slightly
+            }
+
+            // Particles
+            particles.forEach((p, i) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if(p.life <= 0) particles.splice(i, 1);
+            });
+
+            // Damage Numbers
+            damageNumbers.forEach((d, i) => {
+                d.y -= 0.5;
+                d.life--;
+                if(d.life <= 0) damageNumbers.splice(i, 1);
+            });
+
+            // Check Game Over
+            if (tower.hp <= 0) {
+                gameOver();
+            }
+
+            // Update UI Bars
+            document.getElementById('tower-hp-bar').style.width = (tower.hp / tower.maxHp * 100) + '%';
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Background (Grass)
+            ctx.fillStyle = '#14532d'; // Dark Green
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw Grid/Tiles Pattern
+            ctx.strokeStyle = '#166534';
+            ctx.lineWidth = 2;
+            const gridSize = 100;
+            
+            // Parallax-ish effect (just offset grid by player pos slightly)
+            const offX = -player.x * 0.1;
+            const offY = -player.y * 0.1;
+
+            ctx.beginPath();
+            for(let x = offX % gridSize; x < width; x += gridSize) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, height);
+            }
+            for(let y = offY % gridSize; y < height; y += gridSize) {
+                ctx.moveTo(0, y); ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+
+            // Draw Tower (Center)
+            ctx.save();
+            ctx.translate(tower.x, tower.y);
+            // Base
+            ctx.fillStyle = '#57534e';
+            ctx.beginPath(); ctx.arc(0, 0, tower.radius + 5, 0, Math.PI*2); ctx.fill();
+            // Stone
+            ctx.fillStyle = '#a8a29e';
+            ctx.beginPath(); ctx.arc(0, 0, tower.radius, 0, Math.PI*2); ctx.fill();
+            // Crystal
+            ctx.fillStyle = '#3b82f6';
+            ctx.shadowBlur = 20; ctx.shadowColor = '#3b82f6';
+            const pulse = 1 + Math.sin(frameCount * 0.05) * 0.1;
+            ctx.beginPath(); ctx.arc(0, 0, tower.radius * 0.5 * pulse, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+
+            // Draw Entities (Sort by Y for depth)
+            const entities = [...enemies, ...allies, player];
+            entities.sort((a, b) => a.y - b.y);
+
+            entities.forEach(e => {
+                if (e === player) drawPlayer();
+                else if (e instanceof Ally) e.draw();
+                else e.draw();
+            });
+
+            // Projectiles
+            projectiles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI*2); ctx.fill();
+            });
+
+            // Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+
+            // Damage Numbers
+            ctx.font = '700 16px Press Start 2P';
+            ctx.textAlign = 'center';
+            damageNumbers.forEach(d => {
+                ctx.fillStyle = d.color;
+                ctx.globalAlpha = d.life / 40;
+                ctx.fillText(d.text, d.x, d.y);
+                ctx.globalAlpha = 1;
+            });
+
+            if (gameActive) requestAnimationFrame(draw);
+        }
+
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            
+            // Range Indicator (Subtle)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.beginPath(); ctx.arc(0, 0, player.range, 0, Math.PI*2); ctx.stroke();
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 15, 15, 8, 0, 0, Math.PI*2); ctx.fill();
+
+            // Character
+            ctx.fillStyle = player.color;
+            ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
+
+            // Weapon/Accessory based on class
+            ctx.fillStyle = 'white';
+            if (player.class === 'knight') {
+                // Sword
+                ctx.fillRect(10, -5, 15, 4);
+            } else if (player.class === 'ranger') {
+                // Bow
+                ctx.beginPath(); ctx.arc(10, 0, 10, -Math.PI/2, Math.PI/2); ctx.stroke();
+            } else {
+                // Staff
+                ctx.beginPath(); ctx.arc(12, -5, 4, 0, Math.PI*2); ctx.fill();
+            }
+
+            // Name
+            ctx.fillStyle = 'white';
+            ctx.font = '700 12px "Exo 2"';
+            ctx.textAlign = 'center';
+            ctx.fillText("LEAD", 0, -25);
+
+            ctx.restore();
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail');
+            flashFeedback('defeat-gif-badge', 1400);
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('controls-hint').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('final-wave').innerText = wave;
+        }
+
+        /** 6. CONTROLS */
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+
+        // Virtual Joystick Logic
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            joystick.active = true;
+            joystick.originX = touch.clientX;
+            joystick.originY = touch.clientY;
+            joystick.x = 0;
+            joystick.y = 0;
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (!joystick.active) return;
+            const touch = e.touches[0];
+            const maxDist = 50;
+            let dx = touch.clientX - joystick.originX;
+            let dy = touch.clientY - joystick.originY;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist > maxDist) {
+                dx = (dx / dist) * maxDist;
+                dy = (dy / dist) * maxDist;
+            }
+            joystick.x = dx / maxDist;
+            joystick.y = dy / maxDist;
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', () => {
+            joystick.active = false;
+            joystick.x = 0;
+            joystick.y = 0;
+        });
+
+        // Start Buttons
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start');
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls-hint').classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            draw();
+
+            // Start Loop
+            if (!loopHandle) loopHandle = setInterval(update, 1000/60);
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls-hint').classList.remove('hidden');
+            audio.playBGM();
+            gameActive = true;
+            initGame();
+            draw();
+        });
+    });
+    </script>
+</body>
+</html>

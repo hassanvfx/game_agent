@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
+    <title>Pocket Block Builder</title>
+    <!-- [agent-note][stage3] resolved-font: title -> Bangers, ui/body -> Rajdhani, retro accent -> Press Start 2P -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@400;600&family=Press+Start+2P&display=swap">
+    
+    <!-- Three.js Import Map -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "assets/unpkg.com/three_0.159.0/build/three.module.js",
+                "three/addons/": "assets/unpkg.com/three_0.159.0/examples/jsm.bin"
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --sky-top: #67d5ff;
+            --sky-bottom: #0d3a72;
+            --panel-bg: rgba(10, 20, 38, 0.82);
+            --panel-border: rgba(156, 245, 255, 0.38);
+            --panel-shadow: 0 14px 36px rgba(2, 8, 22, 0.42);
+            --glow-cyan: #9cf5ff;
+            --glow-gold: #ffd86b;
+            --accent-red: #ff6f61;
+            --text-main: #f5fbff;
+            --text-muted: #c3d8ea;
+        }
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(255,255,255,0.35), transparent 24%),
+                linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+            touch-action: manipulation; /* Keep menu/buttons tappable on mobile */
+            font-family: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100dvh; /* Dynamic viewport height */
+            z-index: 1;
+            pointer-events: none; /* Prevent pre-play canvas from blocking overlay controls */
+            touch-action: none; /* [agent-note][stage4] scope gesture suppression to gameplay surface */
+        }
+
+        /* Minecraft-style UI borders */
+        .mc-border {
+            border: 4px solid;
+            border-color: #ffffff #555555 #555555 #ffffff;
+            background-color: #c6c6c6;
+        }
+        
+        .mc-slot {
+            border: 4px solid;
+            border-color: #373737 #ffffff #ffffff #373737;
+            background-color: #8b8b8b;
+        }
+
+        .mc-slot.active {
+            border-color: #ffffff #373737 #373737 #ffffff;
+            background-color: #a0a0a0;
+            box-shadow: inset 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        /* Hide scrollbar for hotbar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .pixel-font {
+            font-family: "Press Start 2P", monospace;
+        }
+
+        .title-font {
+            font-family: "Bangers", "Press Start 2P", sans-serif;
+            letter-spacing: 0.08em;
+        }
+
+        .ui-font {
+            font-family: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--panel-shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .arcade-button {
+            background: linear-gradient(180deg, #39c4ff, #0f74cb);
+            border: 2px solid rgba(255,255,255,0.3);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 8px 18px rgba(2, 15, 28, 0.34);
+        }
+
+        .arcade-button.danger {
+            background: linear-gradient(180deg, #ff8678, #c9463c);
+        }
+
+        .arcade-button.confirm {
+            background: linear-gradient(180deg, #7cff8b, #2f9f56);
+        }
+
+        #ui-layer::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.12), transparent 18%, transparent 82%, rgba(0,0,0,0.18)),
+                repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 36px);
+            opacity: 0.55;
+        }
+
+        .loader {
+            box-shadow: 0 0 20px rgba(156, 245, 255, 0.3);
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: 1rem;
+            bottom: 8.5rem;
+            width: min(28vw, 120px);
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 2px solid rgba(255,255,255,0.35);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.28);
+            background: rgba(7, 16, 29, 0.45);
+            opacity: 0;
+            transform: translateY(12px) scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            z-index: 35;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.fail {
+            left: 1rem;
+            right: auto;
+            bottom: 9rem;
+        }
+
+        .feedback-chip {
+            position: absolute;
+            left: 50%;
+            top: 6rem;
+            transform: translateX(-50%) translateY(-10px);
+            min-width: 10rem;
+            padding: 0.55rem 1rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.22);
+            background: rgba(6, 18, 33, 0.76);
+            color: var(--text-main);
+            text-align: center;
+            box-shadow: 0 10px 24px rgba(2, 8, 22, 0.3);
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+            z-index: 36;
+        }
+
+        .feedback-chip.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Loading Spinner */
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #3498db;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+        }
+
+        @media (max-width: 640px) {
+            .feedback-gif,
+            .feedback-gif.fail {
+                width: 88px;
+                bottom: 8rem;
+                right: 0.6rem;
+                left: auto;
+            }
+
+            .feedback-chip {
+                top: 5.25rem;
+                min-width: 8rem;
+                max-width: calc(100vw - 2rem);
+                font-size: 0.9rem;
+            }
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+        <div id="loading" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center text-white ui-font">
+        <div class="loader mb-4"></div>
+        <div class="text-xl font-bold tracking-widest pixel-font">GENERATING BUILD SITE...</div>
+    </div>
+
+    <!-- Game Canvas Container -->
+    <div id="game-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer" class="absolute inset-0 z-20 pointer-events-none flex flex-col justify-between">
+        
+        <!-- Header -->
+        <div class="w-full p-4 flex justify-between items-start pointer-events-auto">
+            <div class="glass-panel text-white px-4 py-2 rounded-2xl ui-font">
+                <h1 class="text-lg font-bold pixel-font title-font text-cyan-100">POCKET BLOCK BUILDER</h1>
+                <p class="text-xs text-cyan-50/75 tracking-[0.2em] uppercase">Sky Forge Sandbox</p>
+            </div>
+            <button id="reset-btn" class="arcade-button danger text-white font-bold py-2 px-4 rounded-xl active:scale-95 transition-all">
+                RESET
+            </button>
+        </div>
+
+        <!-- Start Overlay (replaces previous start screen) -->
+        <div id="start-overlay" class="absolute inset-0 bg-slate-950/65 flex items-center justify-center pointer-events-auto z-50 backdrop-blur-sm">
+            <div class="glass-panel p-5 max-w-sm text-center shadow-2xl transform transition-all ui-font rounded-3xl mx-4">
+                <div class="text-xs uppercase tracking-[0.4em] text-cyan-100/75 mb-3">Builder Signal</div>
+                <h2 class="text-2xl font-bold text-cyan-50 mb-3 pixel-font title-font leading-tight">BUILD MODE READY</h2>
+                <div class="text-left text-sm text-cyan-50/90 space-y-2 mb-5 bg-slate-950/35 p-4 rounded-2xl border border-cyan-200/20">
+                    <p>👆 <strong>TAP</strong> a block to edit the site.</p>
+                    <p>🔄 <strong>DRAG</strong> the sky to rotate the view.</p>
+                    <p>⛏️ Select <strong>PICKAXE</strong> to clear a block.</p>
+                    <p>🧱 Select <strong>BLOCKS</strong> to place materials.</p>
+                </div>
+                <button id="play-btn" class="arcade-button confirm w-full text-white font-bold py-4 px-8 rounded-2xl active:scale-95 text-lg shadow-lg">
+                    PLAY
+                </button>
+            </div>
+        </div>
+
+        <!-- Hotbar -->
+        <div class="w-full pb-6 px-2 pointer-events-auto bg-gradient-to-t from-black/50 to-transparent">
+            <div class="flex justify-center">
+                <div id="hotbar" class="flex overflow-x-auto no-scrollbar gap-2 p-2 glass-panel rounded-2xl max-w-full snap-x">
+                    <!-- Slots injected by JS -->
+                </div>
+            </div>
+            <div class="text-center text-cyan-50 text-xs mt-2 font-bold drop-shadow-md ui-font tracking-[0.2em] uppercase">
+                <span id="current-tool-name">PICKAXE</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="feedback-chip" class="feedback-chip ui-font uppercase tracking-[0.2em]" aria-live="polite"></div>
+    <!-- [agent-note][stage3] resolved-gif: build-success and invalid-action overlays -> catalogs/gifs.json -->
+    <img id="success-gif" class="feedback-gif" alt="Build success reaction" src="https://i.giphy.com/eXjlL8lDEa6rmnZADn.webp">
+    <img id="fail-gif" class="feedback-gif fail" alt="Invalid action reaction" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp">
+
+    <!-- Main Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- CONFIG ---
+        const WORLD_SIZE = 8; // 8x8x8 chunk
+        const BLOCK_SIZE = 1;
+        
+        const BLOCK_TYPES = {
+            AIR: 0,
+            GRASS: 1,
+            DIRT: 2,
+            STONE: 3,
+            WOOD: 4,
+            LEAVES: 5,
+            BRICK: 6,
+            GLASS: 7,
+            TNT: 8
+        };
+
+        const TOOLS = [
+            { id: 'pickaxe', name: 'Pickaxe', icon: '⛏️', type: 'tool' },
+            { id: 'grass', name: 'Grass', type: 'block', blockId: BLOCK_TYPES.GRASS, color: '#567d46' },
+            { id: 'dirt', name: 'Dirt', type: 'block', blockId: BLOCK_TYPES.DIRT, color: '#5d4037' },
+            { id: 'stone', name: 'Stone', type: 'block', blockId: BLOCK_TYPES.STONE, color: '#757575' },
+            { id: 'wood', name: 'Wood', type: 'block', blockId: BLOCK_TYPES.WOOD, color: '#5d4037' },
+            { id: 'leaves', name: 'Leaves', type: 'block', blockId: BLOCK_TYPES.LEAVES, color: '#2e7d32' },
+            { id: 'brick', name: 'Brick', type: 'block', blockId: BLOCK_TYPES.BRICK, color: '#8d6e63' },
+            { id: 'tnt', name: 'TNT', type: 'block', blockId: BLOCK_TYPES.TNT, color: '#d32f2f' },
+        ];
+
+        let state = {
+            selectedToolIndex: 0,
+            isPlaying: false,
+            isDragging: false
+        };
+
+        // --- AUDIO SYSTEM (catalog-backed HTML audio) ---
+        const AUDIO_URLS = {
+            uiClick: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3',
+            start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3',
+            place: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3',
+            break: 'https://gamezone-virid.vercel.app/assets/audios/sfx/hit_01.mp3',
+            blocked: 'https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3',
+            reset: 'https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3',
+            bgm: 'https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3'
+        };
+
+        const sfxCooldowns = new Map();
+        const audioPools = {};
+        let bgmAudio = null;
+        let audioUnlocked = false;
+
+        function createPooledAudio(url, volume = 0.4, poolSize = 3, loop = false) {
+            const pool = Array.from({ length: poolSize }, () => {
+                const audio = new Audio(url);
+                audio.preload = 'auto';
+                audio.volume = volume;
+                audio.loop = loop;
+                audio.crossOrigin = 'anonymous';
+                return audio;
+            });
+            return { pool, index: 0 };
+        }
+
+        function ensureAudio() {
+            if (audioUnlocked) return;
+            audioPools.uiClick = createPooledAudio(AUDIO_URLS.uiClick, 0.32, 2);
+            audioPools.start = createPooledAudio(AUDIO_URLS.start, 0.45, 1);
+            audioPools.place = createPooledAudio(AUDIO_URLS.place, 0.35, 4);
+            audioPools.break = createPooledAudio(AUDIO_URLS.break, 0.34, 4);
+            audioPools.blocked = createPooledAudio(AUDIO_URLS.blocked, 0.28, 2);
+            audioPools.reset = createPooledAudio(AUDIO_URLS.reset, 0.3, 2);
+            bgmAudio = new Audio(AUDIO_URLS.bgm);
+            bgmAudio.loop = true;
+            bgmAudio.volume = 0.18;
+            bgmAudio.preload = 'auto';
+            bgmAudio.crossOrigin = 'anonymous';
+            audioUnlocked = true;
+        }
+
+        function playSound(type, cooldownMs = 100) {
+            ensureAudio();
+            const now = performance.now();
+            const last = sfxCooldowns.get(type) || 0;
+            if (now - last < cooldownMs) return;
+            sfxCooldowns.set(type, now);
+
+            const entry = audioPools[type];
+            if (!entry) return;
+
+            const audio = entry.pool[entry.index];
+            entry.index = (entry.index + 1) % entry.pool.length;
+            try {
+                audio.currentTime = 0;
+                const playPromise = audio.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {});
+                }
+            } catch (_) {}
+        }
+
+        function startBgm() {
+            ensureAudio();
+            if (!bgmAudio) return;
+            try {
+                const playPromise = bgmAudio.paused ? bgmAudio.play() : null;
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {});
+                }
+            } catch (_) {}
+        }
+
+        function stopBgm() {
+            if (!bgmAudio) return;
+            try {
+                bgmAudio.pause();
+                bgmAudio.currentTime = 0;
+            } catch (_) {}
+        }
+
+        // --- TEXTURE GENERATOR ---
+        function createPixelTexture(color, noiseAmount = 20, type = 'standard') {
+            const size = 64;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Base color
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, size, size);
+
+            // Noise
+            for (let i = 0; i < 400; i++) {
+                const x = Math.floor(Math.random() * size);
+                const y = Math.floor(Math.random() * size);
+                const shade = (Math.random() - 0.5) * noiseAmount;
+                ctx.fillStyle = shade > 0 ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+                ctx.fillRect(x, y, 4, 4); // Chunky pixels
+            }
+
+            // Specific patterns
+            if (type === 'wood') {
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.fillRect(10, 0, 8, size);
+                ctx.fillRect(30, 0, 4, size);
+                ctx.fillRect(50, 0, 6, size);
+            } else if (type === 'brick') {
+                ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                ctx.lineWidth = 2;
+                for(let y=0; y<size; y+=16) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(size, y);
+                    ctx.stroke();
+                    for(let x=(y%32===0?0:16); x<size; x+=32) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x, y+16);
+                        ctx.stroke();
+                    }
+                }
+            } else if (type === 'tnt') {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, size/3, size, size/3);
+                ctx.fillStyle = 'black';
+                ctx.font = '20px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText("TNT", size/2, size/2);
+            } else if (type === 'grass_side') {
+                // Dirt background already drawn
+                // Draw grass overhang
+                ctx.fillStyle = '#567d46';
+                ctx.fillRect(0, 0, size, size/4);
+                for(let i=0; i<10; i++) {
+                    ctx.fillRect(Math.random()*size, size/4, 4, 4);
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter; // Pixelated look
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // Generate Materials
+        const materials = {};
+        const texGrassTop = createPixelTexture('#567d46', 10);
+        const texDirt = createPixelTexture('#5d4037', 20);
+        const texGrassSide = createPixelTexture('#5d4037', 20, 'grass_side');
+        const texStone = createPixelTexture('#757575', 30);
+        const texWood = createPixelTexture('#6d4c41', 20, 'wood');
+        const texLeaves = createPixelTexture('#2e7d32', 40);
+        const texBrick = createPixelTexture('#8d6e63', 10, 'brick');
+        const texTNT = createPixelTexture('#d32f2f', 0, 'tnt');
+        const texTNTTop = createPixelTexture('#d32f2f', 10);
+
+        materials[BLOCK_TYPES.GRASS] = [texGrassSide, texGrassSide, texGrassTop, texDirt, texGrassSide, texGrassSide].map(t => new THREE.MeshLambertMaterial({ map: t }));
+        materials[BLOCK_TYPES.DIRT] = new THREE.MeshLambertMaterial({ map: texDirt });
+        materials[BLOCK_TYPES.STONE] = new THREE.MeshLambertMaterial({ map: texStone });
+        materials[BLOCK_TYPES.WOOD] = new THREE.MeshLambertMaterial({ map: texWood });
+        materials[BLOCK_TYPES.LEAVES] = new THREE.MeshLambertMaterial({ map: texLeaves, transparent: true, opacity: 0.9 });
+        materials[BLOCK_TYPES.BRICK] = new THREE.MeshLambertMaterial({ map: texBrick });
+        materials[BLOCK_TYPES.TNT] = [texTNT, texTNT, texTNTTop, texTNTTop, texTNT, texTNT].map(t => new THREE.MeshLambertMaterial({ map: t }));
+
+        // --- SCENE SETUP ---
+        const container = document.getElementById('game-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 40);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(12, 12, 12);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        scene.add(dirLight);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.enablePan = false;
+        controls.enableZoom = true;
+        controls.minDistance = 5;
+        controls.maxDistance = 30;
+        
+        // --- WORLD GENERATION ---
+        const blocks = new Map(); // Key: "x,y,z", Value: Mesh
+        const blockGroup = new THREE.Group();
+        scene.add(blockGroup);
+
+        function getKey(x, y, z) { return `${x},${y},${z}`; }
+
+        function addBlock(x, y, z, type) {
+            const key = getKey(x, y, z);
+            if (blocks.has(key)) return; // Occupied
+
+            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            let mat = materials[type];
+            // Handle array materials (Grass, TNT) vs single
+            if (!Array.isArray(mat)) mat = mat.clone(); // Clone to allow individual lighting updates if needed
+
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = { x, y, z, type }; // Store grid data
+
+            blockGroup.add(mesh);
+            blocks.set(key, mesh);
+            
+            // Pop animation
+            mesh.scale.set(0,0,0);
+            const animateIn = () => {
+                if(mesh.scale.x < 1) {
+                    mesh.scale.addScalar(0.2);
+                    requestAnimationFrame(animateIn);
+                } else {
+                    mesh.scale.set(1,1,1);
+                }
+            };
+            animateIn();
+        }
+
+        function removeBlock(mesh) {
+            const key = getKey(mesh.userData.x, mesh.userData.y, mesh.userData.z);
+            
+            // Particle effect
+            createParticles(mesh.position, mesh.material);
+
+            blockGroup.remove(mesh);
+            blocks.delete(key);
+            mesh.geometry.dispose();
+            // Not disposing material as it's shared
+        }
+
+        // Particles
+        const particles = [];
+        function createParticles(pos, material) {
+            const color = material.length ? material[2].color : material.color; // Top color or base color
+            for(let i=0; i<8; i++) {
+                const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                const mat = new THREE.MeshBasicMaterial({ color: color });
+                const p = new THREE.Mesh(geo, mat);
+                p.position.copy(pos);
+                p.position.x += (Math.random()-0.5)*0.8;
+                p.position.y += (Math.random()-0.5)*0.8;
+                p.position.z += (Math.random()-0.5)*0.8;
+                
+                p.userData = {
+                    vel: new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2, (Math.random()-0.5)*0.2),
+                    life: 1.0
+                };
+                scene.add(p);
+                particles.push(p);
+            }
+        }
+
+        function generateWorld() {
+            // Clear existing
+            Array.from(blocks.values()).forEach(m => {
+                blockGroup.remove(m);
+                m.geometry.dispose();
+            });
+            blocks.clear();
+
+            const offset = WORLD_SIZE / 2;
+            for (let x = -offset; x < offset; x++) {
+                for (let z = -offset; z < offset; z++) {
+                    // Bedrock/Stone layers
+                    addBlock(x, -2, z, BLOCK_TYPES.STONE);
+                    addBlock(x, -1, z, BLOCK_TYPES.DIRT);
+                    addBlock(x, 0, z, BLOCK_TYPES.GRASS);
+                }
+            }
+
+            // A Tree
+            addBlock(0, 1, 0, BLOCK_TYPES.WOOD);
+            addBlock(0, 2, 0, BLOCK_TYPES.WOOD);
+            addBlock(0, 3, 0, BLOCK_TYPES.WOOD);
+            // Leaves
+            for(let x=-2; x<=2; x++) {
+                for(let z=-2; z<=2; z++) {
+                    for(let y=3; y<=4; y++) {
+                        if (Math.abs(x)+Math.abs(z) < 3 && !(x===0 && z===0 && y===3)) {
+                            addBlock(x, y, z, BLOCK_TYPES.LEAVES);
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- INTERACTION ---
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let pointerDownTime = 0;
+        let pointerDownPos = new THREE.Vector2();
+        const feedbackChip = document.getElementById('feedback-chip');
+        const successGif = document.getElementById('success-gif');
+        const failGif = document.getElementById('fail-gif');
+        let feedbackTimers = { chip: 0, success: 0, fail: 0 };
+
+        // Selection Box (Wireframe)
+        const selectGeo = new THREE.BoxGeometry(1.05, 1.05, 1.05);
+        const selectMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, opacity: 0.3, transparent: true });
+        const selectionBox = new THREE.Mesh(selectGeo, selectMat);
+        scene.add(selectionBox);
+        selectionBox.visible = false;
+
+        function onPointerDown(event) {
+            if (!state.isPlaying) return;
+            pointerDownTime = performance.now();
+            pointerDownPos.set(event.clientX, event.clientY);
+        }
+
+        function onPointerUp(event) {
+            if (!state.isPlaying) return;
+            const clickDuration = performance.now() - pointerDownTime;
+            const dist = pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY));
+            
+            // If quick tap and no drag
+            if (clickDuration < 300 && dist < 10) {
+                handleTap(event.clientX, event.clientY);
+            }
+        }
+
+        function showFeedback(message, variant = 'success') {
+            feedbackChip.textContent = message;
+            feedbackChip.classList.add('visible');
+            clearTimeout(feedbackTimers.chip);
+            feedbackTimers.chip = setTimeout(() => {
+                feedbackChip.classList.remove('visible');
+            }, 1100);
+
+            const targetGif = variant === 'fail' ? failGif : successGif;
+            targetGif.classList.add('visible');
+            clearTimeout(feedbackTimers[variant]);
+            feedbackTimers[variant] = setTimeout(() => {
+                targetGif.classList.remove('visible');
+            }, 1300);
+        }
+
+        function handleTap(x, y) {
+            // Normalize pointer
+            pointer.x = (x / window.innerWidth) * 2 - 1;
+            pointer.y = -(y / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObjects(blockGroup.children);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                const mesh = hit.object;
+                const tool = TOOLS[state.selectedToolIndex];
+
+                if (tool.id === 'pickaxe') {
+                    // Break Block
+                    playSound('break', 90);
+                    removeBlock(mesh);
+                    showFeedback('BLOCK CLEARED', 'success');
+                } else {
+                    // Place Block
+                    // Calculate new position based on face normal
+                    const normal = hit.face.normal;
+                    const pos = mesh.position.clone().add(normal);
+
+                    // Prevent placing inside player (camera) or out of bounds (optional)
+                    // Simple check: Don't overwrite existing
+                    if (!blocks.has(getKey(pos.x, pos.y, pos.z))) {
+                        playSound('place', 80);
+                        addBlock(pos.x, pos.y, pos.z, tool.blockId);
+                        showFeedback(`${tool.name.toUpperCase()} PLACED`, 'success');
+                    } else {
+                        playSound('blocked', 140);
+                        showFeedback('SPACE BLOCKED', 'fail');
+                    }
+                }
+            } else {
+                playSound('blocked', 140);
+                showFeedback('TARGET A BLOCK', 'fail');
+            }
+        }
+
+        // Render Loop for selection box update
+        function updateSelection() {
+            // Only useful if we had a mouse hover, but on mobile we don't.
+            // We could raycast constantly from center? No, confusing.
+            // Let's just hide it or show it on the last tapped block momentarily?
+            // For now, keep it simple: No hover state on mobile.
+        }
+
+        // --- UI LOGIC ---
+        function initUI() {
+            const hotbar = document.getElementById('hotbar');
+            const toolName = document.getElementById('current-tool-name');
+
+            TOOLS.forEach((tool, index) => {
+                const slot = document.createElement('div');
+                slot.className = `mc-slot w-14 h-14 flex-shrink-0 flex items-center justify-center rounded cursor-pointer transition-transform active:scale-95 ${index === 0 ? 'active' : ''}`;
+                
+                if (tool.type === 'tool') {
+                    slot.innerHTML = `<span class="text-2xl">${tool.icon}</span>`;
+                } else {
+                    // Draw a mini block preview
+                    const div = document.createElement('div');
+                    div.style.backgroundColor = tool.color;
+                    div.className = "w-8 h-8 border-2 border-black/20 shadow-inner";
+                    slot.appendChild(div);
+                }
+
+                    slot.onclick = () => {
+                        ensureAudio();
+                        // Update Active State
+                        document.querySelectorAll('.mc-slot').forEach(s => s.classList.remove('active'));
+                        slot.classList.add('active');
+                        state.selectedToolIndex = index;
+                        toolName.textContent = tool.name.toUpperCase();
+                        playSound('uiClick', 60);
+                    };
+
+                hotbar.appendChild(slot);
+            });
+
+            // Start Button
+            document.getElementById('play-btn').addEventListener('click', () => {
+                ensureAudio();
+                document.getElementById('start-overlay').classList.add('hidden');
+                container.style.pointerEvents = 'auto';
+                state.isPlaying = true;
+                playSound('start', 0);
+                startBgm();
+                showFeedback('BUILD JAM LIVE', 'success');
+            });
+
+            // Reset Button
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                ensureAudio();
+                generateWorld();
+                playSound('reset', 120);
+                showFeedback('WORLD RESET', 'success');
+            });
+        }
+
+        // --- MAIN LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            // Update particles
+            for(let i=particles.length-1; i>=0; i--) {
+                const p = particles[i];
+                p.userData.life -= 0.02;
+                p.position.add(p.userData.vel);
+                p.userData.vel.y -= 0.01; // Gravity
+                p.rotation.x += 0.1;
+                p.rotation.y += 0.1;
+                
+                if(p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                } else {
+                    p.scale.setScalar(p.userData.life * 0.2);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- INIT ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Event Listeners for Interaction
+        const canvasEl = renderer.domElement;
+        canvasEl.addEventListener('pointerdown', onPointerDown);
+        canvasEl.addEventListener('pointerup', onPointerUp);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopBgm();
+            } else if (state.isPlaying) {
+                startBgm();
+            }
+        });
+
+        // Boot
+        document.getElementById('loading').style.display = 'none';
+        generateWorld();
+        initUI();
+        animate();
+
+    </script>
+</body>
+</html>

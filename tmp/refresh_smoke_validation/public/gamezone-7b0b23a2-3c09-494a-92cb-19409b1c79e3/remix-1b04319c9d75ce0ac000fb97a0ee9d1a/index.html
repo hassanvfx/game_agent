@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Prize Rush: Vault Arena</title>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <!-- [agent-note][stage4] font-remap: display/ui stacks now use approved catalog-backed Audiowide, Rajdhani, and VT323 -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0d0f16;
+            --bg-deep: #070912;
+            --panel: rgba(14, 24, 32, 0.88);
+            --panel-strong: rgba(20, 34, 45, 0.96);
+            --line: rgba(98, 247, 255, 0.28);
+            --cyan: #62f7ff;
+            --mint: #73ffa0;
+            --gold: #ffd95a;
+            --danger: #ff6e9e;
+            --text: #eef8ff;
+            --muted: #9cc2d7;
+            --vault-glow: rgba(98, 247, 255, 0.18);
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(98, 247, 255, 0.08), transparent 35%),
+                linear-gradient(180deg, #131722 0%, #0b0f18 100%);
+            font-family: 'Rajdhani', 'Trebuchet MS', sans-serif;
+            color: var(--text);
+            touch-action: manipulation;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(255, 217, 90, 0.12), transparent 22%),
+                radial-gradient(circle at 80% 14%, rgba(115, 255, 160, 0.09), transparent 26%),
+                linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%);
+            opacity: 0.9;
+        }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        .glass {
+            background: linear-gradient(180deg, rgba(16, 28, 39, 0.94), rgba(7, 14, 22, 0.94));
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--line);
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.45),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                0 0 18px var(--vault-glow);
+            color: var(--text);
+        }
+        .cartoon-text {
+            text-shadow:
+                0 2px 0 rgba(0, 0, 0, 0.75),
+                0 0 12px rgba(255, 217, 90, 0.25);
+            font-weight: 900;
+        }
+        #hud { pointer-events: none; }
+        .hidden { display: none !important; }
+        @keyframes pulse-green { 0%, 100% { color: var(--mint); } 50% { color: #effff5; transform: scale(1.06); } }
+        @keyframes vaultFlicker { 0%, 100% { box-shadow: 0 0 0 rgba(0,0,0,0); opacity: 0.9; } 50% { box-shadow: 0 0 24px rgba(98, 247, 255, 0.22); opacity: 1; } }
+        .urgent { animation: pulse-green 0.5s infinite; }
+        .money-font { font-family: 'VT323', 'Courier New', monospace; letter-spacing: 0.04em; }
+        .brand-font { font-family: 'Audiowide', 'Trebuchet MS', sans-serif; letter-spacing: 0.08em; }
+        .feedback-gif {
+            position: absolute;
+            right: 0.75rem;
+            width: min(28vw, 110px);
+            border-radius: 1rem;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(8, 14, 20, 0.86);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .feedback-gif.is-visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-gif img {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+        }
+        .feedback-gif--hit {
+            bottom: 7rem;
+        }
+        .feedback-gif--win {
+            top: 5.75rem;
+        }
+        .feedback-gif-label {
+            padding: 0.25rem 0.5rem 0.4rem;
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: var(--gold);
+            background: linear-gradient(180deg, rgba(10, 16, 24, 0.35), rgba(10, 16, 24, 0.85));
+        }
+        @media (max-width: 640px) {
+            .feedback-gif {
+                width: min(24vw, 82px);
+                right: 0.5rem;
+            }
+            .feedback-gif--hit {
+                bottom: 6.5rem;
+            }
+            .feedback-gif--win {
+                top: 5rem;
+            }
+        }
+        .hud-chip {
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(14, 26, 34, 0.95), rgba(8, 16, 23, 0.95));
+            border: 1px solid rgba(98, 247, 255, 0.24);
+            box-shadow: 0 0 16px rgba(98, 247, 255, 0.15);
+        }
+        .vault-panel {
+            position: relative;
+            overflow: hidden;
+        }
+        .vault-panel::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(120deg, transparent 0%, rgba(98, 247, 255, 0.08) 45%, transparent 75%);
+            mix-blend-mode: screen;
+        }
+        .score-card {
+            background: linear-gradient(180deg, rgba(8, 18, 24, 0.92), rgba(7, 12, 18, 0.92));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 16px rgba(0,0,0,0.18);
+        }
+        .score-card.is-crown {
+            border-color: rgba(255, 217, 90, 0.48);
+            box-shadow: 0 0 18px rgba(255, 217, 90, 0.18), inset 0 1px 0 rgba(255,255,255,0.08);
+            animation: vaultFlicker 1.8s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Asset Manifest -->
+<div id="assets" style="display: none;">
+    <!-- [agent-note][stage3] resolved-audio: bgm/pickup/hit/win/ui -> catalogs/audios.json -->
+    <audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" loop preload="auto"></audio>
+    <audio id="sfx_spawn" data-editable="audio" data-label="Drop Prize" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+    <audio id="sfx_donut" data-editable="audio" data-label="Prize Pickup" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+    <audio id="sfx_hit" data-editable="audio" data-label="Rival Clash" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3" preload="auto"></audio>
+    <audio id="sfx_win" data-editable="audio" data-label="Win Jingle" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_02.mp3" preload="auto"></audio>
+    <audio id="sfx_steal" data-editable="audio" data-label="Token Transfer" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3" preload="auto"></audio>
+    <audio id="sfx_restart" data-editable="audio" data-label="Restart Button" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+    <audio id="sfx_warning" data-editable="audio" data-label="Time Warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+</div>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "roundTime": { "type": "number", "label": "Round Time (s)", "value": 90, "min": 30, "max": 180 },
+    "botSpeed": { "type": "number", "label": "Bot Speed", "value": 9, "min": 5, "max": 15 },
+    "spawnRate": { "type": "number", "label": "Cash Rate", "value": 0.4, "min": 0.1, "max": 2.0 },
+    "worldScale": { "type": "number", "label": "Room Scale", "value": 2.5, "min": 1.5, "max": 4.0 }
+}
+</script>
+
+<!-- Game Container -->
+<div id="game-container" class="relative w-full h-full select-none bg-[#111]">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 z-50 pointer-events-none flex flex-col justify-between p-4">
+        
+        <!-- Top HUD -->
+        <div id="hud-top" class="flex flex-col w-full gap-2 transition-opacity duration-300">
+            <div class="flex justify-between items-center">
+                <div class="glass hud-chip px-4 py-2 rounded-full text-xl sm:text-2xl money-font" id="game-timer">90</div>
+                <div class="glass hud-chip brand-font px-4 py-2 rounded-full text-sm sm:text-base font-bold text-[var(--cyan)] tracking-[0.25em] uppercase">VAULT ARENA</div>
+            </div>
+            
+            <!-- Scoreboard -->
+            <div id="scoreboard" class="grid grid-cols-5 gap-1 w-full mt-2">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+
+        <!-- Tap Hint -->
+        <div id="tap-hint" class="absolute bottom-24 left-0 right-0 text-center opacity-80 text-[var(--gold)] text-lg sm:text-2xl font-bold animate-bounce pointer-events-none cartoon-text money-font tracking-[0.22em]">
+            TAP TO DROP PRIZES!
+        </div>
+
+        <!-- [agent-note][stage3] resolved-gif: hit/win reactions -> catalogs/gifs.json -->
+        <div id="hit-gif" class="feedback-gif feedback-gif--hit" aria-hidden="true">
+            <img src="https://i.giphy.com/roB5nN2qNNfhUKcprN.webp" alt="Collision reaction">
+            <div class="feedback-gif-label brand-font">Vault Clash</div>
+        </div>
+        <div id="win-gif" class="feedback-gif feedback-gif--win" aria-hidden="true">
+            <img src="https://i.giphy.com/DOZGL2rx0qJAFu0Zx6.webp" alt="Victory celebration">
+            <div class="feedback-gif-label brand-font">Jackpot Jam</div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-auto backdrop-blur-sm z-50">
+            <div class="glass vault-panel p-6 text-center transform scale-100 max-w-sm w-full rounded-3xl border border-[var(--line)]">
+                <h1 class="text-4xl sm:text-5xl font-black text-[var(--gold)] cartoon-text mb-2 money-font leading-tight" id="result-title">JACKPOT!</h1>
+                <div id="final-scores" class="flex flex-col gap-3 mb-6 max-h-[40vh] overflow-y-auto w-full"></div>
+                <button id="restart-btn" class="w-full bg-[linear-gradient(180deg,#73ffa0,#26c777)] hover:brightness-105 text-[#081510] text-2xl sm:text-3xl font-black py-4 px-6 rounded-2xl border-b-4 border-[#138553] active:border-b-0 active:translate-y-1 transition-all money-font shadow-[0_0_20px_rgba(115,255,160,0.38)]">
+                    RUN IT BACK
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * §0 System Constants & State
+ */
+const CONFIG = {
+    colors: {
+        bg: '#1a1a1a',
+        tile1: '#222',
+        tile2: '#1e1e1e',
+        homer: '#FFFFFF',
+        marge: '#4269E1',
+        bart: '#FF4500',
+        lisa: '#FFA500',
+        maggie: '#00BFFF',
+        crown: '#FFD700',
+        bill: '#85bb65',
+        billDark: '#5e8c45',
+        billText: '#1a4010',
+        border: '#444'
+    }
+};
+
+let gameState = 'INIT';
+let cw = 0, ch = 0;
+let WW = 0, WH = 0;
+let dpr = 1;
+let ctx = null;
+let canvas = null;
+let ro = null;
+let lastTime = 0;
+let initialized = false;
+
+let gameTimer = 60;
+let spawnTimer = 0;
+let shakeIntensity = 0;
+let crownOwnerId = -1;
+let camera = { x: 0, y: 0 };
+let gameConfig = {};
+let gameConfigDefs = {};
+
+let audioCtx = null;
+const audioBuffers = {};
+const sfxCooldowns = {};
+let warnedLowTime = false;
+const gifTimers = {};
+
+let players = [];
+let collectibles = [];
+let particles = [];
+let popups = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+    parseConfig();
+    setupAudio();
+
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d', { alpha: false });
+
+    ro = new ResizeObserver(entries => {
+        const rect = entries[0].contentRect;
+        resize(rect.width, rect.height);
+
+        if (!initialized) {
+            initGame();
+            initialized = true;
+            requestAnimationFrame(loop);
+        }
+    });
+    ro.observe(canvas);
+
+    window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+    document.getElementById('restart-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleGlobalInput(e);
+    });
+});
+
+function handleGlobalInput(e) {
+    unlockAudio();
+
+    if (gameState === 'GAMEOVER') {
+        const btn = document.getElementById('restart-btn');
+        if (e.target === btn || btn.contains(e.target)) {
+            initGame();
+        }
+        return;
+    }
+
+    if (gameState === 'PLAYING') {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) + camera.x;
+        const y = (e.clientY - rect.top) + camera.y;
+
+        spawnCashAt(x, y);
+        playSfx('sfx_spawn', 0.2, 70);
+        vibrate('light');
+
+        for (let i = 0; i < 8; i++) {
+            particles.push({
+                x,
+                y,
+                vx: (Math.random() - 0.5) * 400,
+                vy: (Math.random() - 0.5) * 400,
+                color: CONFIG.colors.bill,
+                size: 4,
+                life: 0.4
+            });
+        }
+    }
+}
+
+canvas?.addEventListener('pointermove', e => {
+    if (gameState !== 'PLAYING') return;
+    e.preventDefault();
+}, { passive: false });
+canvas?.addEventListener('pointercancel', e => {
+    if (gameState !== 'PLAYING') return;
+    e.preventDefault();
+}, { passive: false });
+
+function parseConfig() {
+    try {
+        const el = document.getElementById('game-config');
+        gameConfigDefs = JSON.parse(el.textContent);
+        for (const key in gameConfigDefs) {
+            gameConfig[key] = gameConfigDefs[key].value;
+        }
+        window.gameConfigDefs = gameConfigDefs;
+        window.gameConfig = gameConfig;
+    } catch (e) {
+        console.error('Config Parse Error', e);
+    }
+}
+
+function resize(width, height) {
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    cw = width;
+    ch = height;
+
+    const scale = gameConfig.worldScale || 2.5;
+    WW = cw * scale;
+    WH = ch * scale;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function initGame() {
+    gameTimer = gameConfig.roundTime;
+    spawnTimer = 0;
+    shakeIntensity = 0;
+    crownOwnerId = Math.floor(Math.random() * 5);
+    warnedLowTime = false;
+
+    const scale = gameConfig.worldScale || 2.5;
+    WW = cw * scale;
+    WH = ch * scale;
+    camera = { x: WW / 2 - cw / 2, y: WH / 2 - ch / 2 };
+
+    collectibles = [];
+    particles = [];
+    popups = [];
+    hideGif('win-gif');
+    hideGif('hit-gif');
+
+    const positions = [
+        { x: WW * 0.2, y: WH * 0.2 },
+        { x: WW * 0.8, y: WH * 0.2 },
+        { x: WW * 0.5, y: WH * 0.5 },
+        { x: WW * 0.2, y: WH * 0.8 },
+        { x: WW * 0.8, y: WH * 0.8 }
+    ];
+
+    players = [
+        { id: 0, name: 'ACE', type: 'HOMER', color: CONFIG.colors.homer },
+        { id: 1, name: 'BOLT', type: 'MARGE', color: CONFIG.colors.marge },
+        { id: 2, name: 'DASH', type: 'BART', color: CONFIG.colors.bart },
+        { id: 3, name: 'GLOW', type: 'LISA', color: CONFIG.colors.lisa },
+        { id: 4, name: 'NOVA', type: 'MAGGIE', color: CONFIG.colors.maggie }
+    ].map((p, i) => ({
+        ...p,
+        x: positions[i].x,
+        y: positions[i].y,
+        vx: 0,
+        vy: 0,
+        r: 28,
+        score: 0,
+        stun: 0,
+        targetX: positions[i].x,
+        targetY: positions[i].y
+    }));
+
+    for (let i = 0; i < 25; i++) spawnCash();
+
+    setupHUD();
+    setState('PLAYING');
+    playSfx('sfx_restart', 0.5, 180);
+    resumeBgm(true);
+}
+
+function setupHUD() {
+    const board = document.getElementById('scoreboard');
+    board.innerHTML = '';
+    players.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'score-card flex flex-col items-center rounded p-1 border border-white/10 transition-all duration-200';
+        div.innerHTML = `
+            <div class="w-3 h-3 rounded-full mb-1" style="background:${p.color}; box-shadow: 0 0 8px ${p.color}"></div>
+            <div class="text-[10px] font-bold text-[var(--muted)] brand-font">${p.name.substring(0, 3)}</div>
+            <div class="text-sm sm:text-base font-black text-[var(--mint)] cartoon-text money-font" id="score-p${p.id}">$0</div>
+        `;
+        board.appendChild(div);
+    });
+}
+
+function setState(newState) {
+    gameState = newState;
+    const gameOver = document.getElementById('game-over-screen');
+    const hudTop = document.getElementById('hud-top');
+    const tapHint = document.getElementById('tap-hint');
+    const scoreCards = document.querySelectorAll('#scoreboard > div');
+
+    scoreCards.forEach((card, index) => {
+        card.classList.toggle('is-crown', players[index]?.id === crownOwnerId);
+    });
+
+    if (newState === 'PLAYING') {
+        hudTop.classList.remove('opacity-0');
+        gameOver.classList.add('hidden');
+        tapHint.classList.remove('hidden');
+    } else if (newState === 'GAMEOVER') {
+        tapHint.classList.add('hidden');
+
+        const sorted = [...players].sort((a, b) => b.score - a.score);
+        const winner = sorted[0];
+
+        document.getElementById('result-title').textContent = `${winner.name} CLAIMS THE VAULT!`;
+        document.getElementById('result-title').style.color = winner.color;
+
+        const list = document.getElementById('final-scores');
+        list.innerHTML = '';
+        sorted.forEach((p, i) => {
+            const row = document.createElement('div');
+            row.className = 'flex justify-between items-center bg-white/10 p-3 rounded-xl border border-white/5';
+            row.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <span class="text-xl font-bold text-gray-500 money-font">#${i + 1}</span>
+                    <span class="text-xl font-bold brand-font" style="color:${p.color}">${p.name}</span>
+                </div>
+                <span class="text-2xl sm:text-3xl font-black text-[var(--mint)] cartoon-text money-font">$${p.score}</span>
+            `;
+            list.appendChild(row);
+        });
+
+        playSfx('sfx_win', 0.7, 1200);
+        showGif('win-gif', 2600);
+        vibrate('heavy');
+        pauseBgm();
+        gameOver.classList.remove('hidden');
+    }
+}
+
+function setupAudio() {
+    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+    try {
+        audioCtx = new AudioContext();
+    } catch (_) {
+        audioCtx = null;
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) pauseBgm();
+        else if (gameState === 'PLAYING') resumeBgm();
+    });
+    window.addEventListener('blur', pauseBgm);
+    window.addEventListener('focus', () => {
+        if (gameState === 'PLAYING') resumeBgm();
+    });
+
+    const loadBuffer = (id, url) => {
+        if (!audioCtx) return;
+        fetch(url)
+            .then(res => res.arrayBuffer())
+            .then(buf => audioCtx.decodeAudioData(buf))
+            .then(decoded => { audioBuffers[id] = decoded; })
+            .catch(() => {});
+    };
+
+    const assets = document.getElementById('assets').children;
+    for (const el of assets) {
+        if (el.tagName === 'AUDIO' && el.id.startsWith('sfx_')) {
+            loadBuffer(el.id, el.src);
+        }
+    }
+}
+
+function unlockAudio() {
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch?.(() => {});
+    }
+    if (gameState === 'PLAYING') resumeBgm();
+}
+
+function resumeBgm(reset = false) {
+    const bgm = document.getElementById('bgm_main');
+    if (!bgm) return;
+    bgm.volume = 0.2;
+    if (reset) bgm.currentTime = 0;
+    if (bgm.paused) {
+        bgm.play().catch(() => {});
+    }
+}
+
+function pauseBgm() {
+    const bgm = document.getElementById('bgm_main');
+    if (bgm && !bgm.paused) bgm.pause();
+}
+
+function playSfx(id, volume = 0.35, cooldownMs = 0) {
+    const now = performance.now();
+    if (cooldownMs && sfxCooldowns[id] && now - sfxCooldowns[id] < cooldownMs) return;
+    sfxCooldowns[id] = now;
+
+    if (!audioCtx) return;
+
+    if (audioBuffers[id]) {
+        const src = audioCtx.createBufferSource();
+        const gain = audioCtx.createGain();
+        src.buffer = audioBuffers[id];
+        gain.gain.value = volume;
+        src.connect(gain);
+        gain.connect(audioCtx.destination);
+        src.start(0);
+        return;
+    }
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    gain.gain.setValueAtTime(Math.max(volume, 0.05), audioCtx.currentTime);
+    let stopAt = audioCtx.currentTime + 0.12;
+    if (id === 'sfx_hit' || id === 'sfx_steal') {
+        osc.frequency.setValueAtTime(110, audioCtx.currentTime);
+        osc.type = 'sawtooth';
+        stopAt = audioCtx.currentTime + 0.24;
+        gain.gain.exponentialRampToValueAtTime(0.01, stopAt);
+    } else if (id === 'sfx_warning') {
+        osc.frequency.setValueAtTime(680, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(420, audioCtx.currentTime + 0.25);
+        osc.type = 'square';
+        stopAt = audioCtx.currentTime + 0.25;
+        gain.gain.exponentialRampToValueAtTime(0.01, stopAt);
+    } else {
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+        osc.type = 'sine';
+        stopAt = audioCtx.currentTime + 0.12;
+        gain.gain.exponentialRampToValueAtTime(0.01, stopAt);
+    }
+
+    osc.start();
+    osc.stop(stopAt);
+}
+
+function showGif(id, duration = 1200) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    clearTimeout(gifTimers[id]);
+    el.classList.add('is-visible');
+    gifTimers[id] = setTimeout(() => hideGif(id), duration);
+}
+
+function hideGif(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('is-visible');
+}
+
+function vibrate(style) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate',
+            requestId: 'h5-' + Date.now(),
+            version: '1.0',
+            params: { style }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(style === 'heavy' ? 200 : 50);
+    }
+}
+
+function spawnCash() {
+    const margin = 60;
+    spawnCashAt(margin + Math.random() * (WW - margin * 2), margin + Math.random() * (WH - margin * 2));
+}
+
+function spawnCashAt(x, y) {
+    collectibles.push({
+        x,
+        y,
+        angle: Math.random() * Math.PI * 2,
+        life: 12,
+        active: true,
+        scale: 0
+    });
+}
+
+function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function update(dt) {
+    if (gameState !== 'PLAYING') return;
+
+    gameTimer -= dt;
+    if (gameTimer <= 0) {
+        gameTimer = 0;
+        setState('GAMEOVER');
+        return;
+    }
+    if (gameTimer <= 10 && !warnedLowTime) {
+        warnedLowTime = true;
+        playSfx('sfx_warning', 0.32, 1000);
+    }
+
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) {
+        spawnCash();
+        spawnTimer = gameConfig.spawnRate;
+    }
+
+    let target = players.find(p => p.id === crownOwnerId);
+    if (!target) target = [...players].sort((a, b) => b.score - a.score)[0];
+
+    const targetCamX = target.x - cw / 2;
+    const targetCamY = target.y - ch / 2;
+
+    camera.x += (targetCamX - camera.x) * 3 * dt;
+    camera.y += (targetCamY - camera.y) * 3 * dt;
+
+    camera.x = Math.max(0, Math.min(camera.x, WW - cw));
+    camera.y = Math.max(0, Math.min(camera.y, WH - ch));
+
+    collectibles.forEach(c => {
+        if (c.scale < 1) c.scale += dt * 5;
+        c.life -= dt;
+        if (c.life <= 0) c.active = false;
+    });
+    collectibles = collectibles.filter(c => c.active);
+
+    players.forEach(p => {
+        if (p.stun > 0) {
+            p.stun -= dt;
+            return;
+        }
+
+        let nearest = null;
+        let minDist = Infinity;
+        collectibles.forEach(c => {
+            const d = Math.hypot(c.x - p.x, c.y - p.y);
+            if (d < minDist && d < 800) {
+                minDist = d;
+                nearest = c;
+            }
+        });
+
+        if (nearest) {
+            p.targetX = nearest.x;
+            p.targetY = nearest.y;
+        } else if (Math.hypot(p.targetX - p.x, p.targetY - p.y) < 20) {
+            p.targetX = Math.random() * WW;
+            p.targetY = Math.random() * WH;
+        }
+
+        const dx = p.targetX - p.x;
+        const dy = p.targetY - p.y;
+        const dist = Math.hypot(dx, dy);
+        const speed = gameConfig.botSpeed * 40;
+
+        if (dist > 5) {
+            p.vx += (dx / dist * speed - p.vx) * dt * 5;
+            p.vy += (dy / dist * speed - p.vy) * dt * 5;
+        }
+
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+
+        if (p.x < p.r) { p.x = p.r; p.vx *= -0.5; }
+        if (p.x > WW - p.r) { p.x = WW - p.r; p.vx *= -0.5; }
+        if (p.y < p.r) { p.y = p.r; p.vy *= -0.5; }
+        if (p.y > WH - p.r) { p.y = WH - p.r; p.vy *= -0.5; }
+
+        collectibles.forEach(c => {
+            if (!c.active) return;
+            if (Math.hypot(p.x - c.x, p.y - c.y) < p.r + 20) {
+                c.active = false;
+                const points = (p.id === crownOwnerId) ? 30 : 10;
+                p.score += points;
+                playSfx('sfx_donut', 0.28, 50);
+                vibrate('light');
+
+                popups.push({
+                    x: p.x,
+                    y: p.y - 30,
+                    text: `+$${points}`,
+                    color: p.id === crownOwnerId ? CONFIG.colors.crown : '#85bb65',
+                    life: 0.8,
+                    vy: -50
+                });
+
+                for (let i = 0; i < 5; i++) {
+                    particles.push({
+                        x: c.x,
+                        y: c.y,
+                        vx: (Math.random() - 0.5) * 200,
+                        vy: (Math.random() - 0.5) * 200,
+                        color: CONFIG.colors.bill,
+                        size: 4,
+                        life: 0.4
+                    });
+                }
+            }
+        });
+    });
+
+    for (let i = 0; i < players.length; i++) {
+        for (let j = i + 1; j < players.length; j++) {
+            const p1 = players[i];
+            const p2 = players[j];
+            const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+            const minDist = p1.r + p2.r;
+
+            if (dist < minDist) {
+                const angle = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+                const overlap = minDist - dist;
+                const push = overlap * 0.5;
+                const ux = Math.cos(angle);
+                const uy = Math.sin(angle);
+
+                p1.x += ux * push; p1.y += uy * push;
+                p2.x -= ux * push; p2.y -= uy * push;
+
+                const force = 600;
+                p1.vx += ux * force; p1.vy += uy * force;
+                p2.vx -= ux * force; p2.vy -= uy * force;
+
+                let stolen = false;
+                if (crownOwnerId === p1.id) { crownOwnerId = p2.id; stolen = true; }
+                else if (crownOwnerId === p2.id) { crownOwnerId = p1.id; stolen = true; }
+
+                if (stolen) {
+                    playSfx('sfx_steal', 0.45, 140);
+                    showGif('hit-gif', 900);
+                    vibrate('heavy');
+                    shakeIntensity = 15;
+                    popups.push({
+                        x: (p1.x + p2.x) / 2,
+                        y: (p1.y + p2.y) / 2 - 50,
+                        text: 'TOKEN SWAP!',
+                        color: CONFIG.colors.crown,
+                        life: 1.0,
+                        vy: -20,
+                        size: 30
+                    });
+                    for (let k = 0; k < 20; k++) {
+                        particles.push({
+                            x: (p1.x + p2.x) / 2,
+                            y: (p1.y + p2.y) / 2,
+                            vx: (Math.random() - 0.5) * 800,
+                            vy: (Math.random() - 0.5) * 800,
+                            color: CONFIG.colors.crown,
+                            size: 6,
+                            life: 0.6
+                        });
+                    }
+                } else {
+                    playSfx('sfx_hit', 0.24, 100);
+                    showGif('hit-gif', 700);
+                    vibrate('medium');
+                }
+            }
+        }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    for (let i = popups.length - 1; i >= 0; i--) {
+        const p = popups[i];
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) popups.splice(i, 1);
+    }
+
+    if (shakeIntensity > 0) shakeIntensity *= 0.9;
+    if (shakeIntensity < 0.5) shakeIntensity = 0;
+
+    updateHUD();
+}
+
+function updateHUD() {
+    players.forEach(p => {
+        const el = document.getElementById(`score-p${p.id}`);
+        if (el) el.textContent = '$' + p.score;
+    });
+
+    const tEl = document.getElementById('game-timer');
+    tEl.textContent = Math.ceil(gameTimer);
+    if (gameTimer < 10) tEl.classList.add('urgent');
+    else tEl.classList.remove('urgent');
+}
+
+function draw() {
+    ctx.fillStyle = CONFIG.colors.bg;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    if (shakeIntensity > 0) {
+        ctx.translate((Math.random() - 0.5) * shakeIntensity, (Math.random() - 0.5) * shakeIntensity);
+    }
+
+    ctx.strokeStyle = CONFIG.colors.border;
+    ctx.lineWidth = 10;
+    ctx.strokeRect(0, 0, WW, WH);
+
+    ctx.fillStyle = CONFIG.colors.tile1;
+    const ts = 80;
+    const startX = Math.floor(camera.x / ts) * ts;
+    const startY = Math.floor(camera.y / ts) * ts;
+    const endX = startX + cw + ts;
+    const endY = startY + ch + ts;
+
+    for (let x = startX; x < endX; x += ts) {
+        for (let y = startY; y < endY; y += ts) {
+            if (x >= 0 && x < WW && y >= 0 && y < WH) {
+                if ((Math.floor(x / ts) + Math.floor(y / ts)) % 2 === 0) ctx.fillRect(x, y, ts, ts);
+            }
+        }
+    }
+
+    collectibles.forEach(c => {
+        const scale = c.scale;
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        ctx.rotate(c.angle);
+        ctx.scale(scale, scale);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-22, -12, 44, 24);
+
+        ctx.fillStyle = CONFIG.colors.bill;
+        ctx.strokeStyle = CONFIG.colors.billDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-20, -10, 40, 20, 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = CONFIG.colors.billText;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-16, -7, 32, 14);
+
+        ctx.fillStyle = CONFIG.colors.billText;
+        ctx.font = 'bold 10px "VT323", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('$10', 0, 1);
+
+        ctx.restore();
+    });
+
+    players.forEach(p => {
+        const hasCrown = (p.id === crownOwnerId);
+        const r = p.r;
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+
+        if (hasCrown) {
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = CONFIG.colors.crown;
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 1.6 + Math.sin(Date.now() / 100) * 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+
+        const ang = Math.atan2(p.targetY - p.y, p.targetX - p.x);
+        const bodyMap = {
+            HOMER: { shell: '#dff9ff', core: '#62f7ff', accent: '#ffffff', crest: '#62f7ff' },
+            MARGE: { shell: '#86ffc4', core: '#2dbd8c', accent: '#d7fff0', crest: '#8c67ff' },
+            BART: { shell: '#ff8b5d', core: '#ff554d', accent: '#ffd3b6', crest: '#ffcf5a' },
+            LISA: { shell: '#ffca69', core: '#ff8c42', accent: '#fff1b2', crest: '#ff6e9e' },
+            MAGGIE: { shell: '#7cc3ff', core: '#3b82ff', accent: '#d8ecff', crest: '#9ee7ff' }
+        };
+        const style = bodyMap[p.type];
+
+        ctx.shadowColor = hasCrown ? 'rgba(255,217,90,0.75)' : `${style.core}88`;
+        ctx.shadowBlur = hasCrown ? 18 : 10;
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath();
+        ctx.ellipse(0, r * 0.95, r * 0.8, r * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowColor = hasCrown ? 'rgba(255,217,90,0.75)' : `${style.core}88`;
+        ctx.shadowBlur = hasCrown ? 18 : 10;
+        ctx.fillStyle = style.shell;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#06131b';
+        ctx.stroke();
+
+        ctx.fillStyle = style.core;
+        ctx.beginPath();
+        ctx.arc(0, 2, r * 0.68, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = style.accent;
+        ctx.beginPath();
+        ctx.arc(0, -r * 0.28, r * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(6, 19, 27, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#07131d';
+        ctx.beginPath();
+        ctx.roundRect(-11, -r * 0.56, 22, 12, 6);
+        ctx.fill();
+        ctx.fillStyle = hasCrown ? CONFIG.colors.crown : '#eef8ff';
+        ctx.beginPath();
+        ctx.arc(-5 + Math.cos(ang) * 1.6, -r * 0.50 + Math.sin(ang) * 1.2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(5 + Math.cos(ang) * 1.6, -r * 0.50 + Math.sin(ang) * 1.2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = style.core;
+        ctx.beginPath();
+        ctx.arc(-r * 0.62, -2, r * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(r * 0.62, -2, r * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = style.crest;
+        if (p.type === 'MARGE') {
+            ctx.beginPath();
+            ctx.roundRect(-7, -r * 1.75, 14, r * 1.18, 7);
+            ctx.fill();
+            ctx.stroke();
+        } else if (p.type === 'BART') {
+            ctx.beginPath();
+            ctx.moveTo(-12, -r * 0.92);
+            ctx.lineTo(-6, -r * 1.28);
+            ctx.lineTo(-1, -r * 0.92);
+            ctx.lineTo(4, -r * 1.3);
+            ctx.lineTo(9, -r * 0.92);
+            ctx.lineTo(12, -r * 0.6);
+            ctx.lineTo(-12, -r * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        } else if (p.type === 'LISA') {
+            for (let i = 0; i < 8; i++) {
+                const a = (Math.PI * 2 * i) / 8;
+                ctx.beginPath();
+                ctx.arc(Math.cos(a) * (r * 0.82), -r * 0.1 + Math.sin(a) * (r * 0.82), r * 0.13, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else if (p.type === 'MAGGIE') {
+            ctx.beginPath();
+            ctx.arc(0, r * 0.92, r * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, -r * 0.96, r * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        if (hasCrown) {
+            ctx.translate(0, -r * 1.8);
+            ctx.fillStyle = CONFIG.colors.crown;
+            ctx.strokeStyle = '#B8860B';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-12, 0);
+            ctx.lineTo(-12, -12);
+            ctx.lineTo(-6, -6);
+            ctx.lineTo(0, -16);
+            ctx.lineTo(6, -6);
+            ctx.lineTo(12, -12);
+            ctx.lineTo(12, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    });
+
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+
+    popups.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.font = `900 ${p.size || 24}px "Audiowide", sans-serif`;
+        ctx.fillStyle = p.color;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.strokeText(p.text, p.x, p.y);
+        ctx.fillText(p.text, p.x, p.y);
+    });
+    ctx.globalAlpha = 1.0;
+
+    ctx.restore();
+}
+
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
+        this.beginPath();
+        this.moveTo(x + r, y);
+        this.arcTo(x + w, y, x + w, y + h, r);
+        this.arcTo(x + w, y + h, x, y + h, r);
+        this.arcTo(x, y + h, x, y, r);
+        this.arcTo(x, y, x + w, y, r);
+        this.closePath();
+        return this;
+    };
+}
+</script>
+</body>
+</html>

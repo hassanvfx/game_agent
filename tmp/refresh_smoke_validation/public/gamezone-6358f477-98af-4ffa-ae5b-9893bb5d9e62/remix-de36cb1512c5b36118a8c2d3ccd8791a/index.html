@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Data Sweep</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&family=Orbitron:wght@400;700&family=Material+Symbols+Rounded&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #09111f;
+            --bg-bottom: #1d2f59;
+            --panel: rgba(6, 14, 30, 0.72);
+            --panel-border: rgba(126, 241, 255, 0.38);
+            --text-main: #f4fbff;
+            --text-soft: #90d8ff;
+            --accent: #7ef1ff;
+            --accent-strong: #31d6ff;
+            --warning: #ff6b8f;
+            --gold: #ffd65a;
+            --shadow: rgba(0, 0, 0, 0.35);
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(126, 241, 255, 0.16), transparent 28%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text-main);
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.06), transparent 20%, transparent 80%, rgba(0,0,0,0.18)),
+                repeating-linear-gradient(180deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 6px);
+            opacity: 0.4;
+        }
+        canvas { display: block; touch-action: none; }
+        .glass {
+            background: linear-gradient(180deg, rgba(10, 22, 42, 0.9), rgba(6, 12, 24, 0.82));
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 12px 28px var(--shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+        .btn-push { transition: transform 0.1s; active: scale(0.95); }
+        .admin-glow {
+            box-shadow: 0 0 18px rgba(49, 214, 255, 0.25), inset 0 0 12px rgba(49, 214, 255, 0.15);
+            border: 1px solid rgba(126, 241, 255, 0.55);
+            color: #c9fbff;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            background: rgba(3, 18, 31, 0.94);
+        }
+        .material-symbols-rounded {
+            font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+            font-size: 1.1em;
+            vertical-align: middle;
+        }
+        .hud-card {
+            min-width: 0;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 12px rgba(126, 241, 255, 0.2);
+        }
+        .hud-value { color: var(--gold); }
+        .arcade-btn {
+            font-family: 'Exo 2', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .scanline-frame {
+            position: relative;
+            overflow: hidden;
+        }
+        .scanline-frame::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(126, 241, 255, 0.08), transparent 22%, transparent 78%, rgba(255, 107, 143, 0.08));
+            mix-blend-mode: screen;
+        }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 rgba(126, 241, 255, 0.1); } 50% { box-shadow: 0 0 24px rgba(126, 241, 255, 0.25); } }
+        @keyframes gifPulse { 0%, 100% { transform: scale(0.98); opacity: 0; } 15%, 70% { transform: scale(1); opacity: 1; } }
+        .floating { animation: float 3s ease-in-out infinite; }
+        .hidden { display: none !important; }
+        .title-display {
+            font-family: 'Orbitron', 'Exo 2', sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .feedback-gif {
+            position: absolute;
+            right: clamp(0.75rem, 2vw, 1.5rem);
+            width: min(30vw, 128px);
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.22);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.32);
+            opacity: 0;
+            transform: scale(0.96);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: none;
+            object-fit: cover;
+            background: rgba(5, 13, 26, 0.84);
+        }
+        .feedback-gif.active {
+            opacity: 0.94;
+            transform: scale(1);
+            animation: gifPulse 1.15s ease-out;
+        }
+        #collect-gif {
+            top: 5.25rem;
+        }
+        #danger-gif {
+            bottom: 1.25rem;
+        }
+        @media (max-width: 640px) {
+            .feedback-gif {
+                width: min(33vw, 108px);
+                right: 0.75rem;
+            }
+            #collect-gif {
+                top: 5.75rem;
+            }
+            #danger-gif {
+                bottom: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- §3.1 Configuration Declaration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "heroSpeed": { "type": "number", "label": "Courier Speed", "value": 8, "min": 5, "max": 20 },
+    "spawnRate": { "type": "number", "label": "Signal Density", "value": 40, "min": 10, "max": 100 },
+    "adminTitle": { "type": "text", "label": "Callsign", "value": "SWEEP" }
+}
+</script>
+
+<!-- §3.3 Media Declaration -->
+<!-- BGM: Goofy/Comedic -->
+    <audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+    <!-- [agent-note][stage3] resolved-audio: gameplay-loop -> catalogs/audios.json -->
+    <audio id="sfx_collect" data-editable="audio" data-label="Collect SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+    <audio id="sfx_die" data-editable="audio" data-label="OOF SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+    <audio id="sfx_admin" data-editable="audio" data-label="Admin SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3" preload="auto"></audio>
+    <audio id="sfx_ui" data-editable="audio" data-label="UI SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+    <audio id="sfx_alert" data-editable="audio" data-label="Danger Alert SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+
+<!-- UI Structure -->
+<div id="game-container" class="relative w-full h-full select-none">
+    <canvas id="gameCanvas"></canvas>
+    <!-- [agent-note][stage3] resolved-gif: collect/danger feedback overlays -> catalogs/gifs.json -->
+    <img id="collect-gif" class="feedback-gif z-30" src="https://i.giphy.com/Y4nmq4GOnLf4XIgALX.webp" alt="Data packet celebration feedback">
+    <img id="danger-gif" class="feedback-gif z-30" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="Danger reaction feedback">
+    
+    <!-- HUD -->
+    <div id="ui-layer" class="absolute inset-0 z-50 pointer-events-none flex flex-col justify-between">
+        <div id="hud" class="hidden w-full p-4 flex justify-between items-start gap-3">
+            <div class="glass hud-card px-4 py-2 rounded-xl text-lg sm:text-xl font-bold border-l-4 border-cyan-300">
+                DATA: <span id="score" class="hud-value">0</span>
+            </div>
+            <button id="admin-toggle" class="pointer-events-auto glass arcade-btn border border-cyan-300/70 text-cyan-100 px-3 py-2 rounded-lg text-xs sm:text-sm hover:bg-cyan-400/10 transition-colors">
+                <span class="material-symbols-rounded mr-1">terminal</span> CMD
+            </button>
+        </div>
+
+        <!-- Admin Console -->
+        <div id="admin-panel" class="hidden pointer-events-auto absolute top-16 right-4 w-64 max-w-[calc(100vw-2rem)] admin-glow p-4 rounded-lg flex flex-col gap-2 z-50 scanline-frame">
+                <h3 class="text-center font-bold border-b border-cyan-300/60 pb-2 mb-2 tracking-[0.2em]">OPS CONSOLE</h3>
+                <button onclick="window.game.toggleGodMode()" class="border border-cyan-300/60 hover:bg-cyan-300/10 px-2 py-1 text-xs text-left">/shield_mode <span id="god-status">OFF</span></button>
+                <button onclick="window.game.killAll()" class="border border-cyan-300/60 hover:bg-cyan-300/10 px-2 py-1 text-xs text-left">/clear_hazards</button>
+                <button onclick="window.game.addScore(1000)" class="border border-cyan-300/60 hover:bg-cyan-300/10 px-2 py-1 text-xs text-left">/grant_data 1000</button>
+                <button onclick="window.game.setSpeed(20)" class="border border-cyan-300/60 hover:bg-cyan-300/10 px-2 py-1 text-xs text-left">/boost_speed 200%</button>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-auto z-40 px-6">
+            <div class="floating mb-8 text-center glass scanline-frame rounded-3xl px-6 py-7 max-w-md w-full" style="animation: float 3s ease-in-out infinite, pulseGlow 2.8s ease-in-out infinite;">
+                <div class="text-cyan-300 text-xs tracking-[0.35em] mb-3">SIGNAL RUNNER PROTOCOL</div>
+                <h1 class="title-display text-5xl md:text-7xl font-black text-yellow-300 drop-shadow-[0_5px_0_rgba(0,0,0,1)]" style="-webkit-text-stroke: 2px #08111f;">DATA<br><span class="text-white">SWEEP</span></h1>
+                <p class="text-sky-100/90 mt-3 text-sm sm:text-base leading-relaxed">Guide the courier drone to catch bright uplink packets and dodge corruptor hammers in the neon storm.</p>
+            </div>
+            <button id="start-btn" class="pointer-events-auto arcade-btn bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-lg sm:text-2xl font-bold py-4 px-8 sm:px-12 rounded-xl shadow-[0_6px_0_#0891b2] active:shadow-none active:translate-y-2 transition-all">
+                <span class="material-symbols-rounded mr-2">play_arrow</span>START RUN
+            </button>
+        </div>
+
+        <!-- Game Over -->
+        <div id="game-over-screen" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-rose-950/88 pointer-events-auto z-40 px-6">
+            <div class="glass rounded-3xl px-6 py-7 text-center max-w-sm w-full border border-rose-300/30">
+                <div class="text-cyan-200 text-xs tracking-[0.3em] mb-3">TRANSMISSION CUT</div>
+                <h2 class="text-4xl sm:text-5xl font-black text-white mb-2 drop-shadow-lg">SIGNAL LOST</h2>
+                <div class="text-lg sm:text-2xl text-yellow-300 mb-8">Data secured: <span id="finalScore">0</span></div>
+                <button id="restart-btn" class="pointer-events-auto arcade-btn bg-white text-rose-700 hover:bg-gray-200 text-lg sm:text-xl font-bold py-3 px-8 rounded-lg shadow-lg">
+                    <span class="material-symbols-rounded mr-2">refresh</span>RETRY SWEEP
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// §3.2 Configuration Interface
+window.gameConfigDefs = {
+    "heroSpeed": { "type": "number", "label": "Courier Speed", "value": 8, "min": 5, "max": 20 },
+    "spawnRate": { "type": "number", "label": "Signal Density", "value": 40, "min": 10, "max": 100 },
+    "adminTitle": { "type": "text", "label": "Callsign", "value": "SWEEP" }
+};
+window.gameConfig = {
+    heroSpeed: 8,
+    spawnRate: 40,
+    adminTitle: "SWEEP"
+};
+window.updateGameConfig = (key, val) => {
+    if (window.gameConfigDefs[key]) {
+        window.gameConfig[key] = val;
+        // Hot reload logic
+        if (key === 'adminTitle' && window.game && window.game.player) {
+            window.game.player.label = val;
+        }
+    }
+};
+
+// §2 Technical Contract: Audio Manager
+class AudioManager {
+    constructor() {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.buffers = {};
+        this.unlocked = false;
+        this.muted = false;
+        this.lastPlayedAt = {};
+        this.bgm = document.getElementById('bgm_main');
+    }
+
+    unlock() {
+        if (this.unlocked) {
+            this.ctx.resume().catch(() => {});
+            this.playBgm();
+            return;
+        }
+        this.ctx.resume().then(() => {
+            this.unlocked = true;
+            this.playBgm();
+        }).catch(() => {});
+    }
+
+    async loadSound(id, src) {
+        try {
+            const res = await fetch(src);
+            const arrayBuffer = await res.arrayBuffer();
+            this.buffers[id] = await this.ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn(`Failed to load ${id}, fallback to synth`);
+            this.buffers[id] = 'fallback';
+        }
+    }
+
+    playBgm() {
+        if (!this.bgm || this.muted) return;
+        this.bgm.volume = 0.2;
+        this.bgm.play().catch(() => {});
+    }
+
+    stopBgm() {
+        if (!this.bgm) return;
+        this.bgm.pause();
+        this.bgm.currentTime = 0;
+    }
+
+    pauseBgm() {
+        if (!this.bgm) return;
+        this.bgm.pause();
+    }
+
+    playSfx(id, fallbackType = 'beep', debounceMs = 0) {
+        if (!this.unlocked || this.muted) return;
+        const now = performance.now();
+        if (debounceMs && this.lastPlayedAt[id] && now - this.lastPlayedAt[id] < debounceMs) return;
+        this.lastPlayedAt[id] = now;
+        
+        if (this.buffers[id] && this.buffers[id] !== 'fallback') {
+            const src = this.ctx.createBufferSource();
+            const gain = this.ctx.createGain();
+            const volumeMap = {
+                sfx_collect: 0.45,
+                sfx_die: 0.55,
+                sfx_admin: 0.42,
+                sfx_ui: 0.3,
+                sfx_alert: 0.26
+            };
+            src.buffer = this.buffers[id];
+            gain.gain.value = volumeMap[id] || 0.35;
+            src.connect(gain);
+            gain.connect(this.ctx.destination);
+            src.start(0);
+        } else {
+            this.synthesize(fallbackType);
+        }
+    }
+
+    synthesize(type) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        if (type === 'die') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.3);
+        } else if (type === 'collect') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        } else if (type === 'ui') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(420, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(620, this.ctx.currentTime + 0.07);
+            gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.08);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.08);
+        } else if (type === 'alert') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(180, this.ctx.currentTime + 0.18);
+            gain.gain.setValueAtTime(0.16, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.2);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+        }
+    }
+}
+
+// Game Logic
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.audio = new AudioManager();
+        
+        this.state = 'MENU'; // MENU, PLAYING, GAMEOVER
+        this.score = 0;
+        this.frames = 0;
+        this.itemSpawnTimer = 0;
+        this.enemySpawnTimer = 0;
+        
+        // Entities
+            this.player = { x: 0, y: 0, r: 25, color: '#F5B800', label: window.gameConfig.adminTitle, pulse: 0 };
+        this.target = { x: 0, y: 0 };
+        this.enemies = [];
+        this.items = [];
+        this.particles = [];
+        this.popups = [];
+        
+        // Admin
+        this.godMode = false;
+        this.adminPanelOpen = false;
+        
+        // Input
+        this.input = { x: 0, y: 0, active: false };
+        
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        this.setupInput();
+        
+        // Load Audio
+        const sounds = [
+            { id: 'sfx_collect', el: 'sfx_collect' },
+            { id: 'sfx_die', el: 'sfx_die' },
+            { id: 'sfx_admin', el: 'sfx_admin' },
+            { id: 'sfx_ui', el: 'sfx_ui' },
+            { id: 'sfx_alert', el: 'sfx_alert' }
+        ];
+        sounds.forEach(s => {
+            const el = document.getElementById(s.el);
+            if (el) this.audio.loadSound(s.id, el.src);
+        });
+
+        // UI Bindings
+        this.collectGif = document.getElementById('collect-gif');
+        this.dangerGif = document.getElementById('danger-gif');
+        this.gifTimeouts = { collect: null, danger: null };
+        this.lastDangerCue = 0;
+        document.getElementById('start-btn').onclick = () => {
+            this.audio.playSfx('sfx_ui', 'ui', 80);
+            this.start();
+        };
+        document.getElementById('restart-btn').onclick = () => {
+            this.audio.playSfx('sfx_ui', 'ui', 80);
+            this.start();
+        };
+        document.getElementById('admin-toggle').onclick = () => {
+            this.adminPanelOpen = !this.adminPanelOpen;
+            const panel = document.getElementById('admin-panel');
+            if (this.adminPanelOpen) panel.classList.remove('hidden');
+            else panel.classList.add('hidden');
+            this.audio.playSfx('sfx_ui', 'ui', 90);
+        };
+
+        this.loop = this.loop.bind(this);
+        requestAnimationFrame(this.loop);
+    }
+
+    resize() {
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = window.innerWidth * dpr;
+        this.canvas.height = window.innerHeight * dpr;
+        this.canvas.style.width = window.innerWidth + 'px';
+        this.canvas.style.height = window.innerHeight + 'px';
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        
+        if (this.state === 'MENU') {
+            this.player.x = this.width / 2;
+            this.player.y = this.height / 2;
+        }
+    }
+
+    setupInput() {
+        const handler = (e) => {
+            if (this.state !== 'PLAYING') return;
+            e.preventDefault();
+            const rect = this.canvas.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+            this.input.x = clientX - rect.left;
+            this.input.y = clientY - rect.top;
+            this.input.active = true;
+            
+            // Audio unlock on first interaction
+            this.audio.unlock();
+        };
+
+        const endHandler = (e) => {
+            // Don't stop movement on touch end, just update target to last known
+        };
+
+        this.canvas.addEventListener('pointerdown', handler, { passive: false });
+        this.canvas.addEventListener('pointermove', handler, { passive: false });
+        this.canvas.addEventListener('pointerup', endHandler, { passive: false });
+        this.canvas.addEventListener('pointercancel', endHandler, { passive: false });
+    }
+
+    start() {
+        this.state = 'PLAYING';
+        this.score = 0;
+        this.items = [];
+        this.enemies = [];
+        this.particles = [];
+        this.popups = [];
+        this.player.x = this.width / 2;
+        this.player.y = this.height / 2;
+        this.input.x = this.width / 2;
+        this.input.y = this.height / 2;
+        this.godMode = false;
+        this.frames = 0;
+        this.itemSpawnTimer = 0;
+        this.enemySpawnTimer = 0;
+        document.getElementById('god-status').innerText = "OFF";
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('score').innerText = '0';
+        
+        this.audio.unlock();
+        this.audio.playBgm();
+        this.hideFeedbackGif('danger');
+    }
+
+    gameOver() {
+        this.state = 'GAMEOVER';
+        this.audio.pauseBgm();
+        this.audio.playSfx('sfx_die', 'die', 120);
+        this.showFeedbackGif('danger');
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('finalScore').innerText = this.score;
+        document.getElementById('admin-panel').classList.add('hidden');
+        this.adminPanelOpen = false;
+    }
+
+    // Admin Commands
+    toggleGodMode() {
+        this.godMode = !this.godMode;
+        document.getElementById('god-status').innerText = this.godMode ? "ON" : "OFF";
+        this.audio.playSfx('sfx_admin');
+        this.createPopup(this.player.x, this.player.y, "GOD MODE", "#00ff00");
+    }
+
+    killAll() {
+        this.enemies.forEach(e => this.createExplosion(e.x, e.y, '#ff0000'));
+        this.enemies = [];
+        this.audio.playSfx('sfx_admin');
+        this.createPopup(this.player.x, this.player.y, "SERVER NUKE", "#ff0000");
+    }
+
+    addScore(amt) {
+        this.score += amt;
+        document.getElementById('score').innerText = this.score;
+        this.audio.playSfx('sfx_collect');
+        this.createPopup(this.player.x, this.player.y, "+1000 BRAINROT", "#ffff00");
+    }
+
+    setSpeed(val) {
+        window.gameConfig.heroSpeed = val;
+        this.audio.playSfx('sfx_admin');
+        this.createPopup(this.player.x, this.player.y, "SPEED HACK", "#00ffff");
+    }
+
+    createExplosion(x, y, color) {
+        for(let i=0; i<15; i++) {
+            this.particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 15,
+                vy: (Math.random() - 0.5) * 15,
+                life: 1.0,
+                color: color,
+                size: Math.random() * 8 + 2
+            });
+        }
+    }
+
+    createPopup(x, y, text, color) {
+        this.popups.push({ x, y, text, color, life: 1.0, vy: -2 });
+    }
+
+    showFeedbackGif(type) {
+        const map = {
+            collect: this.collectGif,
+            danger: this.dangerGif
+        };
+        const el = map[type];
+        if (!el) return;
+        el.classList.remove('active');
+        void el.offsetWidth;
+        el.classList.add('active');
+        clearTimeout(this.gifTimeouts[type]);
+        this.gifTimeouts[type] = setTimeout(() => this.hideFeedbackGif(type), type === 'collect' ? 1100 : 1500);
+    }
+
+    hideFeedbackGif(type) {
+        const map = {
+            collect: this.collectGif,
+            danger: this.dangerGif
+        };
+        const el = map[type];
+        if (el) el.classList.remove('active');
+    }
+
+    update(dt) {
+        if (this.state !== 'PLAYING') return;
+        this.frames++;
+        this.player.pulse += dt * 0.01;
+
+        // Player Movement
+        const dx = this.input.x - this.player.x;
+        const dy = this.input.y - this.player.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > 1) {
+            const speed = window.gameConfig.heroSpeed * (dt/16);
+            const moveDist = Math.min(dist, speed);
+            this.player.x += (dx / dist) * moveDist;
+            this.player.y += (dy / dist) * moveDist;
+        }
+
+        // Keep player in bounds
+        this.player.x = Math.max(25, Math.min(this.width - 25, this.player.x));
+        this.player.y = Math.max(25, Math.min(this.height - 25, this.player.y));
+
+        // Spawning
+        this.itemSpawnTimer += dt;
+        this.enemySpawnTimer += dt;
+
+        const itemSpawnInterval = Math.max(100, (100 - window.gameConfig.spawnRate) * 16);
+        if (this.itemSpawnTimer >= itemSpawnInterval) {
+            this.itemSpawnTimer -= itemSpawnInterval;
+            const words = ["PING", "CACHE", "NODE", "SYNC", "BYTE", "LINK", "GRID", "PACKET"];
+            this.items.push({
+                x: Math.random() * this.width,
+                y: -50,
+                text: words[Math.floor(Math.random() * words.length)],
+                vy: Math.random() * 2 + 1,
+                osc: Math.random() * Math.PI
+            });
+        }
+
+        if (this.enemySpawnTimer >= 1000) {
+            this.enemySpawnTimer -= 1000;
+            this.enemies.push({
+                x: Math.random() < 0.5 ? -50 : this.width + 50,
+                y: Math.random() * this.height,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                angle: 0
+            });
+        }
+
+        // Logic
+        // Items
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            let item = this.items[i];
+            item.y += item.vy * (dt/16);
+            item.osc += 0.05;
+            item.x += Math.sin(item.osc) * 1;
+
+            // Collision
+            const idx = Math.abs(this.player.x - item.x);
+            const idy = Math.abs(this.player.y - item.y);
+            if (idx < 40 && idy < 40) {
+                this.score++;
+                document.getElementById('score').innerText = this.score;
+                this.audio.playSfx('sfx_collect', 'collect', 50);
+                if (this.score % 3 === 0) this.showFeedbackGif('collect');
+                this.createPopup(item.x, item.y, item.text, "#FFFF00");
+                this.items.splice(i, 1);
+                continue;
+            }
+
+            if (item.y > this.height + 50) this.items.splice(i, 1);
+        }
+
+        // Enemies
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            let e = this.enemies[i];
+            // Home in on player
+            const ex = this.player.x - e.x;
+            const ey = this.player.y - e.y;
+            const edist = Math.sqrt(ex*ex + ey*ey);
+            e.vx += (ex / edist) * 0.1;
+            e.vy += (ey / edist) * 0.1;
+            
+            // Cap speed
+            const speed = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
+            if (speed > 4) { e.vx *= 0.95; e.vy *= 0.95; }
+
+            e.x += e.vx * (dt/16);
+            e.y += e.vy * (dt/16);
+            e.angle += 0.1;
+
+            // Collision
+            if (edist < 40) {
+                if (this.godMode) {
+                    this.createExplosion(e.x, e.y, '#ff0000');
+                    this.enemies.splice(i, 1);
+                    this.audio.playSfx('sfx_admin', 'collect', 80);
+                    this.showFeedbackGif('collect');
+                    this.createPopup(e.x, e.y, "CLEARED", "#ff0000");
+                } else {
+                    this.gameOver();
+                }
+            }
+        }
+
+        const nearestEnemy = this.enemies.reduce((best, enemy) => {
+            const dist = Math.hypot(this.player.x - enemy.x, this.player.y - enemy.y);
+            return Math.min(best, dist);
+        }, Infinity);
+        if (nearestEnemy < 140 && performance.now() - this.lastDangerCue > 1600) {
+            this.lastDangerCue = performance.now();
+            this.audio.playSfx('sfx_alert', 'alert', 1200);
+            this.showFeedbackGif('danger');
+        }
+
+        // Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.05;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        // Popups
+        for (let i = this.popups.length - 1; i >= 0; i--) {
+            let p = this.popups[i];
+            p.y += p.vy;
+            p.life -= 0.02;
+            if (p.life <= 0) this.popups.splice(i, 1);
+        }
+    }
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+
+        // Background (Neon data storm)
+        const grad = this.ctx.createLinearGradient(0, 0, 0, this.height);
+        grad.addColorStop(0, '#09111f');
+        grad.addColorStop(0.55, '#16305b');
+        grad.addColorStop(1, '#081425');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        const glowGrad = this.ctx.createRadialGradient(this.width * 0.5, this.height * 0.1, 30, this.width * 0.5, this.height * 0.1, this.width * 0.8);
+        glowGrad.addColorStop(0, 'rgba(126, 241, 255, 0.18)');
+        glowGrad.addColorStop(1, 'rgba(126, 241, 255, 0)');
+        this.ctx.fillStyle = glowGrad;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Grid / data lanes
+        this.ctx.strokeStyle = 'rgba(126,241,255,0.14)';
+        this.ctx.lineWidth = 1.5;
+        const gridSize = 46;
+        const offset = (Date.now() / 18) % gridSize;
+        for(let x=0; x<this.width; x+=gridSize) {
+            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
+        }
+        for(let y=offset; y<this.height; y+=gridSize) {
+            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
+        }
+
+        for (let i = 0; i < 10; i++) {
+            const laneX = ((Date.now() * 0.02) + i * 130) % (this.width + 120) - 60;
+            this.ctx.fillStyle = 'rgba(255,255,255,0.035)';
+            this.ctx.fillRect(laneX, 0, 18, this.height);
+        }
+
+        if (this.state === 'PLAYING' || this.state === 'GAMEOVER') {
+            // Draw Items
+            this.ctx.font = "700 20px 'Exo 2'";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+            for(let item of this.items) {
+                const bob = Math.sin(item.osc * 2) * 4;
+                this.ctx.save();
+                this.ctx.translate(item.x, item.y + bob);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-36, -16, 72, 32, 12);
+                this.ctx.fillStyle = "rgba(126, 241, 255, 0.16)";
+                this.ctx.fill();
+                this.ctx.strokeStyle = "rgba(126, 241, 255, 0.65)";
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+                this.ctx.fillStyle = "#ffffff";
+                this.ctx.strokeStyle = "rgba(4, 13, 28, 0.95)";
+                this.ctx.lineWidth = 5;
+                this.ctx.strokeText(item.text, 0, 1);
+                this.ctx.fillText(item.text, 0, 1);
+                this.ctx.restore();
+            }
+
+            // Draw Enemies (Corruptor hammers)
+            for(let e of this.enemies) {
+                this.ctx.save();
+                this.ctx.translate(e.x, e.y);
+                this.ctx.rotate(e.angle);
+
+                this.ctx.shadowColor = 'rgba(255, 107, 143, 0.45)';
+                this.ctx.shadowBlur = 14;
+
+                // Handle
+                this.ctx.fillStyle = "#2a1c10";
+                this.ctx.fillRect(-5, -22, 10, 44);
+                this.ctx.fillStyle = "#6d4a2d";
+                this.ctx.fillRect(-3, -20, 6, 40);
+
+                // Head
+                this.ctx.fillStyle = "#7d1335";
+                this.ctx.fillRect(-17, -27, 34, 22);
+                this.ctx.fillStyle = "#ff6b8f";
+                this.ctx.fillRect(-17, -27, 34, 8);
+                this.ctx.strokeStyle = "#ffd3de";
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-17, -27, 34, 22);
+
+                this.ctx.shadowBlur = 0;
+                this.ctx.fillStyle = "white";
+                this.ctx.font = "700 10px 'Exo 2'";
+                this.ctx.fillText("BAN", 0, -16);
+                this.ctx.restore();
+            }
+
+            // Draw Player (Courier drone)
+            if (this.state === 'PLAYING') {
+                this.ctx.save();
+                this.ctx.translate(this.player.x, this.player.y);
+                const tilt = (this.input.x - this.player.x) * 0.05;
+                this.ctx.rotate(Math.max(-0.5, Math.min(0.5, tilt)));
+
+                const pulse = Math.sin(this.player.pulse) * 0.5 + 0.5;
+
+                // Aura if God Mode
+                if (this.godMode) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 42 + pulse * 4, 0, Math.PI*2);
+                    this.ctx.fillStyle = `rgba(49, 214, 255, ${0.22 + pulse * 0.18})`;
+                    this.ctx.fill();
+                }
+
+                // Thruster halo
+                this.ctx.beginPath();
+                this.ctx.arc(0, 6, 31 + pulse * 2, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(126, 241, 255, ${0.08 + pulse * 0.06})`;
+                this.ctx.fill();
+
+                // Legs / thrusters
+                this.ctx.fillStyle = "#1f2f56";
+                this.ctx.fillRect(-17, 10, 8, 22);
+                this.ctx.fillRect(9, 10, 8, 22);
+                this.ctx.fillStyle = "#31d6ff";
+                this.ctx.fillRect(-16, 28, 6, 6 + pulse * 3);
+                this.ctx.fillRect(10, 28, 6, 6 + pulse * 3);
+
+                // Body core
+                this.ctx.beginPath();
+                this.ctx.roundRect(-18, 2, 36, 25, 10);
+                this.ctx.fillStyle = "#294a89";
+                this.ctx.fill();
+                this.ctx.strokeStyle = "#9eeeff";
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // Head / visor
+                this.ctx.beginPath();
+                this.ctx.roundRect(-19, -24, 38, 30, 10);
+                this.ctx.fillStyle = "#ffd65a";
+                this.ctx.fill();
+                this.ctx.strokeStyle = "#fff3bf";
+                this.ctx.stroke();
+
+                this.ctx.beginPath();
+                this.ctx.roundRect(-13, -15, 26, 12, 6);
+                this.ctx.fillStyle = "#0d1932";
+                this.ctx.fill();
+
+                // Eyes
+                this.ctx.fillStyle = this.godMode ? "#7ef1ff" : "#31d6ff";
+                this.ctx.fillRect(-8, -11, 5, 4);
+                this.ctx.fillRect(3, -11, 5, 4);
+
+                // Smile / scan
+                this.ctx.strokeStyle = "#0d1932";
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(0, -1, 6, 0.12, Math.PI - 0.12);
+                this.ctx.stroke();
+
+                // Antenna
+                this.ctx.strokeStyle = "#9eeeff";
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -24);
+                this.ctx.lineTo(0, -33);
+                this.ctx.stroke();
+                this.ctx.beginPath();
+                this.ctx.arc(0, -35, 4, 0, Math.PI * 2);
+                this.ctx.fillStyle = pulse > 0.5 ? "#ff6b8f" : "#7ef1ff";
+                this.ctx.fill();
+
+                // Name Tag
+                this.ctx.fillStyle = this.godMode ? "#7ef1ff" : "white";
+                this.ctx.font = "700 12px 'Exo 2'";
+                this.ctx.fillText(`[${window.gameConfig.adminTitle}]`, 0, -46);
+
+                this.ctx.restore();
+            }
+
+            // Particles
+            for(let p of this.particles) {
+                this.ctx.globalAlpha = p.life;
+                this.ctx.fillStyle = p.color;
+                this.ctx.fillRect(p.x, p.y, p.size, p.size);
+                this.ctx.globalAlpha = 1.0;
+            }
+
+            // Popups
+            for(let p of this.popups) {
+                this.ctx.globalAlpha = p.life;
+                this.ctx.font = "700 20px 'Orbitron'";
+                this.ctx.fillStyle = p.color;
+                this.ctx.strokeStyle = "rgba(4, 13, 28, 0.95)";
+                this.ctx.lineWidth = 4;
+                this.ctx.strokeText(p.text, p.x, p.y);
+                this.ctx.fillText(p.text, p.x, p.y);
+                this.ctx.globalAlpha = 1.0;
+            }
+        }
+    }
+
+    loop(timestamp) {
+        try {
+            if (!this.lastTime) this.lastTime = timestamp;
+            const dt = timestamp - this.lastTime;
+            this.lastTime = timestamp;
+
+            this.update(dt);
+            this.draw();
+            requestAnimationFrame(this.loop);
+        } catch (e) {
+            console.error("Game Loop Error:", e);
+        }
+    }
+}
+
+// Initialization
+document.addEventListener('DOMContentLoaded', () => {
+    window.game = new Game();
+});
+
+</script>
+</body>
+</html>

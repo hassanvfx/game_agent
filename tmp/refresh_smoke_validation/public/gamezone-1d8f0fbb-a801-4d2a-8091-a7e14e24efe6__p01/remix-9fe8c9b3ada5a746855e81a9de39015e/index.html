@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Crystal Dumpster Critter Catcher</title>
+    <!-- [agent-note][v5] catalog fonts: Bangers display + Creepster accent via catalogs/fonts.json; system UI for readable controls -->
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --font-display: 'Bangers', 'Arial Black', cursive;
+            --font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-accent: 'Creepster', 'Arial Black', cursive;
+            --bg-top: #1a0624;
+            --bg-bottom: #07040d;
+            --panel: rgba(31, 11, 43, 0.80);
+            --panel-soft: rgba(57, 20, 76, 0.64);
+            --line: rgba(170, 255, 236, 0.34);
+            --line-strong: rgba(209, 255, 95, 0.72);
+            --glow: rgba(166, 85, 255, 0.26);
+            --text-main: #f7f0ff;
+            --text-dim: #cdb9d9;
+            --accent: #8cffea;
+            --accent-2: #d7ff57;
+            --warning: #ff9f1c;
+        }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: radial-gradient(circle at 50% 0%, #4c1164 0%, var(--bg-top) 40%, var(--bg-bottom) 100%); color: var(--text-main); font-family: var(--font-ui); -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 18%, rgba(140, 255, 234, 0.16), transparent 18%),
+                radial-gradient(circle at 80% 22%, rgba(215, 255, 87, 0.12), transparent 18%),
+                linear-gradient(180deg, rgba(255,255,255,0.06), transparent 22%);
+            pointer-events: none;
+        }
+        canvas { display: block; width: 100%; height: 100%; filter: saturate(1.08) contrast(1.02); touch-action: none; }
+        .glass {
+            background: linear-gradient(180deg, rgba(55, 16, 70, 0.94), rgba(18, 8, 26, 0.88));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--line);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 24px var(--glow);
+            color: var(--text-main);
+        }
+        .glass-dark { background: rgba(8, 3, 13, 0.78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .btn-press { transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease; }
+        .btn-press:active { transform: scale(0.95); filter: brightness(1.08); }
+        .hidden { display: none !important; }
+        .hud-chip {
+            background: linear-gradient(180deg, rgba(65, 20, 83, 0.96), rgba(20, 8, 31, 0.9));
+            border: 1px solid var(--line);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px rgba(92, 225, 255, 0.18);
+        }
+        .panel-title, .font-display {
+            font-family: var(--font-display);
+            letter-spacing: 0.055em;
+            text-transform: uppercase;
+        }
+        .tech-card {
+            background: linear-gradient(180deg, rgba(63, 22, 82, 0.98), rgba(18, 7, 29, 0.96));
+            border: 1px solid rgba(126, 228, 255, 0.26);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(0,0,0,0.3);
+        }
+        .control-dock {
+            background: linear-gradient(to top, rgba(8, 3, 12, 0.84), rgba(33, 10, 43, 0.42), transparent);
+        }
+        .modal-shell { max-height: 90vh; }
+        .modal-scroll { overflow-y: auto; }
+        .modal-actions { position: sticky; bottom: 0; }
+        .status-label {
+            font-family: var(--font-display);
+            font-size: 9px;
+            letter-spacing: 0.22em;
+            color: var(--text-dim);
+        }
+        .numeric-readout {
+            font-family: var(--font-display);
+            letter-spacing: 0.04em;
+            text-shadow: 0 0 12px rgba(92, 225, 255, 0.3);
+        }
+        .scanline {
+            position: relative;
+            overflow: hidden;
+        }
+        .scanline::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.06), transparent 35%, transparent 65%, rgba(255,255,255,0.04));
+            opacity: 0.45;
+            pointer-events: none;
+        }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(126, 228, 255, 0.35); border-radius: 4px; }
+        .feedback-overlay {
+            position: absolute;
+            z-index: 55;
+            width: min(28vw, 112px);
+            min-width: 72px;
+            aspect-ratio: 1;
+            border-radius: 1.25rem;
+            border: 1px solid rgba(126, 228, 255, 0.26);
+            background: rgba(8, 17, 38, 0.58);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.28), 0 0 24px rgba(92, 225, 255, 0.18);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            pointer-events: none;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .feedback-overlay.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-overlay img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .feedback-overlay.collect {
+            right: 1rem;
+            bottom: calc(7.4rem + env(safe-area-inset-bottom, 0px));
+        }
+        .feedback-overlay.blocked {
+            left: 1rem;
+            bottom: calc(7.4rem + env(safe-area-inset-bottom, 0px));
+        }
+        .feedback-caption {
+            position: absolute;
+            left: 0.45rem;
+            right: 0.45rem;
+            bottom: 0.4rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 999px;
+            background: rgba(1, 8, 20, 0.7);
+            color: #eefbff;
+            font-family: var(--font-display);
+            font-size: 0.52rem;
+            letter-spacing: 0.14em;
+            text-align: center;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(92, 225, 255, 0.45);
+        }
+
+        /* Rarity Styles */
+        .rarity-common { color: #7f8c8d; border-color: #bdc3c7; }
+        .rarity-uncommon { color: #27ae60; border-color: #2ecc71; }
+        .rarity-rare { color: #2980b9; border-color: #3498db; }
+        .rarity-epic { color: #8e44ad; border-color: #9b59b6; box-shadow: 0 0 5px rgba(155, 89, 182, 0.3); }
+        .rarity-legendary { color: #d35400; border-color: #f39c12; background: linear-gradient(135deg, #fff 80%, #fff3e0); }
+        .rarity-mythical { color: #c0392b; border-color: #e74c3c; animation: mythic-pulse 2s infinite; background: linear-gradient(135deg, #fff 80%, #ffebee); }
+        .rarity-godly { color: #6a0dad; border-color: #9932cc; animation: godly-pulse 1.5s infinite; background: linear-gradient(135deg, #f3e5f5 0%, #fff 50%, #e1bee7 100%); box-shadow: 0 0 15px rgba(148, 0, 211, 0.4); }
+
+        @keyframes mythic-pulse { 0% { box-shadow: 0 0 0 rgba(231, 76, 60, 0); } 50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.5); } 100% { box-shadow: 0 0 0 rgba(231, 76, 60, 0); } }
+        @keyframes godly-pulse { 0% { box-shadow: 0 0 0 rgba(148, 0, 211, 0); border-color: #9932cc; } 50% { box-shadow: 0 0 20px rgba(148, 0, 211, 0.6); border-color: #ffd700; } 100% { box-shadow: 0 0 0 rgba(148, 0, 211, 0); border-color: #9932cc; } }
+        
+        .map-card-selected { border-color: #5ce1ff; box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.2), 0 0 20px rgba(92, 225, 255, 0.18); }
+        .orb-avatar {
+            position: relative;
+            overflow: hidden;
+            border-radius: 999px;
+        }
+        .orb-avatar::after {
+            content: "";
+            position: absolute;
+            inset: 8% 14% auto 18%;
+            height: 28%;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0));
+            pointer-events: none;
+        }
+        .orb-core {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            box-shadow: inset -6px -10px 16px rgba(0,0,0,0.18), inset 8px 10px 14px rgba(255,255,255,0.16);
+        }
+        @media (max-width: 640px) {
+            .panel-title { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Canonical v5 rebuilt public surface: Crystal Dumpster Critter Catcher. Mechanics preserved from index_old.html; presentation rebuilt around trashy crystal-cave monster catching. -->
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/collect/blocked/pause -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_coin" data-editable="audio" data-label="Coin SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_buy" data-editable="audio" data-label="Buy SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3" preload="auto"></audio>
+<audio id="sfx_save" data-editable="audio" data-label="Save SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_click" data-editable="audio" data-label="Click SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_restock" data-editable="audio" data-label="Restock SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+<audio id="sfx_map_select" data-editable="audio" data-label="Map Select SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_boost" data-editable="audio" data-label="Boost SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3" preload="auto"></audio>
+<audio id="sfx_equip" data-editable="audio" data-label="Equip SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3" preload="auto"></audio>
+<audio id="sfx_unequip" data-editable="audio" data-label="Unequip SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_02.mp3" preload="auto"></audio>
+<audio id="sfx_blocked" data-editable="audio" data-label="Blocked SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3" preload="auto"></audio>
+<audio id="sfx_pause" data-editable="audio" data-label="Pause SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/pause_01.mp3" preload="auto"></audio>
+<audio id="sfx_resume" data-editable="audio" data-label="Resume SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/resume_01.mp3" preload="auto"></audio>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">{"restockTime":{"type":"number","label":"Restock Time (s)","value":60,"min":10,"max":600},"maxBalls":{"type":"number","label":"Max Active Balls","value":150,"min":10,"max":500}}</script>
+
+<!-- UI Layer -->
+<div id="ui-layer" class="absolute inset-0 z-50 pointer-events-none flex flex-col justify-between">
+    <!-- [agent-note][stage3] resolved-gif: collect/blocked feedback overlays -> catalogs/gifs.json -->
+    <div id="feedback-collect" class="feedback-overlay collect" aria-hidden="true">
+        <img src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="Celebration feedback">
+        <div class="feedback-caption">shard leak</div>
+    </div>
+    <div id="feedback-blocked" class="feedback-overlay blocked" aria-hidden="true">
+        <img src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp" alt="Blocked action feedback">
+        <div class="feedback-caption">wallet stink</div>
+    </div>
+    <!-- Top HUD -->
+        <div class="pointer-events-auto p-4 pt-safe flex justify-between items-start">
+            <div class="glass hud-chip rounded-full px-4 py-2 flex items-center gap-3 shadow-lg scanline">
+                <span class="text-2xl">🧃</span>
+                <div class="flex flex-col">
+                    <span class="status-label">TRASH SHARDS</span>
+                    <span id="score-display" class="text-xl sm:text-2xl font-bold numeric-readout">0</span>
+                </div>
+            </div>
+            <div class="flex gap-2 items-start">
+                <div class="glass hud-chip rounded-full px-4 py-2 flex flex-col items-center min-w-[84px] shadow-lg scanline">
+                    <span class="status-label">DUMP TIMER</span>
+                    <span id="restock-timer" class="text-base sm:text-lg font-bold numeric-readout text-cyan-200">00:00</span>
+                </div>
+                <button id="btn-save-manual" class="glass hud-chip w-10 h-10 rounded-full flex items-center justify-center text-xl btn-press shadow-lg">
+                    💾
+                </button>
+                <button id="btn-menu" class="glass hud-chip w-10 h-10 rounded-full flex items-center justify-center text-xl btn-press shadow-lg">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+
+    <!-- Active Boost Indicator -->
+    <div id="boost-indicator" class="hidden absolute top-[12%] right-4 glass hud-chip rounded-full px-3 py-1 flex items-center gap-1 shadow-md animate-bounce scanline">
+        <span class="text-lg">🧊</span>
+        <span class="text-xs font-bold text-cyan-200 numeric-readout">+15%</span>
+    </div>
+
+    <!-- Center Messages -->
+    <div id="message-area" class="absolute top-[20%] w-full text-center pointer-events-none flex flex-col items-center gap-2"></div>
+    
+    <!-- Save Toast -->
+    <div id="save-toast" class="absolute top-[15%] w-full flex justify-center pointer-events-none opacity-0 transition-opacity duration-500" style="opacity: 0;">
+        <div class="glass hud-chip px-4 py-2 rounded-full text-sm font-bold backdrop-blur-md flex items-center gap-2 shadow-xl scanline">
+            <span>💾</span> Cage Log Updated
+        </div>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="pointer-events-auto p-4 pb-8 pb-safe flex gap-2 justify-center items-end control-dock">
+        <button id="btn-shop" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 scanline">
+            <span class="text-2xl">🗑️</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">BAIT BIN</span>
+        </button>
+        <button id="btn-inventory" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 border border-transparent transition-colors scanline">
+            <span class="text-2xl">🪤</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">CAGES</span>
+        </button>
+        <button id="btn-map" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 border border-cyan-300/40 scanline">
+            <span class="text-2xl">💎</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">CAVES</span>
+        </button>
+        <button id="btn-index" class="btn-press glass hud-chip p-2 rounded-2xl font-bold shadow-lg flex flex-col items-center w-[4.4rem] h-[4.4rem] justify-center gap-1 scanline">
+            <span class="text-2xl">📓</span>
+            <span class="status-label !text-[9px] !tracking-[0.18em] !text-cyan-100">MOLD DEX</span>
+        </button>
+    </div>
+</div>
+
+<!-- Modals -->
+<div id="modal-overlay" class="hidden absolute inset-0 z-[60] glass-dark flex items-center justify-center p-4">
+    
+    <!-- Map Modal -->
+    <div id="map-modal" class="hidden glass modal-shell w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 transform transition-all h-[70%]">
+        <div class="flex justify-between items-center border-b border-cyan-200/15 pb-3">
+            <h2 class="text-xl font-bold panel-title">Crystal Dump Pits</h2>
+            <button class="close-modal w-8 h-8 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold">×</button>
+        </div>
+        <div class="tech-card p-3 rounded-xl text-sm text-cyan-50 italic text-center">
+            "Move your caught cave goblins into richer garbage veins."
+        </div>
+        <div id="map-list" class="modal-scroll flex-1 space-y-3 custom-scroll p-1"></div>
+    </div>
+
+    <!-- Shop Modal -->
+    <div id="shop-modal" class="hidden glass modal-shell w-full max-w-md h-[80%] rounded-3xl flex flex-col overflow-hidden shadow-2xl transform transition-all">
+        <div class="p-5 border-b border-cyan-200/15 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold panel-title">Bait Bin</h2>
+                <div class="text-xs text-cyan-100/75">Refreshes in <span id="shop-timer-display" class="numeric-readout font-bold">00:00</span></div>
+            </div>
+            <button class="close-modal w-10 h-10 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold text-xl transition-colors">×</button>
+        </div>
+        <div id="shop-list" class="modal-scroll flex-1 p-4 space-y-3 custom-scroll bg-slate-950/10"></div>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="inventory-modal" class="hidden glass modal-shell w-full max-w-md h-[80%] rounded-3xl flex flex-col overflow-hidden shadow-2xl transform transition-all">
+        <div class="p-5 border-b border-cyan-200/15 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold panel-title">Monster Cages</h2>
+                <div class="text-xs text-cyan-100/75">Deploy or stash your caught cave trashlings</div>
+            </div>
+            <button class="close-modal w-10 h-10 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold text-xl transition-colors">×</button>
+        </div>
+        <div class="tech-card p-2 text-center text-xs text-yellow-100 border-b border-yellow-200/10">
+            Loose Critters: <span id="capacity-display" class="font-bold numeric-readout">0/150</span>
+        </div>
+        <div id="inventory-list" class="modal-scroll flex-1 p-4 space-y-3 custom-scroll bg-slate-950/10"></div>
+    </div>
+
+    <!-- Collection Modal -->
+    <div id="index-modal" class="hidden glass modal-shell w-full max-w-md h-[80%] rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="p-5 border-b border-cyan-200/15 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold panel-title">Moldy Critter Dex</h2>
+                <div class="text-xs text-cyan-100/75">Caught, rumored, and questionably documented</div>
+            </div>
+            <button class="close-modal w-10 h-10 rounded-full tech-card text-cyan-100 hover:text-red-300 flex items-center justify-center font-bold text-xl transition-colors">×</button>
+        </div>
+        <div id="index-grid" class="modal-scroll flex-1 p-4 grid grid-cols-2 gap-3 custom-scroll bg-slate-950/10 content-start"></div>
+    </div>
+
+    <!-- Settings/Menu Modal -->
+    <div id="menu-modal" class="hidden glass modal-shell w-[80%] max-w-xs rounded-3xl p-6 flex flex-col items-center gap-4 shadow-2xl">
+        <h2 class="text-2xl font-bold panel-title text-center">Cave Shift Paused</h2>
+        <button id="btn-reset" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl shadow btn-press">
+            Bleach Save Data
+        </button>
+        <button class="close-modal w-full tech-card text-cyan-50 font-bold py-3 rounded-xl shadow btn-press">
+            Back To Catching
+        </button>
+        <div class="text-xs text-cyan-100/55 mt-2">v10.0 Moldy Critter Dex • Auto-Save ON</div>
+    </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const BALL_TYPES = {
+    mexico: { name: "Can-Gnaw Gremlin", price: 100, income: 1, rarity: "Common", weight: 100, colors: ["#8cffea", "#bddcff", "#7dff67"], type: 'can' },
+    poland: { name: "Moldy Bag Imp", price: 250, income: 12, rarity: "Uncommon", weight: 80, colors: ["#f5f0d1", "#7f6a3a", "#c5ff4f"], type: 'bag' },
+    brazil: { name: "Bottlecap Wyrm", price: 500, income: 120, rarity: "Rare", weight: 60, colors: ["#53e1ff", "#ddff54", "#7b2cff"], type: 'cap' },
+    spain: { name: "Pizza-Stain Slime", price: 666, income: 30, rarity: "Uncommon", weight: 75, colors: ["#ff7a3d", "#ffe16a", "#8a3b17"], type: 'slime' },
+    saudi: { name: "Soda Tab Bat", price: 777, income: 75, rarity: "Rare", weight: 60, colors: ["#59ffc8", "#d9ff73", "#3f2170"], type: 'bat' },
+    canada: { name: "Lint-Horn Sprout", price: 1000, income: 175, rarity: "Epic", weight: 40, colors: ["#ff4f8b", "#f7ffdb", "#94ff68"], type: 'horn' },
+    uk: { name: "Trash Crown Mimic", price: 2500, income: 300, rarity: "Legendary", weight: 20, colors: ["#5427ff", "#fff08a", "#ff3dba"], type: 'mimic' },
+    portugal: { name: "Dumpster Pearl Pup", price: 12000, income: 666, rarity: "Epic", weight: 35, colors: ["#52ffd7", "#ff355e", "#ffe75c"], type: 'pup' },
+    denmark: { name: "Rusty Fork Fang", price: 19000, income: 888, rarity: "Epic", weight: 35, colors: ["#d62947", "#cffff7", "#6d320f"], type: 'fang' },
+    indonesia: { name: "Half-Eaten Jelly", price: 27100, income: 825, rarity: "Legendary", weight: 20, colors: ["#ff3864", "#fff0d8", "#74ffd2"], type: 'jelly' },
+    france: { name: "Crystal Roach Duke", price: 34000, income: 8800, rarity: "Legendary", weight: 15, colors: ["#49b5ff", "#f7f0ff", "#ff5d5d"], type: 'roach' },
+    jordania: { name: "Grotto Garbage Goat", price: 50000, income: 1100, rarity: "Legendary", weight: 15, colors: ["#21162a", "#f8f1e2", "#5dff91", "#ff4d69"], type: 'goat' },
+    lebanon: { name: "Napkin Necromite", price: 54000, income: 2500, rarity: "Legendary", weight: 15, colors: ["#ff334f", "#fff1d7", "#46ff83"], type: 'mite' },
+    turkey: { name: "Moon Mold Gobbler", price: 50100, income: 9100, rarity: "Legendary", weight: 15, colors: ["#e9343a", "#f7ffe8", "#96fffb"], type: 'gobbler' },
+    russia: { name: "Cold Fries Phantom", price: 58000, income: 1100, rarity: "Legendary", weight: 20, colors: ["#ffffff", "#4465ff", "#ff4e37"], type: 'phantom' },
+    iraq: { name: "Grease Crystal Ogre", price: 67000, income: 12000, rarity: "Mythical", weight: 10, colors: ["#f23846", "#ffeccb", "#141217", "#60ff8d"], type: 'ogre' },
+    india: { name: "Curry-Stain Crystal", price: 90000, income: 17000, rarity: "Mythical", weight: 10, colors: ["#ff9b42", "#fff4dc", "#4eff75", "#3030a0"], type: 'crystal' },
+    switzerland: { name: "Bandage Box Beast", price: 67000, income: 2375, rarity: "Legendary", weight: 20, colors: ["#ff3151", "#fff7e7", "#8cffea"], type: 'box' },
+    nkorea: { name: "Neon Soup Goblin", price: 76863, income: 4750, rarity: "Mythical", weight: 10, colors: ["#265dff", "#ff2f48", "#f9f7ff"], type: 'soup' },
+    sweden: { name: "Blue Bin Kelpie", price: 91000, income: 9800, rarity: "Legendary", weight: 15, colors: ["#29a6ff", "#faff52", "#392064"], type: 'kelpie' },
+    finland: { name: "Pale Litter Lurker", price: 125000, income: 17700, rarity: "Mythical", weight: 8, colors: ["#faffff", "#356cff", "#7ffff0"], type: 'lurker' },
+    kazakhstan: { name: "Sunken Can Seraph", price: 137862, income: 7000, rarity: "Mythical", weight: 10, colors: ["#38dfff", "#ffe54d", "#ff73d8"], type: 'seraph' },
+    morocco: { name: "Red Gunk Star", price: 167000, income: 6700, rarity: "Mythical", weight: 8, colors: ["#c93443", "#37ff89", "#ffe9ab"], type: 'star' },
+    argentina: { name: "Sky Trash Cherub", price: 175000, income: 12000, rarity: "Mythical", weight: 8, colors: ["#86d7ff", "#fff8ef", "#ffd04e"], type: 'cherub' },
+    usa: { name: "Burger Wrapper Baron", price: 199900, income: 4000, rarity: "Mythical", weight: 10, colors: ["#d83b55", "#fff8ea", "#36357a"], type: 'baron' },
+    palestine: { name: "Broken Glass Gryph", price: 222000, income: 27300, rarity: "Mythical", weight: 5, colors: ["#151418", "#fff8e9", "#3eff7a", "#ff3f4d"], type: 'gryph' },
+    egypt: { name: "Dustbin Scarab King", price: 267000, income: 25000, rarity: "Mythical", weight: 7, colors: ["#d93344", "#fff4da", "#17121a", "#ffc852"], type: 'scarab' },
+    philippines: { name: "Glitter Noodle Hydra", price: 300000, income: 35000, rarity: "Mythical", weight: 7, colors: ["#315fff", "#ff4458", "#fff5dc", "#ffe34b"], type: 'hydra' },
+    ukraine: { name: "Glow Mold Drake", price: 340000, income: 24000, rarity: "Mythical", weight: 8, colors: ["#2d80ff", "#ffe44a", "#9dff61"], type: 'drake' },
+    skorea: { name: "Ramen Cup Oracle", price: 350000, income: 41000, rarity: "Mythical", weight: 7, colors: ["#fffaf2", "#ff3d59", "#336bff", "#17121a"], type: 'oracle' },
+    greece: { name: "Tile-Crack Titan", price: 375000, income: 47000, rarity: "Godly", weight: 5, colors: ["#2387ff", "#fff8eb", "#96fff0"], type: 'titan' },
+    japan: { name: "Single-Eye Shrine Slug", price: 390000, income: 54000, rarity: "Godly", weight: 5, colors: ["#fff7e8", "#ff3358", "#4c145e"], type: 'slug' },
+    italy: { name: "Sauce-Crystal Chimera", price: 763926, income: 34100, rarity: "Godly", weight: 5, colors: ["#36ff7f", "#fff1dc", "#ff435f"], type: 'chimera' },
+    norway: { name: "Nordic Dumpster Djinn", price: 937725, income: 47000, rarity: "Godly", weight: 5, colors: ["#d9314e", "#3156a8", "#fff6e7"], type: 'djinn' },
+    germany: { name: "Coal-Can Behemoth", price: 1000621, income: 67000, rarity: "Godly", weight: 5, colors: ["#161118", "#ff384c", "#ffdf4e"], type: 'behemoth' },
+    china: { name: "Lucky Litter Dragon", price: 1122926, income: 99000, rarity: "Godly", weight: 5, colors: ["#e12a33", "#ffdf50", "#6affca"], type: 'dragon' },
+    pakistan: { name: "Crescent Crud Leviathan", price: 47926916, income: 100000, rarity: "Godly", weight: 3, colors: ["#fff8ee", "#116b4d", "#8bffdc"], type: 'leviathan' },
+    iran: { name: "Final Gutter Godling", price: 67926915, income: 500000, rarity: "Godly", weight: 3, colors: ["#35c75b", "#fff2da", "#e93036"], type: 'godling' }
+};
+const MAP_DEFINITIONS = {
+    grassland: { id: 'grassland', name: 'Bottlecap Grotto', price: 0, boost: 1.0, desc: 'Default cave pit: cheap bait, loud crystals, wet cardboard.', color: '#8cffea' },
+    snow: { id: 'snow', name: 'Premium Mold Vein', price: 500000, boost: 1.15, desc: '+15% shard ooze from the fancy garbage seam.', color: '#d7ff57' }
+};
+
+const CHAT_PHRASES = {
+    mexico: ["crunch can", "mine?", "skrrt!"], poland: ["bag stink", "mold tax", "heehee"], brazil: ["cap cap!", "shiny bite", "glurp"],
+    usa: ["burger cave", "foil hat", "grease!"], uk: ["trash crown", "bin tea?", "oi slime"], france: ["roach fancy", "baguette rot"],
+    germany: ["sort it!", "coal snack"], italy: ["sauce drip", "pasta sludge"], china: ["lucky litter", "dragon bin"],
+    russia: ["cold fries", "brrr trash"], canada: ["sorry stink", "lint horn"], switzerland: ["bandage beast", "neutral ooze"],
+    japan: ["one eye", "shrine slime"], greece: ["tile crack", "opa garbage"], egypt: ["scarab can", "dustbin king"],
+    morocco: ["red gunk", "star mold"], argentina: ["sky wrapper", "cherub burp"], philippines: ["noodle heads", "glitter trash"],
+    skorea: ["ramen oracle", "cup prophecy"], jordania: ["goat grotto", "crunch"], lebanon: ["napkin spell", "mite bite"],
+    iraq: ["grease ogre", "crystal burp"], india: ["curry stain", "chakra trash"], ukraine: ["mold drake", "glow bite"],
+    pakistan: ["leviathan lint", "deep bin"], iran: ["gutter god", "final stink"], default: ["gross!", "shiny trash", "catch me"]
+};
+const RARITY_COLORS = { Common: "#7f8c8d", Uncommon: "#27ae60", Rare: "#2980b9", Epic: "#8e44ad", Legendary: "#d35400", Mythical: "#c0392b", Godly: "#6a0dad" };
+const SAVE_KEY = 'crystal_dumpster_critter_catcher_v5_save';
+
+let gameState = 'PLAYING', money = 100, balls = [], storedBalls = {}, unlocked = new Set(['mexico']), shopStock = [], nextRestockTime = 0, floatingTexts = [];
+let currentMap = 'grassland', unlockedMaps = new Set(['grassland']);
+const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d', { alpha: false });
+let cw = 0, ch = 0, initialized = false, lastTime = 0, audioCtx = null;
+const audioBuffers = {};
+let bgmUnlocked = false;
+let userActivated = false;
+let lastSfxTimes = {};
+let feedbackTimers = {};
+const FONT_STACKS = {
+    display: "'Bangers', 'Arial Black', cursive",
+    ui: "system-ui, -apple-system, 'Segoe UI', sans-serif"
+};
+
+async function initAudio() {
+    if (audioCtx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+    // Keep approved remote audio tags for catalog-backed media, but avoid cross-origin
+    // buffer fetches in local validation. SFX fall back to tiny oscillators below.
+}
+
+function playSfx(id, options = {}) {
+    if (!audioCtx) return;
+    const now = performance.now();
+    const cooldown = options.cooldown ?? 0;
+    if (cooldown > 0 && now - (lastSfxTimes[id] || 0) < cooldown) return;
+    lastSfxTimes[id] = now;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const buffer = audioBuffers[id];
+    if (buffer) {
+        const source = audioCtx.createBufferSource();
+        const gain = audioCtx.createGain();
+        source.buffer = buffer;
+        source.connect(gain);
+        gain.connect(audioCtx.destination);
+        gain.gain.value = options.volume ?? 0.18;
+        source.start(0);
+    } else {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(id === 'coin' ? 1200 : 400, audioCtx.currentTime);
+        gain.gain.setValueAtTime(options.volume ?? 0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    }
+}
+
+function vibrate(type = 'light') {
+    if (!userActivated) return;
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({ action: 'vibrate', params: { style: type } });
+    } else if (navigator.vibrate) {
+        try { navigator.vibrate(type === 'heavy' ? 40 : 10); } catch (e) {}
+    }
+}
+
+function syncBgmState() {
+    const bgm = document.getElementById('bgm_main');
+    if (!bgm) return;
+    if (!bgmUnlocked) {
+        bgm.pause();
+        return;
+    }
+    if (gameState === 'PLAYING') {
+        if (bgm.paused) bgm.play().catch(() => {});
+    } else {
+        bgm.pause();
+    }
+}
+
+function flashFeedback(id, duration = 1600) {
+    const el = document.getElementById(`feedback-${id}`);
+    if (!el) return;
+    el.classList.add('visible');
+    clearTimeout(feedbackTimers[id]);
+    feedbackTimers[id] = setTimeout(() => el.classList.remove('visible'), duration);
+}
+
+function unlockAudio() {
+    userActivated = true;
+    if (!audioCtx) initAudio();
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
+    const bgm = document.getElementById('bgm_main');
+    if (bgm) {
+        bgm.volume = 0.2;
+        bgmUnlocked = true;
+        syncBgmState();
+    }
+}
+
+class Ball {
+    constructor(typeKey) {
+        this.typeKey = typeKey;
+        this.data = BALL_TYPES[typeKey] || BALL_TYPES['mexico'];
+        const income = this.data.income;
+        this.r = 25 + (income > 50000 ? 25 : (income > 10000 ? 15 : (income > 1000 ? 10 : (income > 100 ? 5 : 0))));
+        this.x = Math.random() * (cw - this.r * 2) + this.r;
+        this.y = Math.random() * (ch - this.r * 2) + this.r;
+        this.vx = (Math.random() - 0.5) * 5;
+        this.vy = (Math.random() - 0.5) * 5;
+        this.incomeTimer = 0;
+        this.blinkTimer = Math.random() * 300;
+        this.isBlinking = false;
+        this.chatTimer = Math.random() * 10 + 5;
+        this.chatBubble = null;
+        if (isFinite(cw) && isFinite(ch)) {
+            this.x = Math.max(this.r, Math.min(this.x, cw - this.r));
+            this.y = Math.max(this.r, Math.min(this.y, ch - this.r));
+        }
+    }
+    update(dt) {
+        this.x += this.vx * (dt * 60);
+        this.y += this.vy * (dt * 60);
+        if (this.x < this.r) { this.x = this.r; this.vx *= -1; }
+        if (this.x > cw - this.r) { this.x = cw - this.r; this.vx *= -1; }
+        if (this.y < this.r) { this.y = this.r; this.vy *= -1; }
+        if (this.y > ch - this.r) { this.y = ch - this.r; this.vy *= -1; }
+        if (gameState === 'PLAYING') {
+            this.incomeTimer += dt;
+            if (this.incomeTimer >= 1.0) {
+                this.incomeTimer = 0;
+                addMoney(this.data.income, this.x, this.y - this.r);
+            }
+            if (this.chatBubble) {
+                this.chatBubble.life -= dt;
+                if (this.chatBubble.life <= 0) this.chatBubble = null;
+            } else {
+                this.chatTimer -= dt;
+                if (this.chatTimer <= 0) {
+                    this.triggerChat();
+                    this.chatTimer = 8 + Math.random() * 15;
+                }
+            }
+        }
+        this.blinkTimer -= dt * 60;
+        if (this.blinkTimer <= 0) {
+            this.isBlinking = true;
+            if (this.blinkTimer < -10) {
+                this.isBlinking = false;
+                this.blinkTimer = 120 + Math.random() * 300;
+            }
+        }
+    }
+    triggerChat(forcedText = null) {
+        let text = forcedText;
+        if (!text) {
+            const phrases = CHAT_PHRASES[this.typeKey] || CHAT_PHRASES['default'];
+            text = phrases[Math.floor(Math.random() * phrases.length)];
+        }
+        this.chatBubble = { text: text, life: 3.0 };
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.beginPath(); ctx.ellipse(0, this.r * 0.85, this.r * 0.8, this.r * 0.3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(3,10,24,0.24)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI * 2); ctx.clip();
+        drawTrashCritterPattern(ctx, this.r, this.data);
+
+        const rimGlow = ctx.createRadialGradient(0, 0, this.r * 0.15, 0, 0, this.r);
+        rimGlow.addColorStop(0, 'rgba(255,255,255,0)');
+        rimGlow.addColorStop(0.75, 'rgba(255,255,255,0)');
+        rimGlow.addColorStop(1, 'rgba(92,225,255,0.28)');
+        ctx.fillStyle = rimGlow;
+        ctx.fillRect(-this.r, -this.r, this.r * 2, this.r * 2);
+
+        ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+        let grad = ctx.createRadialGradient(-this.r*0.35, -this.r*0.45, this.r*0.15, 0, 0, this.r);
+        grad.addColorStop(0, 'rgba(255,255,255,0.5)');
+        grad.addColorStop(0.35, 'rgba(255,255,255,0.12)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.28)');
+        ctx.fillStyle = grad; ctx.fill();
+
+        ctx.beginPath();
+        ctx.ellipse(-this.r * 0.22, -this.r * 0.42, this.r * 0.3, this.r * 0.18, -0.35, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.34)';
+        ctx.fill();
+
+        ctx.lineWidth = 2.5; ctx.strokeStyle = '#163251'; ctx.stroke();
+        ctx.restore();
+        ctx.save(); ctx.translate(this.x, this.y); this.drawEyes(ctx); this.drawMouth(ctx); ctx.restore();
+        if (this.chatBubble) this.drawChatBubble(ctx);
+    }
+    drawEyes(ctx) {
+        const eyeW = this.r * 0.35, eyeH = this.isBlinking ? 3 : this.r * 0.35;
+        const eyeOffset = this.r * 0.18, eyeY = -this.r * 0.1;
+        ctx.fillStyle = '#f7fdff'; ctx.strokeStyle = '#163251'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.ellipse(-eyeOffset - eyeW/2, eyeY, eyeW/2, eyeH/2, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(eyeOffset + eyeW/2, eyeY, eyeW/2, eyeH/2, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        if (!this.isBlinking) {
+            ctx.fillStyle = '#07111f';
+            ctx.beginPath(); ctx.arc(-eyeOffset - eyeW/2, eyeY, this.r * 0.08, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(eyeOffset + eyeW/2, eyeY, this.r * 0.08, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.beginPath(); ctx.arc(-eyeOffset - eyeW/2 - this.r * 0.03, eyeY - this.r * 0.03, this.r * 0.025, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(eyeOffset + eyeW/2 - this.r * 0.03, eyeY - this.r * 0.03, this.r * 0.025, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    drawMouth(ctx) {
+        ctx.strokeStyle = '#163251';
+        ctx.lineWidth = Math.max(1.5, this.r * 0.07);
+        ctx.beginPath();
+        ctx.arc(0, this.r * 0.1, this.r * 0.18, 0.15 * Math.PI, 0.85 * Math.PI, false);
+        ctx.stroke();
+    }
+    drawChatBubble(ctx) {
+        const text = this.chatBubble.text;
+        ctx.font = `600 16px ${FONT_STACKS.ui}`;
+        const m = ctx.measureText(text), w = m.width + 20, h = 30;
+        ctx.save(); ctx.translate(this.x, this.y - this.r - 25);
+        ctx.beginPath();
+        ctx.moveTo(-w/2 + 10, -h); ctx.lineTo(w/2 - 10, -h); ctx.quadraticCurveTo(w/2, -h, w/2, -h + 10);
+        ctx.lineTo(w/2, -10); ctx.quadraticCurveTo(w/2, 0, w/2 - 10, 0); ctx.lineTo(5, 0);
+        ctx.lineTo(0, 8); ctx.lineTo(-5, 0); ctx.lineTo(-w/2 + 10, 0);
+        ctx.quadraticCurveTo(-w/2, 0, -w/2, -10); ctx.lineTo(-w/2, -h + 10);
+        ctx.quadraticCurveTo(-w/2, -h, -w/2 + 10, -h);
+        ctx.fillStyle = "rgba(241, 252, 255, 0.96)"; ctx.shadowColor = "rgba(0,0,0,0.22)"; ctx.shadowBlur = 8; ctx.fill();
+        ctx.strokeStyle = "rgba(92,225,255,0.45)"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = "#163251"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowBlur = 0;
+        ctx.fillText(text, 0, -h/2); ctx.restore();
+    }
+}
+
+function drawTrashCritterPattern(ctx, r, data) {
+    const colors = data.colors;
+    const wobble = Math.sin(performance.now() * 0.003 + r) * r * 0.05;
+    const body = ctx.createRadialGradient(-r * 0.35, -r * 0.45, r * 0.12, 0, 0, r);
+    body.addColorStop(0, colors[1] || '#fff7dd');
+    body.addColorStop(0.45, colors[0] || '#8cffea');
+    body.addColorStop(1, colors[2] || '#4a155f');
+    ctx.fillStyle = body;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = 'rgba(255,255,255,0.52)';
+    ctx.lineWidth = Math.max(2, r * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.72, -r * 0.18 + wobble);
+    ctx.lineTo(-r * 0.22, -r * 0.62);
+    ctx.lineTo(r * 0.28, -r * 0.12 - wobble);
+    ctx.lineTo(r * 0.72, -r * 0.48);
+    ctx.stroke();
+    ctx.restore();
+
+    const shard = (x, y, scale, color) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x, y - r * 0.34 * scale);
+        ctx.lineTo(x + r * 0.20 * scale, y);
+        ctx.lineTo(x, y + r * 0.34 * scale);
+        ctx.lineTo(x - r * 0.20 * scale, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(25,5,35,0.45)';
+        ctx.lineWidth = Math.max(1, r * 0.035 * scale);
+        ctx.stroke();
+    };
+    shard(-r * 0.45, r * 0.18, 0.8, colors[2] || '#d7ff57');
+    shard(r * 0.48, r * 0.24, 0.55, colors[1] || '#8cffea');
+
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = 'rgba(30,8,40,0.45)';
+    const trashBits = [
+        [-0.35, -0.48, 0.28, 0.08], [0.15, -0.34, 0.34, 0.07],
+        [-0.12, 0.44, 0.42, 0.09], [0.42, 0.02, 0.24, 0.08]
+    ];
+    trashBits.forEach(([x,y,w,h], i) => {
+        ctx.save();
+        ctx.translate(x * r, y * r);
+        ctx.rotate((i - 1.5) * 0.34);
+        ctx.fillRect(-w * r / 2, -h * r / 2, w * r, h * r);
+        ctx.restore();
+    });
+    ctx.restore();
+
+    if (['bat','dragon','drake','gryph','seraph','cherub'].includes(data.type)) {
+        ctx.fillStyle = 'rgba(215,255,87,0.42)';
+        ctx.beginPath(); ctx.moveTo(-r * 0.72, -r * 0.12); ctx.lineTo(-r * 1.0, -r * 0.58); ctx.lineTo(-r * 0.48, -r * 0.38); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(r * 0.72, -r * 0.12); ctx.lineTo(r * 1.0, -r * 0.58); ctx.lineTo(r * 0.48, -r * 0.38); ctx.fill();
+    }
+    if (['horn','goat','titan','behemoth'].includes(data.type)) {
+        ctx.fillStyle = '#fff0a9';
+        ctx.beginPath(); ctx.moveTo(-r * 0.45, -r * 0.78); ctx.lineTo(-r * 0.25, -r * 1.12); ctx.lineTo(-r * 0.08, -r * 0.72); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(r * 0.45, -r * 0.78); ctx.lineTo(r * 0.25, -r * 1.12); ctx.lineTo(r * 0.08, -r * 0.72); ctx.fill();
+    }
+    if (['mimic','box','cap','can','baron'].includes(data.type)) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.68)';
+        ctx.lineWidth = Math.max(2, r * 0.10);
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.58, -0.15 * Math.PI, 1.1 * Math.PI); ctx.stroke();
+    }
+}
+function addMoney(amount, x, y) {
+    const mapBoost = MAP_DEFINITIONS[currentMap]?.boost || 1.0;
+    const finalAmount = amount * mapBoost;
+    money += finalAmount;
+    updateHUD();
+    floatingTexts.push({ text: `+${Math.floor(finalAmount).toLocaleString()}◇`, x: x, y: y, life: 1.0, vy: -50, color: '#d7ff57' });
+    if (Math.random() < 0.15) playSfx('coin', { volume: 0.16, cooldown: 120 });
+    if (finalAmount >= 1000) flashFeedback('collect', 1400);
+    vibrate('light');
+}
+
+function updateHUD() {
+    document.getElementById('score-display').innerText = Math.floor(money).toLocaleString();
+    const boostInd = document.getElementById('boost-indicator');
+    if (currentMap === 'snow') boostInd.classList.remove('hidden'); else boostInd.classList.add('hidden');
+}
+
+function saveGame() {
+    if (gameState !== 'PLAYING') return;
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            money, unlocked: Array.from(unlocked), shopStock, nextRestockTime,
+            balls: balls.map(b => ({ typeKey: b.typeKey, x: b.x, y: b.y, vx: b.vx, vy: b.vy })),
+            storedBalls,
+            currentMap, unlockedMaps: Array.from(unlockedMaps),
+            timestamp: Date.now()
+        }));
+        showSaveToast();
+        playSfx('save', { volume: 0.18, cooldown: 180 });
+    } catch(e) {}
+}
+
+function loadGame() {
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        money = data.money || 100;
+        unlocked = new Set(data.unlocked || ['mexico']);
+        shopStock = data.shopStock || [];
+        nextRestockTime = data.nextRestockTime || 0;
+        currentMap = data.currentMap || 'grassland';
+        unlockedMaps = new Set(data.unlockedMaps || ['grassland']);
+        storedBalls = data.storedBalls || {};
+        balls = [];
+        if (Array.isArray(data.balls)) {
+            data.balls.forEach(bData => {
+                const b = new Ball(bData.typeKey);
+                b.x = bData.x; b.y = bData.y; b.vx = bData.vx; b.vy = bData.vy;
+                balls.push(b);
+            });
+        }
+        if (balls.length === 0 && Object.keys(storedBalls).length === 0) balls.push(new Ball('mexico'));
+        updateHUD();
+        return true;
+    } catch(e) { return false; }
+}
+
+function showSaveToast() {
+    const toast = document.getElementById('save-toast');
+    toast.style.opacity = '1';
+    setTimeout(() => toast.style.opacity = '0', 2000);
+}
+
+function restockShop() {
+    shopStock = [];
+    const pool = Object.keys(BALL_TYPES);
+    let totalWeight = pool.reduce((acc, key) => acc + BALL_TYPES[key].weight, 0);
+    for(let i=0; i<4; i++) {
+        let rnd = Math.random() * totalWeight, selected = pool[0];
+        for(const key of pool) {
+            rnd -= BALL_TYPES[key].weight;
+            if (rnd <= 0) { selected = key; break; }
+        }
+        shopStock.push(selected);
+    }
+    renderShop();
+    const duration = window.gameConfig.restockTime || 60;
+    nextRestockTime = Date.now() + (duration * 1000);
+    playSfx('restock', { volume: 0.16, cooldown: 300 });
+    saveGame(); 
+}
+
+function renderShop() {
+    const container = document.getElementById('shop-list');
+    container.innerHTML = '';
+    shopStock.forEach((key, idx) => {
+        const item = BALL_TYPES[key];
+        const div = document.createElement('div');
+        div.className = `tech-card p-3 rounded-2xl border-2 flex justify-between items-center shadow-sm rarity-${item.rarity.toLowerCase()}`;
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="orb-avatar w-12 h-12 border-2 border-cyan-100/20 shadow-inner relative" style="background: ${item.colors[0]}">
+                    <div class="orb-core" style="background:
+                        radial-gradient(circle at 34% 30%, rgba(255,255,255,0.36), transparent 26%),
+                        radial-gradient(circle at 62% 68%, rgba(0,0,0,0.18), transparent 52%)"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-[8px] opacity-50 font-bold text-slate-900">${item.name.substring(0,2).toUpperCase()}</div>
+                </div>
+                <div>
+                    <div class="font-bold text-cyan-50 text-lg leading-none">${item.name}</div>
+                    <div class="text-xs font-bold uppercase tracking-wide mt-1" style="color: ${RARITY_COLORS[item.rarity]}">${item.rarity}</div>
+                    <div class="text-xs text-cyan-100/65 numeric-readout">+${item.income.toLocaleString()}◇/s</div>
+                </div>
+            </div>
+            <button class="bg-emerald-500 active:bg-emerald-600 text-slate-950 font-bold py-2 px-4 rounded-xl shadow btn-press min-w-[80px]" onclick="buyBall('${key}', ${idx})">${item.price.toLocaleString()}◇</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function renderMapModal() {
+    const container = document.getElementById('map-list');
+    container.innerHTML = '';
+    Object.values(MAP_DEFINITIONS).forEach(map => {
+        const isUnlocked = unlockedMaps.has(map.id);
+        const isEquipped = currentMap === map.id;
+        const div = document.createElement('div');
+        div.className = `tech-card p-4 rounded-2xl border-2 shadow-sm flex flex-col gap-2 transition-all ${isEquipped ? 'map-card-selected' : ''}`;
+        
+        let buttonHtml = '';
+        if (isEquipped) {
+            buttonHtml = `<button class="w-full bg-gray-200 text-gray-500 font-bold py-2 rounded-xl cursor-default">ACTIVE</button>`;
+        } else if (isUnlocked) {
+            buttonHtml = `<button class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 rounded-xl btn-press shadow" onclick="equipMap('${map.id}')">ENTER</button>`;
+        } else {
+            buttonHtml = `<button class="w-full bg-green-500 hover:bg-green-600 text-slate-950 font-bold py-2 rounded-xl btn-press shadow" onclick="buyMap('${map.id}')">${map.price.toLocaleString()}◇</button>`;
+        }
+
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="font-bold text-lg text-cyan-50">${map.name}</h3>
+                    <p class="text-xs text-cyan-100/65">${map.desc}</p>
+                </div>
+                <div class="orb-avatar w-10 h-10 border flex items-center justify-center text-xl" style="background: ${map.color}; border-color: rgba(255,255,255,0.16)">
+                    ${map.id === 'snow' ? '🧫' : '🥫'}
+                </div>
+            </div>
+            ${buttonHtml}
+        `;
+        container.appendChild(div);
+    });
+}
+
+function renderInventory() {
+    const container = document.getElementById('inventory-list');
+    container.innerHTML = '';
+    
+    // Calculate counts
+    const activeCounts = {};
+    balls.forEach(b => activeCounts[b.typeKey] = (activeCounts[b.typeKey] || 0) + 1);
+    
+    // Get all types we own (either active or stored)
+    const ownedTypes = new Set([...Object.keys(activeCounts), ...Object.keys(storedBalls).filter(k => storedBalls[k] > 0)]);
+    
+    document.getElementById('capacity-display').innerText = `${balls.length}/${window.gameConfig.maxBalls}`;
+    
+    if (ownedTypes.size === 0) {
+        container.innerHTML = '<div class="text-center text-cyan-100/55 py-10">No trashlings are loose yet.<br>Open the bait bin and catch something nasty.</div>';
+        return;
+    }
+
+    Array.from(ownedTypes).sort((a,b) => BALL_TYPES[b].income - BALL_TYPES[a].income).forEach(key => {
+        const item = BALL_TYPES[key];
+        const active = activeCounts[key] || 0;
+        const stored = storedBalls[key] || 0;
+        
+        const div = document.createElement('div');
+        div.className = `tech-card p-3 rounded-2xl border-2 flex justify-between items-center shadow-sm rarity-${item.rarity.toLowerCase()}`;
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="orb-avatar w-10 h-10 border-2 border-cyan-100/20 shadow-inner overflow-hidden relative" style="background: ${item.colors[0]}">
+                    <div class="orb-core" style="background:
+                        radial-gradient(circle at 34% 30%, rgba(255,255,255,0.36), transparent 28%),
+                        radial-gradient(circle at 62% 68%, rgba(0,0,0,0.18), transparent 52%)"></div>
+                </div>
+                <div>
+                    <div class="font-bold text-cyan-50 text-sm leading-none">${item.name}</div>
+                    <div class="text-[10px] font-bold uppercase tracking-wide mt-0.5" style="color: ${RARITY_COLORS[item.rarity]}">${item.rarity}</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="flex flex-col items-end mr-2">
+                    <span class="text-xs font-bold text-emerald-300">Loose: ${active}</span>
+                    <span class="text-[10px] font-bold text-cyan-100/45">Caged: ${stored}</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button class="w-8 h-8 rounded-lg bg-red-400/15 text-red-200 hover:bg-red-400/25 flex items-center justify-center font-bold btn-press shadow-sm" onclick="unequipBall('${key}')" ${active <= 0 ? 'disabled style="opacity:0.3"' : ''}>▼</button>
+                    <button class="w-8 h-8 rounded-lg bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25 flex items-center justify-center font-bold btn-press shadow-sm" onclick="equipBall('${key}')" ${stored <= 0 ? 'disabled style="opacity:0.3"' : ''}>▲</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+window.buyBall = function(key, idx) {
+    const item = BALL_TYPES[key];
+    if (money >= item.price) {
+        money -= item.price;
+        unlocked.add(key);
+        
+        if (balls.length >= window.gameConfig.maxBalls) {
+            // Auto-store if full
+            storedBalls[key] = (storedBalls[key] || 0) + 1;
+            const btn = document.activeElement;
+            if(btn) {
+                const originalText = btn.innerText;
+                btn.classList.add('bg-blue-500'); btn.innerText = "CAGED";
+                setTimeout(() => { btn.classList.remove('bg-blue-500'); btn.innerText = originalText; }, 1000);
+            }
+        } else {
+            // Spawn active
+            balls.push(new Ball(key));
+        }
+
+        updateHUD();
+        playSfx('buy', { volume: 0.2, cooldown: 160 });
+        vibrate('medium');
+        shopStock.splice(idx, 1);
+        renderShop();
+        saveGame();
+    } else {
+        playSfx('blocked', { volume: 0.2, cooldown: 240 });
+        flashFeedback('blocked');
+        vibrate('heavy');
+    }
+};
+
+window.buyMap = function(id) {
+    const map = MAP_DEFINITIONS[id];
+    if (money >= map.price) {
+        money -= map.price;
+        unlockedMaps.add(id);
+        updateHUD();
+        playSfx('boost');
+        vibrate('heavy');
+        renderMapModal();
+        saveGame();
+    } else {
+        playSfx('blocked', { volume: 0.2, cooldown: 240 });
+        flashFeedback('blocked');
+        vibrate('heavy');
+    }
+};
+
+window.equipMap = function(id) {
+    currentMap = id;
+    playSfx('map_select');
+    vibrate('medium');
+    renderMapModal();
+    updateHUD();
+    saveGame();
+};
+
+window.equipBall = function(key) {
+    if ((storedBalls[key] || 0) > 0) {
+        if (balls.length >= window.gameConfig.maxBalls) {
+            playSfx('blocked', { volume: 0.2, cooldown: 240 });
+            flashFeedback('blocked');
+            vibrate('heavy');
+            return;
+        }
+        storedBalls[key]--;
+        balls.push(new Ball(key));
+        playSfx('equip');
+        vibrate('light');
+        renderInventory();
+        saveGame();
+    }
+};
+
+window.unequipBall = function(key) {
+    const idx = balls.findIndex(b => b.typeKey === key);
+    if (idx !== -1) {
+        balls.splice(idx, 1);
+        storedBalls[key] = (storedBalls[key] || 0) + 1;
+        playSfx('unequip');
+        vibrate('light');
+        renderInventory();
+        saveGame();
+    }
+};
+
+function renderIndex() {
+    const container = document.getElementById('index-grid');
+    container.innerHTML = '';
+    Object.keys(BALL_TYPES).sort((a,b) => BALL_TYPES[a].price - BALL_TYPES[b].price).forEach(key => {
+        const item = BALL_TYPES[key], isUnlocked = unlocked.has(key);
+        const div = document.createElement('div');
+        div.className = `glass tech-card p-2 rounded-2xl flex flex-col items-center justify-between gap-1 relative overflow-hidden transition-transform active:scale-95 h-40 scanline ${isUnlocked ? 'opacity-100' : 'opacity-60 grayscale'}`;
+        div.style.borderColor = isUnlocked ? RARITY_COLORS[item.rarity] : 'rgba(255,255,255,0.15)'; div.style.borderWidth = '2px';
+        div.innerHTML = `
+            <div class="flex-1 flex items-center justify-center w-full mt-1">
+                <div class="orb-avatar w-12 h-12 border-2 shadow-md flex-shrink-0" style="background: ${isUnlocked ? item.colors[0] : '#51617a'}; border-color: rgba(255,255,255,0.18)">
+                    <div class="orb-core" style="background:
+                        radial-gradient(circle at 34% 30%, rgba(255,255,255,0.36), transparent 26%),
+                        radial-gradient(circle at 62% 68%, rgba(0,0,0,0.18), transparent 52%)"></div>
+                </div>
+            </div>
+            <div class="w-full bg-slate-950/40 rounded-lg py-1 px-1 text-center flex flex-col gap-0.5">
+                <div class="text-xs font-black leading-tight truncate ${isUnlocked ? 'text-cyan-50' : 'text-cyan-100/45'}">${item.name}</div>
+                <div class="text-[9px] uppercase font-bold tracking-wider" style="color: ${RARITY_COLORS[item.rarity]}">${item.rarity}</div>
+                <div class="flex justify-between items-center w-full px-1 mt-1 border-t border-cyan-100/10 pt-1">
+                    <div class="flex flex-col items-start"><span class="text-[8px] text-cyan-100/40 font-bold">BAIT</span><span class="text-[10px] numeric-readout font-bold text-rose-300">${item.price > 999 ? (item.price/1000).toFixed(1)+'k' : item.price}◇</span></div>
+                    <div class="flex flex-col items-end"><span class="text-[8px] text-cyan-100/40 font-bold">OOZE/s</span><span class="text-[10px] numeric-readout font-bold text-emerald-300">+${item.income > 999 ? (item.income/1000).toFixed(1)+'k' : item.income}</span></div>
+                </div>
+            </div>
+            ${!isUnlocked ? '<div class="absolute inset-0 flex items-center justify-center bg-black/20 z-10"><span class="text-3xl drop-shadow-lg">🔒</span></div>' : ''}
+        `;
+        container.appendChild(div);
+    });
+}
+
+function initGame() {
+    if (initialized) return;
+    if (localStorage.getItem(SAVE_KEY)) loadGame() || initNewGame(); else initNewGame();
+    if (shopStock.length === 0 || Date.now() >= nextRestockTime) restockShop(); else renderShop();
+    document.getElementById('ui-layer').classList.remove('hidden');
+    gameState = 'PLAYING'; initialized = true;
+    requestAnimationFrame(gameLoop);
+}
+
+function initNewGame() {
+    money = 100; balls = [new Ball('mexico')]; storedBalls = {}; unlocked = new Set(['mexico']); shopStock = [];
+    currentMap = 'grassland'; unlockedMaps = new Set(['grassland']);
+    restockShop(); saveGame(); updateHUD();
+}
+
+function resize() {
+    cw = canvas.width = window.innerWidth * window.devicePixelRatio;
+    ch = canvas.height = window.innerHeight * window.devicePixelRatio;
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    cw /= window.devicePixelRatio; ch /= window.devicePixelRatio;
+    if (initialized) balls.forEach(b => { b.x = Math.min(Math.max(b.x, b.r), cw - b.r); b.y = Math.min(Math.max(b.y, b.r), ch - b.r); });
+    if (!initialized) initGame();
+}
+
+function drawBackground(ctx, time) {
+    const premium = currentMap === 'snow';
+    const t = time * 0.001;
+    const grad = ctx.createLinearGradient(0, 0, 0, ch);
+    grad.addColorStop(0, premium ? '#1f0d31' : '#270633');
+    grad.addColorStop(0.42, premium ? '#063d43' : '#32124a');
+    grad.addColorStop(1, premium ? '#101508' : '#110716');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.save();
+    ctx.globalAlpha = premium ? 0.44 : 0.32;
+    ctx.strokeStyle = premium ? 'rgba(215,255,87,0.42)' : 'rgba(140,255,234,0.36)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 11; i++) {
+        const x = (i / 10) * cw + Math.sin(t * 0.8 + i) * 18;
+        ctx.beginPath();
+        ctx.moveTo(x, -20);
+        ctx.lineTo(x + Math.sin(i) * 55, ch * 0.46 + (i % 3) * 18);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    const drawCrystal = (x, base, h, color, lean = 0) => {
+        ctx.save();
+        ctx.translate(x, base);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(lean, -h);
+        ctx.lineTo(h * 0.18 + lean, -h * 0.35);
+        ctx.lineTo(h * 0.10, 0);
+        ctx.lineTo(-h * 0.16, 0);
+        ctx.lineTo(-h * 0.22 + lean, -h * 0.38);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.16)';
+        ctx.beginPath(); ctx.moveTo(lean, -h); ctx.lineTo(h * 0.03, -h * 0.18); ctx.lineTo(-h * 0.14, 0); ctx.lineTo(-h * 0.22 + lean, -h * 0.38); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    };
+    for (let i = 0; i < 14; i++) {
+        const x = (i * 89 + Math.sin(t + i) * 12) % (cw + 120) - 60;
+        const base = ch * (0.34 + ((i * 37) % 58) / 100);
+        const h = 34 + (i % 5) * 18;
+        const color = i % 3 === 0 ? 'rgba(140,255,234,0.28)' : (i % 3 === 1 ? 'rgba(215,255,87,0.22)' : 'rgba(255,80,190,0.22)');
+        drawCrystal(x, base, h, color, Math.sin(t + i) * 5);
+    }
+
+    ctx.fillStyle = premium ? 'rgba(215,255,87,0.14)' : 'rgba(255,120,60,0.13)';
+    for (let i = 0; i < 18; i++) {
+        const bx = (i * 73 + time * 0.025) % (cw + 90) - 45;
+        const by = ch * (0.48 + ((i * 19) % 48) / 100);
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(Math.sin(t + i) * 0.5);
+        ctx.fillRect(-10 - (i % 3) * 3, -4, 20 + (i % 3) * 6, 8);
+        ctx.restore();
+    }
+
+    ctx.strokeStyle = premium ? 'rgba(215,255,87,0.20)' : 'rgba(140,255,234,0.16)';
+    ctx.lineWidth = 1;
+    for (let y = ch * 0.42; y < ch; y += 42) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + Math.sin(t + y) * 4);
+        for (let x = 0; x <= cw; x += 60) ctx.lineTo(x, y + Math.sin(t + x * 0.01 + y) * 5);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    for (let i = 0; i < 34; i++) {
+        const px = (i * 61 + time * (premium ? 0.055 : 0.035)) % (cw + 50) - 25;
+        const py = (i * 47 + Math.sin(t + i) * 20) % ch;
+        ctx.beginPath();
+        ctx.arc(px, py, (i % 4) + 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = premium ? '#d7ff57' : '#8cffea';
+    ctx.font = `900 ${Math.max(28, cw * 0.09)}px ${FONT_STACKS.display}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(premium ? 'PREMIUM MOLD VEIN' : 'BOTTLECAP GROTTO', cw / 2, ch * 0.22);
+    ctx.restore();
+}
+function gameLoop(time) {
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+    ctx.clearRect(0, 0, cw, ch);
+
+    drawBackground(ctx, time);
+
+    balls.forEach(b => { b.update(dt); b.draw(ctx); });
+
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.life -= dt; ft.y += ft.vy * dt;
+        ctx.save(); ctx.globalAlpha = Math.max(0, ft.life);
+        ctx.fillStyle = ft.color || '#fff'; ctx.font = `700 20px ${FONT_STACKS.display}`; ctx.strokeStyle = '#04111f'; ctx.lineWidth = 3;
+        ctx.strokeText(ft.text, ft.x, ft.y); ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+    }
+
+    if (gameState === 'PLAYING') {
+        if (Date.now() >= nextRestockTime) restockShop();
+        const timeLeft = Math.max(0, Math.ceil((nextRestockTime - Date.now()) / 1000));
+        const mins = Math.floor(timeLeft / 60), secs = timeLeft % 60;
+        const timeStr = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+        document.getElementById('restock-timer').innerText = timeStr;
+        document.getElementById('shop-timer-display').innerText = timeStr;
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+function handleGlobalInput(e) {
+    if (e.target?.closest('#ui-layer, #modal-overlay')) {
+        unlockAudio();
+        return;
+    }
+    unlockAudio();
+    if (gameState === 'PLAYING') {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        let clicked = false;
+        
+        for (let i = balls.length - 1; i >= 0; i--) {
+            const b = balls[i];
+            const dx = x - b.x, dy = y - b.y;
+            if (dx*dx + dy*dy <= b.r*b.r) {
+                b.vy = -12; b.vx = (Math.random() - 0.5) * 10;
+                addMoney(1, b.x, b.y);
+                b.triggerChat();
+                playSfx('click');
+                clicked = true; break;
+            }
+        }
+        if (!clicked) {
+            floatingTexts.push({ text: '.', x: x, y: y, life: 0.5, vy: 0, color: '#fff' });
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        const rawCfg = JSON.parse(document.getElementById('game-config').textContent);
+        window.gameConfigDefs = rawCfg;
+        window.gameConfig = Object.fromEntries(Object.entries(rawCfg).map(([k,v]) => [k, v.value]));
+    } catch(e) { 
+        console.error("Config Parse Error", e);
+        window.gameConfig = { restockTime: 60, maxBalls: 150 }; 
+    }
+
+    const ro = new ResizeObserver(entries => { for(let e of entries) resize(); });
+    ro.observe(canvas);
+
+    document.documentElement.style.setProperty('--font-display', FONT_STACKS.display);
+    document.documentElement.style.setProperty('--font-ui', FONT_STACKS.ui);
+
+    document.getElementById('btn-shop').onclick = () => { renderShop(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('shop-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-map').onclick = () => { renderMapModal(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('map-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-index').onclick = () => { renderIndex(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('index-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-inventory').onclick = () => { renderInventory(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('inventory-modal').classList.remove('hidden'); playSfx('click', { volume: 0.15, cooldown: 120 }); };
+    document.getElementById('btn-menu').onclick = () => { gameState = 'PAUSED'; syncBgmState(); document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('menu-modal').classList.remove('hidden'); playSfx('pause', { volume: 0.18, cooldown: 160 }); };
+    document.getElementById('btn-save-manual').onclick = () => { saveGame(); };
+    document.getElementById('btn-reset').onclick = () => { localStorage.removeItem(SAVE_KEY); location.reload(); };
+
+    document.querySelectorAll('.close-modal').forEach(btn => btn.onclick = () => {
+        document.getElementById('modal-overlay').classList.add('hidden');
+        document.querySelectorAll('#modal-overlay > div').forEach(d => d.classList.add('hidden'));
+        const wasPaused = gameState !== 'PLAYING';
+        gameState = 'PLAYING';
+        syncBgmState();
+        playSfx(wasPaused ? 'resume' : 'click', { volume: 0.16, cooldown: 140 });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            document.getElementById('bgm_main')?.pause();
+        } else {
+            syncBgmState();
+        }
+    });
+
+    // [agent-note][stage4] repaired: mobile-action-path | scope: gameplay canvas only | reason: keep native taps/clicks working for HUD and modal controls
+    canvas.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+    setInterval(saveGame, 30000);
+});
+</script>
+</body>
+</html>

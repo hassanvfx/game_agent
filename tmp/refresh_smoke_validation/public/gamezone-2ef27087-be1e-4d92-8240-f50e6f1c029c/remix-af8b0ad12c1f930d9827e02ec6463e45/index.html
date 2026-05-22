@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Ward 13: Sample Sweep</title>
+    <!-- [agent-note][stage4] preserved-font-map: title=Audiowide | ui=Orbitron | console=VT323 via catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #05070d;
+            --bg-panel: rgba(10, 15, 24, 0.88);
+            --bg-panel-strong: rgba(18, 24, 36, 0.96);
+            --line-dim: rgba(148, 163, 184, 0.2);
+            --line-hot: rgba(239, 68, 68, 0.45);
+            --text-main: #edf2f7;
+            --text-dim: #8f9aae;
+            --text-alert: #ff7b72;
+            --glow-red: rgba(220, 38, 38, 0.35);
+            --glow-cyan: rgba(56, 189, 248, 0.18);
+            --hud-chip: rgba(6, 10, 18, 0.74);
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(127, 29, 29, 0.18), transparent 28%),
+                linear-gradient(180deg, #03050a 0%, #090d16 42%, #020304 100%);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            color: var(--text-main);
+        }
+
+        #game-container {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(74, 222, 128, 0.08), transparent 24%),
+                radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.08), transparent 18%),
+                linear-gradient(180deg, #04060b 0%, #0a0f18 46%, #030406 100%);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        .horror-font {
+            font-family: 'Audiowide', 'Orbitron', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            text-shadow:
+                0 0 10px rgba(239, 68, 68, 0.45),
+                0 0 30px rgba(127, 29, 29, 0.3);
+        }
+
+        .vignette {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle, rgba(0,0,0,0) 24%, rgba(3, 6, 11, 0.6) 58%, rgba(0,0,0,0.96) 100%);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.28) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.045), rgba(0, 255, 170, 0.018), rgba(0, 90, 255, 0.05));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 11;
+            opacity: 0.9;
+        }
+
+        .blood-overlay {
+            position: absolute;
+            inset: 0;
+            box-shadow: inset 0 0 100px rgba(255,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.1s;
+            pointer-events: none;
+            z-index: 12;
+            mix-blend-mode: multiply;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            background:
+                radial-gradient(circle at 50% 20%, rgba(127, 29, 29, 0.16), transparent 30%),
+                linear-gradient(180deg, rgba(2, 4, 8, 0.94), rgba(4, 7, 13, 0.98));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        .title {
+            font-size: clamp(3rem, 11vw, 5rem);
+            line-height: 0.9;
+            color: #f87171;
+            margin: 0 0 8px;
+        }
+
+        .subtitle {
+            color: #b5becd;
+            margin: 0 0 28px;
+            max-width: 420px;
+            font-size: 1.08rem;
+            line-height: 1.1;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .highlight-danger {
+            color: #7f1d1d;
+        }
+
+        .briefing-panel {
+            background:
+                linear-gradient(180deg, rgba(7, 12, 19, 0.96), rgba(13, 20, 31, 0.88));
+            border: 1px solid var(--line-dim);
+            border-radius: 12px;
+            margin-bottom: 28px;
+            padding: 16px;
+            width: min(100%, 320px);
+            text-align: left;
+            color: #a8b3c7;
+            font-family: 'VT323', 'Orbitron', monospace;
+            font-size: 1.18rem;
+            line-height: 0.95;
+            box-sizing: border-box;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03) inset,
+                0 14px 28px rgba(0,0,0,0.35),
+                0 0 24px rgba(56, 189, 248, 0.08);
+        }
+
+        .briefing-panel p {
+            margin: 0 0 8px;
+        }
+
+        .briefing-panel p:last-child {
+            margin-bottom: 0;
+        }
+
+        .briefing-alert {
+            color: #ff7b72;
+            margin-top: 12px !important;
+            text-shadow: 0 0 12px rgba(239, 68, 68, 0.22);
+        }
+
+        .action-button {
+            border: 1px solid rgba(248, 113, 113, 0.4);
+            border-radius: 10px;
+            padding: 13px 28px;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: 1.05rem;
+            font-weight: 600;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+            box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
+        }
+
+        .action-button:active {
+            transform: scale(0.95);
+        }
+
+        .action-button.primary {
+            background: linear-gradient(180deg, #a91f24, #6e1218);
+            color: #fff7f7;
+            box-shadow: 0 0 22px rgba(185, 28, 28, 0.28);
+        }
+
+        .action-button.primary:hover {
+            background: linear-gradient(180deg, #c6242b, #83151a);
+            border-color: rgba(254, 202, 202, 0.45);
+        }
+
+        .action-button.secondary {
+            background: linear-gradient(180deg, rgba(225, 232, 240, 0.95), rgba(188, 200, 214, 0.92));
+            color: #111827;
+            border-color: rgba(226, 232, 240, 0.88);
+        }
+
+        .action-button.secondary:hover {
+            background: linear-gradient(180deg, rgba(241, 245, 249, 1), rgba(203, 213, 225, 0.95));
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 16px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 20;
+            color: #ff7b72;
+            font-family: 'VT323', 'Orbitron', monospace;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+            font-size: 1.1rem;
+        }
+
+        #hud > div {
+            background: var(--hud-chip);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 10px;
+            padding: 8px 10px 7px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.26);
+            backdrop-filter: blur(4px);
+        }
+
+        #hud .hud-sub {
+            color: #8ca1b3;
+            margin-top: 4px;
+            font-size: 0.8rem;
+        }
+
+        #hud .hud-right {
+            text-align: right;
+        }
+
+        #key-icon {
+            color: #facc15;
+            font-size: 1.5rem;
+            margin-top: 2px;
+            text-shadow: 0 0 12px rgba(250, 204, 21, 0.4);
+        }
+
+        .pulse {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+
+        #controls {
+            position: absolute;
+            inset: 0;
+            z-index: 30;
+        }
+
+        /* [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction */
+        .joystick-zone {
+            position: absolute;
+            bottom: 20px;
+            width: 150px;
+            height: 150px;
+            background:
+                radial-gradient(circle at 50% 50%, rgba(148, 163, 184, 0.08), rgba(2, 6, 12, 0.28));
+            border: 2px solid rgba(148, 163, 184, 0.16);
+            border-radius: 50%;
+            touch-action: none;
+            z-index: 20;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.04) inset,
+                0 0 24px rgba(59, 130, 246, 0.08);
+            backdrop-filter: blur(4px);
+        }
+
+        .joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background:
+                radial-gradient(circle at 35% 35%, rgba(254, 202, 202, 0.8), rgba(153, 27, 27, 0.9) 45%, rgba(69, 10, 10, 0.95) 100%);
+            border: 1px solid rgba(254, 202, 202, 0.22);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 18px rgba(220, 38, 38, 0.24);
+        }
+
+        .look-zone {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+        }
+
+        .look-hint {
+            position: absolute;
+            right: 40px;
+            bottom: 40px;
+            color: #9aa7b8;
+            font-family: 'VT323', 'Orbitron', monospace;
+            font-size: 0.9rem;
+            line-height: 1;
+            text-align: right;
+            pointer-events: none;
+            opacity: 0.65;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.12);
+        }
+
+        .glitch {
+            position: relative;
+            color: #ff0000;
+            animation: glitch-skew 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+        }
+
+        @keyframes glitch-skew {
+            0% { transform: skew(0deg); }
+            20% { transform: skew(-2deg); }
+            40% { transform: skew(2deg); }
+            60% { transform: skew(-1deg); }
+            80% { transform: skew(1deg); }
+            100% { transform: skew(0deg); }
+        }
+
+        #game-over-screen .game-over-title {
+            font-size: clamp(2.6rem, 10vw, 4.5rem);
+            color: #ff6b6b;
+            margin: 0 0 16px;
+        }
+
+        #game-over-screen .summary-line {
+            margin: 0 0 8px;
+            font-size: 1.15rem;
+            letter-spacing: 0.08em;
+        }
+
+        #game-over-screen .summary-note {
+            color: #9ba6b5;
+            margin: 0 0 28px;
+            font-size: 0.98rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        #jumpscare {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(22, 0, 0, 0.88), #000 65%);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            z-index: 45;
+            width: min(32vw, 130px);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+            opacity: 0;
+            transform: scale(0.92);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: none;
+            background: rgba(6, 10, 18, 0.55);
+            object-fit: cover;
+        }
+
+        .feedback-gif.show {
+            opacity: 0.92;
+            transform: scale(1);
+        }
+
+        #pickup-gif {
+            top: 88px;
+            right: 14px;
+        }
+
+        #danger-gif {
+            left: 14px;
+            bottom: 188px;
+        }
+
+        @media (max-width: 480px) {
+            #hud {
+                font-size: 1rem;
+                padding: 12px;
+            }
+
+            .briefing-panel {
+                font-size: 0.95rem;
+            }
+
+            .look-hint {
+                right: 20px;
+                bottom: 20px;
+                font-size: 0.8rem;
+            }
+
+            .joystick-zone {
+                left: 20px !important;
+                bottom: 20px !important;
+                width: 132px;
+                height: 132px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="vignette"></div>
+        <div class="scanlines"></div>
+        <div id="blood" class="blood-overlay"></div>
+        <!-- [agent-note][stage3] resolved-gif: pickup-feedback + danger-alert -> catalogs/gifs.json -->
+        <img id="pickup-gif" class="feedback-gif" alt="Sample pickup reaction" src="https://i.giphy.com/1AjEBGWggGXh9onllB.webp">
+        <img id="danger-gif" class="feedback-gif" alt="Danger proximity alert" src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp">
+
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div>
+                <div>SAMPLES: <span id="res-count">0</span>/50</div>
+                <div class="hud-sub">RECOVER THE ACCESS KEY</div>
+            </div>
+            <div class="hud-right">
+                <div class="pulse">VITALS: <span id="hp-count">100</span>%</div>
+                <div id="key-icon" class="hidden">🔑</div>
+            </div>
+        </div>
+
+        <!-- Touch Controls -->
+        <div id="controls" class="hidden">
+            <div id="stick-container" class="joystick-zone" style="left: 30px; bottom: 30px;">
+                <div id="stick" class="joystick-knob"></div>
+            </div>
+            <div id="look-zone" class="look-zone"></div>
+
+            <div class="look-hint">
+                DRAG RIGHT SIDE<br>TO LOOK
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay-screen">
+            <h1 class="horror-font title glitch">WARD 13</h1>
+            <p class="subtitle">
+                QUARANTINE BREACH.<br>
+                SHADOWS ARE MOVING.<br>
+                <span class="highlight-danger">TOUCH ONLY. STAY MOBILE.</span>
+            </p>
+            <div class="briefing-panel">
+                <p>> LINKING FIELD SCANNER...</p>
+                <p>> REMOTE TEAM LOST</p>
+                <p>> SOLO SWEEP AUTHORIZED</p>
+                <p class="briefing-alert">OBJECTIVE: GATHER ALL 50 SAMPLES</p>
+                <p>- Left Stick: Move</p>
+                <p>- Right Screen: Look</p>
+                <p>- Grab the key when you spot it</p>
+            </div>
+            <button id="start-btn" class="action-button primary">BEGIN SWEEP</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="overlay-screen hidden">
+            <h1 class="horror-font game-over-title">RUN LOST</h1>
+            <p class="summary-line">SAMPLES SECURED: <span id="final-score">0</span></p>
+            <p class="summary-note">WARD 13 STAYS HUNGRY.</p>
+            <button id="restart-btn" class="action-button secondary">RUN AGAIN</button>
+        </div>
+
+        <!-- Jumpscare Image Container -->
+        <div id="jumpscare">
+            <!-- [agent-note][stage1] role: future-audio | trigger: death-jumpscare | intent: reinforce the ambush payoff without changing timing -->
+            <div style="width:100%; height:100%; background:radial-gradient(circle, #fff 10%, #500 20%, #000 90%); display:flex; align-items:center; justify-content:center;">
+                <div style="width:200px; height:300px; background:#000; border-radius:50%; position:relative;">
+                    <div style="position:absolute; top:80px; left:40px; width:40px; height:40px; background:#f00; border-radius:50%; box-shadow:0 0 20px #f00;"></div>
+                    <div style="position:absolute; top:80px; right:40px; width:40px; height:40px; background:#f00; border-radius:50%; box-shadow:0 0 20px #f00;"></div>
+                    <div style="position:absolute; bottom:50px; left:50%; transform:translateX(-50%); width:100px; height:120px; background:#200; border-radius:10px; clip-path: polygon(0 0, 100% 0, 50% 100%);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /*
+         * Ward 13 - Single File Horror Raycaster
+         * No external engine. Pure Vanilla JS + Canvas.
+         */
+
+        // --- AUDIO SYSTEM ---
+        const AudioSys = {
+            ctx: null,
+            master: null,
+            initialized: false,
+            bgm: null,
+            sfxCooldowns: {},
+            assets: {
+                bgm: 'https://gamezone-virid.vercel.app/assets/audios/ambience/ambience_loop_02.mp3',
+                start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3',
+                pickup: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3',
+                key: 'https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3',
+                warning: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3',
+                gameOver: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3'
+            },
+
+            init() {
+                if (this.initialized) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                this.master = this.ctx.createGain();
+                this.master.gain.value = 0.6;
+                this.master.connect(this.ctx.destination);
+                this.initialized = true;
+            },
+
+            async unlock() {
+                this.init();
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    try {
+                        await this.ctx.resume();
+                    } catch (_) {}
+                }
+            },
+
+            createMedia(url, volume = 0.35, loop = false) {
+                const audio = new Audio(url);
+                audio.loop = loop;
+                audio.preload = 'auto';
+                audio.crossOrigin = 'anonymous';
+                audio.volume = volume;
+                return audio;
+            },
+
+            playOneShot(name, url, volume = 0.4, cooldown = 80) {
+                if (!this.initialized) return;
+                const now = performance.now();
+                if (this.sfxCooldowns[name] && now - this.sfxCooldowns[name] < cooldown) return;
+                this.sfxCooldowns[name] = now;
+                try {
+                    const clip = this.createMedia(url, volume, false);
+                    clip.play().catch(() => {});
+                } catch (_) {}
+            },
+
+            ensureLoop() {
+                if (!this.bgm) {
+                    this.bgm = this.createMedia(this.assets.bgm, 0.2, true);
+                }
+                return this.bgm;
+            },
+
+            startLoop() {
+                if (!this.initialized) return;
+                const loop = this.ensureLoop();
+                loop.play().catch(() => {});
+            },
+
+            stopLoop() {
+                if (!this.bgm) return;
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            },
+
+            setLoopIntensity(active) {
+                if (!this.bgm) return;
+                this.bgm.volume = active ? 0.2 : 0.2;
+            },
+
+            playHeartbeat() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(58, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.12, this.ctx.currentTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.16);
+                osc.connect(gain);
+                gain.connect(this.master);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.18);
+
+                setTimeout(() => {
+                    if (!this.initialized) return;
+                    const osc2 = this.ctx.createOscillator();
+                    const gain2 = this.ctx.createGain();
+                    osc2.type = 'triangle';
+                    osc2.frequency.setValueAtTime(48, this.ctx.currentTime);
+                    gain2.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+                    gain2.gain.exponentialRampToValueAtTime(0.09, this.ctx.currentTime + 0.02);
+                    gain2.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.14);
+                    osc2.connect(gain2);
+                    gain2.connect(this.master);
+                    osc2.start();
+                    osc2.stop(this.ctx.currentTime + 0.16);
+                }, 150);
+            },
+
+            scream() {
+                this.playOneShot('game-over', this.assets.gameOver, 0.48, 300);
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
+                osc.frequency.linearRampToValueAtTime(100, this.ctx.currentTime + 1.2);
+
+                gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.18, this.ctx.currentTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 1.2);
+
+                osc.connect(gain);
+                gain.connect(this.master);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 1.2);
+            }
+        };
+
+        // --- GAME CONSTANTS ---
+        const SCREEN_WIDTH = 320;
+        const SCREEN_HEIGHT = 568;
+        const FOV = Math.PI / 3;
+        const BLOCK_SIZE = 64;
+        const MAP_SIZE = 24;
+        const MOVEMENT_SPEED = 2.5;
+        const ROTATION_SPEED = 2.0;
+
+        // --- GAME STATE ---
+        let canvas, ctx;
+        let lastTime = 0;
+        let gameState = 'START';
+        let resourcesCollected = 0;
+        let hasKey = false;
+        let player = { x: 0, y: 0, dir: 0, hp: 100 };
+        let map = [];
+        let zBuffer = [];
+        let sprites = [];
+        let rays = [];
+        let feedbackTimers = {};
+        let dangerState = false;
+
+        const input = {
+            forward: 0,
+            strafe: 0,
+            rotate: 0
+        };
+
+        function showGif(id, duration = 900) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('show');
+            clearTimeout(feedbackTimers[id]);
+            feedbackTimers[id] = setTimeout(() => el.classList.remove('show'), duration);
+        }
+
+        // --- MAP GENERATION ---
+        function generateMap() {
+            let newMap = [];
+            for (let y = 0; y < MAP_SIZE; y++) {
+                let row = [];
+                for (let x = 0; x < MAP_SIZE; x++) {
+                    if (x === 0 || x === MAP_SIZE - 1 || y === 0 || y === MAP_SIZE - 1) {
+                        row.push(1);
+                    } else {
+                        row.push(Math.random() > 0.8 ? 1 : 0);
+                    }
+                }
+                newMap.push(row);
+            }
+
+            newMap[2][2] = 0;
+            newMap[2][3] = 0;
+            newMap[3][2] = 0;
+            player.x = 2.5 * BLOCK_SIZE;
+            player.y = 2.5 * BLOCK_SIZE;
+            player.dir = 0;
+
+            sprites = [];
+            for (let i = 0; i < 50; i++) {
+                let rx, ry;
+                do {
+                    rx = Math.floor(Math.random() * MAP_SIZE);
+                    ry = Math.floor(Math.random() * MAP_SIZE);
+                } while (newMap[ry][rx] !== 0);
+                sprites.push({ x: rx * BLOCK_SIZE + 32, y: ry * BLOCK_SIZE + 32, type: 'resource', active: true });
+            }
+
+            let kx, ky;
+            do {
+                kx = Math.floor(Math.random() * MAP_SIZE);
+                ky = Math.floor(Math.random() * MAP_SIZE);
+            } while (newMap[ky][kx] !== 0);
+            sprites.push({ x: kx * BLOCK_SIZE + 32, y: ky * BLOCK_SIZE + 32, type: 'key', active: true });
+
+            for (let i = 0; i < 6; i++) {
+                let mx, my;
+                do {
+                    mx = Math.floor(Math.random() * MAP_SIZE);
+                    my = Math.floor(Math.random() * MAP_SIZE);
+                } while (newMap[my][mx] !== 0 || Math.hypot(mx * BLOCK_SIZE - player.x, my * BLOCK_SIZE - player.y) < 300);
+
+                sprites.push({
+                    x: mx * BLOCK_SIZE + 32,
+                    y: my * BLOCK_SIZE + 32,
+                    type: 'monster',
+                    subtype: i,
+                    speed: 1.0 + (Math.random() * 1.5),
+                    active: true
+                });
+            }
+
+            return newMap;
+        }
+
+        // --- RAYCASTER ENGINE ---
+        function castRays() {
+            rays = [];
+            for (let i = 0; i < SCREEN_WIDTH; i += 2) {
+                let rayAngle = (player.dir - FOV / 2.0) + (i / SCREEN_WIDTH) * FOV;
+                let distanceToWall = 0;
+                let hitWall = false;
+
+                let eyeX = Math.cos(rayAngle);
+                let eyeY = Math.sin(rayAngle);
+
+                let testX = Math.floor(player.x / BLOCK_SIZE);
+                let testY = Math.floor(player.y / BLOCK_SIZE);
+
+                let stepX = (eyeX < 0) ? -1 : 1;
+                let stepY = (eyeY < 0) ? -1 : 1;
+                let sideDistX = (eyeX < 0) ? (player.x - testX * BLOCK_SIZE) : ((testX + 1) * BLOCK_SIZE - player.x);
+                let sideDistY = (eyeY < 0) ? (player.y - testY * BLOCK_SIZE) : ((testY + 1) * BLOCK_SIZE - player.y);
+
+                let deltaDistX = Math.abs(BLOCK_SIZE / (eyeX || 0.001));
+                let deltaDistY = Math.abs(BLOCK_SIZE / (eyeY || 0.001));
+
+                let side = 0;
+
+                while (!hitWall && distanceToWall < 1000) {
+                    if (sideDistX < sideDistY) {
+                        sideDistX += deltaDistX;
+                        testX += stepX;
+                        side = 0;
+                    } else {
+                        sideDistY += deltaDistY;
+                        testY += stepY;
+                        side = 1;
+                    }
+
+                    if (testX < 0 || testX >= MAP_SIZE || testY < 0 || testY >= MAP_SIZE) {
+                        hitWall = true;
+                        distanceToWall = 1000;
+                    } else if (map[testY][testX] > 0) {
+                        hitWall = true;
+                        if (side === 0) distanceToWall = (testX * BLOCK_SIZE - player.x + (1 - stepX) * BLOCK_SIZE / 2) / eyeX;
+                        else distanceToWall = (testY * BLOCK_SIZE - player.y + (1 - stepY) * BLOCK_SIZE / 2) / eyeY;
+                    }
+                }
+
+                distanceToWall = distanceToWall * Math.cos(player.dir - rayAngle);
+
+                zBuffer[i] = distanceToWall;
+                zBuffer[i + 1] = distanceToWall;
+
+                let ceiling = SCREEN_HEIGHT / 2.0 - SCREEN_HEIGHT / distanceToWall * 32;
+                let floor = SCREEN_HEIGHT - ceiling;
+                let wallHeight = floor - ceiling;
+
+                let shade = Math.max(0, 255 - (distanceToWall * 0.5));
+                let color = side === 1 ? `rgb(${shade * 0.8}, ${shade * 0.8}, ${shade * 0.8})` : `rgb(${shade}, ${shade}, ${shade})`;
+
+                if (Math.abs(Math.sin(testX * 10) * Math.cos(testY * 10)) > 0.8) {
+                    color = `rgb(${shade * 0.9}, ${shade * 0.8}, ${shade * 0.8})`;
+                }
+
+                ctx.fillStyle = color;
+                ctx.fillRect(i, ceiling, 2, wallHeight);
+            }
+        }
+
+        function drawSprites() {
+            sprites.sort((a, b) => {
+                let distA = Math.hypot(player.x - a.x, player.y - a.y);
+                let distB = Math.hypot(player.x - b.x, player.y - b.y);
+                return distB - distA;
+            });
+
+            sprites.forEach(sprite => {
+                if (!sprite.active) return;
+
+                let dx = sprite.x - player.x;
+                let dy = sprite.y - player.y;
+                let dist = Math.hypot(dx, dy);
+
+                if (sprite.type === 'monster' && gameState === 'PLAY') {
+                    if (dist < 400) {
+                        sprite.x -= (dx / dist) * sprite.speed;
+                        sprite.y -= (dy / dist) * sprite.speed;
+                    }
+                    if (dist < 30) {
+                        gameOver();
+                    }
+                } else if (sprite.type === 'resource') {
+                    if (dist < 30) {
+                        sprite.active = false;
+                        resourcesCollected++;
+                        AudioSys.playOneShot('pickup', AudioSys.assets.pickup, 0.42, 90);
+                        showGif('pickup-gif', 850);
+                        updateHUD();
+                    }
+                } else if (sprite.type === 'key') {
+                    if (dist < 30) {
+                        sprite.active = false;
+                        hasKey = true;
+                        AudioSys.playOneShot('key', AudioSys.assets.key, 0.48, 140);
+                        showGif('pickup-gif', 1200);
+                        updateHUD();
+                    }
+                }
+
+                let spriteAngle = Math.atan2(dy, dx) - player.dir;
+                while (spriteAngle < -Math.PI) spriteAngle += 2 * Math.PI;
+                while (spriteAngle > Math.PI) spriteAngle -= 2 * Math.PI;
+
+                if (Math.abs(spriteAngle) < FOV / 1.5) {
+                    let screenX = (0.5 * (spriteAngle / (FOV / 2)) + 0.5) * SCREEN_WIDTH;
+                    let spriteHeight = (SCREEN_HEIGHT / dist) * 64;
+                    let spriteWidth = spriteHeight;
+                    let spriteTop = (SCREEN_HEIGHT - spriteHeight) / 2;
+
+                    let checkIdx = Math.floor(Math.max(0, Math.min(SCREEN_WIDTH - 1, screenX)));
+                    if (dist < zBuffer[checkIdx]) {
+                        if (sprite.type === 'monster') {
+                            drawMonster(screenX - spriteWidth / 2, spriteTop, spriteWidth, spriteHeight, dist);
+                        } else if (sprite.type === 'resource') {
+                            ctx.fillStyle = '#0f0';
+                            ctx.fillRect(screenX - spriteWidth / 4, spriteTop + spriteHeight / 2, spriteWidth / 2, spriteHeight / 4);
+                            ctx.fillRect(screenX - spriteWidth / 8, spriteTop + spriteHeight / 4, spriteWidth / 4, spriteHeight / 2);
+                        } else if (sprite.type === 'key') {
+                            ctx.fillStyle = '#ff0';
+                            ctx.beginPath();
+                            ctx.arc(screenX, spriteTop + spriteHeight / 2, spriteWidth / 4, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                }
+            });
+        }
+
+        function drawMonster(x, y, w, h, dist) {
+            let alpha = Math.min(1, 400 / dist);
+            ctx.globalAlpha = alpha;
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(x + w * 0.2, y, w * 0.6, h);
+
+            ctx.fillStyle = '#f00';
+            let eyeSize = w * 0.1;
+            if (Math.random() > 0.1) {
+                ctx.fillRect(x + w * 0.3, y + h * 0.2, eyeSize, eyeSize);
+                ctx.fillRect(x + w * 0.6, y + h * 0.2, eyeSize, eyeSize);
+            }
+
+            ctx.globalAlpha = 1.0;
+        }
+
+        // --- GAME LOOP ---
+        function update(dt) {
+            if (gameState !== 'PLAY') return;
+
+            let moveStep = input.forward * MOVEMENT_SPEED;
+            let strafeStep = input.strafe * MOVEMENT_SPEED * 0.6;
+
+            let newX = player.x + Math.cos(player.dir) * moveStep + Math.cos(player.dir + Math.PI / 2) * strafeStep;
+            let newY = player.y + Math.sin(player.dir) * moveStep + Math.sin(player.dir + Math.PI / 2) * strafeStep;
+
+            let mapX = Math.floor(newX / BLOCK_SIZE);
+            let mapY = Math.floor(newY / BLOCK_SIZE);
+
+            if (map[mapY][mapX] === 0) {
+                player.x = newX;
+                player.y = newY;
+            }
+
+            player.dir += input.rotate * ROTATION_SPEED * 0.05;
+
+            let nearestDist = 9999;
+            sprites.forEach(s => {
+                if (s.type === 'monster') {
+                    let d = Math.hypot(player.x - s.x, player.y - s.y);
+                    if (d < nearestDist) nearestDist = d;
+                }
+            });
+
+            if (nearestDist < 300) {
+                let rate = Math.max(200, nearestDist * 2);
+                let now = Date.now();
+                if (!player.lastBeat || now - player.lastBeat > rate) {
+                    AudioSys.playHeartbeat();
+                    player.lastBeat = now;
+                    document.getElementById('blood').style.opacity = (300 - nearestDist) / 300;
+                }
+
+                if (!dangerState) {
+                    dangerState = true;
+                    AudioSys.playOneShot('warning', AudioSys.assets.warning, 0.28, 1200);
+                    showGif('danger-gif', 1000);
+                }
+
+                AudioSys.setLoopIntensity(nearestDist < 180);
+            } else {
+                dangerState = false;
+                document.getElementById('blood').style.opacity = 0;
+                document.getElementById('danger-gif').classList.remove('show');
+                AudioSys.setLoopIntensity(false);
+            }
+        }
+
+        function render() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+
+            if (!map.length) {
+                return;
+            }
+
+            castRays();
+            drawSprites();
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+            let now = performance.now();
+            let dt = (now - lastTime) / 1000;
+            lastTime = now;
+
+            update(dt);
+            render();
+        }
+
+        // --- CONTROLS ---
+        function initControls() {
+            const stickZone = document.getElementById('stick-container');
+            const stick = document.getElementById('stick');
+            const lookZone = document.getElementById('look-zone');
+
+            let stickTouchId = null;
+            let lookTouchId = null;
+            let lookStartX = 0;
+
+            stickZone.addEventListener('touchstart', e => {
+                e.preventDefault();
+                let touch = e.changedTouches[0];
+                stickTouchId = touch.identifier;
+                updateStick(touch);
+            }, { passive: false });
+
+            stickZone.addEventListener('touchmove', e => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === stickTouchId) {
+                        updateStick(e.changedTouches[i]);
+                    }
+                }
+            }, { passive: false });
+
+            const endStick = (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === stickTouchId) {
+                        stickTouchId = null;
+                        input.forward = 0;
+                        input.strafe = 0;
+                        stick.style.transform = 'translate(-50%, -50%)';
+                    }
+                }
+            };
+            stickZone.addEventListener('touchend', endStick);
+            stickZone.addEventListener('touchcancel', endStick);
+
+            function updateStick(touch) {
+                const rect = stickZone.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+
+                const maxDist = 50;
+                const dist = Math.hypot(dx, dy);
+                if (dist > maxDist) {
+                    dx = (dx / dist) * maxDist;
+                    dy = (dy / dist) * maxDist;
+                }
+
+                stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+                input.strafe = dx / maxDist;
+                input.forward = -(dy / maxDist);
+            }
+
+            lookZone.addEventListener('touchstart', e => {
+                e.preventDefault();
+                let touch = e.changedTouches[0];
+                lookTouchId = touch.identifier;
+                lookStartX = touch.clientX;
+            }, { passive: false });
+
+            lookZone.addEventListener('touchmove', e => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === lookTouchId) {
+                        let deltaX = e.changedTouches[i].clientX - lookStartX;
+                        input.rotate = deltaX * 0.05;
+                        lookStartX = e.changedTouches[i].clientX;
+                    }
+                }
+            }, { passive: false });
+
+            const endLook = (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === lookTouchId) {
+                        lookTouchId = null;
+                        input.rotate = 0;
+                    }
+                }
+            };
+            lookZone.addEventListener('touchend', endLook);
+            lookZone.addEventListener('touchcancel', endLook);
+        }
+
+        // --- GAME FLOW ---
+        async function startGame() {
+            await AudioSys.unlock();
+            AudioSys.playOneShot('start', AudioSys.assets.start, 0.4, 180);
+            AudioSys.startLoop();
+            gameState = 'PLAY';
+            map = generateMap();
+            resourcesCollected = 0;
+            hasKey = false;
+            dangerState = false;
+            player.lastBeat = 0;
+            updateHUD();
+
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('jumpscare').style.display = 'none';
+            document.getElementById('danger-gif').classList.remove('show');
+            document.getElementById('pickup-gif').classList.remove('show');
+        }
+
+        function gameOver() {
+            if (gameState === 'DEAD') return;
+            gameState = 'DEAD';
+
+            AudioSys.stopLoop();
+            AudioSys.scream();
+            showGif('danger-gif', 1400);
+            const js = document.getElementById('jumpscare');
+            js.style.display = 'flex';
+
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
+
+            setTimeout(() => {
+                js.style.display = 'none';
+                document.getElementById('hud').classList.add('hidden');
+                document.getElementById('controls').classList.add('hidden');
+                document.getElementById('game-over-screen').classList.remove('hidden');
+                document.getElementById('final-score').innerText = resourcesCollected;
+            }, 1500);
+        }
+
+        function updateHUD() {
+            document.getElementById('res-count').innerText = resourcesCollected;
+            document.getElementById('hp-count').innerText = player.hp;
+            if (hasKey) {
+                document.getElementById('key-icon').classList.remove('hidden');
+            } else {
+                document.getElementById('key-icon').classList.add('hidden');
+            }
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            // [agent-note][stage4] repaired: mobile-action-path | element: #start-btn/#restart-btn | action: removed global touch suppression so taps can emit click
+            canvas = document.getElementById('gameCanvas');
+            canvas.width = SCREEN_WIDTH;
+            canvas.height = SCREEN_HEIGHT;
+            ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+
+            initControls();
+
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', startGame);
+
+            loop();
+        };
+    </script>
+</body>
+</html>

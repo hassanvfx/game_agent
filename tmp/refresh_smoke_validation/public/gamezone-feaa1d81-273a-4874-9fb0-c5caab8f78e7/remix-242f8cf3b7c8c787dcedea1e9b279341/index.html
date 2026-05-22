@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Genome Glide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- [agent-note][stage3] resolved-font: title/display -> Audiowide, ui/hud -> Exo 2 from catalogs/fonts.json -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600;700&display=swap">
+    <style>
+        :root {
+            --bg-top: #060816;
+            --bg-bottom: #120f28;
+            --panel: rgba(10, 18, 42, 0.78);
+            --panel-strong: rgba(14, 28, 68, 0.92);
+            --panel-border: rgba(108, 242, 255, 0.34);
+            --text-main: #eefcff;
+            --text-soft: rgba(220, 244, 255, 0.78);
+            --glow-cyan: #6cf2ff;
+            --glow-lime: #a7ff70;
+            --glow-gold: #ffd166;
+            --glow-red: #ff6b7f;
+            --glow-blue: #60a5fa;
+            --shadow-deep: rgba(0, 0, 0, 0.42);
+            --font-ui: "Exo 2", system-ui, sans-serif;
+            --font-display: "Audiowide", system-ui, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at top, #17244d 0%, var(--bg-top) 40%, var(--bg-bottom) 100%);
+        }
+
+        body {
+            font-family: var(--font-ui);
+            color: var(--text-main);
+        }
+
+        button {
+            font: inherit;
+            border: 0;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .game-shell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+            background:
+                radial-gradient(circle at 15% 20%, rgba(108, 242, 255, 0.12), transparent 22%),
+                radial-gradient(circle at 85% 15%, rgba(167, 255, 112, 0.08), transparent 18%);
+        }
+
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .overlay-card {
+            width: min(90vw, 420px);
+            pointer-events: auto;
+            text-align: center;
+            padding: 24px 22px;
+            border-radius: 24px;
+            background:
+                linear-gradient(180deg, rgba(12, 27, 66, 0.92), rgba(7, 13, 34, 0.92)),
+                var(--panel);
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                0 18px 44px var(--shadow-deep),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+                0 0 28px rgba(108, 242, 255, 0.14);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .overlay-card.hidden,
+        .hud.hidden,
+        .feedback-gif.hidden {
+            display: none;
+        }
+
+        .title {
+            margin: 0 0 10px;
+            font-family: var(--font-display);
+            font-size: clamp(28px, 7vw, 42px);
+            line-height: 1;
+            letter-spacing: 0.08em;
+            color: #ccfff6;
+            text-shadow:
+                0 0 16px rgba(108, 242, 255, 0.52),
+                0 0 32px rgba(108, 242, 255, 0.2);
+        }
+
+        .title--danger {
+            color: #ffd1d7;
+            text-shadow:
+                0 0 14px rgba(255, 107, 127, 0.45),
+                0 0 28px rgba(255, 107, 127, 0.18);
+        }
+
+        .subtitle {
+            margin: 0 0 18px;
+            font-size: clamp(13px, 3.6vw, 16px);
+            line-height: 1.5;
+            color: var(--text-soft);
+        }
+
+        .subtitle.pulse {
+            animation: softPulse 1.8s ease-in-out infinite;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin: 0 0 18px;
+        }
+
+        .form-chip {
+            padding: 10px 6px 8px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .form-chip__icon {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 22px;
+            filter: drop-shadow(0 0 10px currentColor);
+        }
+
+        .form-chip__label {
+            display: block;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-soft);
+        }
+
+        .glow-green { color: var(--glow-lime); }
+        .glow-red { color: var(--glow-red); }
+        .glow-blue { color: var(--glow-blue); }
+
+        .action-btn {
+            min-width: 180px;
+            padding: 14px 22px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #74ff9d, #13b981);
+            color: #08111f;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            box-shadow:
+                0 10px 24px rgba(19, 185, 129, 0.35),
+                inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+        }
+
+        .action-btn:hover,
+        .action-btn:active {
+            transform: translateY(-1px) scale(1.02);
+            filter: brightness(1.06);
+            box-shadow:
+                0 14px 28px rgba(19, 185, 129, 0.42),
+                inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+        }
+
+        .action-btn--restart {
+            background: linear-gradient(135deg, #ffe08a, #ff8f6b);
+            box-shadow:
+                0 10px 24px rgba(255, 143, 107, 0.3),
+                inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+        }
+
+        .summary-line {
+            margin: 0 0 10px;
+            font-size: clamp(16px, 4.2vw, 24px);
+            color: var(--text-main);
+        }
+
+        .summary-line--accent {
+            margin-bottom: 18px;
+            color: var(--glow-gold);
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        .hud {
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            padding: max(12px, env(safe-area-inset-top)) 12px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .hud-card {
+            min-width: 0;
+            padding: 10px 12px;
+            border-radius: 18px;
+            background:
+                linear-gradient(180deg, rgba(11, 21, 48, 0.88), rgba(8, 13, 28, 0.88));
+            border: 1px solid rgba(108, 242, 255, 0.22);
+            box-shadow:
+                0 8px 20px rgba(0, 0, 0, 0.24),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+        }
+
+        .hud-label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 11px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(194, 232, 255, 0.7);
+        }
+
+        .hud-value {
+            font-size: clamp(18px, 4.8vw, 26px);
+            font-weight: 700;
+            text-shadow: 0 0 12px rgba(108, 242, 255, 0.18);
+        }
+
+        .hud-value--score {
+            color: var(--glow-lime);
+        }
+
+        .hud-right {
+            text-align: right;
+            min-width: 134px;
+        }
+
+        .form-name {
+            font-family: var(--font-display);
+            font-size: clamp(16px, 4vw, 22px);
+            letter-spacing: 0.06em;
+        }
+
+        .dna-meter {
+            margin-top: 7px;
+            width: 120px;
+            height: 10px;
+            margin-left: auto;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .dna-bar {
+            height: 100%;
+            width: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #67e8f9, #818cf8, #c084fc);
+            box-shadow: 0 0 14px rgba(103, 232, 249, 0.5);
+            transition: width 180ms ease;
+        }
+
+        .corner-flair,
+        .corner-flair::before,
+        .corner-flair::after {
+            position: absolute;
+            border-radius: 999px;
+            pointer-events: none;
+        }
+
+        .corner-flair {
+            inset: 12px 12px auto auto;
+            width: 70px;
+            height: 70px;
+            opacity: 0.5;
+            background: radial-gradient(circle, rgba(108, 242, 255, 0.2), transparent 65%);
+            filter: blur(2px);
+        }
+
+        .corner-flair::before,
+        .corner-flair::after {
+            content: "";
+            inset: auto;
+        }
+
+        .corner-flair::before {
+            width: 18px;
+            height: 18px;
+            top: 12px;
+            left: 4px;
+            background: rgba(108, 242, 255, 0.34);
+        }
+
+        .corner-flair::after {
+            width: 10px;
+            height: 10px;
+            top: 34px;
+            left: 24px;
+            background: rgba(167, 255, 112, 0.38);
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: 12px;
+            bottom: max(110px, calc(env(safe-area-inset-bottom) + 110px));
+            width: min(24vw, 108px);
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+            opacity: 0;
+            transform: translateY(14px) scale(0.9);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            object-fit: cover;
+            background: rgba(6, 8, 22, 0.6);
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif--fail {
+            left: 12px;
+            right: auto;
+            bottom: max(120px, calc(env(safe-area-inset-bottom) + 120px));
+            width: min(30vw, 120px);
+        }
+
+        @keyframes softPulse {
+            0%, 100% { opacity: 0.76; }
+            50% { opacity: 1; }
+        }
+
+        @media (max-width: 560px) {
+            .overlay-card {
+                width: min(92vw, 360px);
+                padding: 20px 16px;
+                border-radius: 20px;
+            }
+
+            .form-grid {
+                gap: 8px;
+            }
+
+            .form-chip {
+                padding: 8px 4px 7px;
+            }
+
+            .form-chip__icon {
+                font-size: 20px;
+            }
+
+            .form-chip__label {
+                font-size: 10px;
+            }
+
+            .action-btn {
+                width: 100%;
+                min-width: 0;
+                padding: 13px 20px;
+                font-size: 16px;
+            }
+
+            .hud {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+
+            .hud-card {
+                padding: 9px 10px;
+                border-radius: 16px;
+            }
+
+            .hud-right {
+                min-width: 120px;
+            }
+
+            .dna-meter {
+                width: 110px;
+            }
+
+            .feedback-gif {
+                width: min(22vw, 88px);
+                right: 8px;
+                bottom: max(104px, calc(env(safe-area-inset-bottom) + 104px));
+            }
+
+            .feedback-gif--fail {
+                left: 8px;
+                width: min(24vw, 94px);
+                bottom: max(112px, calc(env(safe-area-inset-bottom) + 112px));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="game-shell">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer" class="ui-layer">
+            <div class="corner-flair" aria-hidden="true"></div>
+
+            <img
+                id="collect-gif"
+                class="feedback-gif hidden"
+                src="https://i.giphy.com/Da3QKzDMWZFIaXxEYQ.gif"
+                alt="Genome surge reward reaction"
+                decoding="async"
+                loading="lazy"
+            >
+            <!-- [agent-note][stage3] resolved-gif: collect-reward -> creature battle capture reward game gif -->
+
+            <img
+                id="fail-gif"
+                class="feedback-gif feedback-gif--fail hidden"
+                src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.gif"
+                alt="Sequence lost fail reaction"
+                decoding="async"
+                loading="lazy"
+            >
+            <!-- [agent-note][stage3] resolved-gif: fail-reaction -> gamer rage fail loss reaction gif -->
+
+            <div id="start-screen" class="overlay-card">
+                <h1 class="title">GENOME GLIDE</h1>
+                <p class="subtitle pulse">Tap, click, or press Space to dodge hazards and gather genome cores.</p>
+                <div class="form-grid" aria-label="Available forms">
+                    <div class="form-chip">
+                        <span class="form-chip__icon glow-green" aria-hidden="true">🦎</span>
+                        <span class="form-chip__label">Scout Form</span>
+                    </div>
+                    <div class="form-chip">
+                        <span class="form-chip__icon glow-red" aria-hidden="true">🦖</span>
+                        <span class="form-chip__label">Titan Form</span>
+                    </div>
+                    <div class="form-chip">
+                        <span class="form-chip__icon glow-blue" aria-hidden="true">🪽</span>
+                        <span class="form-chip__label">Glider Form</span>
+                    </div>
+                </div>
+                <button id="start-btn" class="action-btn">START RUN</button>
+            </div>
+
+            <div id="game-over-screen" class="overlay-card hidden">
+                <h2 class="title title--danger">SEQUENCE LOST</h2>
+                <p class="summary-line">Run Distance: <span id="finalScore">0</span>m</p>
+                <p class="summary-line summary-line--accent">Peak Form: <span id="finalForm">Scout</span></p>
+                <button id="restart-btn" class="action-btn action-btn--restart">RETRY RUN</button>
+            </div>
+
+            <div id="hud" class="hud hidden">
+                <div class="hud-card">
+                    <span class="hud-label">Genome</span>
+                    <div class="hud-value hud-value--score"><span id="score">0</span></div>
+                </div>
+                <div class="hud-card hud-right">
+                    <span class="hud-label">Form</span>
+                    <div id="currentFormName" class="form-name glow-green">Scout</div>
+                    <div class="dna-meter">
+                        <div id="dna-bar" class="dna-bar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. APPROVED MEDIA */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3",
+            sfx: {
+                jump: "https://gamezone-virid.vercel.app/assets/audios/sfx/jump_02.mp3",
+                collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+                morph: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3"
+            }
+        };
+
+        /** 2. AUDIO + FEEDBACK SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.bgm = this.createAudio(ASSETS.bgm, 0.22, true);
+                this.lastPlayedAt = new Map();
+                this.sfx = {
+                    jump: this.createAudio(ASSETS.sfx.jump, 0.44),
+                    collect: this.createAudio(ASSETS.sfx.collect, 0.5),
+                    morph: this.createAudio(ASSETS.sfx.morph, 0.58),
+                    fail: this.createAudio(ASSETS.sfx.fail, 0.62),
+                    start: this.createAudio(ASSETS.sfx.start, 0.5)
+                };
+            }
+
+            createAudio(src, volume, loop = false) {
+                const audio = new Audio(src);
+                audio.preload = 'auto';
+                audio.volume = volume;
+                audio.loop = loop;
+                return audio;
+            }
+
+            unlock() {
+                this.enabled = true;
+            }
+
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            playSFX(key, cooldown = 0) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const now = performance.now();
+                const last = this.lastPlayedAt.get(key) || 0;
+                if (now - last < cooldown) return;
+                this.lastPlayedAt.set(key, now);
+
+                const clone = this.sfx[key].cloneNode();
+                clone.volume = this.sfx[key].volume;
+                clone.play().catch(() => {});
+            }
+        }
+
+        class FeedbackController {
+            constructor() {
+                this.collectGif = document.getElementById('collect-gif');
+                this.failGif = document.getElementById('fail-gif');
+                this.timers = new Map();
+            }
+
+            pulse(type, duration = 820) {
+                const el = type === 'collect' ? this.collectGif : this.failGif;
+                if (!el) return;
+
+                el.classList.remove('hidden');
+                requestAnimationFrame(() => el.classList.add('visible'));
+
+                const prior = this.timers.get(type);
+                if (prior) clearTimeout(prior);
+
+                const timeout = setTimeout(() => {
+                    el.classList.remove('visible');
+                    setTimeout(() => el.classList.add('hidden'), 180);
+                    this.timers.delete(type);
+                }, duration);
+
+                this.timers.set(type, timeout);
+            }
+
+            hideAll() {
+                for (const timeout of this.timers.values()) {
+                    clearTimeout(timeout);
+                }
+                this.timers.clear();
+                [this.collectGif, this.failGif].forEach((el) => {
+                    if (!el) return;
+                    el.classList.remove('visible');
+                    el.classList.add('hidden');
+                });
+            }
+        }
+
+        const audio = new AudioController();
+        const feedback = new FeedbackController();
+
+        /** 3. GAME CONSTANTS & STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const currentFormNameEl = document.getElementById('currentFormName');
+        const scoreEl = document.getElementById('score');
+        const dnaBarEl = document.getElementById('dna-bar');
+        const hudEl = document.getElementById('hud');
+        const startScreenEl = document.getElementById('start-screen');
+        const gameOverScreenEl = document.getElementById('game-over-screen');
+        const finalScoreEl = document.getElementById('finalScore');
+        const finalFormEl = document.getElementById('finalForm');
+
+        let width, height;
+        let gameActive = false;
+        let frame = 0;
+        let score = 0;
+        let gameSpeed = 5;
+        let dnaCount = 0;
+        let dnaToMorph = 5;
+
+        const FORM_THEME = {
+            Scout: 'glow-green',
+            Titan: 'glow-red',
+            Glider: 'glow-blue'
+        };
+
+        const FORMS = {
+            RAPTOR: { name: "Scout", color: "#7eff8f", edge: "#d9ffd9", glow: "rgba(126, 255, 143, 0.45)", w: 40, h: 40, jump: -12, gravity: 0.6, type: 'ground' },
+            TREX: { name: "Titan", color: "#ff667b", edge: "#ffd2da", glow: "rgba(255, 102, 123, 0.4)", w: 60, h: 70, jump: -10, gravity: 0.8, type: 'ground' },
+            PTERO: { name: "Glider", color: "#69b8ff", edge: "#eff7ff", glow: "rgba(105, 184, 255, 0.4)", w: 50, h: 30, jump: -6, gravity: 0.3, type: 'air' }
+        };
+
+        let currentFormKey = 'RAPTOR';
+        let player = {
+            x: 100,
+            y: 0,
+            vy: 0,
+            grounded: false,
+            rotation: 0
+        };
+
+        let obstacles = [];
+        let particles = [];
+        let dnaOrbs = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            if (player.y > height - 100) player.y = height - 150;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function setFormLabel(formName) {
+            currentFormNameEl.textContent = formName;
+            currentFormNameEl.className = `form-name ${FORM_THEME[formName] || ''}`.trim();
+        }
+
+        /** 4. INPUT */
+        function handleInput() {
+            if (!gameActive) return;
+            const form = FORMS[currentFormKey];
+
+            if (form.type === 'air') {
+                player.vy = form.jump;
+                audio.playSFX('jump', 90);
+            } else if (player.grounded) {
+                player.vy = form.jump;
+                player.grounded = false;
+                audio.playSFX('jump', 90);
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') handleInput();
+        });
+        // [agent-note][stage4] repaired: mobile-start-action | element: #game-container | action: scoped touch suppression away from global UI taps
+        const gameContainer = document.getElementById('game-container');
+        gameContainer.addEventListener('touchstart', (e) => {
+            if (!gameActive) return;
+            e.preventDefault();
+            handleInput();
+        }, { passive: false });
+        window.addEventListener('mousedown', handleInput);
+
+        /** 5. GAME LOGIC */
+        function spawnObstacle() {
+            const type = Math.random() > 0.5 ? 'cactus' : 'rock';
+            const isAir = Math.random() > 0.7;
+
+            let obsY = height - 100;
+            if (isAir) obsY = height - 250;
+
+            obstacles.push({
+                x: width,
+                y: obsY,
+                w: 40,
+                h: isAir ? 40 : (Math.random() * 40 + 30),
+                type: isAir ? 'bird' : type,
+                passed: false
+            });
+        }
+
+        function spawnDNA() {
+            dnaOrbs.push({
+                x: width,
+                y: height - 150 - (Math.random() * 150),
+                r: 10,
+                oscillation: Math.random() * Math.PI
+            });
+        }
+
+        function morph() {
+            const keys = Object.keys(FORMS);
+            let newKey = currentFormKey;
+            while (newKey === currentFormKey) {
+                newKey = keys[Math.floor(Math.random() * keys.length)];
+            }
+            currentFormKey = newKey;
+
+            for (let i = 0; i < 20; i++) {
+                particles.push({
+                    x: player.x + 20,
+                    y: player.y + 20,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: FORMS[currentFormKey].color
+                });
+            }
+
+            setFormLabel(FORMS[currentFormKey].name);
+            audio.playSFX('morph', 120);
+        }
+
+        function update() {
+            const form = FORMS[currentFormKey];
+            const groundY = height - 100;
+
+            player.vy += form.gravity;
+            player.y += player.vy;
+
+            if (player.y + form.h > groundY) {
+                player.y = groundY - form.h;
+                player.vy = 0;
+                player.grounded = true;
+            } else {
+                player.grounded = false;
+            }
+
+            if (player.y < 0) {
+                player.y = 0;
+                player.vy = 0;
+            }
+
+            gameSpeed = 5 + (score / 500);
+
+            if (frame % Math.max(60, 150 - Math.floor(score / 10)) === 0) spawnObstacle();
+            if (frame % 200 === 0) spawnDNA();
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let ob = obstacles[i];
+                ob.x -= gameSpeed;
+
+                if (
+                    player.x < ob.x + ob.w &&
+                    player.x + form.w > ob.x &&
+                    player.y < ob.y + ob.h &&
+                    player.y + form.h > ob.y
+                ) {
+                    gameOver();
+                }
+
+                if (ob.x + ob.w < 0) obstacles.splice(i, 1);
+            }
+
+            for (let i = dnaOrbs.length - 1; i >= 0; i--) {
+                let dna = dnaOrbs[i];
+                dna.x -= gameSpeed;
+                dna.y += Math.sin(frame * 0.1 + dna.oscillation) * 0.5;
+
+                const dx = (player.x + form.w / 2) - dna.x;
+                const dy = (player.y + form.h / 2) - dna.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < 30 + dna.r) {
+                    dnaOrbs.splice(i, 1);
+                    dnaCount++;
+                    score += 50;
+                    audio.playSFX('collect', 80);
+                    feedback.pulse('collect', 760);
+
+                    const pct = (dnaCount % dnaToMorph) / dnaToMorph * 100;
+                    dnaBarEl.style.width = `${pct}%`;
+
+                    if (dnaCount % dnaToMorph === 0) {
+                        morph();
+                    }
+                } else if (dna.x < -20) {
+                    dnaOrbs.splice(i, 1);
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            score++;
+            frame++;
+
+            scoreEl.innerText = Math.floor(score / 10);
+        }
+
+        function drawGenomeSignal(x, y, size, hueOffset) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(Math.sin(frame * 0.06 + hueOffset) * 0.15);
+            ctx.strokeStyle = `hsla(${(frame * 3 + hueOffset * 60) % 360}, 100%, 78%, 0.9)`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-size, -size);
+            ctx.bezierCurveTo(-size * 0.25, -size * 0.2, size * 0.25, size * 0.2, size, size);
+            ctx.moveTo(size, -size);
+            ctx.bezierCurveTo(size * 0.25, -size * 0.2, -size * 0.25, size * 0.2, -size, size);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawCharacter(x, y, form) {
+            const bob = Math.sin(frame * 0.18) * 1.6;
+            ctx.save();
+            ctx.translate(x, y + bob);
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = form.glow;
+
+            if (form.name === 'Scout') {
+                const legOffset = Math.sin(frame * 0.5) * 4;
+                ctx.fillStyle = form.color;
+
+                ctx.beginPath();
+                ctx.ellipse(20, 23, 15, 11, -0.1, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(31, 10, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(8, 23);
+                ctx.lineTo(-15, 13);
+                ctx.lineTo(5, 29);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillRect(15 + legOffset, 31, 5, 10);
+                ctx.fillRect(25 - legOffset, 31, 5, 10);
+
+                ctx.fillStyle = form.edge;
+                ctx.beginPath();
+                ctx.arc(34, 8, 2.6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#08240f";
+                ctx.beginPath();
+                ctx.arc(34, 8, 1, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = form.edge;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(36, 13);
+                ctx.lineTo(42, 14);
+                ctx.stroke();
+            } else if (form.name === 'Titan') {
+                const legOffset = Math.sin(frame * 0.3) * 7;
+                ctx.fillStyle = form.color;
+
+                ctx.beginPath();
+                ctx.ellipse(30, 40, 25, 20, -0.18, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.roundRect(35, 5, 30, 25, 6);
+                ctx.fill();
+
+                ctx.fillStyle = "#7f1d1d";
+                ctx.beginPath();
+                ctx.roundRect(43, 19, 18, 7, 4);
+                ctx.fill();
+
+                ctx.fillStyle = form.color;
+                ctx.beginPath();
+                ctx.moveTo(10, 40);
+                ctx.lineTo(-24, 18);
+                ctx.lineTo(9, 50);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillRect(21 + legOffset, 55, 10, 15);
+                ctx.fillRect(40 - legOffset, 55, 10, 15);
+
+                ctx.fillStyle = form.edge;
+                ctx.beginPath();
+                ctx.arc(56, 14, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#2f080e";
+                ctx.beginPath();
+                ctx.arc(56, 14, 1.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = "rgba(255,255,255,0.5)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(43, 27);
+                ctx.lineTo(53, 27);
+                ctx.stroke();
+            } else if (form.name === 'Glider') {
+                const wingY = Math.sin(frame * 0.8) * 15;
+                ctx.fillStyle = form.color;
+
+                ctx.beginPath();
+                ctx.ellipse(25, 15, 15, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(39, 15);
+                ctx.lineTo(60, 10);
+                ctx.lineTo(39, 5);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = "#b8ddff";
+                ctx.beginPath();
+                ctx.moveTo(25, 15);
+                ctx.lineTo(7, 15 - wingY);
+                ctx.lineTo(25, 20);
+                ctx.lineTo(43, 15 - wingY);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = form.edge;
+                ctx.beginPath();
+                ctx.arc(37, 12, 2.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#13223b";
+                ctx.beginPath();
+                ctx.arc(37, 12, 1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function draw() {
+            const sky = ctx.createLinearGradient(0, 0, 0, height);
+            sky.addColorStop(0, "#05101f");
+            sky.addColorStop(0.45, "#142449");
+            sky.addColorStop(1, "#231245");
+            ctx.fillStyle = sky;
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = 0; i < 18; i++) {
+                const starX = (i * 97 + frame * 0.15) % (width + 80) - 40;
+                const starY = 40 + (i % 7) * 34;
+                ctx.fillStyle = `rgba(190, 245, 255, ${0.12 + (i % 3) * 0.08})`;
+                ctx.beginPath();
+                ctx.arc(width - starX, starY, (i % 3) + 1.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = "rgba(120, 92, 255, 0.2)";
+            for (let i = 0; i < 3; i++) {
+                let x = ((frame * 0.45) + (i * 420)) % (width + 420) - 220;
+                x = width - x;
+                ctx.beginPath();
+                ctx.moveTo(x, height - 100);
+                ctx.lineTo(x + 130, height - 420);
+                ctx.lineTo(x + 260, height - 100);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            ctx.fillStyle = "rgba(71, 224, 182, 0.22)";
+            for (let i = 0; i < 10; i++) {
+                let x = ((frame * 1.6) + (i * 180)) % (width + 200) - 100;
+                x = width - x;
+                ctx.beginPath();
+                ctx.arc(x, height - 98, 58, Math.PI, 0);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = "#2b1d2e";
+            ctx.fillRect(0, height - 100, width, 100);
+
+            const groundGlow = ctx.createLinearGradient(0, height - 100, 0, height);
+            groundGlow.addColorStop(0, "#53e6b3");
+            groundGlow.addColorStop(0.22, "#18785f");
+            groundGlow.addColorStop(1, "#0f1723");
+            ctx.fillStyle = groundGlow;
+            ctx.fillRect(0, height - 100, width, 22);
+
+            ctx.fillStyle = "rgba(108, 242, 255, 0.18)";
+            for (let i = 0; i < 12; i++) {
+                const trailX = width - (((frame * 2.3) + i * 120) % (width + 120));
+                ctx.fillRect(trailX, height - 95, 28, 2);
+            }
+
+            obstacles.forEach(ob => {
+                if (ob.type === 'bird') {
+                    ctx.save();
+                    ctx.translate(ob.x + 20, ob.y + 10);
+                    ctx.fillStyle = "#ffd166";
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = "rgba(255, 209, 102, 0.45)";
+                    ctx.beginPath();
+                    ctx.moveTo(-18, 0);
+                    ctx.lineTo(0, -10);
+                    ctx.lineTo(18, 0);
+                    ctx.lineTo(0, 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = "#fff1b8";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-8, 0);
+                    ctx.lineTo(8, 0);
+                    ctx.stroke();
+                    ctx.restore();
+                } else {
+                    const hazardGradient = ctx.createLinearGradient(ob.x, ob.y, ob.x, ob.y + ob.h);
+                    hazardGradient.addColorStop(0, "#1f1d31");
+                    hazardGradient.addColorStop(1, "#09070f");
+                    ctx.fillStyle = hazardGradient;
+                    ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+
+                    ctx.strokeStyle = ob.type === 'cactus' ? "#ff6b7f" : "#9b5cff";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(ob.x + 1, ob.y + 1, ob.w - 2, ob.h - 2);
+
+                    ctx.fillStyle = "rgba(255,255,255,0.08)";
+                    ctx.fillRect(ob.x + 6, ob.y + 6, ob.w - 12, ob.h - 14);
+                }
+            });
+
+            dnaOrbs.forEach((dna, index) => {
+                ctx.save();
+                ctx.translate(dna.x, dna.y);
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = "rgba(108, 242, 255, 0.5)";
+                ctx.fillStyle = `hsl(${(frame * 4 + index * 18) % 360}, 95%, 62%)`;
+                ctx.beginPath();
+                ctx.arc(0, 0, dna.r + 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                drawGenomeSignal(0, 0, 5, index);
+                ctx.restore();
+            });
+
+            drawCharacter(player.x, player.y, FORMS[currentFormKey]);
+
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            ctx.clearRect(0, 0, width, height);
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function initGame() {
+            score = 0;
+            frame = 0;
+            dnaCount = 0;
+            gameSpeed = 5;
+            obstacles = [];
+            dnaOrbs = [];
+            particles = [];
+            currentFormKey = 'RAPTOR';
+            player.y = height - 150;
+            player.vy = 0;
+            player.grounded = false;
+            dnaBarEl.style.width = '0%';
+            setFormLabel('Scout');
+            feedback.hideAll();
+        }
+
+        function startRun() {
+            audio.unlock();
+            audio.playSFX('start', 100);
+            audio.playBGM();
+            startScreenEl.classList.add('hidden');
+            gameOverScreenEl.classList.add('hidden');
+            hudEl.classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            gameLoop();
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail', 120);
+            feedback.pulse('fail', 1200);
+            hudEl.classList.add('hidden');
+            gameOverScreenEl.classList.remove('hidden');
+            finalScoreEl.innerText = Math.floor(score / 10);
+            finalFormEl.innerText = FORMS[currentFormKey].name;
+        }
+
+        /** 6. CONTROLS */
+        document.getElementById('start-btn').addEventListener('click', () => {
+            startRun();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            startRun();
+        });
+    });
+    </script>
+</body>
+</html>

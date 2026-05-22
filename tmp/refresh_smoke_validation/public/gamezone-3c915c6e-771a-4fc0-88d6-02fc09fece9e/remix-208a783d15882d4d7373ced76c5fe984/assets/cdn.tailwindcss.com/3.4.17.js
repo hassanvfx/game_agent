@@ -1,0 +1,1 @@
+/* Stage 03 cleanup: deprecated mirrored Tailwind CDN asset removed because the game now uses self-contained styles only. */

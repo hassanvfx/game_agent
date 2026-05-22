@@ -1,0 +1,160 @@
+{
+  "game_id": "gamezone-b5969451-6f87-4855-9721-f6b3414b447e",
+  "run_id": null,
+  "remix_id": "remix-a18313b8796064ff5441843f06a074d1",
+  "remix_parent_id": null,
+  "root_game_id": "gamezone-b5969451-6f87-4855-9721-f6b3414b447e",
+  "lineage_depth": 0,
+  "aggregated_at": "2026-05-17T04:58:28Z",
+  "recreation_prompt_markdown": "Create a polished mobile-first arcade rhythm game called **Signal Gate: Beat Lock** with a neon synthwave cyber-broadcast aesthetic and a full-screen portrait-friendly presentation. The game should feel like the player is operating a live music feed or DJ transmission inside a glowing retro-futurist control interface. Use a full-screen canvas playfield with HTML-style overlay panels for menu, HUD, recording status, reactions, and results. Visually, lean into deep violet and black backgrounds, bright cyan and hot pink highlights, glowing hit effects, scanlines, vignette shading, glassy translucent panels, and bold futuristic display typography.\n\nThe main gameplay loop should be a **four-lane touch rhythm game**. Divide the screen into four vertical lanes and place a bright horizontal hit line near the lower part of the screen. Spawn glowing rectangular notes at the top so they fall downward and arrive at the hit line on beat. The player taps the matching lane at the right moment on a touchscreen. Judge timing with a forgiving but noticeable rhythm window, reward correct hits with score and combo growth, and reset combo on misses. Show a top HUD with score, a central combo display that pulses when streaks grow, and a \u201cfeed\u201d or \u201csignal\u201d meter that visually represents how alive the broadcast is.\n\nThe game\u2019s signature mechanic must be **music gating**: during actual play, the background music should not simply stay fully audible all the time. Instead, successful note hits should briefly open the audio gate so the song swells in and then fades back down, making accuracy feel like the player is actively keeping the broadcast alive. Mirror this with the feed meter filling on hits and decaying afterward. Misses should feel like signal drops, with combo breaks, fail feedback, and a noticeable audiovisual drop in momentum.\n\nInclude **three modes**. First, an **Endless Broadcast** mode where notes spawn in a beat-like procedural pattern for score chasing. Second, a **Record Pattern** mode where the soundtrack plays continuously and every lane tap is timestamped into a custom pattern the player is authoring live. Third, a **Play My Pattern** mode that becomes available only after a recording exists, loads the saved pattern from local storage, and turns those recorded timestamps into descending notes the player must replay accurately. In custom playback, end the run when the stored song/pattern finishes and show a success-oriented results state; in endless play, present a more failure-flavored \u201csignal lost\u201d framing when the run ends or collapses.\n\nUse strong juice and feedback: particle bursts on successful hits, lane flash beams when pressed, glowing notes, combo celebration moments, and fail reactions for off-beat taps or dropped notes. Add crisp UI, hit, miss, bonus, start, stop, win, and lose sound cues. Include a polished menu with buttons for endless play, record mode, and custom playback, plus a results screen that clearly reports final score, best combo or streak, and sync-rate/accuracy percentage. Keep the tone stylish, energetic, reactive, and instantly legible on mobile, with short-session replayability and the creative twist that the player can record and then perform their own rhythm pattern.",
+  "blueprint_markdown": "# Blueprint\n\n## High-level code structure\nThe game is implemented as a single-page HTML document with three main layers:\n\n1. **Presentation and layout**\n   - Inline CSS defines the neon synthwave visual style, HUD panels, menu, results screen, overlays, and responsive mobile-oriented sizing.\n   - The DOM contains a full-screen canvas for gameplay plus HTML UI panels for menu, HUD, recording state, reaction overlays, and results.\n\n2. **Runtime configuration and state**\n   - `CONFIG` stores lane count, note travel timing, hit window, color palette, remote audio URLs, and reaction GIF URLs.\n   - `STATE` stores the active mode, score/combo stats, note/particle arrays, recording buffers, custom track playback data, input flags, and transient reaction state.\n\n3. **Systems / logic**\n   - `AudioEngine` handles Web Audio initialization, audio buffer loading, BGM playback, short SFX playback, and the \u201cgate open\u201d volume burst mechanic.\n   - Core game functions manage startup, note spawning, hit detection, misses, recording, playback, UI updates, and the animation loop.\n   - Canvas rendering draws the background grid, lanes, hit line, note blocks, lane flashes, and particles.\n   - Touch input maps screen position to one of four lanes, making the game primarily mobile-first.\n\n## Game loop / state model\nThe game uses a frame-driven loop via `requestAnimationFrame(gameLoop)` while `STATE.active` is true.\n\n### Main states\n- **MENU**\n  - Main menu visible.\n  - Player chooses endless play, record pattern, or play a saved pattern.\n- **RECORD**\n  - Background music plays continuously.\n  - Each tap is recorded as `{ lane, time }`.\n  - No note judgment is required; taps become future track data.\n- **PLAY_CUSTOM**\n  - Previously recorded note data is loaded from `localStorage`.\n  - Notes are spawned ahead of their target time so they reach the hit line on-beat.\n  - The song does not stay fully audible; correct hits temporarily open the audio gate.\n  - The run ends when the custom BGM finishes.\n- **ENDLESS**\n  - Notes spawn procedurally in random lanes using beat-like intervals.\n  - Music is also gated by successful hits.\n  - The run effectively continues until the player quits or performance collapses into repeated misses; the results screen is framed like a failed transmission.\n\n### Frame loop responsibilities\nEach frame:\n1. Compute current song/game time from `AudioEngine`.\n2. Spawn notes:\n   - random beat-based notes in endless mode\n   - scheduled notes from saved track data in custom mode\n3. Update note positions according to travel time.\n4. Resolve missed notes after they pass below the hit line, breaking combo.\n5. Visually decay the signal meter unless refreshed by a successful hit.\n6. Render the playfield and effects.\n\n## Player goals\nThe immediate player goal is to tap the correct lane when each falling note reaches the hit line.\n\nThe larger game goals are:\n- keep the broadcast/feed alive by hitting notes accurately\n- build score through streaks and combo scaling\n- maintain a high sync rate\n- in custom mode, successfully replay a player-authored pattern\n- in record mode, create a reusable note chart for later performance\n\n## Interaction pattern\nThe interaction model is direct and minimal:\n- full-screen touch input\n- screen divided into four vertical lanes\n- tap the matching lane when a note reaches the hit line\n- menu buttons choose mode, stop recording, quit, replay, or return to menu\n\nThe code only binds touch events on the canvas, strongly implying mobile-first thumb play rather than keyboard or mouse-driven rhythm play.\n\n## Core systems\n### 1. Lane rhythm input\n- Four lanes across the screen\n- Notes fall toward a shared hit line near the bottom (`hitPosition: 0.85`)\n- A hit is valid if the note\u2019s target time is within `\u00b10.15s` of the current time\n\n### 2. Score / combo / accuracy\n- Successful hits award `100 + combo * 10`\n- Combo increments on hits and resets on misses\n- Best combo is tracked separately\n- Accuracy is inferred at results from `hits / (hits + misses)`\n\n### 3. Music gate mechanic\nThis is the game\u2019s signature system.\n- Background music starts silent or near-silent in gameplay modes\n- A correct hit calls `AudioEngine.gateOpen()`\n- The gate briefly ramps BGM volume up, then fades it back down\n- This turns rhythmic accuracy into a literal \u201ckeep the music/feed alive\u201d mechanic\n- The HUD feed meter mirrors this opening and decay visually\n\n### 4. Record-and-replay chart creation\n- In record mode, taps are timestamped and saved in `localStorage`\n- The saved pattern enables \u201cPlay My Pattern\u201d\n- In playback mode, the recorded taps become note timing data for a custom challenge\n\n### 5. Feedback and juice\n- Hit particles burst at the lane impact point\n- Combo and fail GIF overlays reinforce high streaks or mistakes\n- Lane press beams, glowing notes, CRT scanlines, and neon shadows intensify the arcade presentation\n- Distinct UI/start/result SFX support menu flow and success/failure beats\n\n### 6. Persistent local content\n- Custom pattern data is stored under `synthgate_track`\n- The menu dynamically enables/disables custom play based on whether a track exists\n\n## Inferred genre / gameplay shape\nThis appears to be a **mobile-first arcade rhythm game** with a **lane-tapping note-hit loop** and a **creative recording/playback twist**.\n\nStrong genre signals:\n- falling notes\n- timing window judgment\n- combo/accuracy scoring\n- music-reactive feedback\n- touch lanes\n- beat-based spawning\n\nIts differentiating hook is not pure rhythm-chart mastery, but **signal gating**:\nthe player is framed as keeping a live audiovisual feed active by landing notes, with music volume acting as the reward and confirmation layer.\n\n## Gameplay heuristic\nA faithful mental model of play is:\n\n1. Start a broadcast/performance mode.\n2. Watch glowing notes descend in one of four lanes.\n3. Tap on-beat at the hit line.\n4. Every correct hit briefly reopens the soundtrack and fills the signal meter.\n5. Chain hits to raise score and combo.\n6. Misses cut the streak and produce failure feedback.\n7. Optionally create your own rhythm pattern, save it, then perform it as a custom track.\n\n## Confidence notes\nHigh confidence:\n- four-lane touch rhythm structure\n- score/combo/accuracy model\n- record/playback system\n- music gate as the central differentiator\n- synthwave cyber-broadcast theme\n\nModerate confidence:\n- endless mode fail condition is presentation-led rather than deeply systemized\n- \u201cDJ hero / live feed\u201d framing is aesthetic and UX-driven rather than narrative-heavy\n- the intended emotional hook is maintaining flow and signal continuity, not song completion alone",
+  "semantic_tags": {
+    "title": "Signal Gate: Beat Lock",
+    "theme": [
+      "synthwave",
+      "cyber broadcast",
+      "retro-futurism",
+      "neon arcade",
+      "live signal control",
+      "DJ performance"
+    ],
+    "setting": [
+      "abstract digital stage",
+      "broadcast interface",
+      "virtual signal booth",
+      "CRT-styled neon HUD"
+    ],
+    "characters": [
+      "player as signal operator",
+      "player as cyber DJ",
+      "no explicit story cast"
+    ],
+    "mechanics": [
+      "four-lane note tapping",
+      "timing-based hits",
+      "combo building",
+      "score chasing",
+      "accuracy tracking",
+      "music gate activation on hit",
+      "endless note spawning",
+      "pattern recording",
+      "local pattern persistence",
+      "custom pattern playback"
+    ],
+    "mood": [
+      "flashy",
+      "reactive",
+      "high-energy",
+      "stylish",
+      "slightly tense",
+      "arcade-focused"
+    ],
+    "presentation": [
+      "glowing lane notes",
+      "scanlines",
+      "vignette",
+      "glassmorphism panels",
+      "neon cyan and pink palette",
+      "animated combo/fail reaction overlays",
+      "mobile-first HUD"
+    ],
+    "similar_games": [
+      "Piano Tiles",
+      "osu!mania",
+      "Dance Dance Revolution",
+      "Beat Fever",
+      "Geometry Dash (presentation energy only)"
+    ],
+    "similar_franchises": [
+      "DJ Hero",
+      "Guitar Hero",
+      "Rhythm Heaven"
+    ]
+  },
+  "semantic_tags_source_mode": "split-json",
+  "identity": {
+    "title": "Signal Gate: Beat Lock",
+    "premise": "A neon cyber-broadcast rhythm game where the player taps falling lane notes to keep a music signal alive, build combo, and either survive an endless stream or replay a self-recorded pattern.",
+    "interaction_model": "Mobile-first four-lane touch rhythm input with menu buttons for mode selection, recording control, quitting, replaying, and returning to menu.",
+    "objective": "Hit notes on time at the lane hit line to raise score, preserve the audiovisual feed, maintain combo, and perform well enough to finish a custom recorded pattern or sustain momentum in endless mode.",
+    "progression": "The player starts from a menu, chooses endless play or a record/playback flow, builds score and combo during a run, receives a results summary with score, best streak, and sync rate, and can create persistent custom patterns via local recording.",
+    "theme": "Synthwave broadcast control, cyber DJ performance, signal-lock arcade action.",
+    "mood": "Arcade-intense, stylish, reactive, glowing, and slightly high-pressure but playful.",
+    "likely_audience": [
+      "casual rhythm game players",
+      "mobile arcade players",
+      "players who enjoy neon retro-futurist aesthetics",
+      "players who like short-session score chasing with light creative tools"
+    ],
+    "confidence_notes": [
+      "High confidence that this is a four-lane rhythm/tap game with a music-gating hook.",
+      "High confidence that record-and-replay is a central differentiator because saved local patterns drive a dedicated play mode.",
+      "Moderate confidence on the exact endless fail structure because the code emphasizes presentation and miss handling more than a strict finite lose state.",
+      "High confidence in the synthwave live-broadcast framing due to naming, UI copy, signal meter, and reaction feedback."
+    ],
+    "recreation_prompt": "Create a mobile-first neon synthwave rhythm game called 'Signal Gate: Beat Lock' set inside a retro-futurist live broadcast interface. The game should be a full-screen 2D four-lane tap experience where glowing rectangular notes fall from the top toward a bright hit line near the bottom of the screen, and the player taps the matching lane on a touchscreen right as each note arrives. Build the presentation around a cyber DJ / signal-control fantasy: scanlines, vignette, neon cyan and pink highlights, glowing combo readouts, a feed meter at the top, glassy HUD panels, and a stylish menu/results overlay layered over a canvas playfield. The signature mechanic is that the background music is not simply always on during play: in gameplay modes, correct hits briefly open an audio gate so the soundtrack swells in and then fades back out, making accurate play feel like keeping a live signal or broadcast alive. Include score, combo, best streak, and sync-rate style accuracy feedback, with misses breaking combo and triggering failure reactions. Include three modes: an endless mode with beat-like random lane note spawning for arcade score chasing; a record mode where the soundtrack plays continuously and every lane tap is timestamped into a custom pattern; and a custom playback mode where the saved pattern is replayed as descending notes that the player must hit in time. Save the recorded pattern locally so the menu can enable a 'play my pattern' option only when data exists. Use touch-based four-lane input, hit particles, lane flashes, combo/fail reactions, start/stop/result sound cues, and a polished results screen that reports final score, best combo, and accuracy. The overall tone should feel flashy, responsive, slightly intense, and immediately readable on mobile screens."
+  },
+  "identity_source_mode": "split-json",
+  "mechanics_classification": {
+    "title": "Signal Gate: Beat Lock",
+    "selected_categories": [
+      {
+        "rank": 1,
+        "category": "Rhythm music game",
+        "score": 0.97,
+        "reasoning": "The core loop is direct rhythm timing: notes descend into fixed lanes, the player taps on-beat inside a timing window, and the game tracks combo, score, and hit accuracy.",
+        "confidence": "high"
+      },
+      {
+        "rank": 2,
+        "category": "Lane runner game",
+        "score": 0.58,
+        "reasoning": "The playfield is divided into four discrete vertical lanes and success depends on reacting within a lane structure, even though this is tapping rather than lane switching movement.",
+        "confidence": "medium"
+      },
+      {
+        "rank": 3,
+        "category": "Endless runner",
+        "score": 0.43,
+        "reasoning": "Endless mode continuously spawns notes in a survival-like arcade flow with escalating score-chasing and no authored endpoint, which partially resembles endless-run pacing.",
+        "confidence": "medium-low"
+      },
+      {
+        "rank": 4,
+        "category": "Clicker game",
+        "score": 0.22,
+        "reasoning": "The game does rely on repeated tapping interactions, but it lacks the idle/incremental resource loop that normally defines clicker design, so this is only a weak mechanical analogy.",
+        "confidence": "low"
+      },
+      {
+        "rank": 5,
+        "category": "Memory puzzle game",
+        "score": 0.18,
+        "reasoning": "The record-and-replay feature can create a learnable note pattern that the player later performs, but memorization is secondary to timing and rhythm execution.",
+        "confidence": "low"
+      }
+    ],
+    "uncertainty_notes": [
+      "The category universe does not include a more precise 'lane rhythm tap game' or 'music gating rhythm game' label, so secondary matches are approximate.",
+      "The game's differentiator is the signal-gate audio mechanic and custom recording flow, but those do not map cleanly to any dedicated category in the provided universe.",
+      "Categories after the top result are significantly weaker matches than 'Rhythm music game'."
+    ]
+  },
+  "mechanics_classification_source_mode": "split-json",
+  "screenshots_png": [],
+  "screenshots_jpg": [
+    "screenshots/01.jpg",
+    "screenshots/02.jpg",
+    "screenshots/03.jpg"
+  ],
+  "deploy": {
+    "remix_uuid": "remix-a18313b8796064ff5441843f06a074d1",
+    "source_output_dir": "games/raw/gamezone-b5969451-6f87-4855-9721-f6b3414b447e",
+    "format_version": "1.0.0",
+    "normalized_screenshot_sources": [
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-b5969451-6f87-4855-9721-f6b3414b447e/playwright_after_start.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-b5969451-6f87-4855-9721-f6b3414b447e/playwright_after_tap.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-b5969451-6f87-4855-9721-f6b3414b447e/playwright_initial.png"
+    ]
+  }
+}

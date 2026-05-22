@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Inbox Zero Rush</title>
+    <!-- [agent-note][stage4] approved-fonts: Audiowide for display + Rajdhani for UI from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #070b1f;
+            --bg-mid: #121d4b;
+            --panel: rgba(10, 18, 48, 0.8);
+            --panel-strong: rgba(18, 30, 74, 0.94);
+            --line: rgba(139, 236, 255, 0.72);
+            --glow: rgba(79, 220, 255, 0.4);
+            --glow-hot: rgba(255, 78, 146, 0.38);
+            --text-main: #f7fbff;
+            --text-soft: #c7d7ff;
+            --accent: #5cf0ff;
+            --accent-2: #ffdd55;
+            --danger: #ff4e92;
+            --success: #77ff8c;
+        }
+
+        html, body {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(76, 163, 255, 0.18), transparent 36%),
+                radial-gradient(circle at bottom, rgba(255, 78, 146, 0.18), transparent 30%),
+                var(--bg-deep);
+            touch-action: manipulation;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            color: var(--text-main);
+        }
+
+        body { position: fixed; inset: 0; }
+        canvas { display: block; touch-action: none; }
+        #ui-layer { pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        .glass {
+            background:
+                linear-gradient(180deg, rgba(19, 29, 71, 0.94), rgba(8, 13, 37, 0.94));
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--line);
+            box-shadow:
+                0 16px 40px rgba(0,0,0,0.36),
+                0 0 24px var(--glow);
+        }
+        .shake-anim { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both infinite; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+        .pulse-text { animation: pulse 0.8s infinite alternate; }
+        @keyframes pulse { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.06); opacity: 1; } }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+            touch-action: manipulation;
+            background:
+                radial-gradient(circle at 50% 20%, rgba(92,240,255,0.12), transparent 28%),
+                linear-gradient(180deg, #060916 0%, #0b1431 55%, #111a3f 100%);
+        }
+        #game-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, transparent 0 49.5%, rgba(255,255,255,0.035) 49.5% 50.5%, transparent 50.5% 100%),
+                linear-gradient(transparent 0 49.5%, rgba(255,255,255,0.03) 49.5% 50.5%, transparent 50.5% 100%);
+            background-size: 28px 28px;
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        #ui-layer, #start-screen, #game-over-screen { position: absolute; inset: 0; }
+        #ui-layer { z-index: 50; display: flex; flex-direction: column; justify-content: space-between; }
+        #start-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background:
+                linear-gradient(180deg, rgba(0,0,0,0.28), rgba(3, 6, 20, 0.62));
+            backdrop-filter: blur(4px);
+            transition: opacity 0.3s ease;
+            touch-action: manipulation;
+        }
+        #start-screen.hidden, #game-over-screen.hidden, #hud.hidden { display: none !important; }
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1rem;
+            box-sizing: border-box;
+            pointer-events: none;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        #hud.flex { display: flex; }
+        #game-over-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            background: rgba(1, 4, 14, 0.78);
+            z-index: 50;
+        }
+        #game-over-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            border-radius: 0.9rem;
+            transform: scale(1.04);
+            max-width: min(90vw, 28rem);
+            text-align: center;
+        }
+        #restart-btn {
+            padding: 0.8rem 2rem;
+            background: linear-gradient(180deg, #ffe978 0%, #ffcb34 100%);
+            color: #09111f;
+            font-size: clamp(1rem, 3.6vw, 1.35rem);
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            letter-spacing: 0.12em;
+            font-weight: 400;
+            border: 1px solid rgba(255,255,255,0.55);
+            border-radius: 999px;
+            box-shadow:
+                0 8px 20px rgba(0,0,0,0.26),
+                0 0 18px rgba(255, 221, 85, 0.34);
+            transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+            text-transform: uppercase;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        #restart-btn:hover { filter: brightness(1.05); }
+        #restart-btn:active {
+            transform: translateY(4px) scale(0.98);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.22);
+        }
+        .hud-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+        .hud-stack.end { align-items: flex-end; }
+        .title-display {
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            font-size: clamp(3.1rem, 10vw, 7rem);
+            font-weight: 400;
+            color: var(--text-main);
+            letter-spacing: 0.04em;
+            line-height: 0.92;
+            text-transform: uppercase;
+        }
+        .cta-copy {
+            max-width: min(88vw, 30rem);
+            font-size: clamp(0.95rem, 3.4vw, 1.25rem);
+            color: var(--text-main);
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .hud-label {
+            color: var(--text-soft);
+            font-size: clamp(0.78rem, 2.4vw, 0.95rem);
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+        .phase-label {
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            font-size: clamp(1.45rem, 4.8vw, 2.2rem);
+            color: var(--accent-2);
+            font-weight: 400;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .progress-label, .score-copy {
+            font-size: clamp(0.9rem, 3vw, 1.15rem);
+            color: var(--text-main);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+        }
+        .overlay-title {
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            font-size: clamp(2.7rem, 10vw, 4.7rem);
+            font-weight: 400;
+            color: var(--text-main);
+            margin-bottom: 1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        #timer-bar-bg {
+            width: 8rem;
+            height: 1rem;
+            background: rgba(6, 10, 28, 0.9);
+            border: 1px solid rgba(255,255,255,0.72);
+            border-radius: 999px;
+            overflow: hidden;
+            box-shadow:
+                inset 0 0 0 1px rgba(92,240,255,0.18),
+                0 0 16px rgba(92,240,255,0.12);
+        }
+        #timer-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--danger), #ff9f4a 52%, var(--accent-2));
+            width: 100%;
+            box-shadow: 0 0 12px rgba(255, 78, 146, 0.42);
+        }
+        .bounce-copy { display: inline-block; animation: bounce 1s infinite; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+        /* Approved catalog-backed GIF replacement for the briefing monitor */
+        #meme-container {
+            position: absolute;
+            top: 35%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.78);
+            box-shadow:
+                0 0 0 6px rgba(92,240,255,0.12),
+                0 0 26px rgba(92,240,255,0.32),
+                0 0 44px rgba(255,78,146,0.22);
+            z-index: 10;
+        }
+        #meme-container::before {
+            content: "BRIEFING FEED";
+            position: absolute;
+            top: 0.5rem;
+            left: 0.65rem;
+            z-index: 1;
+            font-size: 0.68rem;
+            letter-spacing: 0.18em;
+            color: var(--text-main);
+            text-shadow: 0 0 10px rgba(92,240,255,0.6);
+        }
+        #meme-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255,255,255,0.14), transparent 26%, rgba(3,7,22,0.24));
+            pointer-events: none;
+        }
+        #meme-img { width: 100%; height: 100%; object-fit: cover; filter: saturate(1.05) contrast(1.08); }
+
+        .hud-card {
+            padding: 0.6rem 0.8rem;
+            border-radius: 0.9rem;
+            background: linear-gradient(180deg, rgba(18,29,72,0.9), rgba(7,13,37,0.9));
+            border: 1px solid rgba(138,236,255,0.42);
+            box-shadow: 0 0 20px rgba(76,163,255,0.18);
+        }
+        .feedback-gif {
+            position: absolute;
+            right: 0.85rem;
+            bottom: 0.85rem;
+            width: min(28vw, 120px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.42);
+            box-shadow: 0 0 18px rgba(92,240,255,0.26);
+            opacity: 0;
+            transform: translateY(10px) scale(0.94);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: none;
+        }
+        .feedback-gif.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-caption {
+            position: absolute;
+            left: 1rem;
+            right: 8.3rem;
+            bottom: 1rem;
+            padding: 0.55rem 0.7rem;
+            border-radius: 0.8rem;
+            background: rgba(5, 12, 32, 0.72);
+            border: 1px solid rgba(138,236,255,0.28);
+            color: var(--text-main);
+            font-size: clamp(0.72rem, 2.6vw, 0.92rem);
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: none;
+        }
+        .feedback-caption.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 640px) {
+            #meme-container { width: 160px; height: 160px; top: 32%; }
+            #hud { padding: 0.75rem; }
+            #game-over-panel { padding: 1.5rem; transform: scale(1.01); }
+            .cta-copy { max-width: min(90vw, 20rem); }
+            #timer-bar-bg { width: 6.6rem; height: 0.85rem; }
+            .feedback-gif { width: min(30vw, 92px); right: 0.65rem; bottom: 0.65rem; }
+            .feedback-caption { right: 6.2rem; left: 0.65rem; bottom: 0.65rem; font-size: 0.68rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Asset Declarations -->
+<div style="display:none;">
+    <!-- Approved catalog-backed reaction loop -->
+            <img id="asset_meme" data-editable="image" data-label="Briefing Monitor" src="https://i.giphy.com/jxEKtzigJi98onkNZJ.gif">
+            <img id="asset_alert" data-editable="image" data-label="Alert Burst" src="https://i.giphy.com/1AjEBGWggGXh9onllB.gif">
+            <img id="asset_fail" data-editable="image" data-label="Backlog Fail Reaction" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.gif">
+            
+            <!-- [agent-note][stage3] resolved-audio: start/click/progress/win/fail -> catalogs/audios.json -->
+            <!-- Audio Assets -->
+            <audio id="bgm_rush" data-editable="audio" data-label="Panic BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" preload="auto" loop></audio>
+            <audio id="sfx_start" data-editable="audio" data-label="Start Shift SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+            <audio id="sfx_hit" data-editable="audio" data-label="Input Hit SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_01.mp3" preload="auto"></audio>
+            <audio id="sfx_phase" data-editable="audio" data-label="Phase Clear SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3" preload="auto"></audio>
+            <audio id="sfx_win" data-editable="audio" data-label="Victory SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+            <audio id="sfx_fail" data-editable="audio" data-label="Fail SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3" preload="auto"></audio>
+            <audio id="sfx_warning" data-editable="audio" data-label="Low Time Warning SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3" preload="auto"></audio>
+            <audio id="sfx_restart" data-editable="audio" data-label="Restart Click SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+</div>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "totalTime": { "type": "number", "label": "Total Time (s)", "value": 15, "min": 5, "max": 60 },
+    "clicksPerPhase": { "type": "number", "label": "Clicks Per Task", "value": 12, "min": 5, "max": 50 },
+    "gameTitle": { "type": "text", "label": "Game Title", "value": "INBOX ZERO RUSH" }
+}
+</script>
+
+<!-- Game Container -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 z-50 flex flex-col justify-between">
+        
+        <!-- Start Screen -->
+        <div id="start-screen" class="pointer-events-auto">
+            <h1 id="ui-title" class="title-display" 
+                style="text-shadow: 0 0 18px rgba(92,240,255,0.5), 0 6px 0 rgba(4,11,29,0.85); position: absolute; top: 15%; width: 100%; text-align: center;">
+                <span class="pulse-text">INBOX ZERO RUSH</span>
+            </h1>
+            
+            <div id="meme-container" class="shake-anim">
+                <img id="meme-img" src="https://i.giphy.com/jxEKtzigJi98onkNZJ.gif" alt="Incoming alert reaction loop">
+            </div>
+
+            <p class="cta-copy" style="position: absolute; bottom: 17%; width: 100%; text-align: center; text-shadow: 0 2px 10px rgba(0,0,0,0.8); margin: 0;">
+                Mash through every alert storm before the queue goes critical.
+            </p>
+            <p id="ui-cta" class="cta-copy"
+               style="position: absolute; bottom: 10%; width: 100%; text-align: center; text-shadow: 0 2px 10px rgba(0,0,0,0.8); margin: 0;">
+                <span class="bounce-copy">Tap or press any key to clock in!</span>
+            </p>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div class="hud-stack hud-card">
+                <div class="hud-label" style="text-shadow: 0 0 10px rgba(92,240,255,0.45);">SHIFT TIME</div>
+                <div id="timer-bar-bg">
+                    <div id="timer-bar-fill"></div>
+                </div>
+            </div>
+            <div class="hud-stack end hud-card">
+                <div id="phase-text" class="phase-label" style="text-shadow: 0 0 14px rgba(255,221,85,0.35);">BOOT UP!</div>
+                <div id="progress-text" class="progress-label">0%</div>
+            </div>
+        </div>
+
+         <!-- [agent-note][stage3] resolved-gif: alert/win/fail overlays -> catalogs/gifs.json -->
+         <div id="feedback-overlay" aria-hidden="true">
+            <div id="feedback-caption" class="feedback-caption">Inbox spike incoming</div>
+            <img id="feedback-gif" class="feedback-gif" src="https://i.giphy.com/1AjEBGWggGXh9onllB.gif" alt="Reaction feedback">
+         </div>
+
+         <!-- Game Over / Victory -->
+        <div id="game-over-screen" class="hidden">
+            <div id="game-over-panel" class="glass">
+                <h2 id="go-title" class="overlay-title" style="text-shadow: 0 0 18px rgba(255, 78, 146, 0.45), 0 5px 0 rgba(5, 12, 31, 0.85);">OVERDUE!</h2>
+                <div id="go-score" class="score-copy" style="margin-bottom: 1.5rem;">The queue buried your shift.</div>
+                <button id="restart-btn">
+                    Run It Back
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO MANAGER
+ */
+class AudioManager {
+    constructor() {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.buffers = {};
+        this.bgmNode = null;
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.8;
+        this.masterGain.connect(this.ctx.destination);
+        this.isMuted = false;
+        this.unlocked = false;
+        this.lastPlayedAt = {};
+    }
+
+    async loadSound(id, fallbackType) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const src = el.src;
+        this.buffers[id] = { buffer: null, fallback: fallbackType };
+        
+        try {
+            const response = await fetch(src);
+            const arrayBuffer = await response.arrayBuffer();
+            this.buffers[id].buffer = await this.ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn(`Audio load failed for ${id}, using fallback`, e);
+        }
+    }
+
+    unlock() {
+        if (this.unlocked) return;
+        this.ctx.resume().then(() => {
+            this.unlocked = true;
+            this.playBgm();
+        });
+    }
+
+    playBgm() {
+        if (this.bgmNode) return;
+        const id = 'bgm_rush';
+        if (this.buffers[id] && this.buffers[id].buffer) {
+            this.bgmNode = this.ctx.createBufferSource();
+            this.bgmNode.buffer = this.buffers[id].buffer;
+            this.bgmNode.loop = true;
+            const gain = this.ctx.createGain();
+            gain.gain.value = 0.34;
+            this.bgmNode.connect(gain);
+            gain.connect(this.masterGain);
+            this.bgmNode.start(0);
+        } else {
+            // Synth BGM Fallback: Driving bass line
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(110, this.ctx.currentTime);
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            this.bgmNode = osc; // Keep ref to stop if needed
+        }
+    }
+
+    stopBgm() {
+        if (this.bgmNode) {
+            this.bgmNode.stop();
+            this.bgmNode = null;
+        }
+    }
+
+    playSfx(id, minGap = 80) {
+        const nowMs = performance.now();
+        if (this.lastPlayedAt[id] && nowMs - this.lastPlayedAt[id] < minGap) return;
+        this.lastPlayedAt[id] = nowMs;
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        
+        if (this.buffers[id] && this.buffers[id].buffer) {
+            const source = this.ctx.createBufferSource();
+            const gain = this.ctx.createGain();
+            source.buffer = this.buffers[id].buffer;
+            gain.gain.value = id === 'sfx_hit' ? 0.42 : id === 'sfx_warning' ? 0.32 : 0.56;
+            source.connect(gain);
+            gain.connect(this.masterGain);
+            source.start(0);
+        } else {
+            const type = this.buffers[id]?.fallback || 'beep';
+            this.synthesize(type);
+        }
+    }
+
+    synthesize(type) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        const now = this.ctx.currentTime;
+        if (type === 'win') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc.start(now);
+            osc.stop(now + 0.5);
+        } else if (type === 'fail') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.linearRampToValueAtTime(50, now + 0.5);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+            osc.start(now);
+            osc.stop(now + 0.5);
+        } else if (type === 'hit') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(220, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.05);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+    }
+}
+
+/**
+ * GAME ENGINE
+ */
+const CONFIG = {
+    colors: {
+        bg: ['#0d173b', '#142a63', '#0b6d83', '#143f54'],
+        primary: '#ff4e92',
+        accent: '#5cf0ff',
+        highlight: '#ffdd55',
+        success: '#77ff8c',
+        text: '#f7fbff',
+        panel: '#091126'
+    },
+    phases: [
+        { title: 'BOOT UP!', color: '#ff6b9e', emoji: '📨', subtext: 'Inbox alarm' },
+        { title: 'TRIAGE!', color: '#ffdd55', emoji: '⚡', subtext: 'Priority surge' },
+        { title: 'REPLY!', color: '#5cf0ff', emoji: '💬', subtext: 'Rapid response' },
+        { title: 'SHIP!', color: '#77ff8c', emoji: '🚀', subtext: 'Send it live' }
+    ]
+};
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.audio = new AudioManager();
+        
+        // State
+        this.state = 'START'; // START, PLAY, GAMEOVER, VICTORY
+        this.lastTime = 0;
+        this.timer = 0;
+        this.phase = 0; // 0: Wake, 1: Eat, 2: Wash, 3: Run
+        this.clicks = 0;
+        this.targetClicks = 10;
+        
+        // Visuals
+        this.particles = [];
+        this.shake = 0;
+        this.scalePulse = 1;
+        this.bgOffset = 0;
+        
+        // Entities
+        this.hero = { x: 0, y: 0, size: 100, rotation: 0 };
+        
+        // Bindings
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        // Input
+        const inputZone = document.getElementById('game-container');
+        inputZone.addEventListener('pointerdown', (e) => this.handleInput(e), { passive: false });
+        document.addEventListener('keydown', (e) => {
+            if (this.state === 'START') this.startGame();
+            else if (this.state === 'PLAY') this.handleInput({ clientX: window.innerWidth/2, clientY: window.innerHeight/2, preventDefault: ()=>{} });
+        });
+        
+        document.getElementById('restart-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.audio.playSfx('sfx_restart', 30);
+            this.resetGame();
+        });
+
+        // Config init
+        this.initEditableConfig();
+
+        // Load Audio
+        this.audio.loadSound('bgm_rush', 'bgm');
+        this.audio.loadSound('sfx_start', 'win');
+        this.audio.loadSound('sfx_hit', 'hit');
+        this.audio.loadSound('sfx_phase', 'win');
+        this.audio.loadSound('sfx_win', 'win');
+        this.audio.loadSound('sfx_fail', 'fail');
+        this.audio.loadSound('sfx_warning', 'fail');
+        this.audio.loadSound('sfx_restart', 'hit');
+
+        this.feedbackGif = document.getElementById('feedback-gif');
+        this.feedbackCaption = document.getElementById('feedback-caption');
+        this.feedbackTimer = null;
+        this.warningPlayed = false;
+
+        // Start Loop
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    initEditableConfig() {
+        if (window.gameConfig) {
+            this.targetClicks = window.gameConfig.clicksPerPhase || 12;
+            this.maxTime = window.gameConfig.totalTime || 15;
+            document.title = window.gameConfig.gameTitle || "Inbox Zero Rush";
+            document.getElementById('ui-title').querySelector('span').innerText = window.gameConfig.gameTitle || "INBOX ZERO RUSH";
+        } else {
+            this.maxTime = 15;
+            this.targetClicks = 12;
+        }
+        
+        // Expose updater
+        window.updateGameConfig = (key, val) => {
+            if (key === 'gameTitle') {
+                document.getElementById('ui-title').querySelector('span').innerText = val;
+            } else if (key === 'totalTime') {
+                this.maxTime = val;
+            } else if (key === 'clicksPerPhase') {
+                this.targetClicks = val;
+            }
+        };
+    }
+
+    resize() {
+        this.width = this.canvas.width = window.innerWidth * window.devicePixelRatio;
+        this.height = this.canvas.height = window.innerHeight * window.devicePixelRatio;
+        this.canvas.style.width = window.innerWidth + 'px';
+        this.canvas.style.height = window.innerHeight + 'px';
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        this.cssWidth = window.innerWidth;
+        this.cssHeight = window.innerHeight;
+    }
+
+    handleInput(e) {
+        if (e.preventDefault) e.preventDefault();
+        
+        if (this.state === 'START') {
+            this.startGame();
+            return;
+        }
+        
+        if (this.state === 'PLAY') {
+            this.audio.unlock(); // Ensure unlock
+            this.clicks++;
+            this.shake = 15;
+            this.scalePulse = 1.3;
+            this.audio.playSfx('sfx_hit', 45);
+            
+            // Spawn particles
+            const x = e.clientX || this.cssWidth / 2;
+            const y = e.clientY || this.cssHeight / 2;
+            this.spawnParticles(x, y, 8);
+
+            if (this.clicks >= this.targetClicks) {
+                this.advancePhase();
+            }
+        }
+    }
+
+    startGame() {
+        this.audio.unlock();
+        this.audio.playSfx('sfx_start', 120);
+        this.state = 'PLAY';
+        this.resetGameData();
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('hud').classList.add('flex');
+        
+        // Hide meme in game
+        document.getElementById('meme-container').style.display = 'none';
+        this.hideFeedback();
+    }
+
+    resetGame() {
+        this.startGame();
+    }
+
+    resetGameData() {
+        this.timer = this.maxTime;
+        this.phase = 0;
+        this.clicks = 0;
+        this.particles = [];
+        this.warningPlayed = false;
+        this.updatePhaseUI();
+        this.showFeedback('Warm up the queue!', 'https://i.giphy.com/1AjEBGWggGXh9onllB.gif', 900);
+    }
+
+    advancePhase() {
+        this.phase++;
+        this.clicks = 0;
+        this.shake = 30;
+        this.spawnParticles(this.cssWidth/2, this.cssHeight/2, 30);
+        
+        if (this.phase > 3) {
+            this.endGame(true);
+        } else {
+            this.updatePhaseUI();
+            this.audio.playSfx('sfx_phase', 80);
+            this.showFeedback(`Phase ${this.phase + 1} live!`, 'https://i.giphy.com/1AjEBGWggGXh9onllB.gif', 850);
+        }
+    }
+
+    updatePhaseUI() {
+        const phaseMeta = CONFIG.phases[this.phase];
+        const el = document.getElementById('phase-text');
+        el.innerText = `${phaseMeta.emoji} ${phaseMeta.title}`;
+        el.style.color = phaseMeta.color;
+        
+        // Pop effect
+        el.classList.remove('pulse-text');
+        void el.offsetWidth;
+        el.classList.add('pulse-text');
+    }
+
+    showFeedback(text, gifSrc, duration = 1200) {
+        if (!this.feedbackGif || !this.feedbackCaption) return;
+        this.feedbackCaption.textContent = text;
+        this.feedbackGif.src = gifSrc;
+        this.feedbackGif.classList.add('visible');
+        this.feedbackCaption.classList.add('visible');
+        clearTimeout(this.feedbackTimer);
+        this.feedbackTimer = setTimeout(() => this.hideFeedback(), duration);
+    }
+
+    hideFeedback() {
+        if (!this.feedbackGif || !this.feedbackCaption) return;
+        this.feedbackGif.classList.remove('visible');
+        this.feedbackCaption.classList.remove('visible');
+    }
+
+    endGame(win) {
+        this.state = win ? 'VICTORY' : 'GAMEOVER';
+        this.audio.stopBgm();
+        this.audio.playSfx(win ? 'sfx_win' : 'sfx_fail');
+        
+        const screen = document.getElementById('game-over-screen');
+        const title = document.getElementById('go-title');
+        const score = document.getElementById('go-score');
+        const btn = document.getElementById('restart-btn');
+        
+        screen.classList.remove('hidden');
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('meme-container').style.display = 'block'; // Show meme again
+        
+        if (win) {
+            title.innerText = "CLEARED!";
+            title.style.textShadow = "0 0 18px rgba(119, 255, 140, 0.42), 0 5px 0 rgba(5, 12, 31, 0.85)";
+            score.innerText = `Queue buffer left: ${this.timer.toFixed(1)}s`;
+            btn.innerText = "RUN IT BACK";
+            this.showFeedback('Inbox zero secured!', 'https://i.giphy.com/dNLrXbRlB5wKNB3z57.gif', 2200);
+        } else {
+            title.innerText = "OVERDUE!";
+            title.style.textShadow = "0 0 18px rgba(255, 78, 146, 0.45), 0 5px 0 rgba(5, 12, 31, 0.85)";
+            score.innerText = "The queue buried your shift.";
+            btn.innerText = "TRY AGAIN";
+            this.showFeedback('Backlog meltdown!', 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.gif', 2200);
+        }
+    }
+
+    spawnParticles(x, y, count) {
+        const colors = ['#FFF', '#FFDC00', '#FF4136'];
+        for(let i=0; i<count; i++) {
+            this.particles.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 20,
+                vy: (Math.random() - 0.5) * 20,
+                life: 1.0,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                size: Math.random() * 10 + 5
+            });
+        }
+    }
+
+    loop(t) {
+        const dt = Math.min((t - this.lastTime) / 1000, 0.1);
+        this.lastTime = t;
+
+        // Update
+        if (this.state === 'PLAY') {
+            this.timer -= dt;
+            if (this.timer <= 0) {
+                this.timer = 0;
+                this.endGame(false);
+            }
+            
+            // HUD Update
+            const pct = this.timer / this.maxTime;
+            document.getElementById('timer-bar-fill').style.width = (pct * 100) + '%';
+            document.getElementById('progress-text').innerText = Math.floor((this.clicks / this.targetClicks) * 100) + '%';
+            if (!this.warningPlayed && pct < 0.3) {
+                this.warningPlayed = true;
+                this.audio.playSfx('sfx_warning', 500);
+                this.showFeedback('Queue critical!', 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.gif', 1200);
+            }
+        }
+
+        // Shake decay
+        if (this.shake > 0) this.shake *= 0.9;
+        if (this.shake < 0.5) this.shake = 0;
+        
+        // Pulse decay
+        if (this.scalePulse > 1) this.scalePulse += (1 - this.scalePulse) * 10 * dt;
+
+        // Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.5; // Gravity
+            p.life -= 2 * dt;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        // Render
+        this.draw();
+        
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    draw() {
+        const ctx = this.ctx;
+        const w = this.cssWidth;
+        const h = this.cssHeight;
+
+        // Clear
+        ctx.fillStyle = CONFIG.colors.panel;
+        ctx.fillRect(0, 0, w, h);
+
+        // Shake transform
+        ctx.save();
+        if (this.shake > 0) {
+            ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+        }
+
+        // Background
+        this.drawBackground(ctx, w, h);
+
+        // Main Object
+        if (this.state !== 'START') {
+            this.drawPhaseObject(ctx, w/2, h/2);
+        } else {
+            // Background animation for start screen
+            this.drawStartBg(ctx, w, h);
+        }
+
+        // Particles
+        for(let p of this.particles) {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.restore();
+    }
+
+    drawBackground(ctx, w, h) {
+        // Dynamic background based on phase
+        let color1, color2;
+        if (this.state === 'START') {
+            color1 = '#091126';
+            color2 = '#1a2760';
+        } else {
+            const phaseColors = [
+                ['#11193f', '#5e1741'],
+                ['#31275b', '#8a3f23'],
+                ['#093355', '#146b78'],
+                ['#0d2a39', '#1a7047']
+            ];
+            const c = phaseColors[this.phase] || phaseColors[0];
+            color1 = c[0];
+            color2 = c[1];
+        }
+
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, color1);
+        grad.addColorStop(1, color2);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+
+        const glow = ctx.createRadialGradient(w * 0.5, h * 0.28, 20, w * 0.5, h * 0.28, Math.max(w, h) * 0.75);
+        glow.addColorStop(0, 'rgba(92,240,255,0.14)');
+        glow.addColorStop(1, 'rgba(92,240,255,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        for (let y = 0; y < h; y += 28) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+
+        // Speed lines effect
+        if (this.state === 'PLAY') {
+            ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for(let i=0; i<10; i++) {
+                const x = (Date.now() / 2 + i * 100) % w;
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x - 50, h);
+            }
+            ctx.stroke();
+        }
+    }
+
+    drawStartBg(ctx, w, h) {
+        // Just some ambient movement
+        const t = Date.now() / 1000;
+        ctx.fillStyle = 'rgba(92, 240, 255, 0.12)';
+        ctx.beginPath();
+        ctx.arc(w/2 + Math.sin(t)*50, h/2 + Math.cos(t)*50, 200, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 4; i++) {
+            ctx.strokeRect(30 + i * 18, 30 + i * 18, w - (60 + i * 36), h - (60 + i * 36));
+        }
+    }
+
+    drawPhaseObject(ctx, cx, cy) {
+        const s = this.scalePulse;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(s, s);
+
+        // Draw based on phase
+        if (this.phase === 0) { // Expressive inbox orb
+            ctx.shadowBlur = 28;
+            ctx.shadowColor = 'rgba(255,78,146,0.55)';
+            ctx.fillStyle = '#ff4e92';
+            ctx.beginPath(); ctx.arc(0, 0, 82, 0, Math.PI*2); ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#f7fbff';
+            ctx.beginPath(); ctx.arc(0, 0, 58, 0, Math.PI*2); ctx.fill();
+
+            ctx.fillStyle = '#0c1434';
+            ctx.fillRect(-42, -12, 84, 32);
+            ctx.strokeStyle = '#5cf0ff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(-42, -12, 84, 32);
+            ctx.beginPath();
+            ctx.moveTo(-42, -12);
+            ctx.lineTo(0, 16);
+            ctx.lineTo(42, -12);
+            ctx.stroke();
+
+            ctx.fillStyle = '#0c1434';
+            ctx.beginPath(); ctx.arc(-22, -28, 7, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(22, -28, 7, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#0c1434';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(0, 10, 24, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#f7fbff';
+            ctx.lineWidth = 8;
+            ctx.beginPath(); ctx.moveTo(-52, -72); ctx.lineTo(-74, -96); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(52, -72); ctx.lineTo(74, -96); ctx.stroke();
+            ctx.fillStyle = '#ffdd55';
+            ctx.beginPath(); ctx.arc(-80, -102, 18, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(80, -102, 18, 0, Math.PI*2); ctx.fill();
+        } else if (this.phase === 1) { // Stack of mail cards
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = 'rgba(255,221,85,0.4)';
+            ctx.fillStyle = '#ffdd55';
+            ctx.fillRect(-72, -74, 144, 148);
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#fff6d6';
+            ctx.fillRect(-60, -62, 120, 124);
+            ctx.strokeStyle = '#0d173b';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(-60, -62, 120, 124);
+
+            ctx.strokeStyle = '#5cf0ff';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(-60, -62);
+            ctx.lineTo(0, -8);
+            ctx.lineTo(60, -62);
+            ctx.stroke();
+
+            ctx.fillStyle = '#0d173b';
+            for (let i = 0; i < 3; i++) {
+                ctx.fillRect(-34, -10 + i * 24, 68, 8);
+            }
+
+            if (this.clicks > 3) {
+                ctx.fillStyle = '#ff9f4a';
+                ctx.beginPath(); ctx.arc(-60, -62, 26, 0, Math.PI*2); ctx.fill();
+            }
+            if (this.clicks > 6) {
+                ctx.beginPath(); ctx.arc(60, -62, 34, 0, Math.PI*2); ctx.fill();
+            }
+        } else if (this.phase === 2) { // Reply beacon wand
+            ctx.rotate(Math.sin(Date.now()/50)*0.32);
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = 'rgba(92,240,255,0.45)';
+            ctx.fillStyle = '#5cf0ff';
+            ctx.fillRect(-12, -88, 24, 172);
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#f7fbff';
+            ctx.fillRect(-18, -110, 36, 48);
+
+            ctx.fillStyle = '#0d173b';
+            ctx.fillRect(-10, -98, 20, 24);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.82)';
+            ctx.beginPath(); ctx.arc(0 + Math.random()*40-20, -112 + Math.random()*40-20, 10, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(18, -84, 8, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-20, -74, 6, 0, Math.PI*2); ctx.fill();
+        } else if (this.phase === 3) { // Rocket courier sneaker
+            ctx.shadowBlur = 24;
+            ctx.shadowColor = 'rgba(119,255,140,0.42)';
+            ctx.fillStyle = '#ff9f4a';
+            ctx.beginPath();
+            ctx.ellipse(0, 24, 84, 34, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#f7fbff';
+            ctx.fillRect(-42, -20, 84, 42);
+            ctx.strokeStyle = '#0c1434';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(-42, -20, 84, 42);
+
+            ctx.strokeStyle = '#0c1434';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-30, -20); ctx.lineTo(30, -20); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(48, 12); ctx.lineTo(82, 0); ctx.stroke();
+            ctx.fillStyle = '#77ff8c';
+            ctx.beginPath();
+            ctx.moveTo(82, 0);
+            ctx.lineTo(98, 10);
+            ctx.lineTo(82, 20);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.font = '700 20px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText(CONFIG.phases[this.phase].emoji, 0, 138);
+        ctx.font = '700 14px Rajdhani';
+        ctx.fillStyle = 'rgba(199,215,255,0.95)';
+        ctx.fillText(CONFIG.phases[this.phase].subtext.toUpperCase(), 0, 160);
+
+        ctx.restore();
+    }
+}
+
+// Init
+window.addEventListener('DOMContentLoaded', () => {
+    try {
+        window.game = new Game();
+    } catch (e) {
+        console.error("Game Init Failed:", e);
+    }
+});
+</script>
+</body>
+</html>

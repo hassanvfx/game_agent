@@ -1,0 +1,1 @@
+/* [agent-note][stage4] retired local mirrored tailwind runtime asset to remove non-allowlisted embedded documentation URL; this game uses inline CSS only */

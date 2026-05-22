@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Neon Courier Run</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap">
+    <style>
+        :root {
+            --bg-dark: #060913;
+            --bg-deep: #0b1330;
+            --sky-top: #142a66;
+            --sky-bottom: #060913;
+            --road: #141a2c;
+            --road-edge: #56d8ff;
+            --panel-bg: rgba(11, 20, 45, 0.84);
+            --panel-border: rgba(123, 235, 255, 0.52);
+            --panel-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+            --text-main: #eef7ff;
+            --text-muted: #99b7d8;
+            --accent: #6af7ff;
+            --accent-strong: #19c8ff;
+            --accent-warm: #ffe46b;
+            --danger: #ff5f7a;
+            --success: #74ffbe;
+            --lane-glow: rgba(92, 227, 255, 0.32);
+        }
+
+        * { box-sizing: border-box; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(45, 111, 255, 0.4), transparent 35%),
+                linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+        body {
+            position: relative;
+            color: var(--text-main);
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 16%, rgba(106, 247, 255, 0.14), transparent 18%),
+                radial-gradient(circle at 80% 18%, rgba(255, 126, 182, 0.14), transparent 16%),
+                linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%);
+            opacity: 0.9;
+        }
+        canvas { display: block; touch-action: none; width: 100%; height: 100%; }
+        .glass {
+            background:
+                linear-gradient(180deg, rgba(19, 31, 68, 0.92), rgba(10, 17, 38, 0.86));
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--panel-shadow), inset 0 0 0 1px rgba(255,255,255,0.05);
+        }
+        .hidden { display: none !important; }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            user-select: none;
+            overflow: hidden;
+        }
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+        #game-container::before {
+            background:
+                linear-gradient(90deg, rgba(5, 11, 24, 0.86) 0%, transparent 12%, transparent 88%, rgba(5, 11, 24, 0.86) 100%),
+                repeating-linear-gradient(
+                    180deg,
+                    rgba(255,255,255,0.04) 0 2px,
+                    transparent 2px 20px
+                );
+            opacity: 0.42;
+        }
+        #game-container::after {
+            background:
+                radial-gradient(circle at center, transparent 58%, rgba(0,0,0,0.34) 100%);
+            opacity: 0.85;
+        }
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px;
+            pointer-events: none;
+        }
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .hud-card {
+            padding: 10px 16px;
+            border-radius: 18px;
+            color: var(--text-main);
+            min-width: 120px;
+            position: relative;
+            overflow: hidden;
+        }
+        .hud-card::before {
+            content: "";
+            position: absolute;
+            inset: auto -20% -55% auto;
+            width: 92px;
+            height: 92px;
+            background: radial-gradient(circle, rgba(106, 247, 255, 0.18), transparent 68%);
+            pointer-events: none;
+        }
+        .hud-label {
+            font-size: 11px;
+            line-height: 1.1;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .hud-value {
+            font-size: 28px;
+            line-height: 1;
+            font-weight: 700;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            text-shadow: 0 0 12px rgba(106, 247, 255, 0.2);
+        }
+        #lives-display {
+            display: flex;
+            gap: 4px;
+            font-size: 22px;
+            color: var(--danger);
+            filter: drop-shadow(0 0 10px rgba(255, 95, 122, 0.35));
+        }
+        #character-badge {
+            align-self: flex-start;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            margin-top: 6px;
+            max-width: min(68vw, 280px);
+        }
+        .badge-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-size: 20px;
+            background:
+                radial-gradient(circle at 35% 30%, #fff6a1, #ffb347 46%, #f25c54 100%);
+            box-shadow:
+                0 0 18px rgba(255, 196, 86, 0.38),
+                inset 0 -3px 8px rgba(0, 0, 0, 0.2);
+            flex: 0 0 auto;
+        }
+        .badge-copy {
+            min-width: 0;
+        }
+        .badge-title {
+            margin: 0;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            color: var(--accent);
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .badge-subtitle {
+            margin: 2px 0 0;
+            font-size: 11px;
+            line-height: 1.2;
+            color: var(--text-muted);
+        }
+        #game-over-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 6, 16, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: auto;
+            padding: 20px;
+        }
+        .overlay-card {
+            padding: 28px 24px;
+            border-radius: 28px;
+            text-align: center;
+            width: min(100%, 320px);
+            transform: scale(1);
+            position: relative;
+            overflow: hidden;
+        }
+        .overlay-card::before {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            background:
+                linear-gradient(135deg, rgba(106,247,255,0.18), transparent 40%, rgba(255,228,107,0.16));
+            pointer-events: none;
+        }
+        .overlay-card > * {
+            position: relative;
+        }
+        .overlay-kicker {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.28em;
+            color: var(--text-muted);
+            margin: 0 0 8px;
+            font-weight: 700;
+        }
+        .overlay-title {
+            margin: 0 0 10px;
+            font-size: 36px;
+            line-height: 0.95;
+            color: var(--text-main);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            text-shadow: 0 0 16px rgba(106, 247, 255, 0.18);
+        }
+        .overlay-copy {
+            margin: 0 0 16px;
+            color: var(--accent);
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .overlay-desc {
+            margin: 0 0 24px;
+            color: var(--text-main);
+            font-size: 16px;
+            line-height: 1.2;
+            font-weight: 600;
+        }
+        .overlay-score {
+            font-size: 48px;
+            line-height: 1;
+            font-weight: 700;
+            color: var(--accent-warm);
+            margin-bottom: 22px;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            text-shadow: 0 0 18px rgba(255, 228, 107, 0.22);
+        }
+        .primary-btn {
+            width: 100%;
+            background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+            border: none;
+            color: #04101f;
+            font-size: 18px;
+            font-weight: 700;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            padding: 15px;
+            border-radius: 18px;
+            box-shadow: 0 10px 24px rgba(25, 200, 255, 0.28);
+            transform: scale(1);
+            transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+            cursor: pointer;
+            letter-spacing: 0.04em;
+        }
+        .primary-btn:hover { filter: brightness(1.05); }
+        .primary-btn:active {
+            transform: scale(0.97);
+            box-shadow: 0 6px 18px rgba(25, 200, 255, 0.2);
+        }
+        .primary-btn:focus-visible {
+            outline: 3px solid rgba(106, 247, 255, 0.4);
+            outline-offset: 2px;
+        }
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 40;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .feedback-gif {
+            position: absolute;
+            width: clamp(84px, 22vw, 136px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(5, 10, 22, 0.45);
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+            opacity: 0;
+            transform: translateY(16px) scale(0.92);
+            transition: opacity 180ms ease, transform 220ms ease;
+        }
+        .feedback-gif.active {
+            opacity: 0.88;
+            transform: translateY(0) scale(1);
+        }
+        #pickup-gif {
+            right: 14px;
+            bottom: 120px;
+        }
+        #crash-gif {
+            left: 14px;
+            bottom: 120px;
+        }
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake-anim { animation: shake 0.5s; }
+
+        @media (max-width: 480px) {
+            #ui-layer { padding: 12px; }
+            #pickup-gif,
+            #crash-gif {
+                bottom: 96px;
+            }
+            .feedback-gif {
+                width: clamp(72px, 26vw, 112px);
+                border-radius: 14px;
+            }
+            .hud-card {
+                min-width: 108px;
+                padding: 9px 12px;
+            }
+            .hud-label { font-size: 10px; letter-spacing: 0.18em; }
+            .hud-value { font-size: 22px; }
+            #lives-display { font-size: 20px; }
+            #character-badge {
+                gap: 8px;
+                padding: 7px 10px;
+                max-width: min(72vw, 240px);
+            }
+            .badge-avatar {
+                width: 34px;
+                height: 34px;
+                font-size: 18px;
+            }
+            .badge-title { font-size: 12px; }
+            .badge-subtitle { font-size: 10px; }
+            .overlay-title { font-size: 31px; }
+            .overlay-copy { font-size: 19px; }
+            .overlay-desc { font-size: 15px; }
+            .overlay-score { font-size: 42px; }
+            .primary-btn { font-size: 17px; padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Assets Declaration -->
+<div id="assets" hidden>
+    <audio id="bgm_main" data-editable="audio" data-label="Arcade action loop" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" preload="auto" loop></audio>
+    <audio id="sfx_pickup" data-editable="audio" data-label="Data shard pickup" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3" preload="auto"></audio>
+    <audio id="sfx_crash" data-editable="audio" data-label="Courier drone collision" src="https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3" preload="auto"></audio>
+</div>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "busSpeed": { "type": "number", "label": "Bus Speed", "value": 6, "min": 3, "max": 10 },
+    "trafficDensity": { "type": "number", "label": "Traffic Density", "value": 0.02, "min": 0.005, "max": 0.05 },
+    "busColor": { "type": "color", "label": "Bus Color", "value": "#FFC107" }
+}
+</script>
+
+<!-- Game Container -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="feedback-layer" aria-hidden="true">
+        <img
+            id="pickup-gif"
+            class="feedback-gif"
+            src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp"
+            alt=""
+            loading="lazy"
+            decoding="async"
+        >
+        <img
+            id="crash-gif"
+            class="feedback-gif"
+            src="https://i.giphy.com/roB5nN2qNNfhUKcprN.webp"
+            alt=""
+            loading="lazy"
+            decoding="async"
+        >
+    </div>
+    
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <!-- HUD -->
+        <div id="hud">
+            <div class="glass hud-card">
+                <div class="hud-label">Data Shards</div>
+                <div class="hud-value" id="score-display">0</div>
+            </div>
+            <div class="glass hud-card">
+                <div class="hud-label">Hull</div>
+                <div id="lives-display">❤️❤️❤️</div>
+            </div>
+        </div>
+
+        <div id="character-badge" class="glass" aria-hidden="true">
+            <div class="badge-avatar">🤖</div>
+            <div class="badge-copy">
+                <p class="badge-title">Nova Courier</p>
+                <p class="badge-subtitle">Signal runner with a sunny core and turbo reflexes.</p>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden">
+            <div class="glass overlay-card">
+                <p class="overlay-kicker">Courier Run Complete</p>
+                <h2 class="overlay-title">SYSTEM DOWN</h2>
+                <p class="overlay-copy">Shards secured</p>
+                <div class="overlay-score" id="final-score">0</div>
+                <p class="overlay-desc">Drag to steer through traffic and recover more signal caches.</p>
+                <button id="restart-btn" class="primary-btn">
+                    RUN AGAIN
+                </button>
+                <!-- [agent-note][stage1] role: future-audio | trigger: game-over-state | intent: reinforce arcade retry loop -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * NEON COURIER RUN - Single File HTML5 Game
+ * Architecture: Canvas + ResizeObserver + Web Audio API
+ */
+
+// --- §0 Constants & Globals ---
+const dpr = window.devicePixelRatio || 1;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let cw = 0, ch = 0;
+let initialized = false;
+let loopId = 0;
+let lastTime = 0;
+const ENABLE_ANIMATIONS = true;
+
+// State
+const STATE = { PLAYING: 'PLAYING', GAMEOVER: 'GAMEOVER' };
+let gameState = STATE.PLAYING;
+let score = 0;
+let lives = 3;
+let gameTime = 0;
+
+// Config Proxy
+const gameConfig = {
+    busSpeed: 6,
+    trafficDensity: 0.02,
+    busColor: '#FFC107'
+};
+
+// Audio System
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const audioBuffers = {};
+const sfxCooldowns = {};
+let audioReady = false;
+let bgmStarted = false;
+let lowHullTriggered = false;
+let feedbackTimers = {};
+
+// Entities
+let bus = { x: 0, y: 0, w: 60, h: 100, vx: 0, targetX: 0, bob: 0 };
+let roadOffset = 0;
+let entities = []; // Traffic & Data Shards
+let particles = [];
+let bgBuildings = [];
+
+// --- §1 System Core ---
+
+function initConfig() {
+    const el = document.getElementById('game-config');
+    if (el) {
+        try {
+            const defs = JSON.parse(el.textContent);
+            window.gameConfigDefs = defs;
+            for (const key in defs) {
+                gameConfig[key] = defs[key].value;
+            }
+        } catch (e) { console.error('Config parse error', e); }
+    }
+    window.gameConfig = gameConfig; // Expose
+}
+
+// Audio Manager
+async function initAudio() {
+    const loadBuffer = async (id, url) => {
+        try {
+            const res = await fetch(url);
+            const arrayBuffer = await res.arrayBuffer();
+            audioBuffers[id] = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) { console.warn(`Audio load failed: ${id}`, e); }
+    };
+
+    const sfxList = [
+        { id: 'pickup', el: 'sfx_pickup' },
+        { id: 'crash', el: 'sfx_crash' },
+        { id: 'ui', el: 'sfx_pickup' },
+        { id: 'warning', el: 'sfx_crash' }
+    ];
+
+    await Promise.all(sfxList.map(s => {
+        const el = document.getElementById(s.el);
+        return el ? loadBuffer(s.id, el.src) : Promise.resolve();
+    }));
+
+    audioReady = true;
+}
+
+function playSynthFallback(id) {
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (id === 'pickup' || id === 'ui') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(id === 'pickup' ? 540 : 360, now);
+        osc.frequency.exponentialRampToValueAtTime(id === 'pickup' ? 940 : 520, now + 0.12);
+        gain.gain.setValueAtTime(id === 'pickup' ? 0.14 : 0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.start();
+        osc.stop(now + 0.12);
+    } else {
+        osc.type = id === 'warning' ? 'square' : 'sawtooth';
+        osc.frequency.setValueAtTime(id === 'warning' ? 220 : 110, now);
+        osc.frequency.exponentialRampToValueAtTime(id === 'warning' ? 160 : 38, now + 0.24);
+        gain.gain.setValueAtTime(id === 'warning' ? 0.08 : 0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.24);
+        osc.start();
+        osc.stop(now + 0.24);
+    }
+}
+
+function playSfx(id, cooldown = 0) {
+    const nowMs = performance.now();
+    if (cooldown && sfxCooldowns[id] && nowMs - sfxCooldowns[id] < cooldown) return;
+    sfxCooldowns[id] = nowMs;
+
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    
+    const buffer = audioBuffers[id];
+    if (buffer) {
+        const source = audioCtx.createBufferSource();
+        const gain = audioCtx.createGain();
+        source.buffer = buffer;
+        gain.gain.value = id === 'crash' ? 0.42 : id === 'warning' ? 0.18 : 0.24;
+        source.connect(gain);
+        gain.connect(audioCtx.destination);
+        source.start(0);
+    } else {
+        playSynthFallback(id);
+    }
+}
+
+function playBgm() {
+    const el = document.getElementById('bgm_main');
+    if (!el || bgmStarted) return;
+    el.volume = 0.2;
+    el.play().then(() => {
+        bgmStarted = true;
+    }).catch(() => {});
+}
+
+function stopBgm() {
+    const el = document.getElementById('bgm_main');
+    if (!el) return;
+    el.pause();
+    el.currentTime = 0;
+    bgmStarted = false;
+}
+
+function showFeedbackGif(id, duration = 900) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    clearTimeout(feedbackTimers[id]);
+    el.classList.add('active');
+    feedbackTimers[id] = setTimeout(() => el.classList.remove('active'), duration);
+}
+
+function vibrate(type) {
+    if (window.navigator?.vibrate) {
+        window.navigator.vibrate(type === 'heavy' ? 400 : 50);
+    }
+    // iOS Bridge
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+        params: { style: type }
+    });
+}
+
+// --- §2 Lifecycle & Input ---
+
+function resize() {
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cw = w;
+    ch = h;
+    
+    if (!initialized) {
+        initGame();
+        initialized = true;
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    } else {
+        // Clamp courier vehicle
+        bus.x = Math.max(bus.w/2, Math.min(cw - bus.w/2, bus.x));
+        bus.targetX = bus.x;
+    }
+}
+
+function initGame() {
+    score = 0;
+    lives = 3;
+    gameTime = 0;
+    entities = [];
+    particles = [];
+    lowHullTriggered = false;
+    
+    // Setup Courier Vehicle
+    bus.w = cw * 0.15;
+    bus.h = bus.w * 1.8;
+    bus.x = cw / 2;
+    bus.y = ch - bus.h - 50;
+    bus.targetX = bus.x;
+    bus.vx = 0;
+    bus.bob = 0;
+    
+    // Setup Background
+    bgBuildings = [];
+    const count = 10;
+    for(let i = 0; i < count; i++) {
+        bgBuildings.push({
+            x: Math.random() < 0.5 ? -50 : cw + 50,
+            y: (ch / count) * i,
+            w: 40 + Math.random() * 60,
+            h: 100 + Math.random() * 200,
+            accent: Math.random() > 0.5 ? '#64d2ff' : '#ff76b7',
+            color: `rgba(${10 + Math.floor(Math.random()*20)}, ${20 + Math.floor(Math.random()*30)}, ${45 + Math.floor(Math.random()*40)}, ${0.65 + Math.random()*0.2})`,
+            speed: 1 + Math.random() * 2
+        });
+    }
+
+    updateUI();
+    setState(STATE.PLAYING);
+    playSfx('ui', 80);
+    playBgm();
+}
+
+function setState(newState) {
+    gameState = newState;
+    const hud = document.getElementById('hud');
+    const gameOver = document.getElementById('game-over-screen');
+    
+    if (newState === STATE.PLAYING) {
+        hud.classList.remove('hidden');
+        gameOver.classList.add('hidden');
+        playBgm();
+    } else {
+        document.getElementById('final-score').innerText = score;
+        gameOver.classList.remove('hidden');
+        playSfx('warning', 80);
+        showFeedbackGif('crash-gif', 1400);
+        stopBgm();
+    }
+}
+
+function handleInput(e) {
+    // L2 Audio Unlock
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+        playBgm();
+    }
+
+    if (gameState === STATE.GAMEOVER) {
+        // Restart logic handled by button, but global click can act as backup if needed
+        return; 
+    }
+
+    if (gameState === STATE.PLAYING) {
+        const rect = canvas.getBoundingClientRect();
+        const inputX = e.clientX - rect.left;
+        // Clamp input to road bounds roughly
+        bus.targetX = Math.max(bus.w/2 + 20, Math.min(cw - bus.w/2 - 20, inputX));
+    }
+}
+
+// --- §3 Game Logic ---
+
+function spawnEntity() {
+    const laneWidth = cw / 4;
+    const lane = Math.floor(Math.random() * 4);
+    const x = (lane * laneWidth) + (laneWidth / 2);
+    const type = Math.random() > 0.7 ? 'PASSENGER' : 'CAR';
+    
+    const entity = {
+        type: type,
+        x: x,
+        y: -100,
+        w: type === 'CAR' ? bus.w * 0.9 : bus.w * 0.5,
+        h: type === 'CAR' ? bus.h * 0.9 : bus.w * 0.5,
+        speed: type === 'CAR' ? (gameConfig.busSpeed * 0.5 + Math.random() * 2) : 0,
+        color: type === 'CAR' ? ['#ff6b6b', '#6a8dff', '#c074ff'][Math.floor(Math.random() * 3)] : '#74ffbe',
+        active: true
+    };
+    entities.push(entity);
+}
+
+function update(dt) {
+    if (gameState !== STATE.PLAYING) return;
+    
+    gameTime += dt;
+    bus.bob += dt * 8;
+    
+    // Movement Smoothing
+    const diff = bus.targetX - bus.x;
+    bus.x += diff * 10 * dt;
+    
+    // Road Scroll
+    const speed = gameConfig.busSpeed * 60; // pixel per sec approx
+    roadOffset = (roadOffset + speed * dt) % 100;
+    
+    // Background Parallax
+    bgBuildings.forEach(b => {
+        b.y += speed * 0.2 * dt;
+        if (b.y > ch) {
+            b.y = -b.h;
+            b.x = Math.random() < 0.5 ? -30 : cw - b.w + 30;
+        }
+    });
+
+    // Spawning
+    if (Math.random() < gameConfig.trafficDensity) {
+        spawnEntity();
+    }
+
+    // Entities Update
+    for (let i = entities.length - 1; i >= 0; i--) {
+        let e = entities[i];
+        // Relative speed: Courier moves up (world moves down), rival cars move down slower
+        // Data shards are static, so they move down at full road speed
+        
+        let moveSpeed = speed;
+        if (e.type === 'CAR') {
+            moveSpeed = (gameConfig.busSpeed - (e.speed / 5)) * 60; 
+        }
+        
+        e.y += moveSpeed * dt;
+        
+        // Collision
+        if (e.active && 
+            Math.abs(e.x - bus.x) < (bus.w/2 + e.w/2) * 0.8 &&
+            Math.abs(e.y - bus.y) < (bus.h/2 + e.h/2) * 0.8) {
+            
+            if (e.type === 'PASSENGER') {
+                // Recover shard
+                e.active = false;
+                score += 10;
+                playSfx('pickup', 90);
+                showFeedbackGif('pickup-gif', 700);
+                vibrate('light');
+                createParticles(e.x, e.y, '#74ffbe', 10);
+                updateUI();
+            } else {
+                // Collision
+                e.active = false;
+                lives--;
+                playSfx('crash', 180);
+                showFeedbackGif('crash-gif', 1100);
+                vibrate('heavy');
+                createParticles(bus.x, bus.y, '#ff5f7a', 20);
+                document.body.classList.add('shake-anim');
+                setTimeout(() => document.body.classList.remove('shake-anim'), 500);
+                updateUI();
+                
+                if (lives <= 0) {
+                    setState(STATE.GAMEOVER);
+                }
+            }
+        }
+        
+        if (e.y > ch + 100) entities.splice(i, 1);
+    }
+    
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function createParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 200 * Math.random(),
+            vy: (Math.random() - 0.5) * 200 * Math.random(),
+            life: 0.5 + Math.random() * 0.5,
+            color: color,
+            size: 2 + Math.random() * 4
+        });
+    }
+}
+
+function updateUI() {
+    document.getElementById('score-display').innerText = score;
+    document.getElementById('lives-display').innerText = '❤️'.repeat(Math.max(0, lives));
+
+    if (lives === 1 && !lowHullTriggered && gameState === STATE.PLAYING) {
+        lowHullTriggered = true;
+        playSfx('warning', 1200);
+    }
+}
+
+// --- §4 Rendering ---
+
+function drawStarfield() {
+    for (let i = 0; i < 24; i++) {
+        const x = (i * 53 + (roadOffset * 0.2)) % (cw + 40) - 20;
+        const y = ((i * 89) + roadOffset * 0.5) % (ch + 60) - 30;
+        const size = i % 4 === 0 ? 2 : 1;
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.8)' : 'rgba(110,220,255,0.55)';
+        ctx.fillRect(x, y, size, size);
+    }
+}
+
+function drawRoadGlow(roadX, roadW) {
+    const laneWidth = roadW / 4;
+    for (let i = 1; i <= 3; i++) {
+        const lx = roadX + laneWidth * i;
+        ctx.fillStyle = 'rgba(86, 216, 255, 0.08)';
+        ctx.fillRect(lx - 6, 0, 12, ch);
+    }
+}
+
+function drawPassenger(e) {
+    const r = e.w / 2;
+    const pulse = 0.88 + Math.sin(gameTime * 8 + e.x * 0.01) * 0.08;
+
+    ctx.save();
+    ctx.scale(pulse, pulse);
+
+    ctx.fillStyle = 'rgba(116, 255, 190, 0.18)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#74ffbe';
+    ctx.beginPath();
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r * 0.9, 0);
+    ctx.lineTo(0, r);
+    ctx.lineTo(-r * 0.9, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#dffff3';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function drawTrafficCar(e) {
+    const bodyRadius = Math.max(8, e.w * 0.12);
+    ctx.fillStyle = e.color;
+    ctx.beginPath();
+    ctx.roundRect(-e.w/2, -e.h/2, e.w, e.h, bodyRadius);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const canopyW = e.w * 0.62;
+    const canopyH = e.h * 0.24;
+    const canopyY = -e.h * 0.16;
+
+    ctx.fillStyle = '#09101f';
+    ctx.beginPath();
+    ctx.roundRect(-canopyW / 2, canopyY - canopyH / 2, canopyW, canopyH, 6);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(-canopyW / 2 + 3, canopyY - canopyH / 2 + 3, canopyW - 6, canopyH * 0.36);
+
+    ctx.fillStyle = '#ff7f96';
+    ctx.fillRect(-e.w/2 + 4, e.h/2 - 8, 10, 4);
+    ctx.fillRect(e.w/2 - 14, e.h/2 - 8, 10, 4);
+
+    ctx.fillStyle = '#c8f7ff';
+    ctx.fillRect(-e.w/2 + 6, -e.h/2 + 5, 10, 4);
+    ctx.fillRect(e.w/2 - 16, -e.h/2 + 5, 10, 4);
+}
+
+function drawCourierVehicle() {
+    const tilt = (bus.x - bus.targetX) * -0.005;
+    const bobOffset = ENABLE_ANIMATIONS ? Math.sin(bus.bob) * 2 : 0;
+
+    ctx.save();
+    ctx.translate(bus.x, bus.y + bobOffset);
+    ctx.rotate(tilt);
+
+    // aura
+    ctx.fillStyle = 'rgba(106, 247, 255, 0.15)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, bus.w * 0.82, bus.h * 0.54, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // boosters
+    ctx.fillStyle = 'rgba(255, 228, 107, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(-bus.w * 0.22, bus.h / 2 - 2);
+    ctx.lineTo(-bus.w * 0.1, bus.h / 2 + 18);
+    ctx.lineTo(0, bus.h / 2 - 2);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(bus.w * 0.22, bus.h / 2 - 2);
+    ctx.lineTo(bus.w * 0.1, bus.h / 2 + 18);
+    ctx.lineTo(0, bus.h / 2 - 2);
+    ctx.closePath();
+    ctx.fill();
+
+    // chassis
+    const bodyGradient = ctx.createLinearGradient(0, -bus.h/2, 0, bus.h/2);
+    bodyGradient.addColorStop(0, '#ffe46b');
+    bodyGradient.addColorStop(0.45, gameConfig.busColor);
+    bodyGradient.addColorStop(1, '#f3832d');
+    ctx.fillStyle = bodyGradient;
+    ctx.beginPath();
+    ctx.roundRect(-bus.w/2, -bus.h/2, bus.w, bus.h, 16);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // side fins
+    ctx.fillStyle = '#1de1ff';
+    ctx.beginPath();
+    ctx.moveTo(-bus.w/2, -bus.h * 0.14);
+    ctx.lineTo(-bus.w/2 - 10, bus.h * 0.08);
+    ctx.lineTo(-bus.w/2, bus.h * 0.18);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(bus.w/2, -bus.h * 0.14);
+    ctx.lineTo(bus.w/2 + 10, bus.h * 0.08);
+    ctx.lineTo(bus.w/2, bus.h * 0.18);
+    ctx.closePath();
+    ctx.fill();
+
+    // canopy
+    ctx.fillStyle = '#081326';
+    ctx.beginPath();
+    ctx.roundRect(-bus.w/2 + 6, -bus.h/2 + 7, bus.w - 12, bus.h * 0.28, 8);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(106,247,255,0.24)';
+    ctx.fillRect(-bus.w/2 + 10, -bus.h/2 + 11, bus.w - 20, bus.h * 0.08);
+
+    // expressive face
+    ctx.fillStyle = '#f5fbff';
+    ctx.beginPath();
+    ctx.arc(-bus.w * 0.18, -bus.h * 0.11, 5, 0, Math.PI * 2);
+    ctx.arc(bus.w * 0.18, -bus.h * 0.11, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#06111d';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, bus.h * 0.03, bus.w * 0.14, 0.15 * Math.PI, 0.85 * Math.PI, false);
+    ctx.stroke();
+
+    // front lights
+    ctx.fillStyle = '#fdfefe';
+    ctx.beginPath();
+    ctx.arc(-bus.w/2 + 11, -bus.h/2 + 6, 4, 0, Math.PI*2);
+    ctx.arc(bus.w/2 - 11, -bus.h/2 + 6, 4, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#03213a';
+    ctx.font = '700 10px "Orbitron"';
+    ctx.textAlign = 'center';
+    ctx.fillText('NOVA', 0, bus.h * 0.21);
+
+    ctx.restore();
+}
+
+function draw() {
+    // Sky
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, ch);
+    skyGradient.addColorStop(0, '#17397e');
+    skyGradient.addColorStop(0.5, '#0d1738');
+    skyGradient.addColorStop(1, '#050811');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, cw, ch);
+    drawStarfield();
+
+    // Cityscape Parallax
+    bgBuildings.forEach(b => {
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(b.x + 3, b.y + 4, b.w - 6, b.h - 8);
+
+        // windows
+        ctx.fillStyle = 'rgba(255, 238, 140, 0.18)';
+        for (let wy = 10; wy < b.h - 10; wy += 18) {
+            ctx.fillRect(b.x + 6, b.y + wy, Math.max(8, b.w - 12), 8);
+        }
+
+        // rooftop neon
+        ctx.fillStyle = b.accent;
+        ctx.fillRect(b.x, b.y + 2, b.w, 3);
+    });
+
+    // Road
+    const roadW = cw * 0.9;
+    const roadX = (cw - roadW) / 2;
+    const roadGradient = ctx.createLinearGradient(roadX, 0, roadX + roadW, 0);
+    roadGradient.addColorStop(0, '#0e1322');
+    roadGradient.addColorStop(0.5, '#151d33');
+    roadGradient.addColorStop(1, '#0e1322');
+    ctx.fillStyle = roadGradient;
+    ctx.fillRect(roadX, 0, roadW, ch);
+
+    ctx.fillStyle = 'rgba(86, 216, 255, 0.14)';
+    ctx.fillRect(roadX, 0, 8, ch);
+    ctx.fillRect(roadX + roadW - 8, 0, 8, ch);
+    drawRoadGlow(roadX, roadW);
+    
+    // Road Markings
+    ctx.strokeStyle = '#e9fbff';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([30, 30]);
+    ctx.lineDashOffset = -roadOffset;
+    
+    // 3 Lanes lines
+    for (let i = 1; i <= 3; i++) {
+        const lx = roadX + (roadW / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(lx, -50);
+        ctx.lineTo(lx, ch + 50);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Shadows
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(bus.x, bus.y + bus.h/2 + 2, bus.w/2.15, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Entities
+    entities.forEach(e => {
+        if (!e.active) return;
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        
+        if (e.type === 'PASSENGER') {
+            drawPassenger(e);
+        } else {
+            drawTrafficCar(e);
+        }
+        ctx.restore();
+    });
+
+    // Courier Vehicle
+    drawCourierVehicle();
+
+    // Particles
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    });
+}
+
+function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    try {
+        update(dt);
+        draw();
+    } catch (e) {
+        console.error("Loop Error", e);
+    }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+// --- §5 Initialization Hooks ---
+
+window.addEventListener('DOMContentLoaded', () => {
+    initConfig();
+    initAudio();
+    
+    const ro = new ResizeObserver(entries => {
+        resize();
+    });
+    ro.observe(canvas);
+    
+    const handleGlobal = (e) => {
+        if (e.type === 'pointerdown' || e.type === 'click') {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+            if (audioReady) {
+                playBgm();
+            }
+        }
+        
+        if (e.target.id === 'restart-btn') {
+            playSfx('ui', 60);
+            initGame();
+            return;
+        }
+        
+        handleInput(e);
+    };
+
+    window.addEventListener('pointerdown', handleGlobal, { passive: false });
+    window.addEventListener('pointermove', handleGlobal, { passive: false });
+    document.getElementById('restart-btn').addEventListener('click', handleGlobal);
+});
+
+// Config Hot Reload
+window.updateGameConfig = (key, val) => {
+    if (gameConfig.hasOwnProperty(key)) {
+        gameConfig[key] = val;
+    }
+};
+
+</script>
+</body>
+</html>

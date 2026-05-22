@@ -1,0 +1,1 @@
+/* Removed mirrored Three.js module for stage 02 policy cleanup. Unused by index.html. */

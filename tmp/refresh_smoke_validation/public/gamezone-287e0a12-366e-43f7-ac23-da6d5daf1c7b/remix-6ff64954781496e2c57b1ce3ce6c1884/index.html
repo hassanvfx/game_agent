@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Midnight Cab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- [agent-note][stage4] repaired: font-remap | vars: --font-main/--font-display -> approved catalogs/fonts.json entries -->
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* [agent-note][stage3] resolved-font: display->Orbitron, ui->Exo 2 via catalogs/fonts.json */
+    --font-main: 'Exo 2', system-ui, sans-serif;
+    --font-display: 'Orbitron', 'Exo 2', sans-serif;
+    --c-bg: #050816;
+    --c-bg-deep: #02030b;
+    --c-road: #10172d;
+    --c-road-edge: #172340;
+    --c-ui: #eef5ff;
+    --c-ui-dim: #aab8d6;
+    --c-panel: rgba(7, 14, 32, 0.74);
+    --c-panel-border: rgba(118, 208, 255, 0.55);
+    --c-accent: #72f1ff;
+    --c-accent-strong: #24c4ff;
+    --c-hot: #ff5ea8;
+    --c-warn: #ffe56b;
+    --c-success: #6dff8f;
+    --shadow-soft: 0 0 0 1px rgba(255,255,255,0.04), 0 10px 30px rgba(0,0,0,0.45);
+    --shadow-glow: 0 0 18px rgba(36, 196, 255, 0.22);
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at top, rgba(40, 95, 175, 0.2), transparent 34%),
+      linear-gradient(180deg, #091127 0%, var(--c-bg) 42%, var(--c-bg-deep) 100%);
+    color: var(--c-ui);
+    font-family: var(--font-main);
+    touch-action: manipulation;
+  }
+
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::before {
+    background:
+      radial-gradient(circle at 12% 18%, rgba(114, 241, 255, 0.14), transparent 18%),
+      radial-gradient(circle at 88% 14%, rgba(255, 94, 168, 0.14), transparent 18%),
+      radial-gradient(circle at 50% 90%, rgba(255, 229, 107, 0.08), transparent 24%);
+    opacity: 0.9;
+  }
+
+  body::after {
+    background:
+      repeating-linear-gradient(
+        180deg,
+        rgba(255,255,255,0.02) 0,
+        rgba(255,255,255,0.02) 1px,
+        transparent 1px,
+        transparent 4px
+      );
+    mix-blend-mode: soft-light;
+    opacity: 0.45;
+  }
+
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    isolation: isolate;
+    touch-action: none;
+  }
+
+  #game-container::before,
+  #game-container::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  #game-container::before {
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.18)),
+      radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.28) 100%);
+  }
+
+  #game-container::after {
+    background:
+      linear-gradient(90deg, rgba(114, 241, 255, 0.04), transparent 22%, transparent 78%, rgba(255, 94, 168, 0.04));
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 0;
+  }
+
+  #ui-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, 4vw) max(16px, env(safe-area-inset-bottom)) max(12px, 4vw);
+  }
+
+  /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+  #hud {
+    align-self: stretch;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: clamp(12px, 2.8vw, 14px);
+    color: var(--c-ui);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  #score-display {
+    position: relative;
+    min-width: min(70vw, 320px);
+    padding: 10px 14px 9px;
+    border: 1px solid var(--c-panel-border);
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, rgba(19, 30, 59, 0.9), rgba(6, 12, 28, 0.85)),
+      linear-gradient(90deg, rgba(114, 241, 255, 0.08), rgba(255, 94, 168, 0.04));
+    box-shadow: var(--shadow-soft), inset 0 0 18px rgba(114, 241, 255, 0.08), var(--shadow-glow);
+    backdrop-filter: blur(7px);
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(114, 241, 255, 0.3);
+  }
+
+  #score-display::before {
+    content: "NIGHT RUN";
+    display: block;
+    margin-bottom: 2px;
+    font-size: 0.68em;
+    letter-spacing: 0.22em;
+    color: var(--c-ui-dim);
+  }
+
+  #status-msg {
+    align-self: center;
+    margin-bottom: 8px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(11, 24, 48, 0.9), rgba(5, 10, 24, 0.86));
+    border: 1px solid rgba(120, 214, 255, 0.28);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), inset 0 0 14px rgba(114, 241, 255, 0.08);
+    font-family: var(--font-display);
+    font-size: clamp(14px, 3.6vw, 20px);
+    letter-spacing: 0.12em;
+    text-align: center;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s, color 0.3s, box-shadow 0.3s;
+    transform: translateY(4px);
+  }
+
+  #status-msg[style*="opacity: 1"] {
+    transform: translateY(0);
+  }
+
+  #feedback-gif-layer {
+    position: absolute;
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(82px, calc(env(safe-area-inset-bottom) + 72px));
+    z-index: 2;
+    width: min(30vw, 136px);
+    aspect-ratio: 1;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(4, 10, 24, 0.52);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+
+  #feedback-gif-layer.active {
+    opacity: 0.95;
+    transform: translateY(0) scale(1);
+  }
+
+  #feedback-gif {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  #feedback-gif-label {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: rgba(3, 8, 20, 0.74);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #f3f8ff;
+    font-family: var(--font-display);
+    font-size: clamp(9px, 2.2vw, 11px);
+    letter-spacing: 0.1em;
+    text-align: center;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #game-over-screen {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background:
+      radial-gradient(circle at top, rgba(255, 94, 168, 0.12), transparent 32%),
+      linear-gradient(180deg, rgba(2, 4, 12, 0.78), rgba(0, 0, 0, 0.9));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    backdrop-filter: blur(8px);
+    text-align: center;
+  }
+
+  #game-over-screen.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(26px, 8vw, 48px);
+    line-height: 1.05;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 18px rgba(255, 94, 168, 0.38);
+  }
+
+  p {
+    margin: 0 0 8px 0;
+    font-size: clamp(16px, 4.4vw, 24px);
+    font-weight: 600;
+    color: var(--c-ui-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  button {
+    pointer-events: auto;
+    background: linear-gradient(180deg, #ffe879 0%, #ffc93a 100%);
+    color: #09101f;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 16px;
+    padding: 14px 24px;
+    min-width: min(80vw, 260px);
+    min-height: 52px;
+    font-size: clamp(16px, 4.6vw, 24px);
+    font-family: var(--font-display);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 10px 26px rgba(255, 201, 58, 0.25), inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+    transform: translateY(0);
+    transition: transform 0.12s ease, box-shadow 0.16s ease, filter 0.16s ease;
+  }
+
+  button:active {
+    transform: translateY(2px) scale(0.98);
+    filter: brightness(1.05);
+    box-shadow: 0 5px 16px rgba(255, 201, 58, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+  }
+
+  @media (max-width: 640px) {
+    #ui-layer {
+      padding: max(10px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom)) 10px;
+    }
+
+    #score-display {
+      min-width: 0;
+      width: auto;
+      max-width: 88vw;
+      padding: 9px 12px 8px;
+    }
+
+    #status-msg {
+      max-width: 88vw;
+      padding: 9px 14px;
+      letter-spacing: 0.08em;
+    }
+
+    #feedback-gif-layer {
+      width: min(32vw, 112px);
+      bottom: max(76px, calc(env(safe-area-inset-bottom) + 66px));
+    }
+
+    #game-over-screen {
+      padding: 20px 14px;
+    }
+  }
+</style>
+
+<!-- Config Declaration -->
+<script id="game-config" type="application/x-game-config">
+{
+  "heroSpeed": { "type": "number", "label": "Steering Speed", "value": 8, "min": 1, "max": 12 },
+  "trafficSpeed": { "type": "number", "label": "Traffic Speed", "value": 6, "min": 3, "max": 15 },
+  "taxiColor": { "type": "color", "label": "Taxi Color", "value": "#FFD700" }
+}
+</script>
+
+<!-- Assets Declaration -->
+<img id="asset_taxi" data-editable="image" data-label="Taxi Sprite" src="data:image/svg+xml,%3Csvg width='60' height='100' viewBox='0 0 60 100' xmlns='assets/www.w3.org/2000/svg.html'%3E%3Cpath d='M10,10 L50,10 L55,30 L55,90 L5,90 L5,30 Z' fill='%23FFD700' stroke='%23333' stroke-width='2'/%3E%3Crect x='10' y='35' width='40' height='20' fill='%23111'/%3E%3Crect x='5' y='90' width='10' height='5' fill='%23333'/%3E%3Crect x='45' y='90' width='10' height='5' fill='%23333'/%3E%3C/svg%3E" hidden>
+<!-- [agent-note][stage3] resolved-audio: gameplay loop + pickup/dropoff/crash/ui from catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_pickup" data-editable="audio" data-label="Pickup SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_dropoff" data-editable="audio" data-label="Arrival SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3" preload="auto"></audio>
+<audio id="sfx_crash" data-editable="audio" data-label="Crash SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3" preload="auto"></audio>
+<audio id="sfx_ui" data-editable="audio" data-label="UI SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_start" data-editable="audio" data-label="Start SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3" preload="auto"></audio>
+
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui-layer">
+    <div id="hud">
+      <div id="score-display">DATA BANKED: 0</div>
+    </div>
+    <div id="status-msg">LINK ESTABLISHED</div>
+  </div>
+  <!-- [agent-note][stage3] resolved-gif: pickup reward + crash reaction from catalogs/gifs.json -->
+  <!-- [agent-note][stage3] caution: keep-gif-off-playfield | reason: protect controls -->
+  <div id="feedback-gif-layer" aria-hidden="true">
+    <img id="feedback-gif" alt="" src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp">
+    <div id="feedback-gif-label">Courier locked</div>
+  </div>
+  <div id="game-over-screen">
+    <h1>RUN TERMINATED</h1>
+    <p id="final-score">Data Banked: 0</p>
+    <button id="restart-btn">REDEPLOY</button>
+  </div>
+</div>
+
+<script>
+// --- §2 System Invariants & §3 Implementation ---
+
+// 1. Config System
+const DEFAULT_CONFIG = {
+  heroSpeed: 8,
+  trafficSpeed: 6,
+  taxiColor: "#FFD700"
+};
+let gameConfig = { ...DEFAULT_CONFIG };
+
+function parseConfig() {
+  const el = document.getElementById('game-config');
+  if (el) {
+    try {
+      const parsed = JSON.parse(el.textContent);
+      for (const key in parsed) {
+        if (parsed[key].value !== undefined) {
+          gameConfig[key] = parsed[key].value;
+        }
+      }
+    } catch (e) { console.error("Config parse error", e); }
+  }
+}
+
+// 2. Audio System
+const AudioSys = {
+  ctx: null,
+  buffers: {},
+  bgm: null,
+  sfxElements: {},
+  unlocked: false,
+  lastPlayedAt: {},
+
+  init() {
+    this.bgm = document.getElementById('bgm_main');
+    this.sfxElements = {
+      pickup: document.getElementById('sfx_pickup'),
+      dropoff: document.getElementById('sfx_dropoff'),
+      crash: document.getElementById('sfx_crash'),
+      ui: document.getElementById('sfx_ui'),
+      start: document.getElementById('sfx_start')
+    };
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return;
+    this.ctx = new AudioContextCtor();
+
+    const load = (key) => {
+      const el = this.sfxElements[key];
+      if (!el || !el.src || !this.ctx) return;
+      const srcUrl = new URL(el.src, window.location.href);
+      if (srcUrl.origin !== window.location.origin) return;
+      fetch(srcUrl.href)
+        .then(r => r.arrayBuffer())
+        .then(buf => this.ctx.decodeAudioData(buf))
+        .then(decoded => { this.buffers[key] = decoded; })
+        .catch(() => {});
+    };
+
+    load('pickup');
+    load('dropoff');
+    load('crash');
+    load('ui');
+    load('start');
+  },
+
+  unlock() {
+    if (this.unlocked) return;
+    this.unlocked = true;
+    if (this.ctx?.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+    this.syncBgm(true);
+    this.playSfx('start', 0.55, 0.14);
+  },
+
+  syncBgm(forcePlay = false) {
+    if (!this.bgm) return;
+    this.bgm.volume = gameState === 'GAMEOVER' ? 0.12 : 0.2;
+    if (!this.unlocked && !forcePlay) return;
+
+    if (gameState === 'PLAYING' || forcePlay) {
+      this.bgm.play().catch(() => {});
+    } else {
+      this.bgm.pause();
+    }
+  },
+
+  playSfx(key, volume = 0.24, minGap = 0.08) {
+    const now = this.ctx?.currentTime || (performance.now() / 1000);
+    if (this.lastPlayedAt[key] && (now - this.lastPlayedAt[key]) < minGap) return;
+    this.lastPlayedAt[key] = now;
+
+    const buf = this.buffers[key];
+    if (buf && this.ctx) {
+      const src = this.ctx.createBufferSource();
+      const gain = this.ctx.createGain();
+      src.buffer = buf;
+      gain.gain.value = volume;
+      src.connect(gain);
+      gain.connect(this.ctx.destination);
+      src.start(0);
+      return;
+    }
+
+    const mediaEl = this.sfxElements[key];
+    if (mediaEl) {
+      const clone = mediaEl.cloneNode();
+      clone.volume = Math.max(0, Math.min(volume, 1));
+      clone.play().catch(() => {});
+      return;
+    }
+
+    if (!this.ctx) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    const synthMap = {
+      pickup: { type: 'sine', start: 520, end: 860, dur: 0.12, gain: 0.08 },
+      dropoff: { type: 'triangle', start: 460, end: 980, dur: 0.22, gain: 0.11 },
+      crash: { type: 'sawtooth', start: 120, end: 48, dur: 0.24, gain: 0.14 },
+      ui: { type: 'square', start: 680, end: 540, dur: 0.08, gain: 0.05 },
+      start: { type: 'triangle', start: 300, end: 620, dur: 0.15, gain: 0.06 }
+    };
+    const preset = synthMap[key] || synthMap.ui;
+
+    osc.type = preset.type;
+    osc.frequency.setValueAtTime(preset.start, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, preset.end), now + preset.dur);
+    gain.gain.setValueAtTime(preset.gain, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + preset.dur);
+    osc.start(now);
+    osc.stop(now + preset.dur);
+  }
+};
+
+// 3. GIF Feedback System
+const GifFeedback = {
+  layer: null,
+  img: null,
+  label: null,
+  timer: null,
+  states: {
+    pickup: {
+      src: 'https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp',
+      label: 'Courier locked',
+      duration: 1100
+    },
+    dropoff: {
+      src: 'https://i.giphy.com/DOZGL2rx0qJAFu0Zx6.webp',
+      label: 'Data delivered',
+      duration: 1400
+    },
+    crash: {
+      src: 'https://i.giphy.com/roB5nN2qNNfhUKcprN.webp',
+      label: 'Impact spike',
+      duration: 1500
+    }
+  },
+
+  init() {
+    this.layer = document.getElementById('feedback-gif-layer');
+    this.img = document.getElementById('feedback-gif');
+    this.label = document.getElementById('feedback-gif-label');
+  },
+
+  show(type) {
+    const state = this.states[type];
+    if (!state || !this.layer || !this.img || !this.label) return;
+
+    this.img.src = state.src;
+    this.label.textContent = state.label;
+    this.layer.classList.add('active');
+
+    window.clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => {
+      this.layer.classList.remove('active');
+    }, state.duration);
+  },
+
+  clear() {
+    if (!this.layer) return;
+    window.clearTimeout(this.timer);
+    this.layer.classList.remove('active');
+  }
+};
+
+// 4. Vibration Bridge
+function vibrate(type) {
+  const style = type === 'crash' ? 'heavy' : 'light';
+  window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+    action: 'vibrate',
+    requestId: 'h5-' + Date.now(),
+    version: '1.0',
+    params: { style: style }
+  });
+}
+
+// --- Game Logic ---
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let gameState = 'INIT'; // INIT, PLAYING, GAMEOVER
+let cw = 0, ch = 0;
+let dpr = 1;
+let lastTime = 0;
+let animationFrameId;
+
+// Entities
+let hero = { x: 0, y: 0, w: 50, h: 90, vx: 0, targetX: 0 };
+let roadOffset = 0;
+let traffic = [];
+let items = []; // Passengers and Destinations
+let particles = [];
+let score = 0;
+let hasPassenger = false;
+let speedMultiplier = 1.0;
+let shake = 0;
+
+// State Management
+function initGame() {
+  score = 0;
+  hasPassenger = false;
+  speedMultiplier = 1.0;
+  shake = 0;
+  traffic = [];
+  items = [];
+  particles = [];
+  GifFeedback.clear();
+
+  // Reset Hero
+  hero.w = cw * 0.12;
+  hero.h = hero.w * 1.8;
+  hero.x = cw / 2;
+  hero.y = ch - hero.h - (ch * 0.15);
+  hero.targetX = hero.x;
+  hero.vx = 0;
+
+  roadOffset = 0;
+
+  updateUI();
+  setState('PLAYING');
+}
+
+function setState(state) {
+  gameState = state;
+  const goScreen = document.getElementById('game-over-screen');
+  const statusMsg = document.getElementById('status-msg');
+
+  if (state === 'GAMEOVER') {
+    goScreen.classList.add('active');
+    document.getElementById('final-score').textContent = `Data Banked: ${score}`;
+    statusMsg.style.opacity = 0;
+    GifFeedback.show('crash');
+    AudioSys.playSfx('crash', 0.35, 0.2);
+  } else {
+    goScreen.classList.remove('active');
+    statusMsg.style.opacity = hasPassenger ? 1 : 0;
+  }
+
+  AudioSys.syncBgm();
+}
+
+function spawnTraffic() {
+  const laneWidth = cw / 4;
+  const lane = Math.floor(Math.random() * 4);
+  const x = (lane * laneWidth) + (laneWidth / 2);
+  const speed = gameConfig.trafficSpeed * (0.8 + Math.random() * 0.4);
+
+  // Ensure no overlap at spawn
+  const safe = traffic.every(t => t.y > -200);
+  if (safe) {
+    traffic.push({
+      x,
+      y: -150,
+      w: hero.w,
+      h: hero.h,
+      speed: speed,
+      color: Math.random() > 0.5 ? '#ff4f7b' : '#4cc7ff'
+    });
+  }
+}
+
+function spawnItem() {
+  const laneWidth = cw / 4;
+  const lane = Math.floor(Math.random() * 4);
+  const x = (lane * laneWidth) + (laneWidth / 2);
+
+  const type = hasPassenger ? 'DESTINATION' : 'PASSENGER';
+
+  const safe = traffic.every(t => Math.abs(t.y + 150) > 200);
+  if (safe && items.length === 0) {
+    items.push({
+      x,
+      y: -100,
+      r: hero.w * 0.6,
+      type: type,
+      active: true
+    });
+  }
+}
+
+function createParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 10,
+      vy: (Math.random() - 0.5) * 10,
+      life: 1.0,
+      color: color
+    });
+  }
+}
+
+// Update Loop
+function update(dt) {
+  if (shake > 0) shake *= 0.9;
+  if (shake < 0.5) shake = 0;
+
+  // Hero Movement
+  const diff = hero.targetX - hero.x;
+  hero.x += diff * Math.min(dt * gameConfig.heroSpeed, 1);
+
+  // Clamp
+  const margin = hero.w / 2;
+  if (hero.x < margin) hero.x = margin;
+  if (hero.x > cw - margin) hero.x = cw - margin;
+
+  // Road & Spawning
+  const baseSpeed = 500 * dt * speedMultiplier;
+  roadOffset = (roadOffset + baseSpeed) % 80;
+
+  if (Math.random() < 0.02) spawnTraffic();
+  if (Math.random() < 0.015 && items.length === 0) spawnItem();
+
+  // Update Traffic
+  for (let i = traffic.length - 1; i >= 0; i--) {
+    let t = traffic[i];
+    t.y += (baseSpeed - (t.speed * 20 * dt));
+    if (t.y > ch + 100) traffic.splice(i, 1);
+
+    // Collision
+    if (Math.abs(t.x - hero.x) < (hero.w + t.w) * 0.4 &&
+        Math.abs(t.y - hero.y) < (hero.h + t.h) * 0.4) {
+      shake = 14;
+      vibrate('crash');
+      setState('GAMEOVER');
+      return;
+    }
+  }
+
+  // Update Items
+  for (let i = items.length - 1; i >= 0; i--) {
+    let item = items[i];
+    item.y += baseSpeed;
+    if (item.y > ch + 100) items.splice(i, 1);
+
+    // Interaction
+    if (item.active &&
+        Math.abs(item.x - hero.x) < (hero.w/2 + item.r) &&
+        Math.abs(item.y - hero.y) < (hero.h/2 + item.r)) {
+
+      if (item.type === 'PASSENGER' && !hasPassenger) {
+        hasPassenger = true;
+        score += 10;
+        speedMultiplier += 0.05;
+        createParticles(item.x, item.y, '#6dff8f', 10);
+        AudioSys.playSfx('pickup', 0.24, 0.08);
+        GifFeedback.show('pickup');
+        vibrate('light');
+        item.active = false;
+      } else if (item.type === 'DESTINATION' && hasPassenger) {
+        hasPassenger = false;
+        score += 50;
+        speedMultiplier += 0.05;
+        createParticles(item.x, item.y, '#72f1ff', 20);
+        AudioSys.playSfx('dropoff', 0.28, 0.12);
+        GifFeedback.show('dropoff');
+        vibrate('light');
+        item.active = false;
+      }
+      updateUI();
+    }
+  }
+
+  // Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= dt * 2;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function updateUI() {
+  document.getElementById('score-display').textContent = `DATA BANKED: ${score}`;
+  const statusMsg = document.getElementById('status-msg');
+  if (hasPassenger) {
+    statusMsg.textContent = "DELIVER DATA";
+    statusMsg.style.color = "#72f1ff";
+    statusMsg.style.opacity = 1;
+    statusMsg.style.boxShadow = "0 8px 22px rgba(0, 0, 0, 0.35), inset 0 0 16px rgba(114, 241, 255, 0.14), 0 0 18px rgba(36, 196, 255, 0.22)";
+  } else {
+    statusMsg.textContent = "GRAB COURIER";
+    statusMsg.style.color = "#6dff8f";
+    statusMsg.style.opacity = 1;
+    statusMsg.style.boxShadow = "0 8px 22px rgba(0, 0, 0, 0.35), inset 0 0 16px rgba(109, 255, 143, 0.12), 0 0 18px rgba(109, 255, 143, 0.18)";
+  }
+}
+
+// Draw Loop
+function draw() {
+  const time = Date.now() * 0.001;
+
+  // Clear & Background
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, ch);
+  bgGrad.addColorStop(0, '#091127');
+  bgGrad.addColorStop(0.55, '#060b18');
+  bgGrad.addColorStop(1, '#02030a');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Skyline glow
+  const skylineGrad = ctx.createLinearGradient(0, 0, 0, ch * 0.45);
+  skylineGrad.addColorStop(0, 'rgba(53, 108, 210, 0.22)');
+  skylineGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = skylineGrad;
+  ctx.fillRect(0, 0, cw, ch * 0.45);
+
+  ctx.save();
+  if (shake > 0) {
+    ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+  }
+
+  // Road
+  const roadGrad = ctx.createLinearGradient(0, 0, 0, ch);
+  roadGrad.addColorStop(0, '#11182d');
+  roadGrad.addColorStop(1, '#070c18');
+  ctx.fillStyle = roadGrad;
+  ctx.fillRect(0, 0, cw, ch);
+
+  const laneWidth = cw / 4;
+
+  // Road shoulders
+  ctx.fillStyle = 'rgba(130, 24, 90, 0.14)';
+  ctx.fillRect(0, 0, laneWidth * 0.1, ch);
+  ctx.fillRect(cw - laneWidth * 0.1, 0, laneWidth * 0.1, ch);
+
+  // Building strips
+  for (let side = 0; side < 2; side++) {
+    const baseX = side === 0 ? 0 : cw - laneWidth * 0.18;
+    for (let i = 0; i < 6; i++) {
+      const bx = baseX + (side === 0 ? i * laneWidth * 0.022 : -i * laneWidth * 0.022);
+      const bw = laneWidth * (0.06 + i * 0.01);
+      const bh = ch * (0.18 + (i % 3) * 0.06);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(26, 48, 86, 0.45)' : 'rgba(17, 28, 54, 0.45)';
+      ctx.fillRect(bx, 0, bw, bh);
+    }
+  }
+
+  // Road glow center
+  const centerGrad = ctx.createLinearGradient(cw * 0.5, 0, cw * 0.5, ch);
+  centerGrad.addColorStop(0, 'rgba(114, 241, 255, 0.05)');
+  centerGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+  centerGrad.addColorStop(1, 'rgba(255, 94, 168, 0.05)');
+  ctx.fillStyle = centerGrad;
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Road markings
+  ctx.strokeStyle = 'rgba(182, 232, 255, 0.36)';
+  ctx.lineWidth = 4;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath();
+    ctx.setLineDash([40, 34]);
+    ctx.lineDashOffset = -roadOffset;
+    ctx.moveTo(i * laneWidth, -50);
+    ctx.lineTo(i * laneWidth, ch + 50);
+    ctx.stroke();
+  }
+
+  // Edge rails
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255, 94, 168, 0.16)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(laneWidth * 0.1, 0);
+  ctx.lineTo(laneWidth * 0.1, ch);
+  ctx.moveTo(cw - laneWidth * 0.1, 0);
+  ctx.lineTo(cw - laneWidth * 0.1, ch);
+  ctx.stroke();
+
+  // Rain streaks
+  ctx.strokeStyle = 'rgba(114, 194, 255, 0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 26; i++) {
+    const rx = ((time * 220) + i * 61) % cw;
+    const ry = ((time * 620) + i * 107) % ch;
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx - 10, ry + 28);
+  }
+  ctx.stroke();
+
+  // Neon horizon dashes
+  ctx.strokeStyle = 'rgba(114, 241, 255, 0.12)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const y = ch * 0.18 + i * 9;
+    ctx.moveTo(0, y);
+    ctx.lineTo(cw, y);
+  }
+  ctx.stroke();
+
+  // Draw Items (Zones)
+  items.forEach(item => {
+    if (!item.active) return;
+    ctx.save();
+    ctx.translate(item.x, item.y);
+
+    const pulse = 1 + Math.sin(time * 6) * 0.06;
+    ctx.scale(pulse, pulse);
+
+    if (item.type === 'PASSENGER') {
+      // Friendly courier beacon
+      ctx.shadowBlur = 22;
+      ctx.shadowColor = 'rgba(109, 255, 143, 0.65)';
+      ctx.fillStyle = 'rgba(109, 255, 143, 0.18)';
+      ctx.beginPath();
+      ctx.arc(0, 0, item.r * 1.35, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#6dff8f';
+      ctx.beginPath();
+      ctx.arc(0, 0, item.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#03120a';
+      ctx.beginPath();
+      ctx.arc(0, -item.r * 0.18, item.r * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-item.r * 0.22, item.r * 0.02, item.r * 0.44, item.r * 0.36);
+
+      ctx.fillStyle = '#dcffe6';
+      ctx.font = `700 ${Math.max(11, hero.w * 0.16)}px "Exo 2"`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('PICKUP', 0, item.r * 1.55);
+    } else {
+      // Destination sync gate
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = 'rgba(114, 241, 255, 0.75)';
+      ctx.strokeStyle = '#72f1ff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, item.r * 1.28 + Math.sin(time * 7) * 4, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 94, 168, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, item.r * 0.8, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(114, 241, 255, 0.18)';
+      ctx.beginPath();
+      ctx.arc(0, 0, item.r * 1.05, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#f6fbff';
+      ctx.font = `700 ${Math.max(11, hero.w * 0.16)}px "Exo 2"`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('SYNC', 0, 0);
+
+      ctx.fillStyle = '#ff77bb';
+      ctx.font = `700 ${Math.max(10, hero.w * 0.12)}px "Exo 2"`;
+      ctx.fillText('DROP', 0, item.r * 1.45);
+    }
+    ctx.restore();
+  });
+
+  // Draw Traffic
+  traffic.forEach(t => {
+    ctx.save();
+    ctx.translate(t.x, t.y);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, t.h * 0.38, t.w * 0.48, t.h * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outer glow
+    ctx.shadowBlur = 16;
+    ctx.shadowColor = t.color === '#ff4f7b' ? 'rgba(255, 79, 123, 0.42)' : 'rgba(76, 199, 255, 0.42)';
+
+    // Chassis
+    const bodyGrad = ctx.createLinearGradient(0, -t.h / 2, 0, t.h / 2);
+    bodyGrad.addColorStop(0, t.color === '#ff4f7b' ? '#ff8eb0' : '#83ddff');
+    bodyGrad.addColorStop(1, t.color === '#ff4f7b' ? '#7d1738' : '#12486f');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.roundRect(-t.w / 2, -t.h / 2, t.w, t.h, Math.max(10, t.w * 0.18));
+    ctx.fill();
+
+    // Cabin
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(6, 12, 26, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(-t.w * 0.34, -t.h * 0.18, t.w * 0.68, t.h * 0.34, Math.max(6, t.w * 0.12));
+    ctx.fill();
+
+    // Stripe
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(-t.w * 0.38, -t.h * 0.02, t.w * 0.76, t.h * 0.08);
+
+    // Tail lights
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'rgba(255, 84, 84, 0.9)';
+    ctx.fillStyle = '#ff4a4a';
+    ctx.fillRect(-t.w / 2 + 3, t.h / 2 - 7, 11, 5);
+    ctx.fillRect(t.w / 2 - 14, t.h / 2 - 7, 11, 5);
+
+    // Top signal
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.28)';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(-8, -t.h * 0.28, 16, 6);
+
+    ctx.restore();
+  });
+
+  // Draw Hero
+  ctx.save();
+  ctx.translate(hero.x, hero.y);
+
+  const hover = Math.sin(time * 9) * 2;
+  ctx.translate(0, hover);
+
+  // Hero shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+  ctx.beginPath();
+  ctx.ellipse(0, hero.h * 0.42, hero.w * 0.55, hero.h * 0.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Headlights projection
+  const beamGrad = ctx.createLinearGradient(0, -hero.h / 2, 0, -hero.h / 2 - 180);
+  beamGrad.addColorStop(0, 'rgba(255, 245, 166, 0.26)');
+  beamGrad.addColorStop(1, 'rgba(255, 245, 166, 0)');
+  ctx.fillStyle = beamGrad;
+  ctx.beginPath();
+  ctx.moveTo(-hero.w * 0.22, -hero.h / 2);
+  ctx.lineTo(-hero.w * 0.8, -hero.h / 2 - 170);
+  ctx.lineTo(hero.w * 0.8, -hero.h / 2 - 170);
+  ctx.lineTo(hero.w * 0.22, -hero.h / 2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Outer glow
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = 'rgba(255, 213, 79, 0.45)';
+
+  // Chassis
+  const heroGrad = ctx.createLinearGradient(0, -hero.h / 2, 0, hero.h / 2);
+  heroGrad.addColorStop(0, '#fff2a2');
+  heroGrad.addColorStop(0.35, gameConfig.taxiColor);
+  heroGrad.addColorStop(1, '#cf8c00');
+  ctx.fillStyle = heroGrad;
+  ctx.beginPath();
+  ctx.roundRect(-hero.w / 2, -hero.h / 2, hero.w, hero.h, Math.max(12, hero.w * 0.22));
+  ctx.fill();
+
+  // Side trims
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+  ctx.fillRect(-hero.w * 0.34, -hero.h * 0.26, hero.w * 0.68, hero.h * 0.05);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.16)';
+  ctx.fillRect(-hero.w * 0.34, hero.h * 0.18, hero.w * 0.68, hero.h * 0.07);
+
+  // Cabin glass
+  const glassGrad = ctx.createLinearGradient(0, -hero.h * 0.25, 0, hero.h * 0.15);
+  glassGrad.addColorStop(0, 'rgba(176, 237, 255, 0.92)');
+  glassGrad.addColorStop(1, 'rgba(12, 25, 49, 0.96)');
+  ctx.fillStyle = glassGrad;
+  ctx.beginPath();
+  ctx.roundRect(-hero.w * 0.34, -hero.h * 0.18, hero.w * 0.68, hero.h * 0.38, Math.max(8, hero.w * 0.14));
+  ctx.fill();
+
+  // Window split
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -hero.h * 0.16);
+  ctx.lineTo(0, hero.h * 0.18);
+  ctx.stroke();
+
+  // Taxi sign / expression light
+  ctx.shadowBlur = 12;
+  ctx.shadowColor = hasPassenger ? 'rgba(255, 94, 168, 0.85)' : 'rgba(109, 255, 143, 0.85)';
+  ctx.fillStyle = hasPassenger ? '#ff5ea8' : '#6dff8f';
+  ctx.beginPath();
+  ctx.roundRect(-hero.w * 0.18, -hero.h * 0.34, hero.w * 0.36, hero.h * 0.12, 5);
+  ctx.fill();
+
+  // Face-like front lights
+  ctx.shadowBlur = 12;
+  ctx.shadowColor = 'rgba(255, 247, 166, 0.8)';
+  ctx.fillStyle = '#fff7a6';
+  ctx.beginPath();
+  ctx.roundRect(-hero.w * 0.28, -hero.h * 0.44, hero.w * 0.16, hero.h * 0.08, 4);
+  ctx.roundRect(hero.w * 0.12, -hero.h * 0.44, hero.w * 0.16, hero.h * 0.08, 4);
+  ctx.fill();
+
+  // Bumper
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#17253d';
+  ctx.beginPath();
+  ctx.roundRect(-hero.w * 0.38, hero.h * 0.32, hero.w * 0.76, hero.h * 0.08, 5);
+  ctx.fill();
+
+  // Accent stripe
+  ctx.fillStyle = hasPassenger ? 'rgba(255, 94, 168, 0.55)' : 'rgba(114, 241, 255, 0.45)';
+  ctx.fillRect(-hero.w * 0.08, -hero.h * 0.5, hero.w * 0.16, hero.h);
+
+  ctx.restore();
+
+  // Particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = p.color;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1.0;
+
+  // Noise overlay
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < 12; i++) {
+    ctx.fillRect(Math.random() * cw, Math.random() * ch, 2, 2);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  ctx.restore();
+}
+
+function gameLoop(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  try {
+    if (gameState === 'PLAYING') {
+      update(dt);
+    }
+    draw();
+  } catch (e) {
+    console.error(e);
+  }
+
+  animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+// --- Input Handling ---
+function handleInput(e) {
+  AudioSys.unlock();
+  if (gameState === 'GAMEOVER') {
+    return;
+  }
+
+  if (gameState === 'PLAYING') {
+    const rect = canvas.getBoundingClientRect();
+    const tx = (e.clientX - rect.left);
+    hero.targetX = tx * (cw / rect.width);
+  }
+}
+
+/* [agent-note][stage4] repaired: mobile-action-path | scope gameplay gestures to canvas so overlay/button taps keep native behavior */
+canvas.addEventListener('pointerdown', handleInput, { passive: false });
+canvas.addEventListener('pointermove', (e) => {
+  if (gameState === 'PLAYING') {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const tx = (e.clientX - rect.left);
+    hero.targetX = tx * (cw / rect.width);
+  }
+}, { passive: false });
+
+// Restart Button
+document.getElementById('restart-btn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  AudioSys.unlock();
+  AudioSys.playSfx('ui', 0.14, 0.05);
+  initGame();
+});
+
+// --- Initialization ---
+const ro = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const { width, height } = entry.contentRect;
+    dpr = window.devicePixelRatio || 1;
+    cw = width;
+    ch = height;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (gameState === 'INIT') {
+      parseConfig();
+      GifFeedback.init();
+      AudioSys.init();
+      initGame();
+      requestAnimationFrame(gameLoop);
+    } else {
+      hero.x = Math.min(Math.max(hero.x, 0), cw);
+    }
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    AudioSys.bgm?.pause();
+  } else {
+    AudioSys.syncBgm();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  parseConfig();
+  ro.observe(document.getElementById('game-container'));
+});
+
+</script>
+</body>
+</html>

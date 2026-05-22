@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Recovery Ward 3D</title>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&family=Russo+One&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #c9f4ff;
+            --bg-bottom: #dfe9ff;
+            --panel: rgba(255, 255, 255, 0.86);
+            --panel-border: rgba(255, 255, 255, 0.95);
+            --hud-shadow: 0 10px 24px rgba(14, 116, 144, 0.15);
+            --accent: #14b8a6;
+            --accent-strong: #0f766e;
+            --accent-soft: #99f6e4;
+            --danger: #fb7185;
+            --warning: #fbbf24;
+            --success: #34d399;
+            --ink: #164e63;
+            --title: #0f172a;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(255,255,255,0.9), transparent 38%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            color: var(--ink);
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(135deg, rgba(20, 184, 166, 0.08), transparent 34%),
+                radial-gradient(circle at 20% 20%, rgba(255,255,255,0.85) 0 3px, transparent 4px) 0 0 / 120px 120px,
+                radial-gradient(circle at 80% 35%, rgba(20,184,166,0.15) 0 2px, transparent 3px) 0 0 / 150px 150px;
+            opacity: 0.8;
+        }
+        canvas { display: block; touch-action: none; image-rendering: pixelated; }
+        .glass {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), var(--panel));
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--panel-border);
+            box-shadow: var(--hud-shadow);
+        }
+        .btn-bounce:active { transform: scale(0.95); }
+        .tool-btn.active {
+            background: linear-gradient(180deg, #14b8a6, #0f766e);
+            color: white;
+            border-color: #0f766e;
+            transform: translateY(-4px);
+            box-shadow: 0 6px 0 #115e59, 0 10px 16px rgba(15, 118, 110, 0.2);
+        }
+        .tool-btn {
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, color 0.12s ease;
+            border-bottom: 4px solid #cbd5e1;
+            color: #475569;
+            background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(236,254,255,0.95));
+        }
+        .tool-btn:not(.active):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(14, 116, 144, 0.12);
+        }
+        #toast { transition: opacity 0.5s; pointer-events: none; }
+        .screen-title, .hud-title, .tool-btn span, #start-btn {
+            font-family: 'Russo One', system-ui, sans-serif;
+            letter-spacing: 0.05em;
+        }
+        .money-readout,
+        .status-pill,
+        #toast,
+        p,
+        button,
+        canvas {
+            font-family: 'Rajdhani', system-ui, sans-serif;
+        }
+        .feedback-gif {
+            position: absolute;
+            right: clamp(0.75rem, 3vw, 1.5rem);
+            bottom: clamp(0.75rem, 3vw, 1.5rem);
+            width: min(28vw, 126px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 1.25rem;
+            border: 3px solid rgba(255,255,255,0.95);
+            box-shadow: 0 16px 28px rgba(15, 23, 42, 0.18);
+            opacity: 0;
+            transform: translateY(16px) scale(0.92);
+            transition: opacity 0.28s ease, transform 0.28s ease;
+            pointer-events: none;
+            z-index: 25;
+            background: rgba(255,255,255,0.78);
+        }
+        .feedback-gif.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-caption {
+            position: absolute;
+            right: clamp(0.75rem, 3vw, 1.5rem);
+            bottom: calc(min(28vw, 126px) + clamp(1.3rem, 5vw, 2rem));
+            max-width: min(52vw, 220px);
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.84);
+            border: 1px solid rgba(20,184,166,0.2);
+            color: #0f766e;
+            font-size: 0.8rem;
+            font-weight: 600;
+            box-shadow: 0 10px 18px rgba(15,118,110,0.12);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.28s ease, transform 0.28s ease;
+            pointer-events: none;
+            z-index: 26;
+        }
+        .feedback-caption.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #start-screen {
+            background:
+                radial-gradient(circle at top, rgba(255,255,255,0.65), transparent 35%),
+                linear-gradient(180deg, rgba(207, 250, 254, 0.95), rgba(224, 231, 255, 0.94));
+        }
+        #start-screen::before,
+        #start-screen::after {
+            content: '✦';
+            position: absolute;
+            color: rgba(20, 184, 166, 0.28);
+            font-size: clamp(2rem, 8vw, 4.5rem);
+            animation: floatPulse 4.2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        #start-screen::before { top: 10%; left: 8%; }
+        #start-screen::after { right: 10%; bottom: 14%; animation-delay: -2.1s; }
+        .start-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(135deg, rgba(20,184,166,0.14), transparent 35%),
+                linear-gradient(315deg, rgba(59,130,246,0.12), transparent 40%);
+            pointer-events: none;
+        }
+        .mascot {
+            width: 5.5rem;
+            height: 5.5rem;
+            margin: 0 auto 0.75rem;
+            display: grid;
+            place-items: center;
+            border-radius: 1.75rem;
+            background: linear-gradient(180deg, #ffffff, #d1fae5);
+            box-shadow: inset 0 -8px 0 rgba(20, 184, 166, 0.18), 0 12px 24px rgba(20, 184, 166, 0.18);
+            border: 2px solid rgba(255,255,255,0.9);
+            position: relative;
+        }
+        .mascot::before {
+            content: '🩺';
+            position: absolute;
+            right: -0.35rem;
+            bottom: -0.35rem;
+            font-size: 1.65rem;
+            filter: drop-shadow(0 4px 8px rgba(15, 118, 110, 0.25));
+        }
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.78);
+            border: 1px solid rgba(20,184,166,0.18);
+            box-shadow: 0 6px 14px rgba(20,184,166,0.12);
+            font-size: 0.95rem;
+            color: #0f766e;
+        }
+        #start-btn {
+            background: linear-gradient(180deg, #14b8a6, #0f766e);
+            box-shadow: 0 6px 0 #115e59, 0 10px 22px rgba(15, 118, 110, 0.24);
+            animation: pulseLift 1.8s ease-in-out infinite;
+        }
+        #start-btn:hover { filter: brightness(1.06); }
+        #start-btn:active { transform: translateY(6px) scale(0.99); }
+        /* Prevent selection */
+        .no-select { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+        @keyframes floatPulse {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.22; }
+            50% { transform: translateY(-10px) scale(1.08); opacity: 0.42; }
+        }
+        @keyframes pulseLift {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+        }
+    </style>
+</head>
+<body class="no-select">
+
+<!-- Assets (Using procedural generation mostly, but keeping structure) -->
+<audio id="bgm_main" src="https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_start" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_admit" src="https://gamezone-virid.vercel.app/assets/audios/sfx/land_02.mp3" preload="auto"></audio>
+<audio id="sfx_treat" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_cash" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_invalid" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3" preload="auto"></audio>
+<audio id="sfx_ready" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_tool" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "recoveryTime": { "type": "number", "label": "Recovery Time (sec)", "value": 4, "min": 1, "max": 10 },
+    "billAmount": { "type": "number", "label": "Payout ($)", "value": 150, "min": 10, "max": 500 },
+    "gridSize": { "type": "number", "label": "Ward Size", "value": 5, "min": 3, "max": 8 }
+}
+</script>
+
+<!-- UI -->
+<div id="game-container" class="relative w-full h-full">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="absolute top-safe left-4 right-4 flex justify-between items-start hidden pointer-events-none" style="top: max(1rem, env(safe-area-inset-top));">
+        <div class="glass px-4 py-2 rounded-xl flex flex-col pointer-events-auto min-w-[100px]">
+            <span class="hud-title text-xs text-teal-500 font-bold uppercase tracking-[0.25em]">Clinic Funds</span>
+            <span class="money-readout text-2xl font-bold text-slate-700">$<span id="scoreVal">0</span></span>
+        </div>
+        
+        <!-- Tools -->
+        <div class="flex gap-2 pointer-events-auto">
+            <button id="tool-admit" class="tool-btn active bg-white p-3 rounded-xl shadow-sm border-slate-200 w-20 flex flex-col items-center justify-center" onclick="selectTool('admit')">
+                <div class="text-2xl mb-1">🛏️</div>
+                <span class="text-[10px] uppercase font-bold leading-none">Admit</span>
+            </button>
+            <button id="tool-treat" class="tool-btn bg-white p-3 rounded-xl shadow-sm border-slate-200 w-20 flex flex-col items-center justify-center" onclick="selectTool('treat')">
+                <div class="text-2xl mb-1">💊</div>
+                <span class="text-[10px] uppercase font-bold leading-none">Treat</span>
+            </button>
+            <button id="tool-discharge" class="tool-btn bg-white p-3 rounded-xl shadow-sm border-slate-200 w-20 flex flex-col items-center justify-center" onclick="selectTool('discharge')">
+                <div class="text-2xl mb-1">📋</div>
+                <span class="text-[10px] uppercase font-bold leading-none">Bill</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm">
+        <div class="glass start-card p-8 rounded-3xl text-center max-w-md mx-4 shadow-xl relative overflow-hidden border-blue-100">
+            <div class="relative z-10">
+                <div class="mascot text-5xl" aria-hidden="true">🙂</div>
+                <h1 class="screen-title text-4xl sm:text-5xl font-bold text-cyan-700 mb-2 drop-shadow-sm">RECOVERY WARD 3D</h1>
+                <p class="text-slate-600 mb-4 text-lg font-semibold">Admit. Treat. Clear the bed.</p>
+                <div class="status-pill mb-8"><span>💚</span><span>Bright beds, calm ward, quick rounds.</span></div>
+                <button id="start-btn" class="text-white text-xl font-bold py-4 px-12 rounded-2xl active:shadow-none transition-all w-full">
+                    START SHIFT
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- [agent-note][stage3] resolved-gif: bedside-feedback and cash-celebration -> catalogs/gifs.json -->
+    <img id="reaction-gif" class="feedback-gif" alt="Ward reaction overlay" src="https://i.giphy.com/DX3i6ABlOz0mYVcLj9.webp">
+    <div id="reaction-caption" class="feedback-caption">Ward spirits are high.</div>
+</div>
+
+<script>
+/**
+ * AUDIO MANAGER
+ */
+class AudioManager {
+    constructor() {
+        this.ctx = null;
+        this.unlocked = false;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.bgmEl = document.getElementById('bgm_main');
+        this.sounds = {
+            start: document.getElementById('sfx_start'),
+            admit: document.getElementById('sfx_admit'),
+            treat: document.getElementById('sfx_treat'),
+            cash: document.getElementById('sfx_cash'),
+            invalid: document.getElementById('sfx_invalid'),
+            ready: document.getElementById('sfx_ready'),
+            tool: document.getElementById('sfx_tool')
+        };
+        this.cooldowns = {};
+    }
+
+    ensureContext() {
+        if (this.ctx) return;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.9;
+        this.sfxGain.gain.value = 0.8;
+        this.sfxGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+    }
+
+    unlock() {
+        if (this.unlocked) return;
+        this.ensureContext();
+        const resumePromise = this.ctx ? this.ctx.resume() : Promise.resolve();
+        resumePromise.finally(() => {
+            this.unlocked = true;
+            this.configureMedia();
+            this.playBgm();
+            this.play('start');
+        });
+    }
+
+    configureMedia() {
+        Object.entries(this.sounds).forEach(([key, el]) => {
+            if (!el) return;
+            el.volume = key === 'tool' ? 0.28 : key === 'invalid' ? 0.32 : 0.4;
+        });
+        if (this.bgmEl) {
+            this.bgmEl.volume = 0.24;
+        }
+    }
+
+    playBgm() {
+        if (!this.unlocked || !this.bgmEl) return;
+        this.bgmEl.currentTime = 0;
+        this.bgmEl.play().catch(() => {});
+    }
+
+    play(type, cooldown = 90) {
+        if (!this.unlocked) return;
+        const now = performance.now();
+        if (this.cooldowns[type] && now - this.cooldowns[type] < cooldown) return;
+        this.cooldowns[type] = now;
+        const el = this.sounds[type];
+        if (!el) return;
+        try {
+            el.currentTime = 0;
+            el.play().catch(() => {});
+        } catch (_) {}
+    }
+}
+
+/**
+ * GAME ENGINE
+ */
+const audioManager = new AudioManager();
+
+// Config
+let gameConfig = {
+    recoveryTime: 4,
+    billAmount: 150,
+    gridSize: 5
+};
+
+// State
+let money = 0;
+let grid = [];
+let particles = [];
+let floatingTexts = [];
+let currentTool = 'admit'; // admit, treat, discharge
+let lastTime = 0;
+let camera = { x: 0, y: 0 };
+
+// Constants
+const TILE_SIZE = 64; 
+const BLOCK_HEIGHT = 12;
+const COLORS = {
+    floor: '#f0fdfa',
+    floorSide: '#99f6e4',
+    floorBorder: '#ccfbf1',
+    tileGlow: 'rgba(255,255,255,0.42)',
+    bed: '#ffffff',
+    bedSide: '#67e8f9',
+    bedTrim: '#0f766e',
+    patientSick: '#fb7185',
+    patientRecovering: '#fbbf24',
+    patientCured: '#34d399',
+    sheet: '#bfdbfe',
+    face: '#1f2937',
+    blush: '#fda4af'
+};
+
+// DOM
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('scoreVal');
+const startScreen = document.getElementById('start-screen');
+const hud = document.getElementById('hud');
+const reactionGif = document.getElementById('reaction-gif');
+const reactionCaption = document.getElementById('reaction-caption');
+let reactionTimer = 0;
+
+function init() {
+    // Load config
+    const rawConfig = JSON.parse(document.getElementById('game-config').textContent);
+    for (let k in rawConfig) gameConfig[k] = rawConfig[k].value;
+
+    resize();
+    window.addEventListener('resize', resize);
+    
+    // Input
+    canvas.addEventListener('pointerdown', handleInput, { passive: false });
+    canvas.addEventListener('pointermove', handleMove, { passive: false });
+    
+    // Start
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audioManager.unlock();
+            startScreen.classList.add('hidden');
+            hud.classList.remove('hidden');
+            initGrid();
+            showReaction('https://i.giphy.com/DX3i6ABlOz0mYVcLj9.webp', 'Shift started • calm ward energy');
+            requestAnimationFrame(gameLoop);
+        });
+}
+
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Center camera
+    camera.x = window.innerWidth / 2;
+    camera.y = window.innerHeight / 2 - (gameConfig.gridSize * TILE_SIZE / 4);
+}
+
+function initGrid() {
+    grid = [];
+    const size = gameConfig.gridSize;
+    for (let x = 0; x < size; x++) {
+        grid[x] = [];
+        for (let y = 0; y < size; y++) {
+            grid[x][y] = {
+                state: 'empty', // empty, patient_waiting, recovering, cured
+                timer: 0,
+                progress: 0,
+                heightOffset: 0,
+                treated: false
+            };
+        }
+    }
+}
+
+// Isometric Maths
+function isoToScreen(gx, gy) {
+    const tileW = TILE_SIZE;
+    const tileH = TILE_SIZE / 2;
+    return {
+        x: (gx - gy) * tileW + camera.x,
+        y: (gx + gy) * tileH + camera.y
+    };
+}
+
+function screenToIso(sx, sy) {
+    const tileW = TILE_SIZE;
+    const tileH = TILE_SIZE / 2;
+    const adjX = sx - camera.x;
+    const adjY = sy - camera.y;
+    const gy = ((adjY / tileH) - (adjX / tileW)) / 2;
+    const gx = ((adjY / tileH) + (adjX / tileW)) / 2;
+    return { x: Math.floor(gx), y: Math.floor(gy) };
+}
+
+// Game Loop
+function gameLoop(timestamp) {
+    const dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    update(dt);
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+function update(dt) {
+    // Grid Updates
+    for (let x = 0; x < gameConfig.gridSize; x++) {
+        for (let y = 0; y < gameConfig.gridSize; y++) {
+            const cell = grid[x][y];
+            
+            // Bounce dampening
+            if (cell.heightOffset > 0) {
+                cell.heightOffset = Math.max(0, cell.heightOffset - dt * 60);
+            }
+
+            // Recovery Logic
+            if (cell.state === 'recovering') {
+                cell.timer += dt;
+                cell.progress = Math.min(1, cell.timer / gameConfig.recoveryTime);
+                
+                if (cell.timer >= gameConfig.recoveryTime) {
+                    cell.state = 'cured';
+                    cell.progress = 1;
+                    cell.heightOffset = 15; // Jump for joy
+                    spawnParticles(isoToScreen(x,y).x, isoToScreen(x,y).y, '#4ade80', 5, 'star');
+                    audioManager.play('ready', 220);
+                    showReaction('https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp', 'Patient stabilized • ready to bill');
+                }
+            }
+        }
+    }
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= dt;
+        p.x += p.vx * dt * 60;
+        p.y += p.vy * dt * 60;
+        p.z += p.vz * dt * 60;
+        p.vz -= dt * 2; 
+        if (p.z < 0) { p.z = 0; p.vz *= -0.5; }
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // Floating Text
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const t = floatingTexts[i];
+        t.life -= dt;
+        t.y -= dt * 40;
+        if (t.life <= 0) floatingTexts.splice(i, 1);
+    }
+}
+
+    function draw() {
+        if (!grid.length) return;
+        const sky = ctx.createLinearGradient(0, 0, 0, window.innerHeight);
+        sky.addColorStop(0, '#c9f4ff');
+        sky.addColorStop(1, '#dbeafe');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.42)';
+        for (let i = 0; i < 5; i++) {
+            const cloudX = 70 + i * (window.innerWidth / 4.6);
+            const cloudY = 38 + (i % 2) * 18;
+            ctx.beginPath();
+            ctx.arc(cloudX, cloudY, 20, 0, Math.PI * 2);
+            ctx.arc(cloudX + 18, cloudY - 8, 16, 0, Math.PI * 2);
+            ctx.arc(cloudX + 34, cloudY, 18, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.font = '600 14px Rajdhani';
+        ctx.fillStyle = 'rgba(15, 118, 110, 0.82)';
+        ctx.textAlign = 'left';
+        ctx.fillText('Admit patients, treat them, then bill cured beds.', 16, 24);
+
+        // Draw Grid
+    for (let x = 0; x < gameConfig.gridSize; x++) {
+        for (let y = 0; y < gameConfig.gridSize; y++) {
+            drawTile(x, y, grid[x][y]);
+        }
+    }
+
+    // Draw Particles
+    particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        const size = p.size * p.life;
+        
+        if (p.type === 'cross') {
+            const px = p.x;
+            const py = p.y - p.z;
+            ctx.fillRect(px - size/2, py - size/6, size, size/3);
+            ctx.fillRect(px - size/6, py - size/2, size/3, size);
+        } else {
+            ctx.fillRect(p.x, p.y - p.z, size, size);
+        }
+    });
+
+    // Draw Floating Text
+    ctx.textAlign = 'center';
+    ctx.font = '700 28px Rajdhani';
+    floatingTexts.forEach(t => {
+        ctx.fillStyle = `rgba(13, 148, 136, ${t.life})`;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${t.life})`;
+        ctx.lineWidth = 4;
+        ctx.strokeText(t.text, t.x, t.y);
+        ctx.fillText(t.text, t.x, t.y);
+    });
+}
+
+function drawBlock(x, y, z, w, h, d, colorTop, colorSide) {
+    // Isometric box drawing helper
+    // x,y is center bottom of the iso footprint
+    // z is height up
+    // w is width across x-axis, d is depth across y-axis (iso coords) - simplified here to screen W/H
+    
+    // Simplified: input x,y is screen coords for bottom center
+    // h is height (z-axis)
+    
+    const topY = y - z - h;
+    
+    // Right Face
+    ctx.fillStyle = colorSide;
+    ctx.beginPath();
+    ctx.moveTo(x, y - z);
+    ctx.lineTo(x + w, y - z - w/2);
+    ctx.lineTo(x + w, topY - w/2);
+    ctx.lineTo(x, topY);
+    ctx.fill();
+    
+    // Left Face
+    ctx.brightness = 0.8; // Fake shading
+    ctx.fillStyle = adjustColor(colorSide, -20);
+    ctx.beginPath();
+    ctx.moveTo(x, y - z);
+    ctx.lineTo(x - w, y - z - w/2);
+    ctx.lineTo(x - w, topY - w/2);
+    ctx.lineTo(x, topY);
+    ctx.fill();
+
+    // Top Face
+    ctx.fillStyle = colorTop;
+    ctx.beginPath();
+    ctx.moveTo(x, topY);
+    ctx.lineTo(x + w, topY - w/2);
+    ctx.lineTo(x, topY - w);
+    ctx.lineTo(x - w, topY - w/2);
+    ctx.fill();
+}
+
+function adjustColor(col, amt) {
+    // Simple hex darken helper could go here, but for MVP we rely on predefined or just use same color
+    return col; 
+}
+
+function drawTile(gx, gy, cell) {
+    const pos = isoToScreen(gx, gy);
+    const x = pos.x;
+    const y = pos.y + cell.heightOffset;
+    const w = TILE_SIZE; 
+    const h = TILE_SIZE / 2;
+
+    // 1. Draw Floor Tile
+    ctx.fillStyle = COLORS.floor;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y + h/2);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x - w, y + h/2);
+    ctx.fill();
+
+    ctx.fillStyle = COLORS.tileGlow;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 4);
+    ctx.lineTo(x + w * 0.65, y + h/2);
+    ctx.lineTo(x, y + h - 4);
+    ctx.lineTo(x - w * 0.65, y + h/2);
+    ctx.fill();
+
+    // Floor Thickness
+    ctx.fillStyle = COLORS.floorSide;
+    ctx.beginPath();
+    ctx.moveTo(x + w, y + h/2);
+    ctx.lineTo(x + w, y + h/2 + 4);
+    ctx.lineTo(x, y + h + 4);
+    ctx.lineTo(x - w, y + h/2 + 4);
+    ctx.lineTo(x - w, y + h/2);
+    ctx.lineTo(x, y + h);
+    ctx.fill();
+
+    // Tile Border
+    ctx.strokeStyle = COLORS.floorBorder;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (cell.state === 'empty') return;
+
+    // 2. Draw Bed (Box)
+    const bedH = 15;
+    const bedW = TILE_SIZE * 0.6;
+    
+    // Bed Base
+    drawBlock(x, y + h/2, 0, bedW, bedH, bedW, COLORS.bed, COLORS.bedSide);
+    
+    ctx.strokeStyle = COLORS.bedTrim;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h/2 - bedH);
+    ctx.lineTo(x + bedW, y + h/2 - bedH - bedW/2);
+    ctx.lineTo(x, y + h/2 - bedH - bedW);
+    ctx.lineTo(x - bedW, y + h/2 - bedH - bedW/2);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Pillow (Small bump)
+    drawBlock(x - 10, y + h/2 - 5, bedH, 10, 5, 10, '#fff', '#cffafe');
+
+    // 3. Draw Patient
+    let pColor = COLORS.patientSick;
+    if (cell.state === 'recovering') pColor = COLORS.patientRecovering;
+    if (cell.state === 'cured') pColor = COLORS.patientCured;
+
+    // Patient Body
+    const breathe = Math.sin(Date.now() / 200) * 2;
+    drawBlock(x, y + h/2, bedH, 15, 10, 15, pColor, pColor);
+    
+    // Blanket
+    drawBlock(x + 5, y + h/2 + 5, bedH, 16, 8, 16, COLORS.sheet, '#60a5fa');
+
+    // Character face + heart monitor accent
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x, y + h/2 - 22, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = COLORS.face;
+    ctx.beginPath();
+    ctx.arc(x - 3.5, y + h/2 - 23, 1.2, 0, Math.PI * 2);
+    ctx.arc(x + 3.5, y + h/2 - 23, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = COLORS.face;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(x, y + h/2 - 20, 3.5, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    ctx.fillStyle = COLORS.blush;
+    ctx.beginPath();
+    ctx.arc(x - 6.5, y + h/2 - 20, 2, 0, Math.PI * 2);
+    ctx.arc(x + 6.5, y + h/2 - 20, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y + h/2 + 3);
+    ctx.lineTo(x + 8, y + h/2 - 1);
+    ctx.lineTo(x + 13, y + h/2 + 6);
+    ctx.stroke();
+
+    // 4. Status Icons
+    if (cell.state === 'patient_waiting') {
+        // Exclamation or Cross
+        ctx.fillStyle = '#ef4444';
+        ctx.font = '700 20px Rajdhani';
+        ctx.fillText('✚', x, y - 40 + breathe);
+    } else if (cell.state === 'recovering') {
+        // Progress Bar
+        const barW = 40;
+        const barH = 6;
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(x - barW/2, y - 60, barW, barH);
+        ctx.fillStyle = '#4ade80';
+        ctx.fillRect(x - barW/2 + 1, y - 59, (barW-2) * cell.progress, barH-2);
+    } else if (cell.state === 'cured') {
+        // Dollar Sign or Check
+        ctx.font = '700 22px Rajdhani';
+        ctx.fillText('✓', x, y - 50 + breathe);
+    }
+}
+
+// Input Handling
+function handleInput(e) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const iso = screenToIso(sx, sy);
+    
+    if (iso.x >= 0 && iso.x < gameConfig.gridSize && iso.y >= 0 && iso.y < gameConfig.gridSize) {
+        interact(iso.x, iso.y);
+    }
+}
+
+function handleMove(e) { e.preventDefault(); }
+
+function interact(x, y) {
+    const cell = grid[x][y];
+    let success = false;
+    const pos = isoToScreen(x, y);
+
+    if (currentTool === 'admit') {
+        if (cell.state === 'empty') {
+            cell.state = 'patient_waiting';
+            cell.treated = false;
+            cell.timer = 0;
+            spawnParticles(pos.x, pos.y, '#ffffff', 6);
+            audioManager.play('admit', 110);
+            showReaction('https://i.giphy.com/TrNU3n781G90LPBiKN.webp', 'New patient admitted');
+            success = true;
+        }
+    } else if (currentTool === 'treat') {
+        if (cell.state === 'patient_waiting') {
+            cell.state = 'recovering';
+            spawnParticles(pos.x, pos.y, '#ef4444', 5, 'cross');
+            audioManager.play('treat', 110);
+            showReaction('https://i.giphy.com/roB5nN2qNNfhUKcprN.webp', 'Treatment pulse engaged');
+            success = true;
+        }
+    } else if (currentTool === 'discharge') {
+        if (cell.state === 'cured') {
+            money += gameConfig.billAmount;
+            scoreEl.textContent = money;
+            cell.state = 'empty';
+            cell.timer = 0;
+            spawnParticles(pos.x, pos.y, '#fbbf24', 8);
+            addFloatingText(pos.x, pos.y - 60, `+$${gameConfig.billAmount}`);
+            audioManager.play('cash', 110);
+            showReaction('https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp', `Payout secured • +$${gameConfig.billAmount}`);
+            success = true;
+        }
+    }
+
+    if (success) {
+        cell.heightOffset = 8;
+    } else {
+        audioManager.play('invalid', 120);
+        showReaction('https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp', 'That bed is not ready for that action');
+    }
+}
+
+function spawnParticles(x, y, color, count, type = 'square') {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y + TILE_SIZE/2,
+            z: 20,
+            vx: (Math.random() - 0.5) * 3,
+            vy: (Math.random() - 0.5) * 3,
+            vz: Math.random() * 4 + 3,
+            life: 1.0,
+            color: color,
+            size: Math.random() * 6 + 4,
+            type: type
+        });
+    }
+}
+
+function addFloatingText(x, y, text) {
+    floatingTexts.push({ x, y, text, life: 1.0 });
+}
+
+// UI Logic
+function showReaction(src, label) {
+    if (!reactionGif || !reactionCaption) return;
+    reactionGif.src = src;
+    reactionCaption.textContent = label;
+    reactionGif.classList.add('visible');
+    reactionCaption.classList.add('visible');
+    clearTimeout(reactionTimer);
+    reactionTimer = setTimeout(() => {
+        reactionGif.classList.remove('visible');
+        reactionCaption.classList.remove('visible');
+    }, 1800);
+}
+
+window.selectTool = (tool) => {
+    currentTool = tool;
+    audioManager.play('tool', 80);
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.classList.remove('active', 'border-blue-600', 'bg-blue-100');
+        if (btn.id === `tool-${tool}`) {
+            btn.classList.add('active');
+        }
+    });
+};
+
+document.addEventListener('visibilitychange', () => {
+    const bgm = document.getElementById('bgm_main');
+    if (!bgm) return;
+    if (document.hidden) {
+        bgm.pause();
+    } else if (audioManager.unlocked) {
+        bgm.play().catch(() => {});
+    }
+});
+
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>

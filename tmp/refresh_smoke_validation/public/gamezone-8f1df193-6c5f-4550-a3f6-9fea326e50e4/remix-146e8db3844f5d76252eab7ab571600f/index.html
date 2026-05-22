@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Penalty Quiz Striker</title>
+    <!-- [agent-note][stage3] resolved-font: title -> Russo One, ui -> Rajdhani from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --glass-bg: rgba(11, 24, 46, 0.76);
+            --glass-border: rgba(133, 214, 255, 0.28);
+            --hud-muted: #b3d7f4;
+            --sky-top: #08111f;
+            --sky-mid: #11254a;
+            --sky-bottom: #214f7e;
+            --pitch-deep: #0e6c4b;
+            --pitch-light: #22a36d;
+            --panel-edge: #7dd3fc;
+            --goal-gold: #ffd166;
+            --hero-blue: #2ec5ff;
+            --hero-navy: #173b6d;
+            --hero-glow: rgba(46, 197, 255, 0.34);
+            --accent-hot: #ff9f1c;
+            --accent-lime: #d4ff54;
+        }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: radial-gradient(circle at top, #133264 0%, #050a12 68%); font-family: 'Rajdhani', system-ui, sans-serif; }
+        body { color: #fff; }
+        canvas { display: block; touch-action: none; }
+        .hidden { display: none !important; }
+        .glass { background: linear-gradient(180deg, rgba(15, 33, 63, 0.92), rgba(6, 14, 28, 0.88)); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); box-shadow: 0 10px 32px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.05); }
+        .font-display { font-family: 'Russo One', 'Rajdhani', system-ui, sans-serif; letter-spacing: 0.06em; }
+        .btn-push { transition: transform 0.1s, filter 0.18s, box-shadow 0.18s; }
+        .btn-push:active { transform: scale(0.95); }
+        #game-container { position: relative; width: 100%; height: 100%; user-select: none; background: linear-gradient(180deg, var(--sky-top), var(--sky-bottom)); overflow: hidden; }
+        #game-container::before, #game-container::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+        #game-container::before { background: radial-gradient(circle at 50% 20%, rgba(255,255,255,0.16), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.08), transparent 32%); opacity: 0.9; }
+        #game-container::after { background: repeating-linear-gradient(90deg, transparent 0 7.5%, rgba(255,255,255,0.04) 7.5% 8%, transparent 8% 16%); mix-blend-mode: soft-light; opacity: 0.35; }
+        #trivia-overlay { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; pointer-events: auto; transition: opacity 0.3s; }
+        .trivia-panel { width: min(100%, 28rem); border-radius: 1rem; padding: 1.25rem; text-align: center; color: #fff; position: relative; overflow: hidden; }
+        .trivia-panel::before { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent 45%, rgba(255,209,102,0.15)); pointer-events: none; }
+        .trivia-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; position: relative; z-index: 1; }
+        .q-label { color: var(--goal-gold); font-weight: 700; font-size: 1rem; text-transform: uppercase; text-shadow: 0 0 10px rgba(255, 209, 102, 0.35); }
+        #timer-display { width: 3rem; height: 3rem; border-radius: 999px; border: 4px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.32), rgba(27,54,94,0.95)); box-shadow: 0 0 18px rgba(125, 211, 252, 0.28); }
+        #question-text { font-size: clamp(1.15rem, 3vw, 1.7rem); font-weight: 700; margin: 0 0 1.2rem; line-height: 1.25; position: relative; z-index: 1; text-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+        #answers-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; position: relative; z-index: 1; }
+        #ui-layer { position: absolute; inset: 0; z-index: 50; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        #hud { display: flex; justify-content: space-between; align-items: flex-start; padding: 1rem; width: 100%; box-sizing: border-box; gap: 1rem; }
+        .hud-card { padding: 0.65rem 0.95rem; border-radius: 0.9rem; min-width: 0; }
+        .hud-label { color: var(--hud-muted); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.22em; display: block; margin-bottom: 0.2rem; }
+        .hud-value { font-size: 1.3rem; color: #fff; text-shadow: 0 0 10px rgba(46, 197, 255, 0.35); }
+        .lives-card { display: flex; gap: 0.5rem; align-items: center; }
+        #lives-display { display: flex; gap: 0.25rem; color: #ff5d73; font-size: 1.15rem; filter: drop-shadow(0 0 5px rgba(255,93,115,0.5)); }
+        .overlay-screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; text-align: center; padding: 1.5rem; box-sizing: border-box; }
+        #start-screen { background: linear-gradient(180deg, rgba(3,8,17,0.42), rgba(3,8,17,0.78)); backdrop-filter: blur(5px); }
+        #game-over-screen { background: linear-gradient(180deg, rgba(3,8,17,0.58), rgba(3,8,17,0.86)); backdrop-filter: blur(8px); }
+        .title-stack { font-size: clamp(3.4rem, 10vw, 6.8rem); color: #fff; margin: 0 0 0.5rem; line-height: 0.82; text-shadow: 0 5px 0 rgba(7,17,36,0.8), 0 0 22px rgba(46, 197, 255, 0.28); transform: rotate(-2deg); }
+        .title-accent { color: var(--accent-lime); display: inline-block; text-shadow: 0 0 18px rgba(212,255,84,0.38); }
+        .subtext { color: #e5f3ff; margin: 0 0 1.8rem; animation: pulse 1.6s infinite; max-width: 22rem; font-size: 0.95rem; line-height: 1.45; }
+        .primary-btn, .secondary-btn { pointer-events: auto; border: 0; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s, filter 0.16s; font-family: 'Russo One', 'Rajdhani', system-ui, sans-serif; letter-spacing: 0.08em; }
+        .primary-btn { background: linear-gradient(180deg, #ffe66d, var(--accent-hot)); color: #101722; font-size: 1.65rem; padding: 0.8rem 2.6rem; border-radius: 999px; box-shadow: 0 5px 0 #c66a00, 0 0 18px rgba(255,159,28,0.35); }
+        .secondary-btn { background: linear-gradient(180deg, #d6f2ff, #7dd3fc); color: #0d223f; font-size: 1.55rem; padding: 0.7rem 2.2rem; box-shadow: 0 5px 0 #2d7ba2; border-radius: 999px; }
+        .primary-btn:active, .secondary-btn:active { box-shadow: none; transform: translateY(4px); }
+        .results-line { color: #fff; font-size: 1.4rem; margin: 0 0 1.35rem; text-shadow: 0 3px 10px rgba(0,0,0,0.35); }
+        .results-accent { font-weight: 700; color: var(--goal-gold); }
+        #feedback-overlay { position: absolute; inset: 0; z-index: 30; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+        #feedback-text { font-size: clamp(3.4rem, 12vw, 7rem); color: #fff; text-shadow: 0 5px 18px rgba(0,0,0,0.8); transform: scale(0); transition: transform 0.3s; }
+        .reaction-gif {
+            position: absolute;
+            z-index: 32;
+            width: min(28vw, 140px);
+            max-width: 32vw;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 2px solid rgba(255,255,255,0.24);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
+            background: rgba(5, 10, 18, 0.36);
+        }
+        .reaction-gif.active {
+            opacity: 0.94;
+            transform: translateY(0) scale(1);
+        }
+        #goal-gif {
+            right: clamp(0.75rem, 3vw, 1.4rem);
+            bottom: clamp(5.5rem, 15vw, 8rem);
+        }
+        #miss-gif {
+            left: clamp(0.75rem, 3vw, 1.4rem);
+            bottom: clamp(5.5rem, 15vw, 8rem);
+        }
+        .answer-btn { background: linear-gradient(180deg, #2ec5ff, #1f70d6); border: 1px solid rgba(255,255,255,0.12); border-bottom: 4px solid #15438d; border-radius: 0.85rem; width: 100%; padding: 0.95rem 1rem; color: #fff; font: 700 1rem 'Rajdhani', system-ui, sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18); }
+        .answer-btn:active { border-bottom: 0; transform: translateY(4px); }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-2px, 0, 0); } 20%, 80% { transform: translate3d(4px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-6px, 0, 0); } 40%, 60% { transform: translate3d(6px, 0, 0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+        @media (max-width: 640px) {
+            #hud { padding: 0.75rem; }
+            .hud-card { padding: 0.58rem 0.75rem; }
+            .hud-label { font-size: 0.58rem; }
+            .hud-value { font-size: 1.05rem; }
+            #lives-display { font-size: 1rem; }
+            .results-line { font-size: 1.2rem; }
+            .primary-btn, .secondary-btn { font-size: 1.35rem; }
+            .subtext { font-size: 0.88rem; }
+            #question-text { font-size: 1.05rem; }
+            .answer-btn { font-size: 0.92rem; padding: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Assets -->
+<div style="display: none;">
+    <!-- SVG Placeholders for Editable Images -->
+    <img id="asset_ball" data-editable="image" data-label="Soccer Ball" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0id2hpdGUiIHN0cm9rZT0iIzMzMyIgc3Ryb2tlLXdpZHRoPSI0Ii8+PHBhdGggZD0iTTUwIDUwIEwzMCAzMCBNNTAgNTAgTDcwIDMwIE01MCA1MCBMNTAgODAiIHN0cm9rZT0iIzMzMyIgc3Ryb2tlLXdpZHRoPSI0Ii8+PC9zdmc+" hidden>
+    <img id="asset_keeper" data-editable="image" data-label="Goalkeeper" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB4PSIyMCIgeT0iMjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI4MCIgZmlsbD0iI2UzY2UyMCIgcng9IjEwIi8+PGNpcmNsZSBjeD0iNTAiIGN5PSIyMCIgcj0iMTUiIGZpbGw9IiNmMWM0MGYiLz48L3N2Zz4" hidden>
+    
+    <!-- [agent-note][stage3] resolved-audio: start/ui/kick/goal/miss/gameover/bgm -> catalogs/audios.json -->
+    <audio id="bgm_stadium" data-editable="audio" data-label="Stadium BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" loop preload="auto"></audio>
+    <audio id="sfx_start" data-editable="audio" data-label="Start Match" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+    <audio id="sfx_ui" data-editable="audio" data-label="UI Click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+    <audio id="sfx_kick" data-editable="audio" data-label="Kick Sound" src="https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_01.mp3" preload="auto"></audio>
+    <audio id="sfx_goal" data-editable="audio" data-label="Goal Cheer" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+    <audio id="sfx_miss" data-editable="audio" data-label="Miss/Whistle" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+    <audio id="sfx_gameover" data-editable="audio" data-label="Game Over" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3" preload="auto"></audio>
+</div>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "keeperSpeed": { "type": "number", "label": "Keeper Difficulty", "value": 3, "min": 1, "max": 10 },
+    "questionTime": { "type": "number", "label": "Time per Question (s)", "value": 15, "min": 5, "max": 60 },
+    "primaryColor": { "type": "color", "label": "Primary Color", "value": "#2ecc71" }
+}
+</script>
+
+<!-- Game Container -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Trivia UI Overlay -->
+    <div id="trivia-overlay" class="hidden">
+        <div class="glass trivia-panel">
+            <div class="trivia-header">
+                <span class="q-label">Round <span id="q-num">1</span></span>
+                <div class="font-display" id="timer-display">15</div>
+            </div>
+            <h3 id="question-text">Which country won the 2018 World Cup?</h3>
+            <div id="answers-grid">
+                <!-- Buttons injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Main UI Layer -->
+    <div id="ui-layer">
+        
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div class="glass hud-card">
+                <span class="hud-label">Score</span>
+                <span id="score-display" class="font-display hud-value">0</span>
+            </div>
+            <div class="glass hud-card lives-card">
+                <span class="hud-label">Shots Left</span>
+                <div id="lives-display">❤️❤️❤️</div>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay-screen">
+            <h1 class="font-display title-stack">ARCADE<br><span class="title-accent">SHOOTOUT</span></h1>
+            <p class="subtext">Answer fast to place each shot.</p>
+            <button id="start-btn" class="primary-btn font-display">START MATCH</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden overlay-screen">
+            <h2 class="font-display" style="font-size: clamp(3rem, 9vw, 6rem); color: #ef4444; margin: 0 0 0.5rem;">MATCH OVER</h2>
+            <div class="results-line">Goals scored: <span id="final-score" class="results-accent">0</span></div>
+            <button id="restart-btn" class="secondary-btn font-display">PLAY AGAIN</button>
+        </div>
+    </div>
+    
+    <!-- [agent-note][stage3] resolved-gif: goal/fail reactions -> catalogs/gifs.json; keep compact off-playfield for mobile safety -->
+    <img id="goal-gif" class="reaction-gif" alt="Goal celebration reaction" src="https://i.giphy.com/ye080RbECtcCnkrSyD.webp">
+    <img id="miss-gif" class="reaction-gif" alt="Miss reaction" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp">
+    <!-- Feedback Overlay -->
+    <div id="feedback-overlay" class="hidden">
+        <h1 id="feedback-text" class="font-display">GOAL!</h1>
+    </div>
+</div>
+
+<script>
+/** 
+ * §3 Editable Protocol Implementation 
+ */
+window.gameConfigDefs = {
+    keeperSpeed: { type: "number", label: "Keeper Difficulty", value: 3, min: 1, max: 10 },
+    questionTime: { type: "number", label: "Time per Question (s)", value: 15, min: 5, max: 60 },
+    primaryColor: { type: "color", label: "Primary Color", value: "#2ecc71" }
+};
+
+window.gameConfig = {
+    keeperSpeed: 3,
+    questionTime: 15,
+    primaryColor: "#2ecc71"
+};
+
+window.updateGameConfig = (key, val) => {
+    if (window.gameConfigDefs[key]) {
+        window.gameConfig[key] = val;
+        if (key === 'primaryColor') initBackground();
+    }
+};
+
+function initBackground() {
+    const primary = window.gameConfig.primaryColor || '#2ecc71';
+    document.documentElement.style.setProperty('--pitch-light', primary);
+}
+
+/**
+ * §A Audio Manager
+ */
+class AudioManager {
+    constructor() {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = AudioCtx ? new AudioCtx() : null;
+        this.buffers = {};
+        this.unlocked = false;
+        this.cooldowns = {};
+        this.masterGain = null;
+
+        if (this.ctx) {
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.6;
+            this.masterGain.connect(this.ctx.destination);
+        }
+    }
+
+    async loadSound(id, fallbackType, volume = 0.7) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.tagName === 'AUDIO') el.volume = volume;
+        if (!this.ctx) {
+            this.buffers[id] = fallbackType;
+            return;
+        }
+
+        const src = el.currentSrc || el.src || '';
+        if (!src) {
+            this.buffers[id] = fallbackType;
+            return;
+        }
+
+        const srcUrl = new URL(src, window.location.href);
+        if (srcUrl.origin !== window.location.origin) {
+            this.buffers[id] = fallbackType;
+            return;
+        }
+
+        try {
+            const res = await fetch(srcUrl.href);
+            const arrayBuffer = await res.arrayBuffer();
+            this.buffers[id] = await this.ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn(`Audio load failed: ${id}, using fallback`);
+            this.buffers[id] = fallbackType;
+        }
+    }
+
+    unlock() {
+        if (this.unlocked) {
+            this.playBgm();
+            return;
+        }
+
+        if (!this.ctx) {
+            this.unlocked = true;
+            this.playBgm();
+            return;
+        }
+
+        this.ctx.resume().then(() => {
+            this.unlocked = true;
+            this.playBgm();
+        }).catch(() => {
+            this.unlocked = true;
+            this.playBgm();
+        });
+    }
+
+    playBgm() {
+        const el = document.getElementById('bgm_stadium');
+        if (!el || !this.unlocked) return;
+        el.volume = 0.2;
+        if (el.paused) {
+            el.play().catch(() => {});
+        }
+    }
+
+    pauseBgm() {
+        const el = document.getElementById('bgm_stadium');
+        if (el && !el.paused) el.pause();
+    }
+
+    playSfx(id, cooldownMs = 0) {
+        if (!this.unlocked) return;
+        const now = performance.now();
+        if (cooldownMs && this.cooldowns[id] && now - this.cooldowns[id] < cooldownMs) return;
+        this.cooldowns[id] = now;
+
+        const el = document.getElementById(id);
+        const buffer = this.buffers[id];
+
+        if (buffer && typeof buffer !== 'string' && this.ctx && this.masterGain) {
+            const source = this.ctx.createBufferSource();
+            const gain = this.ctx.createGain();
+            gain.gain.value = el?.volume ?? 0.7;
+            source.buffer = buffer;
+            source.connect(gain);
+            gain.connect(this.masterGain);
+            source.start(0);
+            return;
+        }
+
+        if (typeof buffer === 'string' && this.ctx && this.masterGain) {
+            this.synthesize(buffer);
+            return;
+        }
+
+        if (el) {
+            try {
+                el.currentTime = 0;
+                el.play().catch(() => {});
+            } catch (_) {}
+        }
+    }
+
+    synthesize(type) {
+        if (!this.ctx || !this.masterGain) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        if (type === 'whistle') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(2000, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1000, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.22, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.3);
+        } else if (type === 'kick') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+        }
+    }
+}
+
+/**
+ * Game Logic
+ */
+const TRIVIA_DB = [
+    { q: "Which country won the 2018 World Cup?", a: ["France", "Croatia", "Brazil", "Germany"], c: 0 },
+    { q: "Who is known as 'CR7'?", a: ["Messi", "Ronaldo", "Neymar", "Mbappe"], c: 1 },
+    { q: "How long is a soccer match?", a: ["45 mins", "60 mins", "90 mins", "100 mins"], c: 2 },
+    { q: "What card dismisses a player?", a: ["Yellow", "Red", "Blue", "Green"], c: 1 },
+    { q: "Which club plays at Old Trafford?", a: ["Liverpool", "Arsenal", "Man Utd", "Chelsea"], c: 2 },
+    { q: "Who won the most Ballon d'Ors?", a: ["Ronaldo", "Messi", "Pele", "Maradona"], c: 1 },
+    { q: "Which country hosted the 2014 World Cup?", a: ["South Africa", "Brazil", "Russia", "Qatar"], c: 1 },
+    { q: "What is the shape of a soccer ball?", a: ["Sphere", "Oval", "Cube", "Pyramid"], c: 0 },
+    { q: "How many players are on a team?", a: ["7", "9", "11", "15"], c: 2 },
+    { q: "Which is not a soccer position?", a: ["Striker", "Goalie", "Quarterback", "Midfielder"], c: 2 }
+];
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const audio = new AudioManager();
+const reactionTimers = { goal: null, miss: null };
+
+// Game State
+let state = 'MENU'; // MENU, TRIVIA, KICK, RESULT, GAMEOVER
+let score = 0;
+let lives = 3;
+let currentQuestion = null;
+let timer = 0;
+let timerInterval = null;
+let lastTime = 0;
+
+// Entities
+const ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, scale: 1, state: 'IDLE' }; // z is depth (0 to 1)
+const keeper = { x: 0, tx: 0, width: 0, height: 0, dir: 1 };
+const goal = { x: 0, y: 0, w: 0, h: 0 };
+const particles = [];
+const crowdDots = Array.from({ length: 100 }, (_, i) => ({
+    seedA: i * 132.43,
+    seedB: i * 15.77,
+    hue: 180 + (i * 7.5) % 120
+}));
+
+// Assets
+const imgBall = document.getElementById('asset_ball');
+const imgKeeper = document.getElementById('asset_keeper');
+
+function init() {
+    resize();
+    window.addEventListener('resize', resize);
+    
+    // [agent-note][stage4] repaired: mobile-cta-actionability | element: #start-btn,#restart-btn | action: use click so native tap activation remains reliable across browsers
+    // UI Bindings
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+    
+    // Audio Preload
+    audio.loadSound('sfx_start', 'whistle', 0.5);
+    audio.loadSound('sfx_ui', 'kick', 0.38);
+    audio.loadSound('sfx_kick', 'kick', 0.5);
+    audio.loadSound('sfx_goal', 'whistle', 0.55);
+    audio.loadSound('sfx_miss', 'whistle', 0.5);
+    audio.loadSound('sfx_gameover', 'whistle', 0.55);
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            audio.pauseBgm();
+        } else if (state !== 'GAMEOVER') {
+            audio.playBgm();
+        }
+    });
+    
+    // Loop
+    requestAnimationFrame(gameLoop);
+}
+
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Recalc positions
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    
+    goal.w = Math.min(w * 0.6, 400);
+    goal.h = goal.w * 0.6;
+    goal.x = w / 2 - goal.w / 2;
+    goal.y = h * 0.25;
+    
+    resetBall();
+}
+
+function resetBall() {
+    ball.x = window.innerWidth / 2;
+    ball.y = window.innerHeight * 0.85;
+    ball.z = 0;
+    ball.scale = 1;
+    ball.state = 'IDLE';
+}
+
+function startGame() {
+    const isRestart = state === 'GAMEOVER';
+    audio.unlock();
+    audio.playSfx(isRestart ? 'sfx_ui' : 'sfx_start', 120);
+    score = 0;
+    lives = 3;
+    hideReactionGif('goal');
+    hideReactionGif('miss');
+    updateHUD();
+    
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+    
+    startRound();
+}
+
+function startRound() {
+    if (lives <= 0) {
+        gameOver();
+        return;
+    }
+    
+    state = 'TRIVIA';
+    resetBall();
+    
+    // Pick Question
+    currentQuestion = TRIVIA_DB[Math.floor(Math.random() * TRIVIA_DB.length)];
+    showTriviaUI();
+}
+
+function showTriviaUI() {
+    const overlay = document.getElementById('trivia-overlay');
+    const qText = document.getElementById('question-text');
+    const grid = document.getElementById('answers-grid');
+    const timerDisplay = document.getElementById('timer-display');
+    const qNum = document.getElementById('q-num');
+    
+    qNum.textContent = score + 1;
+    qText.textContent = currentQuestion.q;
+    grid.innerHTML = '';
+    
+    currentQuestion.a.forEach((ans, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'answer-btn btn-push';
+        btn.textContent = ans;
+        btn.onclick = () => handleAnswer(idx);
+        grid.appendChild(btn);
+    });
+    
+    overlay.classList.remove('hidden');
+    overlay.style.opacity = '1';
+    
+    // Timer
+    let timeLeft = window.gameConfig.questionTime;
+    timerDisplay.textContent = timeLeft;
+    timerDisplay.style.borderColor = 'white';
+    
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        timerDisplay.textContent = timeLeft;
+        if (timeLeft <= 5) timerDisplay.style.borderColor = '#e74c3c';
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            handleAnswer(-1); // Timeout
+        }
+    }, 1000);
+}
+
+function handleAnswer(idx) {
+    clearInterval(timerInterval);
+    document.getElementById('trivia-overlay').classList.add('hidden');
+    
+    const correct = idx === currentQuestion.c;
+    if (!correct) {
+        audio.playSfx('sfx_ui', 80);
+    }
+    kickBall(correct);
+}
+
+function kickBall(isGoal) {
+    state = 'KICK';
+    audio.playSfx('sfx_kick');
+    
+    // Target calculation
+    const targetX = isGoal 
+        ? goal.x + Math.random() * goal.w * 0.8 + goal.w * 0.1 
+        : (Math.random() > 0.5 ? goal.x - 50 : goal.x + goal.w + 50); // Miss target
+        
+    const targetY = goal.y + Math.random() * goal.h * 0.8;
+    
+    // Animation params
+    ball.startX = ball.x;
+    ball.startY = ball.y;
+    ball.targetX = targetX;
+    ball.targetY = targetY;
+    ball.t = 0;
+    ball.isGoal = isGoal;
+    
+    // Keeper logic
+    keeper.tx = isGoal ? (Math.random() > 0.5 ? goal.x : goal.x + goal.w) : targetX; // Dive wrong way or to ball
+}
+
+function updateHUD() {
+    document.getElementById('score-display').textContent = score;
+    document.getElementById('lives-display').textContent = '❤️'.repeat(Math.max(0, lives));
+}
+
+function showReactionGif(type) {
+    const activeId = type === 'goal' ? 'goal-gif' : 'miss-gif';
+    const inactiveId = type === 'goal' ? 'miss-gif' : 'goal-gif';
+    const activeEl = document.getElementById(activeId);
+    const inactiveEl = document.getElementById(inactiveId);
+    if (!activeEl || !inactiveEl) return;
+
+    inactiveEl.classList.remove('active');
+    clearTimeout(reactionTimers[type]);
+    activeEl.classList.add('active');
+    reactionTimers[type] = setTimeout(() => {
+        activeEl.classList.remove('active');
+    }, 1500);
+}
+
+function hideReactionGif(type) {
+    const el = document.getElementById(type === 'goal' ? 'goal-gif' : 'miss-gif');
+    if (!el) return;
+    clearTimeout(reactionTimers[type]);
+    el.classList.remove('active');
+}
+
+function showFeedback(text, color) {
+    const el = document.getElementById('feedback-text');
+    const overlay = document.getElementById('feedback-overlay');
+    el.textContent = text;
+    el.style.color = color;
+    overlay.classList.remove('hidden');
+    
+    // Pop animation
+    requestAnimationFrame(() => {
+        el.style.transform = 'scale(1.5) rotate(-5deg)';
+        setTimeout(() => {
+            el.style.transform = 'scale(0)';
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }, 1000);
+    });
+}
+
+function gameOver() {
+    state = 'GAMEOVER';
+    audio.pauseBgm();
+    audio.playSfx('sfx_gameover', 200);
+    hideReactionGif('goal');
+    hideReactionGif('miss');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.remove('hidden');
+    document.getElementById('final-score').textContent = score;
+}
+
+function spawnParticles(x, y, color) {
+    for(let i=0; i<30; i++) {
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+function roundedRectPath(x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+}
+
+function drawGoalScene(timestamp) {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const horizonY = goal.y + goal.h;
+
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, horizonY);
+    skyGradient.addColorStop(0, '#08111f');
+    skyGradient.addColorStop(0.52, '#16386d');
+    skyGradient.addColorStop(1, '#2f6ea8');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, width, horizonY);
+
+    const glow = ctx.createRadialGradient(width * 0.5, horizonY * 0.16, 10, width * 0.5, horizonY * 0.16, width * 0.5);
+    glow.addColorStop(0, 'rgba(255,255,255,0.30)');
+    glow.addColorStop(0.4, 'rgba(125,211,252,0.18)');
+    glow.addColorStop(1, 'rgba(125,211,252,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, horizonY);
+
+    ctx.fillStyle = 'rgba(5, 10, 18, 0.62)';
+    ctx.fillRect(0, 0, width, horizonY);
+
+    crowdDots.forEach((dot, i) => {
+        const cx = (Math.sin(dot.seedA + timestamp * 0.002) * 0.5 + 0.5) * width;
+        const cy = (Math.cos(dot.seedB + timestamp * 0.003) * 0.5 + 0.5) * horizonY;
+        const radius = i % 8 === 0 ? 3.4 : 2.4;
+        ctx.fillStyle = `hsla(${dot.hue}, 90%, ${56 + (i % 5) * 4}%, 0.85)`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    const pitchGradient = ctx.createLinearGradient(0, horizonY, 0, height);
+    pitchGradient.addColorStop(0, '#15905f');
+    pitchGradient.addColorStop(1, '#0b5137');
+    ctx.fillStyle = pitchGradient;
+    ctx.fillRect(0, horizonY, width, height - horizonY);
+
+    const stripeWidth = width / 8;
+    for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.05)';
+        ctx.fillRect(i * stripeWidth, horizonY, stripeWidth, height - horizonY);
+    }
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    ctx.lineTo(width, horizonY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.rect(width / 2 - goal.w, horizonY, goal.w * 2, Math.min(200, height * 0.26));
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(width / 2, height * 0.76, Math.min(width * 0.14, 100), Math.PI, 0);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255, 209, 102, 0.95)';
+    ctx.lineWidth = 8;
+    ctx.shadowColor = 'rgba(255, 209, 102, 0.35)';
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.moveTo(goal.x, goal.y + goal.h);
+    ctx.lineTo(goal.x, goal.y);
+    ctx.lineTo(goal.x + goal.w, goal.y);
+    ctx.lineTo(goal.x + goal.w, goal.y + goal.h);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = 'rgba(205, 240, 255, 0.24)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let i=0; i<=10; i++) {
+        const x = goal.x + (goal.w * i / 10);
+        ctx.moveTo(x, goal.y);
+        ctx.lineTo(x, goal.y + goal.h);
+    }
+    for(let i=0; i<=5; i++) {
+        const y = goal.y + (goal.h * i / 5);
+        ctx.moveTo(goal.x, y);
+        ctx.lineTo(goal.x + goal.w, y);
+    }
+    ctx.stroke();
+}
+
+function drawKeeper(kX, kY, kW, kH) {
+    const diveOffset = state === 'KICK' ? (keeper.x - window.innerWidth / 2) * 0.05 : 0;
+    ctx.save();
+    ctx.translate(kX, kY + kH * 0.12 + Math.sin(performance.now() / 180) * 1.5);
+    ctx.rotate(diveOffset * 0.01);
+
+    ctx.shadowColor = 'rgba(46, 197, 255, 0.35)';
+    ctx.shadowBlur = 18;
+
+    ctx.fillStyle = '#122c52';
+    roundedRectPath(-kW * 0.23, -kH * 0.04, kW * 0.46, kH * 0.56, 12);
+    ctx.fill();
+
+    ctx.fillStyle = '#2ec5ff';
+    roundedRectPath(-kW * 0.18, kH * 0.06, kW * 0.36, kH * 0.3, 10);
+    ctx.fill();
+
+    ctx.fillStyle = '#7ed6ff';
+    roundedRectPath(-kW * 0.48, kH * 0.08, kW * 0.22, kH * 0.12, 8);
+    ctx.fill();
+    roundedRectPath(kW * 0.26, kH * 0.08, kW * 0.22, kH * 0.12, 8);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffd6a5';
+    ctx.beginPath();
+    ctx.arc(0, -kH * 0.16, kW * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#0b1730';
+    ctx.beginPath();
+    ctx.arc(-kW * 0.06, -kH * 0.18, 2.2, 0, Math.PI * 2);
+    ctx.arc(kW * 0.06, -kH * 0.18, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#0b1730';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -kH * 0.13, kW * 0.06, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#173b6d';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-kW * 0.08, kH * 0.5);
+    ctx.lineTo(-kW * 0.22, kH * 0.82);
+    ctx.moveTo(kW * 0.08, kH * 0.5);
+    ctx.lineTo(kW * 0.22, kH * 0.82);
+    ctx.moveTo(-kW * 0.22, kH * 0.08);
+    ctx.lineTo(-kW * 0.46, kH * 0.24);
+    ctx.moveTo(kW * 0.22, kH * 0.08);
+    ctx.lineTo(kW * 0.46, kH * 0.24);
+    ctx.stroke();
+
+    ctx.fillStyle = '#d4ff54';
+    ctx.beginPath();
+    ctx.arc(0, kH * 0.18, kW * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawBallSprite(x, y, radius) {
+    const ballGlow = ctx.createRadialGradient(x - radius * 0.35, y - radius * 0.35, radius * 0.15, x, y, radius * 1.25);
+    ballGlow.addColorStop(0, 'rgba(255,255,255,0.98)');
+    ballGlow.addColorStop(0.55, '#ffffff');
+    ballGlow.addColorStop(1, '#bcc7d9');
+    ctx.fillStyle = ballGlow;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#12233e';
+    ctx.lineWidth = Math.max(1.2, radius * 0.12);
+    ctx.stroke();
+
+    const spots = [
+        [0, -0.38], [-0.42, -0.05], [0.42, -0.02], [-0.24, 0.35], [0.26, 0.34]
+    ];
+    ctx.fillStyle = '#12233e';
+    spots.forEach(([sx, sy]) => {
+        ctx.beginPath();
+        ctx.arc(x + sx * radius, y + sy * radius, radius * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    ctx.strokeStyle = 'rgba(18,35,62,0.6)';
+    ctx.lineWidth = Math.max(1, radius * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(x, y - radius * 0.22);
+    ctx.lineTo(x - radius * 0.24, y + radius * 0.02);
+    ctx.lineTo(x - radius * 0.16, y + radius * 0.28);
+    ctx.moveTo(x, y - radius * 0.22);
+    ctx.lineTo(x + radius * 0.24, y + radius * 0.02);
+    ctx.lineTo(x + radius * 0.16, y + radius * 0.28);
+    ctx.stroke();
+}
+
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    
+    // Update
+    if (state === 'KICK') {
+        ball.t += dt * 1.5; // Speed of kick
+        
+        if (ball.t >= 1) {
+            ball.t = 1;
+            state = 'RESULT';
+            
+            if (ball.isGoal) {
+                score++;
+                audio.playSfx('sfx_goal', 120);
+                showFeedback('GOAL!', '#f1c40f');
+                showReactionGif('goal');
+                hideReactionGif('miss');
+                spawnParticles(ball.targetX, ball.targetY, '#f1c40f');
+            } else {
+                lives--;
+                audio.playSfx('sfx_miss', 120);
+                showFeedback('SAVE!', '#e74c3c');
+                showReactionGif('miss');
+                hideReactionGif('goal');
+                document.getElementById('game-container').classList.add('shake');
+                setTimeout(() => document.getElementById('game-container').classList.remove('shake'), 500);
+            }
+            updateHUD();
+            
+            setTimeout(() => {
+                startRound();
+            }, 2000);
+        }
+        
+        // Ball lerp
+        const ease = t => t * (2 - t);
+        const f = ease(ball.t);
+        ball.x = ball.startX + (ball.targetX - ball.startX) * f;
+        ball.y = ball.startY + (ball.targetY - ball.startY) * f;
+        ball.scale = 1 - (0.7 * f); // Shrink as it goes away
+        
+        // Keeper Move
+        const kSpeed = window.gameConfig.keeperSpeed * 50 * dt;
+        if (ball.isGoal) {
+             // Keeper dives randomly/helplessly
+        } else {
+            // Keeper moves to block
+            const dx = ball.targetX - keeper.x;
+            keeper.x += Math.sign(dx) * Math.min(Math.abs(dx), kSpeed * 2); 
+        }
+    } else if (state === 'TRIVIA' || state === 'MENU') {
+        // Idle keeper animation
+        keeper.x = (window.innerWidth / 2) + Math.sin(timestamp / 500) * 50;
+    }
+
+    // Render
+    drawGoalScene(timestamp);
+
+    // Draw Keeper
+    const kW = 60;
+    const kH = 90;
+    const kX = state === 'KICK' ? keeper.x : (window.innerWidth/2);
+    const kY = goal.y + goal.h - kH;
+    drawKeeper(kX, kY, kW, kH);
+
+    // Draw Ball
+    const bR = 20 * ball.scale;
+    drawBallSprite(ball.x, ball.y, bR);
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= dt;
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        } else {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>

@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Orbit Quota Control</title>
+<!-- [agent-note][stage4] repaired: font-remap | title: Orbitron | ui: Exo 2 | source: catalogs/fonts.json -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg: #090816;
+        --panel: rgba(13, 14, 34, 0.84);
+        --panel-border: rgba(94, 234, 212, 0.34);
+        --blue: #67e8f9;
+        --blue-strong: #38bdf8;
+        --red: #fb7185;
+        --red-soft: #fda4af;
+        --text: #f8fbff;
+        --muted: #c4b5fd;
+        --slate: #17172d;
+        --slate-soft: #2b2b4d;
+        --gold: #fbbf24;
+        --green: #34d399;
+        --violet: #a78bfa;
+        --violet-soft: rgba(167, 139, 250, 0.22);
+        --teal-soft: rgba(103, 232, 249, 0.18);
+        --star: rgba(255, 255, 255, 0.82);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Exo 2', system-ui, sans-serif;
+    }
+
+    body {
+        position: relative;
+        background:
+            radial-gradient(circle at top, rgba(103, 232, 249, 0.14), transparent 28%),
+            radial-gradient(circle at 20% 20%, rgba(167, 139, 250, 0.16), transparent 24%),
+            linear-gradient(180deg, #0b1020 0%, #070812 100%);
+    }
+
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+    }
+
+    .glass {
+        background:
+            linear-gradient(180deg, rgba(20, 24, 52, 0.92), rgba(10, 12, 30, 0.88));
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--panel-border);
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+            0 0 18px rgba(103, 232, 249, 0.1),
+            0 10px 28px rgba(3, 7, 18, 0.42);
+    }
+
+    .scan-line {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: rgba(14, 165, 233, 0.5);
+        animation: scan 2s linear infinite;
+        pointer-events: none;
+    }
+
+    @keyframes scan {
+        0% { top: 0%; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 100%; opacity: 0; }
+    }
+
+    .crt-overlay {
+        background:
+            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+            linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+        background-size: 100% 2px, 3px 100%;
+        pointer-events: none;
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        user-select: none;
+        background:
+            radial-gradient(circle at 50% 14%, rgba(167, 139, 250, 0.18), transparent 22%),
+            linear-gradient(180deg, rgba(8, 10, 26, 0.18), rgba(8, 10, 26, 0.68));
+    }
+
+    #game-container::before,
+    #game-container::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    #game-container::before {
+        background-image:
+            radial-gradient(circle, var(--star) 0 1px, transparent 1.5px),
+            radial-gradient(circle, rgba(103, 232, 249, 0.8) 0 1px, transparent 1.6px),
+            radial-gradient(circle, rgba(167, 139, 250, 0.8) 0 1px, transparent 1.8px);
+        background-size: 120px 120px, 180px 180px, 240px 240px;
+        background-position: 0 0, 24px 36px, 80px 28px;
+        opacity: 0.38;
+    }
+
+    #game-container::after {
+        background:
+            linear-gradient(90deg, transparent 0%, rgba(103, 232, 249, 0.08) 50%, transparent 100%);
+        transform: translateX(-100%);
+        animation: horizonSweep 7s linear infinite;
+        opacity: 0.5;
+    }
+
+    .overlay-fill {
+        position: absolute;
+        inset: 0;
+    }
+
+    #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 1rem;
+    }
+
+    .hud-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .hud-card {
+        padding: 0.75rem 1rem;
+    }
+
+    .quota-card {
+        border-left: 4px solid var(--blue-strong);
+        border-radius: 0.5rem 0.5rem 1.25rem 0.5rem;
+    }
+
+    .trust-card {
+        border-right: 4px solid var(--red);
+        border-radius: 0.5rem 0.5rem 0.5rem 1.25rem;
+        text-align: right;
+    }
+
+    .label {
+        font-size: 0.7rem;
+        letter-spacing: 0.25em;
+        text-transform: uppercase;
+        font-family: 'Orbitron', sans-serif;
+    }
+
+    .label-blue { color: var(--blue); }
+    .label-red { color: var(--red-soft); }
+
+    .score-value {
+        margin-top: 0.15rem;
+        font-size: clamp(2rem, 5vw, 2.75rem);
+        font-weight: 700;
+        line-height: 1;
+        font-family: 'Orbitron', sans-serif;
+    }
+
+    #lives-display {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.25rem;
+        margin-top: 0.35rem;
+    }
+
+    #notification-area {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        text-align: center;
+        pointer-events: none;
+        z-index: 35;
+    }
+
+    .hud-bottom {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 1rem;
+    }
+
+    .scanner-card {
+        padding: 0.55rem 0.7rem;
+        border-radius: 0.75rem;
+    }
+
+    .scanner-line {
+        font-size: 0.72rem;
+        color: #93c5fd;
+        font-family: 'Orbitron', sans-serif;
+        letter-spacing: 0.08em;
+    }
+
+    .scan-pill {
+        padding: 0.7rem 1.4rem;
+        border-radius: 999px;
+        border: 1px solid var(--blue);
+        color: var(--blue);
+        font-size: clamp(1rem, 2.8vw, 1.3rem);
+        font-weight: 700;
+        font-family: 'Orbitron', sans-serif;
+        letter-spacing: 0.2em;
+        animation: pulse 1.5s ease-in-out infinite;
+        text-align: center;
+    }
+
+    .reaction-gif {
+        position: absolute;
+        z-index: 32;
+        pointer-events: none;
+        border-radius: 1rem;
+        border: 1px solid rgba(103, 232, 249, 0.45);
+        background: rgba(5, 10, 24, 0.52);
+        box-shadow: 0 10px 24px rgba(3, 7, 18, 0.35);
+        opacity: 0;
+        transform: translateY(10px) scale(0.95);
+        transition: opacity 180ms ease, transform 180ms ease;
+        overflow: hidden;
+    }
+
+    .reaction-gif img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .reaction-gif.active {
+        opacity: 0.92;
+        transform: translateY(0) scale(1);
+    }
+
+    #tag-gif {
+        right: 0.9rem;
+        bottom: 6.5rem;
+        width: min(28vw, 120px);
+        aspect-ratio: 1 / 1;
+    }
+
+    #alert-gif {
+        left: 0.9rem;
+        bottom: 6.5rem;
+        width: min(30vw, 132px);
+        aspect-ratio: 1 / 1;
+    }
+
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 rgba(56, 189, 248, 0.25); transform: scale(1); }
+        50% { box-shadow: 0 0 20px rgba(56, 189, 248, 0.25); transform: scale(1.02); }
+    }
+
+    @keyframes horizonSweep {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+
+    #game-over-screen {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        background: rgba(15, 23, 42, 0.95);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+    }
+
+    #game-over-screen.hidden { display: none; }
+
+    .game-over-card {
+        width: min(100%, 26rem);
+        padding: 2rem;
+        border-radius: 1.25rem;
+        border: 2px solid #dc2626;
+        box-shadow: 0 0 50px rgba(220, 38, 38, 0.4);
+        text-align: center;
+    }
+
+    .end-icon {
+        font-size: 3.5rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .end-title {
+        margin: 0 0 0.35rem;
+        color: var(--red);
+        font-size: clamp(2.6rem, 8vw, 3.4rem);
+        line-height: 0.95;
+        font-family: 'Orbitron', sans-serif;
+        letter-spacing: -0.05em;
+        text-transform: uppercase;
+    }
+
+    .end-subtitle {
+        margin: 0 0 1.75rem;
+        color: var(--muted);
+        font-size: 1.1rem;
+        font-family: 'Exo 2', system-ui, sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .results-box {
+        background: rgba(30, 41, 59, 0.95);
+        border-radius: 0.85rem;
+        padding: 1rem;
+        margin-bottom: 1.75rem;
+        width: 100%;
+    }
+
+    .results-label {
+        color: #94a3b8;
+        font-size: 0.72rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        margin-bottom: 0.25rem;
+        font-family: 'Orbitron', sans-serif;
+    }
+
+    .results-value {
+        font-size: clamp(2rem, 7vw, 3rem);
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 700;
+    }
+
+    #restart-btn {
+        pointer-events: auto;
+        width: 100%;
+        border: 0;
+        background: #2563eb;
+        color: #fff;
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-family: 'Orbitron', sans-serif;
+        padding: 1rem;
+        border-radius: 1rem;
+        box-shadow: 0 12px 20px rgba(37, 99, 235, 0.25);
+        transition: transform 120ms ease, background 120ms ease;
+        cursor: pointer;
+    }
+
+    #restart-btn:hover { background: #3b82f6; }
+    #restart-btn:active { transform: scale(0.97); }
+
+    @media (max-width: 640px) {
+        #ui-layer { padding: 0.75rem; }
+        .hud-card { padding: 0.65rem 0.8rem; }
+        .hud-bottom { align-items: stretch; }
+        .scan-pill { padding: 0.8rem 1rem; letter-spacing: 0.14em; }
+        .scanner-line { font-size: 0.68rem; }
+        .game-over-card { padding: 1.5rem; }
+        #tag-gif, #alert-gif {
+            width: min(26vw, 96px);
+            bottom: 7.25rem;
+        }
+    }
+</style>
+</head>
+<body>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "speedLimit": { "type": "number", "label": "Scan Threshold (km/h)", "value": 80, "min": 60, "max": 120 },
+    "trafficDensity": { "type": "number", "label": "Lane Traffic", "value": 1.5, "min": 0.5, "max": 3.0 }
+}
+</script>
+
+<!-- Assets -->
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/tag/error/gameover -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="BGM Patrol" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_tag" data-editable="audio" data-label="SFX Tag" src="https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_01.mp3" preload="auto"></audio>
+<audio id="sfx_false" data-editable="audio" data-label="SFX False Tag" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+<audio id="sfx_scan" data-editable="audio" data-label="SFX Scan Ping" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_restart" data-editable="audio" data-label="SFX Relaunch" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_gameover" data-editable="audio" data-label="SFX Game Over" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3" preload="auto"></audio>
+<img id="img_badge" data-editable="image" data-label="Badge Icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyMkwzIDdsOS00IDkgNCA5IDE1eiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiLz48L3N2Zz4=" hidden>
+
+<!-- Game Container -->
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="overlay-fill crt-overlay" style="z-index:10;"></div>
+    <div class="scan-line" style="z-index:20;"></div>
+
+    <!-- [agent-note][stage3] resolved-gif: tag-success + fail-alert -> catalogs/gifs.json -->
+    <div id="tag-gif" class="reaction-gif" aria-hidden="true">
+        <img src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" alt="">
+    </div>
+    <div id="alert-gif" class="reaction-gif" aria-hidden="true">
+        <img src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" alt="">
+    </div>
+
+    <!-- HUD -->
+    <div id="ui-layer">
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+        <!-- [agent-note][stage3] caution: keep-gif-off-playfield | reason: protect controls -->
+        <div class="hud-top">
+            <div class="glass hud-card quota-card">
+                <div class="label label-blue">STAR BOUNTY</div>
+                <div class="score-value">¢<span id="score-display">0</span></div>
+            </div>
+            <div class="glass hud-card trust-card">
+                <div class="label label-red">DRONE CORE</div>
+                <div id="lives-display">
+                    <!-- Lives injected by JS -->
+                </div>
+            </div>
+        </div>
+
+        <div id="notification-area">
+            <!-- Dynamic Popups -->
+        </div>
+
+        <div class="hud-bottom">
+            <div class="glass scanner-card">
+                <div class="scanner-line">ORBIT GRID: ONLINE</div>
+                <div class="scanner-line">LOCK LIMIT: <span id="limit-display">80</span> KM/H</div>
+            </div>
+            <div class="glass scan-pill">TAP TO TRACTOR TAG</div>
+        </div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="game-over-screen" class="hidden">
+        <div class="glass game-over-card">
+            <div class="end-icon">🛸</div>
+            <h2 class="end-title">ORBIT LOST</h2>
+            <p class="end-subtitle">Too many safe couriers slipped into the tractor beam.</p>
+
+            <div class="results-box">
+                <div class="results-label">Final Star Bounty</div>
+                <div class="results-value">¢<span id="final-score">0</span></div>
+            </div>
+
+            <button id="restart-btn">RE-LAUNCH PATROL</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- §0 System Invariants & Config ---
+const CONFIG = {
+    colors: {
+        bg: '#0f172a',
+        road: '#1e293b',
+        line: '#3b82f6',
+        text: '#ffffff',
+        violator: '#ef4444',
+        civilian: '#94a3b8',
+        scan: '#10b981'
+    },
+    lanes: 3
+};
+
+const FONT_STACKS = {
+    display: "'Orbitron', sans-serif",
+    ui: "'Exo 2', system-ui, sans-serif"
+};
+
+let gameConfig = {};
+let gameConfigDefs = {};
+
+// --- §1 State Management ---
+const STATE = { BOOT: 0, PLAYING: 1, GAMEOVER: 2 };
+let gameState = STATE.BOOT;
+let cw, ch;
+let ctx;
+let lastTime = 0;
+
+// Runtime State
+let rt = {
+    cars: [],
+    popups: [],
+    particles: [],
+    score: 0,
+    lives: 3,
+    spawnTimer: 0,
+    roadOffset: 0,
+    audioUnlocked: false,
+    shake: 0,
+    combo: 0,
+    gifTimers: {}
+};
+
+// --- §2 Audio System ---
+const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+const audioCtx = AudioContextCtor ? new AudioContextCtor() : null;
+const sounds = {
+    bgm: document.getElementById('bgm_main'),
+    tag: document.getElementById('sfx_tag'),
+    falseTag: document.getElementById('sfx_false'),
+    scan: document.getElementById('sfx_scan'),
+    restart: document.getElementById('sfx_restart'),
+    gameOver: document.getElementById('sfx_gameover')
+};
+
+Object.values(sounds).forEach((sound) => {
+    if (!sound) return;
+    sound.preload = 'auto';
+});
+
+sounds.bgm.volume = 0.2;
+sounds.tag.volume = 0.5;
+sounds.falseTag.volume = 0.5;
+sounds.scan.volume = 0.2;
+sounds.restart.volume = 0.35;
+sounds.gameOver.volume = 0.45;
+
+function unlockAudio() {
+    if (rt.audioUnlocked) return;
+    rt.audioUnlocked = true;
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+    }
+    startBgm();
+}
+
+function startBgm() {
+    if (!rt.audioUnlocked) return;
+    sounds.bgm.currentTime = 0;
+    sounds.bgm.play().catch(() => {});
+}
+
+function stopBgm() {
+    sounds.bgm.pause();
+    sounds.bgm.currentTime = 0;
+}
+
+function playSynth(type) {
+    if (!audioCtx || !rt.audioUnlocked) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+
+    if (type === 'scan') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(760, now);
+        osc.frequency.exponentialRampToValueAtTime(1120, now + 0.08);
+        gain.gain.setValueAtTime(0.03, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start();
+        osc.stop(now + 0.08);
+    } else if (type === 'tag') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.linearRampToValueAtTime(880, now + 0.16);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.18);
+        osc.start();
+        osc.stop(now + 0.18);
+    } else if (type === 'falseTag' || type === 'gameOver') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(type === 'gameOver' ? 180 : 150, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.22);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.22);
+        osc.start();
+        osc.stop(now + 0.22);
+    } else if (type === 'restart') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(280, now);
+        osc.frequency.linearRampToValueAtTime(620, now + 0.18);
+        gain.gain.setValueAtTime(0.045, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start();
+        osc.stop(now + 0.2);
+    }
+}
+
+function playMedia(audioEl, fallbackType) {
+    if (!rt.audioUnlocked || !audioEl) return;
+    try {
+        audioEl.currentTime = 0;
+    } catch (_) {}
+    audioEl.play().catch(() => playSynth(fallbackType));
+}
+
+function playSfx(type) {
+    if (!rt.audioUnlocked) return;
+    if (type === 'scan') {
+        playMedia(sounds.scan, 'scan');
+    } else if (type === 'tag') {
+        playMedia(sounds.tag, 'tag');
+    } else if (type === 'falseTag') {
+        playMedia(sounds.falseTag, 'falseTag');
+    } else if (type === 'restart') {
+        playMedia(sounds.restart, 'restart');
+    } else if (type === 'gameOver') {
+        playMedia(sounds.gameOver, 'gameOver');
+    }
+}
+
+function showReactionGif(id, duration = 900) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (rt.gifTimers[id]) {
+        clearTimeout(rt.gifTimers[id]);
+    }
+    el.classList.add('active');
+    rt.gifTimers[id] = setTimeout(() => {
+        el.classList.remove('active');
+    }, duration);
+}
+
+function vibrate(style) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate',
+            requestId: 'h5-' + Date.now(),
+            version: '1.0',
+            params: { style: style }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(style === 'heavy' ? 200 : 50);
+    }
+}
+
+// --- §3 Entities ---
+class Car {
+    constructor() {
+        this.lane = Math.floor(Math.random() * CONFIG.lanes);
+        this.laneWidth = cw / CONFIG.lanes;
+        this.w = this.laneWidth * 0.45;
+        this.h = this.w * 2.0;
+        this.x = this.lane * this.laneWidth + (this.laneWidth - this.w) / 2;
+        this.y = -this.h - 20;
+
+        // Speed Logic
+        const limit = gameConfig.speedLimit || 80;
+        const isViolator = Math.random() < 0.4;
+
+        if (isViolator) {
+            this.speedKm = Math.floor(limit + 15 + Math.random() * 60);
+            this.color = CONFIG.colors.violator;
+            this.isViolator = true;
+            this.velocity = (this.speedKm / 50) * (ch * 0.4);
+        } else {
+            this.speedKm = Math.floor(limit - 20 + Math.random() * 15);
+            this.color = CONFIG.colors.civilian;
+            this.isViolator = false;
+            this.velocity = (this.speedKm / 50) * (ch * 0.4);
+        }
+
+        this.scanned = false;
+        this.active = true;
+    }
+
+    update(dt) {
+        this.y += this.velocity * dt;
+        if (this.y > ch + 100) this.active = false;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x + this.w/2, this.y + this.h/2);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(-this.w/2 + 5, -this.h/2 + 5, this.w, this.h);
+
+        ctx.fillStyle = this.color;
+        if (this.isViolator) {
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 10;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(-this.w/2 + 4, -this.h/2);
+        ctx.lineTo(this.w/2 - 4, -this.h/2);
+        ctx.lineTo(this.w/2, -this.h/2 + 10);
+        ctx.lineTo(this.w/2, this.h/2 - 4);
+        ctx.quadraticCurveTo(this.w/2, this.h/2, this.w/2 - 4, this.h/2);
+        ctx.lineTo(-this.w/2 + 4, this.h/2);
+        ctx.quadraticCurveTo(-this.w/2, this.h/2, -this.w/2, this.h/2 - 4);
+        ctx.lineTo(-this.w/2, -this.h/2 + 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(-this.w/2 + 4, -this.h/4, this.w - 8, this.h/3);
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(-this.w/2 + 2, this.h/2 - 4, 8, 4);
+        ctx.fillRect(this.w/2 - 10, this.h/2 - 4, 8, 4);
+
+        if (this.scanned) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold 16px ${FONT_STACKS.display}`;
+            ctx.textAlign = 'center';
+            ctx.fillText(this.speedKm, 0, 5);
+        }
+
+        ctx.restore();
+    }
+}
+
+class Popup {
+    constructor(x, y, text, color) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 1.0;
+        this.vy = -50;
+    }
+    update(dt) {
+        this.y += this.vy * dt;
+        this.life -= dt * 1.5;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.font = `bold 32px ${FONT_STACKS.display}`;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeText(this.text, this.x, this.y);
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 150 + 50;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.life = 0.8;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt * 2;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, 4, 4);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --- §4 Core Functions ---
+function initGame() {
+    rt.cars = [];
+    rt.popups = [];
+    rt.particles = [];
+    rt.score = 0;
+    rt.lives = 3;
+    rt.spawnTimer = 0;
+    rt.combo = 0;
+    rt.shake = 0;
+
+    const rawConfig = document.getElementById('game-config').textContent;
+    try {
+        const parsed = JSON.parse(rawConfig);
+        gameConfigDefs = parsed;
+        gameConfig = Object.fromEntries(Object.entries(parsed).map(([k,v]) => [k, v.value]));
+    } catch(e) {
+        gameConfig = { speedLimit: 80, trafficDensity: 1.5 };
+    }
+
+    document.getElementById('limit-display').innerText = gameConfig.speedLimit;
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('tag-gif').classList.remove('active');
+    document.getElementById('alert-gif').classList.remove('active');
+    updateHUD();
+}
+
+function spawnCar() {
+    rt.cars.push(new Car());
+}
+
+function updateHUD() {
+    document.getElementById('score-display').innerText = rt.score;
+    const livesContainer = document.getElementById('lives-display');
+    livesContainer.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+        const d = document.createElement('div');
+        d.style.width = '1.5rem';
+        d.style.height = '0.9rem';
+        d.style.borderRadius = '0.25rem';
+        d.style.transform = 'skewX(-10deg)';
+        d.style.background = i < rt.lives ? '#ef4444' : '#1f2937';
+        livesContainer.appendChild(d);
+    }
+}
+
+function createExplosion(x, y, color) {
+    for (let i = 0; i < 15; i++) rt.particles.push(new Particle(x, y, color));
+}
+
+function endGame() {
+    gameState = STATE.GAMEOVER;
+    document.getElementById('game-over-screen').classList.remove('hidden');
+    document.getElementById('final-score').innerText = rt.score;
+    stopBgm();
+    playSfx('gameOver');
+    showReactionGif('alert-gif', 1600);
+    vibrate('heavy');
+}
+
+function resize() {
+    const c = document.getElementById('gameCanvas');
+    cw = c.clientWidth;
+    ch = c.clientHeight;
+    c.width = cw * window.devicePixelRatio;
+    c.height = ch * window.devicePixelRatio;
+    ctx = c.getContext('2d');
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+}
+
+// --- §5 Main Loop ---
+function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    if (gameState === STATE.PLAYING) {
+        rt.spawnTimer -= dt;
+        if (rt.spawnTimer <= 0) {
+            spawnCar();
+            rt.spawnTimer = (2.0 / gameConfig.trafficDensity) * (Math.random() * 0.5 + 0.5);
+        }
+
+        rt.roadOffset = (rt.roadOffset + 800 * dt) % 80;
+
+        rt.cars.forEach(c => c.update(dt));
+        rt.cars = rt.cars.filter(c => c.active);
+
+        rt.popups.forEach(p => p.update(dt));
+        rt.popups = rt.popups.filter(p => p.life > 0);
+
+        rt.particles.forEach(p => p.update(dt));
+        rt.particles = rt.particles.filter(p => p.life > 0);
+
+        if (rt.shake > 0) rt.shake = Math.max(0, rt.shake - 20 * dt);
+    }
+
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.save();
+
+    if (rt.shake > 0) {
+        ctx.translate((Math.random() - 0.5) * rt.shake, (Math.random() - 0.5) * rt.shake);
+    }
+
+    ctx.fillStyle = CONFIG.colors.road;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.strokeStyle = CONFIG.colors.line;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([40, 40]);
+    ctx.lineDashOffset = -rt.roadOffset;
+    const laneW = cw / CONFIG.lanes;
+    for (let i = 1; i < CONFIG.lanes; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * laneW, -50);
+        ctx.lineTo(i * laneW, ch + 50);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    rt.cars.forEach(c => c.draw(ctx));
+    rt.particles.forEach(p => p.draw(ctx));
+    rt.popups.forEach(p => p.draw(ctx));
+
+    ctx.restore();
+
+    requestAnimationFrame(loop);
+}
+
+// --- §6 Input Handling ---
+function handleInput(e) {
+    unlockAudio();
+    if (gameState === STATE.GAMEOVER) {
+        return;
+    }
+    if (gameState === STATE.PLAYING) {
+        const rect = document.getElementById('gameCanvas').getBoundingClientRect();
+        const tx = e.clientX - rect.left;
+        const ty = e.clientY - rect.top;
+
+        let hit = false;
+        for (let i = rt.cars.length - 1; i >= 0; i--) {
+            const c = rt.cars[i];
+            if (tx >= c.x - 10 && tx <= c.x + c.w + 10 && ty >= c.y - 10 && ty <= c.y + c.h + 10) {
+                if (!c.scanned) {
+                    c.scanned = true;
+
+                    if (c.isViolator) {
+                        const reward = c.speedKm * 2 + (rt.combo * 50);
+                        rt.score += reward;
+                        rt.combo++;
+                        rt.shake = 10;
+                        playSfx('tag');
+                        vibrate('medium');
+                        createExplosion(c.x + c.w/2, c.y + c.h/2, '#fbbf24');
+                        showReactionGif('tag-gif', 1000);
+                        rt.popups.push(new Popup(c.x, c.y, `${c.speedKm} KM/H!`, '#ef4444'));
+                        rt.popups.push(new Popup(c.x, c.y - 30, `TAGGED +¢${reward}`, '#fbbf24'));
+
+                        c.active = false;
+                    } else {
+                        rt.lives--;
+                        rt.combo = 0;
+                        rt.shake = 5;
+                        playSfx('falseTag');
+                        vibrate('heavy');
+                        showReactionGif('alert-gif', 1200);
+                        rt.popups.push(new Popup(c.x, c.y, `${c.speedKm} KM/H`, '#10b981'));
+                        rt.popups.push(new Popup(c.x, c.y - 30, `FALSE TAG`, '#ef4444'));
+
+                        if (rt.lives <= 0) endGame();
+                    }
+                    updateHUD();
+                }
+                hit = true;
+                break;
+            }
+        }
+
+        if (!hit) {
+            playSfx('scan');
+            createExplosion(tx, ty, 'rgba(14, 165, 233, 0.5)');
+        }
+    }
+}
+
+function handleRestart(e) {
+    e.stopPropagation();
+    unlockAudio();
+    playSfx('restart');
+    initGame();
+    startBgm();
+    gameState = STATE.PLAYING;
+}
+
+// --- §7 Lifecycle ---
+window.addEventListener('DOMContentLoaded', () => {
+    resize();
+    initGame();
+
+    window.gameConfigDefs = gameConfigDefs;
+    window.gameConfig = gameConfig;
+    window.updateGameConfig = (k, v) => {
+        if (gameConfig[k] !== undefined) {
+            gameConfig[k] = v;
+            document.getElementById('limit-display').innerText = gameConfig.speedLimit;
+        }
+    };
+
+    window.addEventListener('resize', resize);
+    const canvas = document.getElementById('gameCanvas');
+    canvas.addEventListener('pointerdown', handleInput, { passive: false });
+    document.getElementById('restart-btn').addEventListener('click', handleRestart);
+
+    gameState = STATE.PLAYING;
+    requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

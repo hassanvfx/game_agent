@@ -1,0 +1,3 @@
+/* Local placeholder file retained for workspace compatibility.
+   Production stage removed embedded Tailwind CDN runtime and disallowed source URL.
+   The game now uses inline CSS in index.html instead of this script. */

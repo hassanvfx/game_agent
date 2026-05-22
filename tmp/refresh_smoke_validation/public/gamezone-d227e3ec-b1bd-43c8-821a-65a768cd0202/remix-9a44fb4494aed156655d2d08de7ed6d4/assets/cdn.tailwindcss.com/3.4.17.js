@@ -1,0 +1,1 @@
+/* Local stub retained for policy compliance; runtime no longer depends on this file. */

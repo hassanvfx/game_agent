@@ -1,0 +1,1 @@
+console['warn']('Local\x20tailwind\x20CDN\x20stub\x20inactive.');

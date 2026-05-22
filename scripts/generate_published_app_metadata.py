@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,15 @@ from typing import Any
 ROOT = Path("/Users/hassan/repos/game_agent")
 DEFAULT_PUBLISHED_PUBLIC_ROOT = ROOT / "games/published/public"
 DEFAULT_OUTPUT_ROOT = ROOT / "games/published"
+SEMANTIC_BUCKET_ALIASES = {
+    "mechanics": ["mechanics", "mechanic_tags"],
+    "theme": ["theme", "prompt_requested_tags", "presentation_tags", "theme_tags"],
+    "mood": ["mood", "mood_tags", "tone_tags"],
+    "setting": ["setting", "setting_tags"],
+    "characters": ["characters", "character_tags"],
+    "similar_games": ["similar_games", "games_tags"],
+    "similar_franchises": ["similar_franchises", "franchise_tags"],
+}
 
 
 def load_json(path: Path) -> Any:
@@ -79,6 +89,27 @@ def normalize_tag_list(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def normalize_tag_value(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return normalize_tag_list(value)
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def merge_tag_lists(*values: Any) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for tag in normalize_tag_value(value):
+            key = tag.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(tag)
+    return merged
+
+
 def first_non_empty_string(*values: Any) -> str:
     for value in values:
         if isinstance(value, str) and value.strip():
@@ -86,11 +117,45 @@ def first_non_empty_string(*values: Any) -> str:
     return ""
 
 
-def semantic_tag_bucket(metadata: dict[str, Any], key: str) -> list[str]:
+def normalize_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def semantic_payload(metadata: dict[str, Any]) -> dict[str, Any]:
     semantic = metadata.get("semantic_tags")
-    if isinstance(semantic, dict):
-        return normalize_tag_list(semantic.get(key))
-    return []
+    return semantic if isinstance(semantic, dict) else {}
+
+
+def semantic_nested_tags(metadata: dict[str, Any]) -> dict[str, Any]:
+    tags = semantic_payload(metadata).get("tags")
+    return tags if isinstance(tags, dict) else {}
+
+
+def semantic_title(metadata: dict[str, Any]) -> str:
+    return first_non_empty_string(semantic_payload(metadata).get("title"))
+
+
+def semantic_value(metadata: dict[str, Any], key: str) -> Any:
+    semantic = semantic_payload(metadata)
+    if key in semantic:
+        return semantic.get(key)
+    return semantic_nested_tags(metadata).get(key)
+
+
+def general_semantic_tags(metadata: dict[str, Any]) -> list[str]:
+    semantic = semantic_payload(metadata)
+    tags_value = semantic.get("tags")
+    general_tags = tags_value if isinstance(tags_value, list) else []
+    return merge_tag_lists(
+        general_tags,
+        semantic.get("preserve_tags"),
+        semantic.get("transform_tags"),
+    )
+
+
+def semantic_tag_bucket(metadata: dict[str, Any], key: str) -> list[str]:
+    aliases = SEMANTIC_BUCKET_ALIASES.get(key, [key])
+    return merge_tag_lists(*(semantic_value(metadata, alias) for alias in aliases))
 
 
 def identity_value(metadata: dict[str, Any], key: str) -> Any:
@@ -101,38 +166,136 @@ def identity_value(metadata: dict[str, Any], key: str) -> Any:
 
 
 def identity_tag_bucket(metadata: dict[str, Any], key: str) -> list[str]:
-    return normalize_tag_list(identity_value(metadata, key))
+    return normalize_tag_value(identity_value(metadata, key))
+
+
+def prompt_text(metadata: dict[str, Any]) -> str:
+    return first_non_empty_string(
+        metadata.get("recreation_prompt_markdown"),
+        identity_value(metadata, "recreation_prompt"),
+        identity_value(metadata, "prompt"),
+    )
+
+
+def clean_extracted_title(value: str) -> str:
+    return value.strip().strip("\"'“”‘’`*").strip()
+
+
+def extract_title_from_text(text: Any) -> str:
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    patterns = (
+        re.compile(r"recreate\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"recreate\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"recreate\s+[^\n]{0,120}?\s+as\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"recreate\s+[^\n]{0,120}?\s+as\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"recreate\s+(?!a\b|an\b|the\b)([^,\n]{2,160}?)\s+as\s+(?:a|an|the)\b", re.IGNORECASE),
+        re.compile(r"source\s+as\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"source\s+as\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"presentation\s+as\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"presentation\s+as\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"named\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"named\s+[\"“']([^\"”']{2,160})[\"”']", re.IGNORECASE),
+        re.compile(r"named\s+([^\n]{2,160}?)\s+from\s+this\s+brief:", re.IGNORECASE),
+        re.compile(r"named\s+([^\.\n]{2,160}?)(?:\.|\n)", re.IGNORECASE),
+        re.compile(r"called\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"called\s+[\"“']([^\"”']{2,160})[\"”']", re.IGNORECASE),
+        re.compile(r"called\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"theme\s+the\s+game\s+as\s+([^\.\n]{2,160}?)(?:\.|\n)", re.IGNORECASE),
+        re.compile(r"should\s+be\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"should\s+be\s+[\"“']([^\"”']{2,160})[\"”']", re.IGNORECASE),
+        re.compile(r"should\s+be\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"titled\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"titled\s+[\"“']([^\"”']{2,160})[\"”']", re.IGNORECASE),
+        re.compile(r"titled\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"titled\s+([^\.\n]{2,160}?)(?:\.|\n)", re.IGNORECASE),
+        re.compile(r"into\s+\*\*([^*]{2,160})\*\*", re.IGNORECASE),
+        re.compile(r"into\s+[\"“']([^\"”']{2,160})[\"”']", re.IGNORECASE),
+        re.compile(r"into\s+`([^`]{2,160})`", re.IGNORECASE),
+        re.compile(r"^\s*(?:#\s+recreation prompt\s+)?create\s+([^,\n]{2,160}?),\s+a\b", re.IGNORECASE),
+        re.compile(r"called\s+([^\.\n]{2,160}?)(?:\.|\n)", re.IGNORECASE),
+    )
+    for pattern in patterns:
+        match = pattern.search(text)
+        if not match:
+            continue
+        candidate = clean_extracted_title(match.group(1))
+        if candidate:
+            return candidate
+    return ""
+
+
+def selected_mechanic_categories(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    tags: list[str] = []
+    for item in value:
+        if isinstance(item, dict):
+            candidate = first_non_empty_string(item.get("category"), item.get("name"), item.get("title"), item.get("tag"))
+            if candidate:
+                tags.append(candidate)
+        elif isinstance(item, str) and item.strip():
+            tags.append(item.strip())
+    return tags
+
+
+def mechanics_title(metadata: dict[str, Any]) -> str:
+    mechanics = metadata.get("mechanics_classification")
+    if isinstance(mechanics, dict):
+        return first_non_empty_string(mechanics.get("game"), mechanics.get("title"))
+    return ""
+
+
+def is_placeholder_title(title: str, game_id: str, remix_id: str, published_path: str) -> bool:
+    normalized_title = normalize_text(title)
+    if not normalized_title:
+        return True
+    if title.strip().startswith("gamezone-"):
+        return True
+
+    raw_candidates = {
+        normalize_text(game_id),
+        normalize_text(remix_id),
+        normalize_text(published_path),
+        normalize_text(Path(published_path).name if published_path else ""),
+        normalize_text(f"{game_id}__{remix_id}" if game_id and remix_id else ""),
+    }
+    raw_candidates.discard("")
+    return normalized_title in raw_candidates
 
 
 def derive_mechanic_tags(metadata: dict[str, Any]) -> list[str]:
     mechanics = metadata.get("mechanics_classification")
+    selected_tags: list[str] = []
+    ranked_tags: list[str] = []
+    direct_tags: list[str] = []
     if isinstance(mechanics, dict):
-        for key in ["selected_top_5", "selected_top_5_categories"]:
-            selected = mechanics.get(key)
-            if isinstance(selected, list):
-                tags = []
-                for item in selected:
-                    if isinstance(item, dict):
-                        category = item.get("category")
-                        if isinstance(category, str) and category.strip():
-                            tags.append(category.strip())
-                if tags:
-                    return tags
+        for key in ["selected_top_5", "selected_top_5_categories", "selected_categories"]:
+            selected_tags.extend(selected_mechanic_categories(mechanics.get(key)))
+
+        ranked_tags.extend(selected_mechanic_categories(mechanics.get("ranked_mechanics")))
+
         direct = mechanics.get("mechanic_tags")
-        if isinstance(direct, list):
-            direct_tags = normalize_tag_list(direct)
-            if direct_tags:
-                return direct_tags
+        direct_tags = normalize_tag_value(direct)
 
     semantic_mechanics = semantic_tag_bucket(metadata, "mechanics")
-    if semantic_mechanics:
-        return semantic_mechanics
-
-    return []
+    return merge_tag_lists(selected_tags, ranked_tags, direct_tags, semantic_mechanics)
 
 
-def derive_title(metadata: dict[str, Any], fallback_game_id: str) -> str:
-    return first_non_empty_string(identity_value(metadata, "title"), metadata.get("title"), fallback_game_id)
+def derive_title(metadata: dict[str, Any], fallback_game_id: str, remix_id: str, published_path: str) -> str:
+    prompt_title = extract_title_from_text(prompt_text(metadata))
+    candidates = [
+        first_non_empty_string(identity_value(metadata, "title")),
+        semantic_title(metadata),
+        first_non_empty_string(identity_value(metadata, "short_title")),
+        prompt_title,
+        mechanics_title(metadata),
+        first_non_empty_string(metadata.get("title")),
+    ]
+    for candidate in candidates:
+        if candidate and not is_placeholder_title(candidate, fallback_game_id, remix_id, published_path):
+            return candidate
+    return first_non_empty_string(*candidates, fallback_game_id)
 
 
 def derive_description(metadata: dict[str, Any]) -> str:
@@ -153,7 +316,11 @@ def derive_blueprint(metadata: dict[str, Any]) -> str:
 
 
 def list_relative_files(remix_dir: Path) -> list[str]:
-    return sorted(path.relative_to(remix_dir).as_posix() for path in remix_dir.rglob("*") if path.is_file())
+    return sorted(
+        path.relative_to(remix_dir).as_posix()
+        for path in remix_dir.rglob("*")
+        if path.is_file() and not path.name.startswith("._")
+    )
 
 
 def classify_files(all_files: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
@@ -360,13 +527,34 @@ def build_entry_from_remix(
         "obfuscation_status": obfuscation_status,
         "screenshots": [f"{rel_prefix}/{path}" for path in screenshots],
         "mechanic_tags": derive_mechanic_tags(metadata),
-        "semantic_tags": semantic_tag_bucket(metadata, "theme") or semantic_tag_bucket(metadata, "semantic_tags"),
-        "mood_tags": semantic_tag_bucket(metadata, "mood"),
-        "setting_tags": semantic_tag_bucket(metadata, "setting"),
-        "character_tags": semantic_tag_bucket(metadata, "characters") or identity_tag_bucket(metadata, "characters") or identity_tag_bucket(metadata, "character_tags"),
-        "games_tags": semantic_tag_bucket(metadata, "similar_games") or identity_tag_bucket(metadata, "similar_games") or identity_tag_bucket(metadata, "games_tags"),
-        "franchise_tags": semantic_tag_bucket(metadata, "similar_franchises") or identity_tag_bucket(metadata, "similar_franchises") or identity_tag_bucket(metadata, "franchise_tags"),
-        "title": derive_title(metadata, game_id),
+        "semantic_tags": merge_tag_lists(
+            semantic_tag_bucket(metadata, "theme"),
+            general_semantic_tags(metadata),
+            identity_tag_bucket(metadata, "theme"),
+        ),
+        "mood_tags": merge_tag_lists(
+            semantic_tag_bucket(metadata, "mood"),
+            identity_tag_bucket(metadata, "mood"),
+            identity_tag_bucket(metadata, "tone"),
+        ),
+        "setting_tags": merge_tag_lists(semantic_tag_bucket(metadata, "setting")),
+        "character_tags": merge_tag_lists(
+            semantic_tag_bucket(metadata, "characters"),
+            identity_tag_bucket(metadata, "characters"),
+            identity_tag_bucket(metadata, "character_tags"),
+            identity_tag_bucket(metadata, "teams"),
+        ),
+        "games_tags": merge_tag_lists(
+            semantic_tag_bucket(metadata, "similar_games"),
+            identity_tag_bucket(metadata, "similar_games"),
+            identity_tag_bucket(metadata, "games_tags"),
+        ),
+        "franchise_tags": merge_tag_lists(
+            semantic_tag_bucket(metadata, "similar_franchises"),
+            identity_tag_bucket(metadata, "similar_franchises"),
+            identity_tag_bucket(metadata, "franchise_tags"),
+        ),
+        "title": derive_title(metadata, game_id, remix_id, rel_prefix),
         "description": derive_description(metadata),
     }
 

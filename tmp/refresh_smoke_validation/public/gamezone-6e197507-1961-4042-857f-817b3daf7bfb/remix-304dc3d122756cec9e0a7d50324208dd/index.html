@@ -1,0 +1,2002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Night Shift: Trust Protocol</title>
+<script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+<script src="assets/unpkg.com/peerjs_1.5.2/dist/peerjs.min.js"></script>
+<!-- [agent-note][stage4] repaired-font-remap: title/display -> Audiowide, UI/body -> Exo 2 from catalogs/fonts.json -->
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg-soft: #f7efe3;
+        --bg-warm: #ffe1c6;
+        --panel-soft: rgba(255, 248, 240, 0.74);
+        --panel-line: rgba(255, 255, 255, 0.55);
+        --ink-soft: #2a3040;
+        --glow-mint: #7fffd4;
+        --glow-gold: #ffcf70;
+        --danger-red: #ff465f;
+        --danger-core: #a4001f;
+        --night-panel: rgba(15, 10, 24, 0.8);
+    }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: radial-gradient(circle at top, var(--bg-soft), var(--bg-warm)); touch-action: manipulation; user-select: none; -webkit-user-select: none; font-family: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(circle at 50% 28%, rgba(255, 244, 204, 0.55), transparent 30%),
+            radial-gradient(circle at 50% 75%, rgba(255, 120, 70, 0.16), transparent 38%);
+        opacity: 0.9;
+        transition: opacity 0.8s ease;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    
+    /* UI Classes */
+    .glass { background: linear-gradient(180deg, rgba(255, 252, 247, 0.9), rgba(255, 232, 210, 0.76)); backdrop-filter: blur(14px); border: 2px solid var(--panel-line); box-shadow: 0 10px 28px rgba(92, 53, 24, 0.15), inset 0 0 0 1px rgba(255,255,255,0.55); color: var(--ink-soft); }
+    .glass-dark { background: linear-gradient(180deg, rgba(22, 16, 38, 0.82), rgba(11, 7, 20, 0.88)); backdrop-filter: blur(12px); border: 1px solid rgba(151, 234, 255, 0.2); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45); color: #fff; }
+    
+    .glass-danger { background: linear-gradient(180deg, rgba(75, 7, 16, 0.84), rgba(34, 3, 10, 0.92)); border: 1px solid rgba(255, 113, 134, 0.45); color: #fff; box-shadow: 0 0 24px rgba(255, 70, 95, 0.2); }
+    .glass-evil { background: linear-gradient(180deg, rgba(24, 7, 18, 0.92), rgba(8, 2, 10, 0.94)); backdrop-filter: blur(5px); border: 1px solid rgba(255, 70, 95, 0.3); color: #ffd6de; box-shadow: 0 0 26px rgba(255, 70, 95, 0.14); }
+    .glass-disabled { opacity: 0.5; filter: grayscale(100%); pointer-events: none; }
+    
+    .hidden { display: none !important; }
+    .font-cute { font-family: 'Audiowide', 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+    .font-horror { font-family: 'Audiowide', 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+    .font-ui { font-family: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+    
+    @keyframes glitch-text {
+        0% { transform: translate(0); }
+        20% { transform: translate(-2px, 2px); }
+        40% { transform: translate(-2px, -2px); }
+        60% { transform: translate(2px, 2px); }
+        80% { transform: translate(2px, -2px); }
+        100% { transform: translate(0); }
+    }
+    .glitch-active { animation: glitch-text 0.1s infinite; color: red; text-shadow: 2px 0 #fff; }
+    .pulse-fast { animation: pulse 0.2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .8; transform: scale(1.05); } }
+
+    #blood-overlay { pointer-events: none; background: radial-gradient(circle, transparent 34%, rgba(164,0,31,0.9) 100%); opacity: 0; transition: opacity 0.5s ease-out; }
+    #flash-overlay { pointer-events: none; background: white; opacity: 0; transition: opacity 0.1s ease-out; }
+    #scanlines { pointer-events: none; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(36,255,220,0.08) 50%, rgba(0,0,0,0.22)); background-size: 100% 4px; opacity: 0; transition: opacity 2s; }
+    
+    #game-container {
+        background:
+            radial-gradient(circle at 50% 24%, rgba(255, 248, 224, 0.55), transparent 25%),
+            linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+    }
+    #mode-select-layer,
+    #day-overlay,
+    #game-over-screen,
+    #lobby-layer {
+        backdrop-filter: blur(12px);
+    }
+    #main-title,
+    #day-title,
+    #game-over-title,
+    #day-indicator {
+        text-shadow: 0 0 14px rgba(255,255,255,0.14), 0 0 28px rgba(127,255,212,0.15);
+    }
+    #status-text {
+        max-width: min(88vw, 360px);
+        text-wrap: balance;
+    }
+    #action-bar button,
+    #pet-hud button,
+    #restart-btn,
+    #btn-connect,
+    #btn-mode-solo,
+    #btn-mode-host,
+    #btn-mode-join {
+        border-radius: 1.1rem;
+    }
+    #action-bar button {
+        min-height: 84px;
+        box-shadow: 0 8px 22px rgba(35, 18, 14, 0.15);
+    }
+    #pet-hud button {
+        box-shadow: 0 0 24px rgba(255, 70, 95, 0.18);
+    }
+    .cooldown-overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.1); transition: height 0.1s linear; pointer-events: none; }
+    .malice-bar { transition: width 0.2s linear; background: linear-gradient(90deg, #ff7f8f, #ff465f 45%, #8b001b); box-shadow: 0 0 12px rgba(255, 70, 95, 0.5); }
+    
+    input.name-input { background: rgba(255,248,240,0.92); border: 2px solid rgba(255, 185, 120, 0.55); color: #1e2430; font-family: 'Exo 2', ui-sans-serif, system-ui, sans-serif; text-align: center; font-size: 1.5rem; letter-spacing: 0.08em; outline: none; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 24px rgba(120, 84, 48, 0.12); }
+    input.name-input:focus { border-color: #7fffd4; box-shadow: 0 0 0 3px rgba(127,255,212,0.14), inset 0 1px 0 rgba(255,255,255,0.65), 0 10px 24px rgba(120, 84, 48, 0.12); }
+
+    @media (max-width: 640px) {
+        #ui-layer { padding: 1rem; }
+        #top-hud { top: 1rem !important; }
+        #pet-hud button { transform: scale(0.92); transform-origin: top; }
+        #action-bar { bottom: 1rem; gap: 0.75rem; padding-inline: 1rem; }
+        #action-bar button { max-width: none; min-height: 78px; }
+        #main-title { font-size: clamp(2.5rem, 16vw, 4rem); }
+        #day-title, #game-over-title { font-size: clamp(3.3rem, 18vw, 5rem); }
+        #shoot-prompt h2, #attack-warning h2 { font-size: clamp(3rem, 18vw, 4.5rem); }
+    }
+</style>
+</head>
+<body>
+
+<!-- Assets -->
+<img id="asset_placeholder" data-editable="image" data-label="Placeholder" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg==" hidden>
+
+<!-- [agent-note][stage4] repaired-audio-remap: replaced required local audio refs with catalogs/audios.json mappings -->
+<!-- BGM -->
+<audio id="bgm_cute" data-editable="audio" data-label="BGM Cute Start" src="https://gamezone-virid.vercel.app/assets/audios/music/music_loop_01.mp3" preload="auto" loop></audio>
+<audio id="bgm_horror" data-editable="audio" data-label="BGM Horror Phase" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+<audio id="bgm_city" data-editable="audio" data-label="BGM Urban Ambience" src="https://gamezone-virid.vercel.app/assets/audios/ambience/ambience_loop_01.mp3" preload="auto" loop></audio>
+
+<!-- SFX -->
+<audio id="sfx_bark" data-editable="audio" data-label="Dog Bark" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+<audio id="sfx_squeak" data-editable="audio" data-label="Toy Squeak" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_bite" data-editable="audio" data-label="Attack SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_01.mp3" preload="auto"></audio>
+<audio id="sfx_hit" data-editable="audio" data-label="Hit Defense SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/hit_01.mp3" preload="auto"></audio>
+<audio id="sfx_day" data-editable="audio" data-label="Day Transition" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+<audio id="sfx_gun_cycle" data-editable="audio" data-label="Gun Cycle SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_shoot" data-editable="audio" data-label="Cannon Shot" src="https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_01.mp3" preload="auto"></audio>
+<audio id="sfx_scream" data-editable="audio" data-label="Scream SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+<audio id="sfx_pounce" data-editable="audio" data-label="Pounce Impact" src="https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3" preload="auto"></audio>
+<audio id="sfx_action" data-editable="audio" data-label="Action Click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+<audio id="sfx_friend_bleed" data-editable="audio" data-label="Friend Bleeding Ambience" src="https://gamezone-virid.vercel.app/assets/audios/ambience/ambience_loop_02.mp3" preload="auto"></audio>
+<audio id="sfx_restore" data-editable="audio" data-label="Blood Restore SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3" preload="auto"></audio>
+<audio id="sfx_day_complete" data-editable="audio" data-label="Day Complete SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_win" data-editable="audio" data-label="Win SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3" preload="auto"></audio>
+<audio id="sfx_reveal" data-editable="audio" data-label="Reveal SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+<audio id="sfx_connect" data-editable="audio" data-label="Connect SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_disconnect" data-editable="audio" data-label="Disconnect SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+<audio id="sfx_transform" data-editable="audio" data-label="Horror Transform SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3" preload="auto"></audio>
+<audio id="sfx_day20" data-editable="audio" data-label="Day 20 Reveal" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3" preload="auto"></audio>
+<audio id="sfx_gun_pickup" data-editable="audio" data-label="Gun Pickup" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_reload" data-editable="audio" data-label="Reload SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+    "actionsToAdvance": { "type": "number", "label": "Actions per Day", "value": 5, "min": 3, "max": 10 },
+    "shotsToKill": { "type": "number", "label": "Shots to Kill", "value": 5, "min": 1, "max": 10 },
+    "cooldownTime": { "type": "number", "label": "Ability Cooldown (s)", "value": 0.9, "min": 0.1, "max": 2.0 }
+}
+</script>
+
+<!-- UI Structure -->
+<div id="game-container" class="relative w-full h-full text-gray-800 font-cute overflow-hidden">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Overlays -->
+    <div id="scanlines" class="absolute inset-0 z-30"></div>
+    <div id="blood-overlay" class="absolute inset-0 z-40"></div>
+    <div id="flash-overlay" class="absolute inset-0 z-[100]"></div>
+    <!-- [agent-note][stage3] resolved-gif: compact reaction overlays pinned away from controls -->
+    <div id="gif-layer" class="absolute inset-0 z-[55] pointer-events-none">
+        <img id="gif-comfort" class="hidden absolute left-4 top-24 w-24 sm:w-28 rounded-2xl border border-white/40 shadow-2xl object-cover opacity-90" alt="comfort reaction" src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp">
+        <img id="gif-breach" class="hidden absolute right-4 top-24 w-24 sm:w-28 rounded-2xl border border-red-400/40 shadow-2xl object-cover opacity-90" alt="breach reaction" src="https://i.giphy.com/3bzB1rHg6g9Cp06acA.webp">
+    </div>
+
+    <!-- Mode Select (Start Screen) -->
+    <div id="mode-select-layer" class="absolute inset-0 z-[80] bg-[radial-gradient(circle_at_top,_rgba(255,248,224,0.96),_rgba(255,224,197,0.9)_45%,_rgba(30,18,40,0.92)_130%)] flex flex-col items-center justify-center p-6 transition-colors duration-1000">
+        <div class="absolute inset-0 pointer-events-none opacity-80" aria-hidden="true">
+            <div class="absolute left-1/2 top-[18%] h-48 w-48 -translate-x-1/2 rounded-full bg-[#fff4c8]/40 blur-3xl"></div>
+            <div class="absolute bottom-[20%] left-[20%] h-24 w-24 rounded-full bg-[#7fffd4]/15 blur-2xl"></div>
+            <div class="absolute bottom-[28%] right-[18%] h-20 w-20 rounded-full bg-[#ff7f8f]/20 blur-2xl"></div>
+        </div>
+        <div class="pointer-events-none mb-4 flex flex-col items-center" aria-hidden="true">
+            <div class="text-[4.2rem] leading-none drop-shadow-[0_0_20px_rgba(255,255,255,0.55)]">🐾</div>
+            <div class="-mt-2 h-3 w-32 rounded-full bg-[radial-gradient(circle,_rgba(127,255,212,0.85),_transparent_70%)] blur-md"></div>
+        </div>
+        <h1 id="main-title" class="text-6xl font-cute text-[#1f2533] mb-2 tracking-[0.22em] drop-shadow-[0_0_14px_rgba(127,255,212,0.25)] uppercase">Night Shift</h1>
+        <p id="main-subtitle" class="text-[#6a6271] mb-8 tracking-[0.45em] uppercase text-xs">Trust Protocol v3.0</p>
+        
+        <div class="flex flex-col gap-4 w-full max-w-xs items-center">
+            <div class="w-full">
+                <label class="text-xs text-gray-400 uppercase tracking-widest pl-1">Name your subject</label>
+                <input id="pet-name-input" type="text" maxlength="8" class="name-input w-full p-3 mt-1 mb-4" placeholder="Subject" value="Subject">
+            </div>
+
+            <button id="btn-mode-solo" class="glass w-full py-4 text-2xl font-cute tracking-widest hover:bg-white active:scale-95 transition-all text-[#ff69b4] font-bold">
+                BEGIN SHIFT
+            </button>
+            
+            <div class="h-px bg-gray-200 w-full my-4"></div>
+            
+            <button id="btn-mode-host" class="glass w-full py-3 text-lg font-cute tracking-widest hover:bg-white active:scale-95 transition-all text-gray-400">
+                HOST (Multiplayer)
+            </button>
+            <button id="btn-mode-join" class="glass w-full py-3 text-lg font-cute tracking-widest hover:bg-white active:scale-95 transition-all text-gray-400">
+                JOIN (Multiplayer)
+            </button>
+        </div>
+    </div>
+
+    <!-- Lobby Layer -->
+    <div id="lobby-layer" class="absolute inset-0 z-[85] bg-black hidden flex flex-col items-center justify-center p-6">
+        <div id="lobby-host-panel" class="hidden w-full max-w-xs text-center">
+            <h2 class="text-4xl font-horror text-red-500 mb-4">WAITING FOR OPERATOR...</h2>
+            <p class="text-gray-400 text-sm mb-2">SHARE THIS CODE:</p>
+            <div id="host-code-display" class="text-6xl font-horror text-white tracking-[0.2em] border border-red-900 p-4 bg-red-900/20 mb-8 select-all">...</div>
+            <div class="animate-pulse text-xs text-gray-500 uppercase tracking-widest">Listening for connection...</div>
+            <button id="btn-cancel-lobby" class="mt-8 text-gray-500 underline">CANCEL</button>
+        </div>
+
+        <div id="lobby-join-panel" class="hidden w-full max-w-xs text-center">
+            <h2 class="text-4xl font-horror text-red-500 mb-4">ENTER SHIFT CODE</h2>
+            <input id="join-code-input" type="text" maxlength="6" class="name-input w-full p-4 mb-4 uppercase bg-gray-800 text-white border-red-900" placeholder="XXXXXX">
+            <button id="btn-connect" class="glass-danger w-full py-4 text-2xl font-horror tracking-widest mb-4">LINK</button>
+            <p id="join-status" class="text-xs text-red-500 h-4"></p>
+            <button id="btn-cancel-join" class="mt-4 text-gray-500 underline">CANCEL</button>
+        </div>
+    </div>
+
+    <!-- HUD Layer -->
+    <div id="ui-layer" class="absolute inset-0 z-50 pointer-events-none flex flex-col justify-between p-6">
+        
+        <!-- Monster Controls (Top) -->
+        <div id="pet-hud" class="w-full flex justify-between items-start opacity-0 transition-opacity duration-300 pointer-events-auto hidden">
+            <div class="flex flex-col gap-2">
+                <button id="btn-pet-bite" class="glass-evil w-24 h-24 rounded-full flex items-center justify-center flex-col active:scale-90 transition-transform">
+                    <span class="text-3xl">🦷</span>
+                    <span class="text-xs font-horror tracking-widest text-red-500">BREACH</span>
+                    <div class="absolute inset-0 rounded-full border-2 border-red-500/30" id="cd-pet-bite"></div>
+                </button>
+            </div>
+            <div class="flex flex-col items-end">
+                <div class="text-right mb-1">
+                    <span class="text-xs font-horror text-red-500 tracking-widest">RISK</span>
+                </div>
+                <div class="w-32 h-2 bg-gray-900 rounded-full overflow-hidden border border-red-900/50">
+                    <div id="malice-bar" class="h-full bg-red-700 w-0 malice-bar"></div>
+                </div>
+                <button id="btn-pet-scare" class="glass-evil mt-2 w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+                    <span class="text-xl">👁️</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Top Info -->
+        <div id="top-hud" class="absolute top-6 left-0 w-full flex flex-col items-center transition-opacity duration-500 pointer-events-none">
+            <!-- [agent-note][stage2] preserve: top-hud-layout | reason: already mobile-safe, styling only -->
+            <h1 id="day-indicator" class="text-4xl font-cute tracking-widest drop-shadow-md text-gray-700">Shift 1</h1>
+            
+            <!-- Progress -->
+            <div id="progress-container" class="w-48 h-3 bg-white rounded-full mt-2 overflow-hidden border border-gray-200 shadow-sm">
+                <div id="progress-bar" class="h-full bg-[#ff69b4] transition-all duration-300 w-0"></div>
+            </div>
+            
+            <!-- Health/Status -->
+            <div id="health-container" class="mt-4 flex flex-col items-center w-full max-w-[200px]">
+                <div class="w-full flex justify-between text-xs uppercase tracking-widest text-gray-400 mb-1">
+                    <span id="health-label">Trust</span>
+                    <span id="health-val">100%</span>
+                </div>
+                <div class="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                    <div id="health-bar" class="h-full bg-[#ff69b4] w-full transition-all duration-100"></div>
+                </div>
+            </div>
+
+            <p id="status-text" class="mt-4 text-sm font-bold text-center text-gray-400 animate-pulse uppercase tracking-widest">Subject is stable.</p>
+        </div>
+
+        <!-- Attack Warning -->
+        <div id="attack-warning" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full text-center hidden pointer-events-none">
+            <h2 class="text-7xl font-horror text-red-500 glitch-active tracking-widest">BREACH!</h2>
+            <p class="text-white font-bold text-lg mt-2 uppercase tracking-widest">Tap Repeatedly</p>
+        </div>
+
+        <!-- Day 50 Shoot Prompt -->
+        <div id="shoot-prompt" class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full text-center hidden pointer-events-none z-[90]">
+            <h2 class="text-8xl font-horror text-red-500 drop-shadow-[0_0_25px_rgba(255,0,0,0.8)] pulse-fast tracking-widest glitch-active">LOCK!</h2>
+        </div>
+
+        <!-- Survivor Actions (Bottom) -->
+        <div id="action-bar" class="absolute bottom-6 left-0 w-full flex justify-center gap-3 px-6 pointer-events-auto transition-all duration-300">
+            <button id="btn-feed" class="glass relative overflow-hidden flex-1 max-w-[100px] py-4 rounded-xl active:scale-95 transition-all flex flex-col items-center hover:bg-white/50">
+                <span class="text-2xl mb-1 relative z-10">🦴</span>
+                <span class="text-xs font-bold tracking-widest relative z-10 text-gray-600">CALM</span>
+                <div class="cooldown-overlay bg-[#ff69b4]/30" id="cd-feed" style="height: 0%"></div>
+            </button>
+            <button id="btn-pet" class="glass relative overflow-hidden flex-1 max-w-[100px] py-4 rounded-xl active:scale-95 transition-all flex flex-col items-center hover:bg-white/50">
+                <span class="text-2xl mb-1 relative z-10">🤚</span>
+                <span class="text-xs font-bold tracking-widest relative z-10 text-gray-600">CHECK</span>
+                <div class="cooldown-overlay bg-[#00aaff]/30" id="cd-pet" style="height: 0%"></div>
+            </button>
+            <button id="btn-gun" class="glass hidden relative overflow-hidden flex-1 max-w-[100px] py-4 rounded-xl active:scale-95 transition-all flex flex-col items-center hover:bg-red-900/40 border-red-500/30">
+                <span id="gun-icon" class="text-2xl mb-1 relative z-10">🔫</span>
+                <span id="gun-label" class="text-xs font-bold tracking-widest text-red-400 relative z-10">LOCK</span>
+                <div class="cooldown-overlay bg-yellow-500/30" id="cd-gun" style="height: 0%"></div>
+            </button>
+        </div>
+
+        <!-- Day Transition Overlay -->
+        <div id="day-overlay" class="absolute inset-0 bg-white z-50 flex items-center justify-center hidden pointer-events-auto transition-colors duration-1000">
+            <div class="text-center">
+                <h2 id="day-title" class="text-8xl font-cute text-[#ff69b4] tracking-widest mb-2">Day 2</h2>
+                <p id="day-subtitle" class="text-gray-400 text-sm tracking-widest uppercase">Stable shift</p>
+                <p id="day-restore-msg" class="text-[#ff69b4] text-xs mt-4 tracking-widest font-bold animate-pulse">TRUST RESTORED</p>
+            </div>
+        </div>
+
+        <!-- Game Over / Win Screen -->
+        <div id="game-over-screen" class="absolute inset-0 bg-black/95 z-[60] flex flex-col items-center justify-center hidden pointer-events-auto">
+            <h1 id="game-over-title" class="text-8xl text-red-600 font-horror mb-2 tracking-widest glitch-active">OVERRUN</h1>
+            <p id="game-over-msg" class="text-xl text-gray-400 mb-8 text-center px-4 tracking-widest">THE SUBJECT TOOK CONTROL</p>
+            <button id="restart-btn" class="px-12 py-4 bg-white text-black text-2xl font-horror tracking-widest hover:bg-red-600 hover:text-white transition-colors rounded-sm">
+                RESTART
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * CORE SYSTEM
+ */
+const CONFIG_DEFS = JSON.parse(document.getElementById('game-config').textContent);
+const gameConfig = Object.fromEntries(Object.entries(CONFIG_DEFS).map(([k, v]) => [k, v.value]));
+window.gameConfigDefs = CONFIG_DEFS;
+
+// State
+let gameState = 'INIT'; 
+let gameMode = 'SOLO'; // SOLO, HOST, CLIENT
+let petName = "Subject";
+let cw = 0, ch = 0;
+let dpr = window.devicePixelRatio || 1;
+let lastTime = 0;
+let initialized = false;
+
+// Network Logic
+let peer = null;
+let conn = null;
+let peerId = null;
+let isHost = false;
+let lastSyncTime = 0;
+
+// Game Logic
+let currentDay = 1;
+let dailyProgress = 0;
+let maxProgress = 5;
+let playerHealth = 100;
+let actionCooldown = 0; 
+
+// Pet State
+let petState = 'IDLE'; 
+let petAnimTimer = 0;
+let biteHitsRequired = 0;
+let biteHitsTaken = 0;
+let biteTimer = 0; 
+let shake = 0;
+let fearFactor = 0; 
+
+// 2P/Network State
+let petMalice = 0;
+let petMaxMalice = 100;
+
+// Narrative Sequence State
+let sequenceTimer = 0;
+let sequenceStep = 0;
+
+// Gun State
+let gunStep = 0; 
+let shotsFired = 0;
+
+// Day 50 Mechanic
+let hiddenTarget = { x: 0, y: 0 };
+let searchRadius = 0;
+let friendBleedTimer = 0;
+
+// Audio
+let audioCtx;
+let sfxBuffers = {};
+let currentBgm = null;
+let audioUnlocked = false;
+let activeLoopSfx = {};
+let feedbackTimers = {};
+
+// Particles
+let particles = [];
+
+/**
+ * NETWORK SYSTEM (PeerJS)
+ */
+function initPeer(mode) {
+    if (peer) peer.destroy();
+    const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    peer = new Peer(shortId, { debug: 1 });
+
+    peer.on('open', (id) => {
+        peerId = id;
+        if (mode === 'HOST') {
+            document.getElementById('host-code-display').innerText = id;
+            isHost = true;
+        }
+    });
+
+    peer.on('connection', (c) => {
+        if (gameMode === 'HOST') {
+            conn = c;
+            setupConnection();
+        } else {
+            c.close();
+        }
+    });
+
+    peer.on('error', (err) => {
+        document.getElementById('join-status').innerText = "LINKION FAILED";
+    });
+}
+
+function connectToHost(hostId) {
+    if (!peer) initPeer('CLIENT');
+    conn = peer.connect(hostId);
+    setupConnection();
+}
+
+function setupConnection() {
+    conn.on('open', () => {
+        playSfx('connect');
+        document.getElementById('lobby-layer').classList.add('hidden');
+        if (gameMode === 'HOST') startGame('HOST');
+        else startGame('CLIENT');
+    });
+
+    conn.on('data', (data) => {
+        handleNetworkData(data);
+    });
+    
+    conn.on('close', () => {
+        playSfx('disconnect');
+        alert('Connection Lost');
+        location.reload();
+    });
+}
+
+function sendNetworkData(type, payload) {
+    if (conn && conn.open) conn.send({ type, payload });
+}
+
+function handleNetworkData(data) {
+    if (gameMode === 'CLIENT') {
+        if (data.type === 'STATE') {
+            const s = data.payload;
+            currentDay = s.currentDay;
+            dailyProgress = s.dailyProgress;
+            maxProgress = s.maxProgress;
+            playerHealth = s.playerHealth;
+            petState = s.petState;
+            petMalice = s.petMalice;
+            fearFactor = s.fearFactor;
+            shake = s.shake;
+            petName = s.petName;
+            if (s.triggerBite) triggerBite(true);
+            if (s.resolveBite) resolveBite(true);
+            updateHUD();
+        }
+        else if (data.type === 'SFX') playSfx(data.payload.id);
+        else if (data.type === 'SET_STATE') setState(data.payload.state);
+    } 
+    else if (gameMode === 'HOST') {
+        if (data.type === 'ACTION') {
+            if (data.payload.name === 'BREACH') {
+                if (petMalice >= 30) {
+                    petMalice -= 30;
+                    triggerBite();
+                }
+            }
+            else if (data.payload.name === 'SCARE') {
+                shake += 5;
+                playSfx('scream');
+                sendNetworkData('SFX', { id: 'scream' });
+            }
+        }
+    }
+}
+
+/**
+ * AUDIO SYSTEM (Web Audio API)
+ */
+async function initAudio() {
+    if (audioCtx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+
+    const loadBuffer = async (id, url) => {
+        try {
+            const response = await fetch(url, { mode: 'cors' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const arrayBuffer = await response.arrayBuffer();
+            sfxBuffers[id] = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) { console.warn(`Failed to load SFX ${id}`); }
+    };
+
+    await Promise.all([
+        loadBuffer('bark', document.getElementById('sfx_bark').src),
+        loadBuffer('squeak', document.getElementById('sfx_squeak').src),
+        loadBuffer('bite', document.getElementById('sfx_bite').src),
+        loadBuffer('hit', document.getElementById('sfx_hit').src),
+        loadBuffer('day', document.getElementById('sfx_day').src),
+        loadBuffer('gun_cycle', document.getElementById('sfx_gun_cycle').src),
+        loadBuffer('shoot', document.getElementById('sfx_shoot').src),
+        loadBuffer('scream', document.getElementById('sfx_scream').src),
+        loadBuffer('pounce', document.getElementById('sfx_pounce').src),
+        loadBuffer('action', document.getElementById('sfx_action').src),
+        loadBuffer('friend_bleed', document.getElementById('sfx_friend_bleed').src),
+        loadBuffer('restore', document.getElementById('sfx_restore').src),
+        loadBuffer('day_complete', document.getElementById('sfx_day_complete').src),
+        loadBuffer('win', document.getElementById('sfx_win').src),
+        loadBuffer('reveal', document.getElementById('sfx_reveal').src),
+        loadBuffer('connect', document.getElementById('sfx_connect').src),
+        loadBuffer('disconnect', document.getElementById('sfx_disconnect').src),
+        loadBuffer('transform', document.getElementById('sfx_transform').src),
+        loadBuffer('day20', document.getElementById('sfx_day20').src),
+        loadBuffer('gun_pickup', document.getElementById('sfx_gun_pickup').src),
+        loadBuffer('reload', document.getElementById('sfx_reload').src)
+    ]);
+}
+
+function unlockAudio() {
+    if (audioUnlocked) return;
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    updateBGM();
+    audioUnlocked = true;
+}
+
+function stopLoopSfx(id) {
+    const active = activeLoopSfx[id];
+    if (!active) return;
+    try { active.stop(0); } catch (e) {}
+    delete activeLoopSfx[id];
+}
+
+function playLoopSfx(id) {
+    if (!audioCtx || !sfxBuffers[id] || activeLoopSfx[id]) return;
+    const source = playSfx(id, 0);
+    if (source) activeLoopSfx[id] = source;
+}
+
+function showFeedbackGif(id, duration = 1200) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    clearTimeout(feedbackTimers[id]);
+    el.classList.remove('hidden');
+    feedbackTimers[id] = setTimeout(() => el.classList.add('hidden'), duration);
+}
+
+function updateBGM() {
+    if (!audioUnlocked) return;
+    // Horror starts at Shift 10
+    let targetBgm = document.getElementById('bgm_cute');
+    if (currentDay >= 10) targetBgm = document.getElementById('bgm_horror');
+    if (currentDay >= 35) targetBgm = document.getElementById('bgm_city');
+    
+    if (currentBgm !== targetBgm) {
+        if (currentBgm) {
+            const fadeOut = currentBgm;
+            let vol = fadeOut.volume;
+            const fade = setInterval(() => {
+                vol -= 0.1;
+                if (vol <= 0) {
+                    fadeOut.pause();
+                    clearInterval(fade);
+                } else {
+                    fadeOut.volume = vol;
+                }
+            }, 100);
+        }
+        
+        currentBgm = targetBgm;
+        currentBgm.volume = 0;
+        currentBgm.currentTime = 0;
+        currentBgm.play().catch(()=>{});
+        
+        let vol = 0;
+        const fadeIn = setInterval(() => {
+            vol += 0.05;
+            if (vol >= 0.2) {
+                currentBgm.volume = 0.2;
+                clearInterval(fadeIn);
+            } else {
+                currentBgm.volume = vol;
+            }
+        }, 100);
+    }
+}
+
+function playSfx(id, pitchVar = 0.1) {
+    if (!audioCtx) return;
+    if (!sfxBuffers[id]) {
+        const mediaEl = document.getElementById(`sfx_${id}`);
+        if (mediaEl) {
+            const clone = mediaEl.cloneNode();
+            clone.crossOrigin = 'anonymous';
+            clone.volume = id === 'friend_bleed' ? 0.2 : 0.45;
+            clone.loop = id === 'friend_bleed';
+            clone.play().catch(() => {});
+            if (id === 'friend_bleed') {
+                return {
+                    stop() {
+                        clone.pause();
+                        clone.currentTime = 0;
+                    }
+                };
+            }
+            clone.addEventListener('ended', () => clone.remove(), { once: true });
+            document.body.appendChild(clone);
+            return;
+        }
+
+        // Fallback oscillator
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+        return;
+    }
+
+    const pitch = 1.0 + (Math.random() * pitchVar * 2 - pitchVar);
+    const source = audioCtx.createBufferSource();
+    source.buffer = sfxBuffers[id];
+    source.playbackRate.value = pitch;
+    const gain = audioCtx.createGain();
+    
+    let vol = 0.6;
+    if (id === 'friend_bleed') { vol = 0.2; source.loop = true; }
+    else if (id === 'restore' || id === 'reveal' || id === 'day20' || id === 'win') vol = 0.7;
+    else if (id === 'action' || id === 'bark' || id === 'squeak' || id === 'connect' || id === 'disconnect' || id === 'reload' || id === 'gun_cycle') vol = 0.45;
+    else if (id === 'bite' || id === 'shoot' || id === 'pounce' || id === 'transform' || id === 'scream') vol = 0.82;
+    
+    gain.gain.value = vol;
+    source.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start(0);
+    return source;
+}
+
+function vibrate(type) {
+    if (!window.navigator.vibrate) return;
+    if (type === 'heavy') navigator.vibrate([80, 50, 80, 50, 100]);
+    else if (type === 'medium') navigator.vibrate(40);
+    else if (type === 'light') navigator.vibrate(15);
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0', params: { style: type }
+    });
+}
+
+/**
+ * GAME LIFECYCLE
+ */
+function initGame() {
+    if (initialized) return;
+    resize(cw, ch);
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+    initAudio();
+    initialized = true;
+}
+
+function startGame(mode) {
+    gameMode = mode;
+    petName = document.getElementById('pet-name-input').value.trim() || "Subject";
+    document.getElementById('mode-select-layer').classList.add('hidden');
+    
+    // Setup UI based on role
+    const petHud = document.getElementById('pet-hud');
+    const actionBar = document.getElementById('action-bar');
+    const topHud = document.getElementById('top-hud');
+
+    if (mode === 'CLIENT') { // Monster
+        petHud.classList.remove('hidden');
+        petHud.style.opacity = '1';
+        actionBar.classList.add('hidden'); 
+        topHud.style.top = '140px'; 
+    } else { // Solo or Host
+        petHud.classList.add('hidden');
+        actionBar.classList.remove('hidden');
+        topHud.style.top = '24px';
+    }
+    
+    playSfx('reveal'); // Chime for start
+    restartGame();
+}
+
+function restartGame() {
+    stopLoopSfx('friend_bleed');
+    currentDay = 1;
+    playerHealth = 100;
+    actionCooldown = 0;
+    petMalice = 0;
+    resetDay();
+    setState('PLAYING');
+    
+    updateBGM();
+    
+    document.body.style.backgroundColor = '#fafafa';
+    document.getElementById('flash-overlay').style.opacity = '0';
+    document.getElementById('flash-overlay').style.backgroundColor = 'white';
+    document.getElementById('gif-comfort').classList.add('hidden');
+    document.getElementById('gif-breach').classList.add('hidden');
+}
+
+function resetDay() {
+    dailyProgress = 0;
+    maxProgress = gameConfig.actionsToAdvance + Math.floor(currentDay * 0.5);
+    petState = 'IDLE';
+    biteHitsRequired = 0;
+    gunStep = 0;
+    sequenceStep = 0;
+    
+    stopLoopSfx('friend_bleed');
+    playerHealth = 100;
+    document.getElementById('blood-overlay').style.opacity = '0';
+    
+    if (currentDay === 10) {
+        playSfx('transform');
+        vibrate('heavy');
+    } else if (currentDay === 20) {
+        playSfx('day20');
+        playSfx('gun_pickup');
+        vibrate('medium');
+    } else {
+        playSfx('restore');
+    }
+    
+    // Fear factor starts ramping up from Shift 10
+    fearFactor = Math.max(0, (currentDay - 10) / 6);
+    
+    if (gameMode === 'SOLO') {
+        // Safe until Shift 10
+        biteTimer = currentDay < 10 ? 99999 : 3 + Math.random() * 3;
+    } else {
+        biteTimer = 99999; 
+        petMalice = 50; 
+    }
+    
+    // Endgame phases shifted
+    if (currentDay === 35) {
+        petState = 'FAKE_DEATH';
+        biteTimer = 99999;
+        maxProgress = 1; 
+    }
+    else if (currentDay === 45) {
+        petState = 'GONE';
+        biteTimer = 99999;
+        maxProgress = 1; 
+    }
+    else if (currentDay >= 55) {
+        petState = 'HIDDEN';
+        biteTimer = 99999;
+        hiddenTarget = { 
+            x: 50 + Math.random() * (cw - 100), 
+            y: 100 + Math.random() * (ch - 200) 
+        };
+        searchRadius = 80;
+        playSfx('scream');
+        playLoopSfx('friend_bleed'); 
+    }
+    
+    updateHUD();
+    
+    // Shift 1-9: Cute Mode | Shift 10+: Horror Mode
+    if (currentDay < 10) {
+        document.body.style.backgroundColor = '#fafafa';
+        document.getElementById('scanlines').style.opacity = '0';
+        document.getElementById('game-container').classList.remove('font-horror', 'text-white');
+        document.getElementById('game-container').classList.add('font-cute', 'text-gray-800');
+    } else {
+        const lightness = Math.max(0, 15 - ((currentDay-10) * 1.5));
+        document.body.style.backgroundColor = `hsl(0, 0%, ${lightness}%)`;
+        document.getElementById('scanlines').style.opacity = '0.1';
+        document.getElementById('game-container').classList.add('font-horror', 'text-white');
+        document.getElementById('game-container').classList.remove('font-cute', 'text-gray-800');
+    }
+    
+    updateBGM();
+}
+
+function setState(newState) {
+    gameState = newState;
+    
+    if (gameMode === 'HOST') sendNetworkData('SET_STATE', { state: newState });
+
+    const gameOver = document.getElementById('game-over-screen');
+    const dayOverlay = document.getElementById('day-overlay');
+    const actionBar = document.getElementById('action-bar');
+    const topHud = document.getElementById('top-hud');
+    const shootPrompt = document.getElementById('shoot-prompt');
+    const flash = document.getElementById('flash-overlay');
+
+    shootPrompt.classList.add('hidden');
+
+    if (newState === 'PLAYING') {
+        gameOver.classList.add('hidden');
+        dayOverlay.classList.add('hidden');
+        if (gameMode !== 'CLIENT') {
+            actionBar.style.opacity = '1';
+            actionBar.style.pointerEvents = 'auto';
+        }
+        topHud.style.opacity = '1';
+        
+        if (currentDay >= 35 && currentDay >= 55) {
+            actionBar.style.opacity = '0';
+            actionBar.style.pointerEvents = 'none';
+        }
+    } else if (newState === 'TRANSITION') {
+        dayOverlay.classList.remove('hidden');
+        playSfx('day');
+        document.getElementById('day-title').innerText = `Day ${currentDay}`;
+        
+        // Style changes for horror days
+        const dayTitle = document.getElementById('day-title');
+        const daySub = document.getElementById('day-subtitle');
+        const dayMsg = document.getElementById('day-restore-msg');
+        const dayOverlayEl = document.getElementById('day-overlay');
+
+        if (currentDay < 10) {
+            dayOverlayEl.style.backgroundColor = '#fff';
+            dayTitle.className = "text-8xl font-cute text-[#ff69b4] tracking-widest mb-2";
+            daySub.innerText = "Stable shift";
+            dayMsg.innerText = "TRUST RESTORED";
+            dayMsg.className = "text-[#ff69b4] text-xs mt-4 tracking-widest font-bold animate-pulse";
+        } else {
+            dayOverlayEl.style.backgroundColor = '#000';
+            dayTitle.className = "text-8xl font-horror text-red-600 tracking-widest mb-2 glitch-active";
+            dayMsg.innerText = "SYSTEM RESTORED";
+            dayMsg.className = "text-red-500 text-xs mt-4 tracking-widest font-bold animate-pulse";
+            
+            let sub = "Stress is escalating";
+            if (currentDay > 12) sub = "Avoid direct engagement";
+            if (currentDay >= 15) sub = "CONTROL IS SLIPPING";
+            if (currentDay >= 20) sub = "LOCKDOWN AUTHORITY GRANTED";
+            if (currentDay == 35) sub = "NO RESPONSE";
+            if (currentDay == 45) sub = "SIGNAL LOST";
+            if (currentDay >= 55) sub = "PROTECT YOUR PARTNER";
+            daySub.innerText = sub;
+        }
+
+        actionBar.style.opacity = '0';
+        actionBar.style.pointerEvents = 'none';
+        
+        if (gameMode === 'HOST' || gameMode === 'SOLO') {
+            setTimeout(() => setState('PLAYING'), 2500);
+        }
+    } else if (newState === 'GAMEOVER') {
+        stopLoopSfx('friend_bleed');
+        showFeedbackGif('gif-breach', 1800);
+        gameOver.classList.remove('hidden');
+        actionBar.style.opacity = '0';
+        topHud.style.opacity = '0';
+        document.getElementById('blood-overlay').style.opacity = '0.8';
+        document.getElementById('pet-hud').style.opacity = '0';
+    } else if (newState === 'WIN') {
+        stopLoopSfx('friend_bleed');
+        showFeedbackGif('gif-comfort', 2200);
+        flash.style.transition = 'opacity 2s ease-in';
+        flash.style.opacity = '0';
+        
+        // Good BGM for win
+        currentBgm.pause();
+        currentBgm = document.getElementById('bgm_cute');
+        currentBgm.volume = 0.2;
+        currentBgm.currentTime = 0;
+        currentBgm.play().catch(()=>{});
+        playSfx('reveal');
+
+        document.body.style.backgroundColor = '#ffffff';
+        gameOver.classList.remove('hidden');
+        gameOver.style.backgroundColor = 'rgba(255,255,255,0.95)';
+        
+        const title = document.getElementById('game-over-title');
+        title.innerText = "CONTAINED";
+        title.className = "text-8xl text-black font-cute mb-2 tracking-widest drop-shadow-[0_0_15px_gold]";
+        
+        const msg = document.getElementById('game-over-msg');
+        msg.innerText = "THE SUBJECT HAS BEEN SECURED.";
+        msg.className = "text-xl text-gray-600 mb-8 text-center px-4 tracking-widest font-bold";
+        
+        const btn = document.getElementById('restart-btn');
+        btn.innerText = "WAKE UP";
+        btn.className = "px-12 py-4 bg-black text-white text-2xl font-cute tracking-widest hover:bg-gray-800 transition-colors rounded-sm shadow-xl";
+
+        actionBar.style.opacity = '0';
+        topHud.style.opacity = '0';
+        document.getElementById('pet-hud').style.opacity = '0';
+    }
+}
+
+/**
+ * LOGIC
+ */
+function triggerBite(fromNetwork = false) {
+    if (petState === 'BITING' || gameState !== 'PLAYING') return;
+    
+    petState = 'BITING';
+    biteHitsTaken = 0;
+    biteHitsRequired = 15 + (currentDay - 10) * 2;
+    if (gameMode !== 'SOLO') biteHitsRequired = 20;
+    
+    playSfx('bite');
+    showFeedbackGif('gif-breach', 1200);
+    vibrate('heavy');
+    shake = 40;
+    
+    const warning = document.getElementById('attack-warning');
+    warning.classList.remove('hidden');
+    
+    const btns = document.querySelectorAll('#action-bar button:not(#btn-gun)');
+    btns.forEach(b => {
+        b.classList.add('opacity-30', 'cursor-not-allowed');
+        b.classList.remove('glass');
+        b.classList.add('glass-danger');
+    });
+    
+    document.getElementById('status-text').innerText = `${petName} IS BREACHING!`;
+    document.getElementById('status-text').classList.add('text-red-500', 'glitch-active');
+}
+
+function resolveBite(fromNetwork = false) {
+    petState = 'STUNNED';
+    petAnimTimer = 2.0; 
+    biteTimer = 5 + Math.random() * 5; 
+    if (gameMode !== 'SOLO') biteTimer = 99999;
+    
+    const warning = document.getElementById('attack-warning');
+    warning.classList.add('hidden');
+    
+    const btns = document.querySelectorAll('#action-bar button');
+    btns.forEach(b => {
+        b.classList.remove('opacity-30', 'cursor-not-allowed', 'glass-danger');
+        b.classList.add('glass');
+    });
+    
+    document.getElementById('status-text').innerText = `${petName} stabilizes...`;
+    document.getElementById('status-text').classList.remove('text-red-500', 'glitch-active');
+    showFeedbackGif('gif-comfort', 1000);
+    
+    shake = 10;
+}
+
+function hitPet() {
+    if (petState !== 'BITING') return;
+    
+    playSfx('hit');
+    vibrate('medium');
+    shake += 15;
+    biteHitsTaken++;
+    
+    const flash = document.createElement('div');
+    flash.className = 'absolute inset-0 bg-red-500 z-[100] pointer-events-none mix-blend-add';
+    flash.style.opacity = '0.3';
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 50);
+    
+    spawnParticles(cw/2, ch/2 + 50, '#ff0000');
+
+    if (biteHitsTaken >= biteHitsRequired) {
+        resolveBite();
+    }
+}
+
+function performAction(type) {
+    unlockAudio();
+    if (gameState !== 'PLAYING') return;
+    if (actionCooldown > 0) return; 
+    
+    if (currentDay === 35 || currentDay === 45) {
+        dailyProgress = maxProgress;
+        playSfx('action'); 
+        actionCooldown = gameConfig.cooldownTime;
+        checkProgress();
+        return;
+    }
+    
+    if (petState === 'BITING') {
+        vibrate('medium');
+        shake = 5;
+        return; 
+    }
+    
+    if (petState === 'STUNNED' || petState === 'IDLE' || petState === 'HAPPY') {
+        dailyProgress++;
+        actionCooldown = gameConfig.cooldownTime;
+        
+        petState = type === 'feed' ? 'EATING' : 'HAPPY';
+        petAnimTimer = 1.0;
+        
+        const partColor = currentDay < 10 ? (type === 'feed' ? '#ff69b4' : '#00aaff') : (type === 'feed' ? '#00ffaa' : '#ffaa00');
+        spawnParticles(cw/2, ch/2, partColor);
+        
+        playSfx('action');
+        setTimeout(() => {
+            if (type === 'feed') {
+                playSfx('squeak');
+                showFeedbackGif('gif-comfort', 900);
+            } else {
+                playSfx('bark');
+            }
+        }, 100);
+        vibrate('light');
+        
+        if (gameMode !== 'SOLO') {
+            petMalice += 10;
+            if (petMalice > petMaxMalice) petMalice = petMaxMalice;
+        }
+
+        updateHUD();
+        checkProgress();
+    }
+}
+
+function performGunAction() {
+    unlockAudio();
+    if (gameState !== 'PLAYING') return;
+    
+    if (petState === 'MONSTER_POUNCE') {
+        playSfx('shoot');
+        vibrate('heavy');
+        shake = 100;
+        const flash = document.getElementById('flash-overlay');
+        flash.style.transition = 'none';
+        flash.style.opacity = '1';
+        flash.style.backgroundColor = '#ffffff';
+        currentBgm?.pause();
+        petState = 'DEAD';
+        document.getElementById('shoot-prompt').classList.add('hidden');
+        setTimeout(() => setState('WIN'), 1000);
+        return;
+    }
+
+    if (actionCooldown > 0) return;
+    actionCooldown = gameConfig.cooldownTime;
+
+    if (gunStep === 0) { 
+        gunStep = 1;
+        playSfx('action');
+        setTimeout(() => playSfx('gun_cycle'), 100);
+        vibrate('light');
+        updateHUD();
+    }
+    else if (gunStep === 1) { 
+        gunStep = 2;
+        playSfx('action');
+        setTimeout(() => playSfx('reload'), 100);
+        vibrate('medium');
+        updateHUD();
+    }
+    else if (gunStep === 2) { 
+        gunStep = 0;
+        playSfx('shoot');
+        vibrate('heavy');
+        shake = 60;
+        shotsFired++;
+        
+        const flash = document.getElementById('flash-overlay');
+        flash.style.opacity = '1';
+        setTimeout(() => flash.style.opacity = '0', 100);
+        
+        spawnParticles(cw/2, ch/2, '#ffffff');
+        
+        if (petState === 'BITING') {
+            resolveBite();
+            dailyProgress = maxProgress;
+        } else if (petState !== 'GONE') {
+            dailyProgress += 5;
+            
+            if (shotsFired >= gameConfig.shotsToKill) {
+                petState = 'FAKE_DEATH';
+                document.getElementById('status-text').innerText = "LOCKDOWN CONFIRMED.";
+                setTimeout(() => {
+                    currentDay = 35;
+                    resetDay();
+                    setState('TRANSITION');
+                }, 1500);
+                return; 
+            } else {
+                petState = 'STUNNED';
+                petAnimTimer = 3.0;
+            }
+        }
+        
+        updateHUD();
+        checkProgress();
+    }
+}
+
+function checkProgress() {
+    if (dailyProgress >= maxProgress) {
+        playSfx('day_complete');
+        setTimeout(() => {
+            currentDay++;
+            if (currentDay === 36) currentDay = 45;
+            if (currentDay === 46) currentDay = 55;
+            resetDay();
+            setState('TRANSITION');
+        }, 1000);
+    }
+}
+
+function updateHUD() {
+    const dayText = document.getElementById('day-indicator');
+    const bar = document.getElementById('progress-bar');
+    const status = document.getElementById('status-text');
+    const healthBar = document.getElementById('health-bar');
+    const healthVal = document.getElementById('health-val');
+    const healthLabel = document.getElementById('health-label');
+    const gunBtn = document.getElementById('btn-gun');
+    const gunLabel = document.getElementById('gun-label');
+    const gunIcon = document.getElementById('gun-icon');
+    const maliceBar = document.getElementById('malice-bar');
+
+    dayText.innerText = `Shift ${currentDay}`;
+    dayText.className = currentDay >= 10 ? 'text-6xl font-horror text-red-600 glitch-active' : 'text-4xl font-cute text-gray-700';
+    status.classList.add('font-ui');
+    
+    // Love/Blood Level Label Switch
+    if (currentDay >= 10) {
+        healthLabel.innerText = "BREACH LEVEL";
+        healthLabel.className = "text-red-600 font-horror tracking-widest";
+    } else {
+        healthLabel.innerText = "Trust";
+        healthLabel.className = "font-ui"; // Reset to approved UI font
+    }
+
+    const pct = Math.min(100, (dailyProgress / maxProgress) * 100);
+    bar.style.width = `${pct}%`;
+    
+    healthBar.style.width = `${playerHealth}%`;
+    healthVal.innerText = `${Math.floor(playerHealth)}%`;
+    
+    if (gameMode !== 'SOLO') {
+        maliceBar.style.width = `${(petMalice / petMaxMalice) * 100}%`;
+        const biteBtn = document.getElementById('btn-pet-bite');
+        if (petMalice >= 30) biteBtn.classList.remove('opacity-50', 'grayscale');
+        else biteBtn.classList.add('opacity-50', 'grayscale');
+    }
+
+    // LOCK VISIBILITY LOGIC: Available Day 20-35
+    let showGun = (currentDay >= 20 && currentDay < 35);
+    if (petState === 'MONSTER_POUNCE') showGun = true;
+
+    if (showGun) {
+        gunBtn.classList.remove('hidden');
+        if (petState === 'MONSTER_POUNCE') {
+            gunLabel.innerText = "FIRE!";
+            gunIcon.innerText = "💥";
+            gunLabel.className = "text-xs font-bold tracking-widest text-white animate-pulse relative z-10";
+            gunBtn.classList.add('bg-red-500', 'scale-110');
+            gunBtn.classList.remove('glass');
+            gunBtn.style.boxShadow = "0 0 20px #f00";
+        } else {
+            gunBtn.classList.remove('bg-red-500', 'scale-110');
+            gunBtn.classList.add('glass');
+            gunBtn.style.boxShadow = "none";
+            
+            if (gunStep === 0) {
+                gunLabel.innerText = "LOCK";
+                gunIcon.innerText = "🔫";
+                gunLabel.className = "text-xs font-bold tracking-widest text-red-400 relative z-10";
+            } else if (gunStep === 1) {
+                gunLabel.innerText = "RELOAD";
+                gunIcon.innerText = "🔄";
+                gunLabel.className = "text-xs font-bold tracking-widest text-yellow-400 relative z-10";
+            } else if (gunStep === 2) {
+                gunLabel.innerText = "SHOOT";
+                gunIcon.innerText = "💥";
+                gunLabel.className = "text-xs font-bold tracking-widest text-red-600 glitch-active relative z-10";
+            }
+        }
+    } else {
+        gunBtn.classList.add('hidden');
+    }
+    
+    if (petState !== 'BITING' && petState !== 'STUNNED') {
+        if (petState === 'FAKE_DEATH') status.innerText = `${petName} is not moving.`;
+        else if (petState === 'GONE') status.innerText = "Where is it?";
+        else if (petState === 'HIDDEN') status.innerText = "FIND THE SOURCE.";
+        else if (petState === 'MONSTER_REVEAL') status.innerText = "RUN.";
+        else if (currentDay < 10) status.innerText = `${petName} is happy.`;
+        else if (currentDay < 15) status.innerText = `${petName} is watching you.`;
+        else if (currentDay < 20) status.innerText = "Something is wrong.";
+        else if (currentDay >= 20) status.innerText = "END IT.";
+        else status.innerText = "SURVIVE.";
+    }
+}
+
+function update(dt) {
+    if (gameState !== 'PLAYING') return;
+
+    // HOST/SOLO Logic Authority
+    if (gameMode !== 'CLIENT') {
+        if (gameMode !== 'SOLO' && petState !== 'BITING' && petState !== 'STUNNED') {
+            petMalice += dt * 2;
+            if (petMalice > petMaxMalice) petMalice = petMaxMalice;
+            updateHUD();
+        }
+
+        if (actionCooldown > 0) {
+            actionCooldown -= dt;
+            if (actionCooldown < 0) actionCooldown = 0;
+            
+            const pct = (actionCooldown / gameConfig.cooldownTime) * 100;
+            document.getElementById('cd-feed').style.height = `${pct}%`;
+            document.getElementById('cd-pet').style.height = `${pct}%`;
+            document.getElementById('cd-gun').style.height = `${pct}%`;
+            
+            const btns = [document.getElementById('btn-feed'), document.getElementById('btn-pet'), document.getElementById('btn-gun')];
+            btns.forEach(b => {
+                if (actionCooldown > 0 && petState !== 'MONSTER_POUNCE') b.classList.add('glass-disabled');
+                else b.classList.remove('glass-disabled');
+            });
+        }
+
+        if (petAnimTimer > 0) {
+            petAnimTimer -= dt;
+            if (petAnimTimer <= 0 && petState !== 'FAKE_DEATH') {
+                petState = 'IDLE';
+            }
+        }
+
+        if (currentDay >= 55 && petState === 'HIDDEN') {
+            friendBleedTimer += dt;
+            if (friendBleedTimer > 0.1) {
+                friendBleedTimer = 0;
+                spawnParticles(cw/2 + 20, ch/2 + 80, '#00ff00');
+            }
+        }
+
+        if (petState === 'MONSTER_REVEAL' || petState === 'MONSTER_POUNCE') {
+            sequenceTimer += dt;
+            if (sequenceStep === 0 && sequenceTimer > 1.5) {
+                sequenceStep = 1;
+                playSfx('scream');
+                vibrate('heavy');
+                shake = 20;
+                document.getElementById('status-text').innerText = "IT TOOK YOUR FRIEND!";
+                document.getElementById('status-text').classList.add('text-red-600', 'glitch-active');
+                spawnParticles(cw/2, ch/2, '#ff0000');
+                updateHUD();
+            }
+            if (sequenceStep === 1 && sequenceTimer > 4.0) {
+                sequenceStep = 2;
+                petState = 'MONSTER_POUNCE';
+                playSfx('pounce');
+                vibrate('heavy');
+                shake = 100;
+                const actionBar = document.getElementById('action-bar');
+                actionBar.style.opacity = '1';
+                actionBar.style.pointerEvents = 'auto';
+                document.getElementById('btn-feed').classList.add('hidden');
+                document.getElementById('btn-pet').classList.add('hidden');
+                document.getElementById('btn-gun').classList.remove('hidden');
+                document.getElementById('shoot-prompt').classList.remove('hidden');
+                updateHUD(); 
+            }
+            if (sequenceStep === 2) {
+                dt = dt * 0.2;
+                if (sequenceTimer > 6.0) { 
+                    document.getElementById('game-over-title').innerText = "SLAUGHTERED";
+                    document.getElementById('game-over-msg').innerText = "YOU MISSED YOUR CHANCE";
+                    setState('GAMEOVER');
+                }
+            }
+        }
+
+        if (gameMode === 'SOLO' && petState !== 'BITING' && petState !== 'STUNNED' && petState !== 'FAKE_DEATH' && petState !== 'GONE' && petState !== 'HIDDEN' && petState !== 'MONSTER_REVEAL' && petState !== 'MONSTER_POUNCE' && currentDay >= 10 && currentDay < 35) {
+            biteTimer -= dt;
+            if (biteTimer <= 0) {
+                triggerBite();
+            }
+        }
+
+        if (petState === 'BITING') {
+            const damageRate = 15 + (currentDay - 10) * 2; 
+            playerHealth -= damageRate * dt;
+            shake = Math.max(shake, 5 + (100 - playerHealth)/5);
+            document.getElementById('blood-overlay').style.opacity = (100 - playerHealth) / 100;
+            if (playerHealth <= 0) {
+                playerHealth = 0;
+                setState('GAMEOVER');
+            }
+            updateHUD();
+        } else {
+            if (playerHealth < 100) {
+                playerHealth += dt * 5;
+                document.getElementById('blood-overlay').style.opacity = (100 - playerHealth) / 100;
+                updateHUD();
+            }
+        }
+
+        if (gameMode === 'HOST') {
+            lastSyncTime += dt;
+            if (lastSyncTime > 0.06) {
+                lastSyncTime = 0;
+                sendNetworkData('STATE', {
+                    currentDay, dailyProgress, maxProgress, playerHealth,
+                    petState, petMalice, fearFactor, shake, petName
+                });
+            }
+        }
+    } 
+    else {
+        document.getElementById('blood-overlay').style.opacity = (100 - playerHealth) / 100;
+    }
+
+    if (shake > 0) shake *= 0.9;
+    if (shake < 0.5) shake = 0;
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt * 60;
+        p.y += p.vy * dt * 60;
+        p.vy += 0.5;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function spawnParticles(x, y, color) {
+    for (let i = 0; i < 5; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            color: color,
+            life: 0.5 + Math.random() * 0.5,
+            size: 2 + Math.random() * 4
+        });
+    }
+}
+
+function checkHiddenTarget(x, y) {
+    if (petState !== 'HIDDEN') return;
+    
+    const dx = x - hiddenTarget.x;
+    const dy = y - hiddenTarget.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    if (dist < searchRadius) {
+        petState = 'MONSTER_REVEAL';
+        sequenceTimer = 0;
+        sequenceStep = 0;
+        playSfx('scream');
+        vibrate('heavy');
+        shake = 50;
+        const flash = document.getElementById('flash-overlay');
+        flash.style.opacity = '1';
+        flash.style.backgroundColor = 'white';
+        setTimeout(() => flash.style.opacity = '0', 500);
+        document.getElementById('status-text').innerText = "WHAT IS THAT?";
+        document.getElementById('status-text').className = "mt-4 text-xl font-bold text-center text-red-500 glitch-active uppercase tracking-widest";
+    } else {
+        const prox = Math.max(0, 1 - (dist / (cw * 0.8)));
+        const color = prox > 0.8 ? '#ff0000' : (prox > 0.5 ? '#ffaa00' : '#444444');
+        spawnParticles(x, y, color);
+        if (prox > 0.5) vibrate('light');
+    }
+}
+
+/**
+ * DRAWING
+ */
+function draw(ctx) {
+    ctx.fillStyle = document.body.style.backgroundColor || '#fafafa';
+    ctx.fillRect(0, 0, cw, ch);
+    drawBackdrop(ctx);
+
+    ctx.save();
+    
+    if (shake > 0) {
+        ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    }
+
+    if (petState === 'MONSTER_REVEAL' || petState === 'MONSTER_POUNCE') {
+        drawMonster(ctx);
+    } else if (petState !== 'GONE' && petState !== 'HIDDEN' && petState !== 'DEAD') {
+        drawDog(ctx);
+    }
+    
+    if (petState === 'HIDDEN') {
+        ctx.fillStyle = 'rgba(0, 25, 0, 0.95)';
+        ctx.fillRect(-50, -50, cw+100, ch+100);
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.05)';
+        for(let i=0; i<ch; i+=4) {
+            ctx.fillRect(0, i, cw, 2);
+        }
+        
+        if (gameMode !== 'CLIENT') {
+            const tx = hiddenTarget.x;
+            const ty = hiddenTarget.y;
+            ctx.save();
+            ctx.translate(tx, ty);
+            const time = performance.now() * 0.005;
+            const pulse = 1 + Math.sin(time * 5) * 0.2;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#f00';
+            ctx.fillStyle = '#f00';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20 * pulse, 12 * pulse, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        drawFriend(ctx);
+    }
+
+    drawParticles(ctx);
+
+    if (petState === 'BITING') {
+        const grad = ctx.createRadialGradient(cw/2, ch/2, cw*0.2, cw/2, ch/2, cw*0.9);
+        grad.addColorStop(0, 'transparent');
+        grad.addColorStop(1, `rgba(255, 0, 0, ${0.4 + Math.sin(performance.now()*0.02)*0.3})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, cw, ch);
+    }
+    
+    ctx.restore();
+}
+
+function drawBackdrop(ctx) {
+    const dayRatio = Math.min(1, Math.max(0, (currentDay - 1) / 54));
+    const horizonY = ch * 0.62;
+    const sky = ctx.createLinearGradient(0, 0, 0, ch);
+    if (currentDay < 10) {
+        sky.addColorStop(0, '#fff3db');
+        sky.addColorStop(0.45, '#ffc98d');
+        sky.addColorStop(1, '#54324d');
+    } else {
+        sky.addColorStop(0, `rgba(${18 + Math.floor(dayRatio * 20)}, ${8 + Math.floor(dayRatio * 6)}, ${26 + Math.floor(dayRatio * 12)}, 1)`);
+        sky.addColorStop(0.5, `rgba(${46 + Math.floor(dayRatio * 16)}, 6, ${26 + Math.floor(dayRatio * 18)}, 1)`);
+        sky.addColorStop(1, '#05040a');
+    }
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, cw, ch);
+
+    const glow = ctx.createRadialGradient(cw * 0.5, ch * 0.24, 10, cw * 0.5, ch * 0.24, cw * 0.38);
+    if (currentDay < 10) {
+        glow.addColorStop(0, 'rgba(255, 247, 187, 0.72)');
+        glow.addColorStop(1, 'rgba(255, 247, 187, 0)');
+    } else {
+        glow.addColorStop(0, 'rgba(255, 70, 95, 0.16)');
+        glow.addColorStop(1, 'rgba(255, 70, 95, 0)');
+    }
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.fillStyle = currentDay < 10 ? 'rgba(63, 39, 75, 0.35)' : 'rgba(7, 6, 14, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    for (let x = 0; x <= cw; x += cw / 6) {
+        const peak = (x / cw) % 0.4 < 0.2 ? 70 : 38;
+        ctx.lineTo(x, horizonY - peak - (currentDay >= 10 ? 20 : 0));
+    }
+    ctx.lineTo(cw, ch);
+    ctx.lineTo(0, ch);
+    ctx.closePath();
+    ctx.fill();
+
+    const floor = ctx.createLinearGradient(0, horizonY, 0, ch);
+    floor.addColorStop(0, currentDay < 10 ? 'rgba(65, 36, 29, 0.15)' : 'rgba(22, 8, 20, 0.35)');
+    floor.addColorStop(1, currentDay < 10 ? 'rgba(25, 18, 26, 0.92)' : 'rgba(2, 2, 5, 1)');
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, horizonY, cw, ch - horizonY);
+
+    for (let i = 0; i < 7; i++) {
+        const x = (cw / 7) * i + ((performance.now() * 0.01 * (i + 1)) % 18);
+        const h = currentDay < 10 ? 26 + (i % 3) * 12 : 36 + (i % 3) * 18;
+        ctx.fillStyle = currentDay < 10 ? 'rgba(255, 242, 214, 0.08)' : 'rgba(127, 255, 212, 0.04)';
+        ctx.fillRect(x, horizonY - h, 2, h);
+    }
+}
+
+function drawFriend(ctx) {
+    const cx = cw / 2;
+    const cy = ch / 2 + 100;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#0f0';
+    ctx.fillStyle = '#0f0'; 
+    ctx.beginPath();
+    ctx.moveTo(-20, 40);
+    ctx.lineTo(-30, 0); 
+    ctx.quadraticCurveTo(0, -10, 30, 0); 
+    ctx.lineTo(20, 40); 
+    ctx.fill();
+    ctx.fillStyle = '#cfc'; 
+    ctx.beginPath();
+    ctx.arc(0, 10, 15, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-30, 0);
+    ctx.quadraticCurveTo(-40, 20, -35, 45);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.quadraticCurveTo(40, 20, 35, 45);
+    ctx.stroke();
+    const time = performance.now() * 0.002;
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 45, 40 + Math.sin(time)*2, 10 + Math.cos(time)*2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(5, 15, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawMonster(ctx) {
+    const cx = cw / 2;
+    let cy = ch / 2 + 50;
+    let scale = 1.0;
+    if (petState === 'MONSTER_POUNCE') {
+        scale = 1.0 + (sequenceTimer - 4.0) * 15; 
+    }
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    const time = performance.now() * 0.01;
+    const jitter = (v, range = 8) => v + (Math.random() - 0.5) * range;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 70, 95, 0.15)';
+    ctx.shadowBlur = 45;
+    ctx.shadowColor = '#ff465f';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 30, 120, 150, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#07040c';
+    ctx.beginPath();
+    ctx.moveTo(jitter(cx - 90), jitter(cy - 95));
+    ctx.quadraticCurveTo(jitter(cx), jitter(cy - 190, 14), jitter(cx + 90), jitter(cy - 95));
+    ctx.lineTo(jitter(cx + 60), jitter(cy + 65));
+    ctx.quadraticCurveTo(jitter(cx), jitter(cy + 125, 14), jitter(cx - 60), jitter(cy + 65));
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#16050d';
+    ctx.beginPath();
+    ctx.moveTo(cx - 70, cy - 92);
+    ctx.lineTo(cx - 28, cy - 172);
+    ctx.lineTo(cx - 3, cy - 94);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + 70, cy - 92);
+    ctx.lineTo(cx + 28, cy - 172);
+    ctx.lineTo(cx + 3, cy - 94);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 3;
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * 22, cy - 44);
+        ctx.quadraticCurveTo(cx + i * 15, cy + 8, cx + i * 10, cy + 78);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = '#ff465f';
+    ctx.shadowColor = '#ff465f';
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.ellipse(cx - 34, cy - 56, 16, 22, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + 34, cy - 60, 14, 20, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff4f6';
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(cx - 58, cy - 8);
+    for (let i = 0; i < 9; i++) {
+        const toothX = cx - 58 + i * 14;
+        const toothDepth = 22 + Math.random() * 10;
+        ctx.lineTo(toothX, cy - 8);
+        ctx.lineTo(toothX + 6, cy + toothDepth);
+    }
+    ctx.lineTo(cx + 58, cy - 8);
+    for (let i = 8; i >= 0; i--) {
+        const toothX = cx - 58 + i * 14;
+        const toothDepth = 18 + Math.random() * 8;
+        ctx.lineTo(toothX + 6, cy + 20);
+        ctx.lineTo(toothX, cy + 20 - toothDepth);
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawParticles(ctx) {
+    for (let p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+function drawDog(ctx) {
+    const cx = cw / 2;
+    let cy = ch / 2 + 50;
+    let baseSize = Math.min(cw, ch) * 0.35;
+    const time = performance.now() * 0.005;
+    
+    // Cute Mode Adjustments
+    const isCute = currentDay < 10;
+    
+    if (petState === 'BITING') {
+        baseSize *= 1.5;
+        cy += Math.sin(performance.now() * 0.1) * 30; 
+    } else if (petState === 'STUNNED' || petState === 'FAKE_DEATH') {
+        cy += 30;
+    }
+    
+    if (petState === 'FAKE_DEATH') {
+        ctx.transform(1.2, 0, 0, 0.6, 0, cy * 0.4);
+    }
+
+    const distortionBase = fearFactor * 10; 
+    const distortionAnim = petState === 'BITING' ? 30 : distortionBase;
+    
+    let bodyColor = isCute ? '#e0c0a0' : '#332211'; // Tan for cute, dark brown for scary
+    if (fearFactor > 0.5) bodyColor = '#1a1a1a';
+    if (petState === 'BITING') bodyColor = '#100';
+    if (petState === 'FAKE_DEATH') bodyColor = '#111';
+    
+    ctx.save();
+    ctx.shadowBlur = isCute ? 32 : 26;
+    ctx.shadowColor = isCute ? 'rgba(255, 215, 140, 0.38)' : 'rgba(255, 70, 95, 0.18)';
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    
+    const points = 40;
+    
+    // Head Shape
+    for (let i = 0; i <= points; i++) {
+        const angle = (i / points) * Math.PI * 2;
+        let r = baseSize;
+        
+        // Flatten bottom slightly for jowls
+        if (Math.sin(angle) > 0.5 && isCute) r *= 1.1;
+
+        if (fearFactor > 0.1 || petState === 'BITING') {
+            const noiseFreq = 3 + fearFactor * 10;
+            const noiseAmp = distortionAnim;
+            const noise = Math.sin(angle * noiseFreq + time * (1 + fearFactor));
+            r += noise * noiseAmp;
+            
+            if (currentDay >= 15 && petState !== 'FAKE_DEATH') {
+                r += (Math.random() - 0.5) * 10;
+            }
+        }
+        
+        const px = cx + Math.cos(angle) * r;
+        const py = cy + Math.sin(angle) * r;
+        
+        if (i===0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.fill();
+    ctx.restore();
+
+    // Ears (Floppy for dog)
+    ctx.fillStyle = isCute ? '#d0b090' : bodyColor;
+    if (fearFactor > 0.5) ctx.fillStyle = '#000';
+    
+    const earWag = isCute ? Math.sin(time * 2) * 10 : 0;
+    
+    // Left Ear
+    ctx.beginPath();
+    ctx.ellipse(cx - baseSize*0.8, cy - baseSize*0.2 + earWag, baseSize*0.3, baseSize*0.6, 0.3, 0, Math.PI*2);
+    ctx.fill();
+    
+    // Right Ear
+    ctx.beginPath();
+    ctx.ellipse(cx + baseSize*0.8, cy - baseSize*0.2 - earWag, baseSize*0.3, baseSize*0.6, -0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = isCute ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)';
+    ctx.beginPath();
+    ctx.ellipse(cx - baseSize * 0.18, cy - baseSize * 0.28, baseSize * 0.22, baseSize * 0.12, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isCute) {
+        const charmColors = ['#7fffd4', '#ffcf70', '#ff8cab'];
+        for (let i = 0; i < 3; i++) {
+            ctx.fillStyle = charmColors[i];
+            ctx.beginPath();
+            ctx.arc(cx - 28 + i * 24, cy + baseSize * 0.78 + Math.sin(time * 3 + i) * 2, 4 + i, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Snout
+    const snoutY = cy + baseSize * 0.2;
+    ctx.fillStyle = isCute ? '#f0d0b0' : '#221100';
+    if (fearFactor > 0.5) ctx.fillStyle = '#110000';
+    
+    ctx.beginPath();
+    ctx.ellipse(cx, snoutY, baseSize*0.4, baseSize*0.35, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Nose
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(cx, snoutY - baseSize*0.1, baseSize*0.15, baseSize*0.1, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    drawEyes(ctx, cx, cy, baseSize, isCute);
+    drawMouth(ctx, cx, cy, baseSize, isCute);
+}
+
+function drawEyes(ctx, cx, cy, size, isCute) {
+    if (petState === 'FAKE_DEATH') {
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 5;
+        const eyeOffset = size * 0.35;
+        const ly = cy - size*0.1;
+        const lx = cx - eyeOffset;
+        const rx = cx + eyeOffset;
+        const es = size * 0.1;
+        ctx.beginPath(); ctx.moveTo(lx-es, ly-es); ctx.lineTo(lx+es, ly+es); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(lx+es, ly-es); ctx.lineTo(lx-es, ly+es); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rx-es, ly-es); ctx.lineTo(rx+es, ly+es); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rx+es, ly-es); ctx.lineTo(rx-es, ly+es); ctx.stroke();
+        return;
+    }
+
+    let eyeColor = isCute ? '#543' : '#fff';
+    let pupilColor = isCute ? '#000' : '#000';
+    
+    if (!isCute) {
+        if (currentDay >= 10) eyeColor = '#ffffaa';
+        if (currentDay >= 15) eyeColor = '#ffaa00';
+        if (currentDay >= 20) eyeColor = '#ff0000';
+    }
+    
+    if (petState === 'BITING') { eyeColor = '#ff0000'; pupilColor = '#fff'; }
+    if (petState === 'STUNNED') { eyeColor = '#555'; pupilColor = '#222'; }
+
+    const eyeSize = isCute ? size * 0.15 : size * 0.15;
+    const eyeOffset = size * 0.35;
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath();
+    let lx = cx - eyeOffset;
+    let ly = cy - size*0.2;
+    ctx.ellipse(lx, ly, eyeSize, eyeSize * (petState==='HAPPY'?0.5:1), 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    let rx = cx + eyeOffset;
+    let ry = cy - size*0.2;
+    ctx.ellipse(rx, ry, eyeSize, eyeSize * (petState==='HAPPY'?0.5:1), 0, 0, Math.PI*2);
+    ctx.fill();
+
+    if (petState !== 'HAPPY') {
+        ctx.fillStyle = pupilColor;
+        let pw = isCute ? eyeSize * 0.4 : eyeSize * 0.3;
+        if (!isCute && currentDay > 10) pw = eyeSize * 0.15;
+        if (!isCute && currentDay > 15) pw = eyeSize * 0.08;
+        let ph = isCute ? eyeSize * 0.4 : eyeSize * 0.3;
+        if (!isCute && currentDay > 10) ph = eyeSize * 0.6;
+        if (!isCute && currentDay > 15) ph = eyeSize * 0.8;
+        
+        // Cute highlight
+        if (isCute) {
+             ctx.fillStyle = '#fff';
+             ctx.beginPath(); ctx.arc(lx - pw*0.5, ly - ph*0.5, pw*0.5, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(rx - pw*0.5, ry - ph*0.5, pw*0.5, 0, Math.PI*2); ctx.fill();
+             ctx.fillStyle = '#7fffd4';
+             ctx.beginPath(); ctx.arc(lx + pw*0.3, ly + ph*0.2, pw*0.22, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(rx + pw*0.3, ry + ph*0.2, pw*0.22, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = pupilColor;
+            ctx.beginPath(); ctx.ellipse(lx, ly, pw, ph, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(rx, ry, pw, ph, 0, 0, Math.PI*2); ctx.fill();
+        }
+    }
+}
+
+function drawMouth(ctx, cx, cy, size, isCute) {
+    if (petState === 'FAKE_DEATH') return;
+    
+    const snoutY = cy + size * 0.2;
+    const mouthY = snoutY + size * 0.15;
+
+    if (petState === 'HAPPY') {
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        // Dog smile
+        ctx.moveTo(cx - 20, mouthY);
+        ctx.quadraticCurveTo(cx, mouthY + 10, cx + 20, mouthY);
+        ctx.stroke();
+        
+        // Tongue
+        if (isCute) {
+            ctx.fillStyle = '#ffaaaa';
+            ctx.beginPath();
+            ctx.ellipse(cx, mouthY + 5, 8, 12, 0, 0, Math.PI*2);
+            ctx.fill();
+        }
+    } else if (petState === 'BITING') {
+        ctx.fillStyle = '#400';
+        ctx.beginPath();
+        ctx.ellipse(cx, mouthY, size*0.5, size*0.4, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#eee';
+        // Sharp teeth
+        for(let i=-3; i<=3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(cx + i*25 - 10, mouthY - size*0.3);
+            ctx.lineTo(cx + i*25, mouthY + size*0.2);
+            ctx.lineTo(cx + i*25 + 10, mouthY - size*0.3);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(cx + i*25 - 10, mouthY + size*0.3);
+            ctx.lineTo(cx + i*25, mouthY - size*0.2);
+            ctx.lineTo(cx + i*25 + 10, mouthY + size*0.3);
+            ctx.fill();
+        }
+    } else {
+        // Neutral/Serious
+        ctx.strokeStyle = isCute ? '#333' : '#000';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx, snoutY + size*0.05);
+        ctx.lineTo(cx, mouthY);
+        ctx.moveTo(cx - 10, mouthY + 5);
+        ctx.quadraticCurveTo(cx, mouthY, cx + 10, mouthY + 5);
+        ctx.stroke();
+    }
+}
+
+/**
+ * ENGINE LOOP
+ */
+function gameLoop(time) {
+    if (!initialized) return;
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+
+    try {
+        update(dt);
+        draw(ctx);
+    } catch (e) { console.error(e); }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Input Handlers
+function handleGlobalInput(e) {
+    unlockAudio();
+    if (gameState === 'GAMEOVER' || gameState === 'WIN') return;
+    
+    if (gameState === 'PLAYING') {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        if (petState === 'BITING' && gameMode !== 'CLIENT') {
+            hitPet();
+        } else if (petState === 'HIDDEN' && gameMode !== 'CLIENT') {
+            checkHiddenTarget(x, y);
+        }
+    }
+}
+
+// UI Bindings
+document.getElementById('btn-feed').addEventListener('click', (e) => { e.stopPropagation(); performAction('feed'); });
+document.getElementById('btn-pet').addEventListener('click', (e) => { e.stopPropagation(); performAction('pet'); });
+document.getElementById('btn-gun').addEventListener('click', (e) => { e.stopPropagation(); performGunAction(); });
+document.getElementById('restart-btn').addEventListener('click', (e) => { 
+    e.stopPropagation(); 
+    unlockAudio(); 
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('mode-select-layer').classList.remove('hidden');
+    if (peer) { peer.destroy(); peer = null; }
+    restartGame();
+});
+
+document.getElementById('btn-mode-solo').addEventListener('click', () => { unlockAudio(); startGame('SOLO'); });
+
+// Network UI Bindings
+document.getElementById('btn-mode-host').addEventListener('click', () => { 
+    unlockAudio();
+    gameMode = 'HOST';
+    document.getElementById('mode-select-layer').classList.add('hidden');
+    document.getElementById('lobby-layer').classList.remove('hidden');
+    document.getElementById('lobby-host-panel').classList.remove('hidden');
+    initPeer('HOST');
+});
+
+document.getElementById('btn-mode-join').addEventListener('click', () => { 
+    unlockAudio();
+    gameMode = 'CLIENT';
+    document.getElementById('mode-select-layer').classList.add('hidden');
+    document.getElementById('lobby-layer').classList.remove('hidden');
+    document.getElementById('lobby-join-panel').classList.remove('hidden');
+});
+
+document.getElementById('btn-connect').addEventListener('click', () => {
+    const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+    if (code.length === 6) {
+        document.getElementById('join-status').innerText = "LINKING...";
+        connectToHost(code);
+    } else {
+        document.getElementById('join-status').innerText = "INVALID CODE";
+    }
+});
+
+const cancelLobby = () => {
+    document.getElementById('lobby-layer').classList.add('hidden');
+    document.getElementById('lobby-host-panel').classList.add('hidden');
+    document.getElementById('lobby-join-panel').classList.add('hidden');
+    document.getElementById('mode-select-layer').classList.remove('hidden');
+    if (peer) { peer.destroy(); peer = null; }
+};
+document.getElementById('btn-cancel-lobby').addEventListener('click', cancelLobby);
+document.getElementById('btn-cancel-join').addEventListener('click', cancelLobby);
+
+// Monster Controls
+document.getElementById('btn-pet-bite').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (gameMode === 'CLIENT') sendNetworkData('ACTION', { name: 'BREACH' });
+});
+document.getElementById('btn-pet-scare').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (gameMode === 'CLIENT') sendNetworkData('ACTION', { name: 'SCARE' });
+});
+
+// Canvas Setup
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+/* [agent-note][stage4] repaired-mobile-input: gameplay pointer capture scoped to canvas so menu/button taps keep native click behavior */
+canvas.addEventListener('pointerdown', handleGlobalInput, { passive: true });
+
+function resize(width, height) {
+    cw = width;
+    ch = height;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const ro = new ResizeObserver(entries => {
+    for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        resize(width, height);
+        if (!initialized) initGame();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    ro.observe(canvas);
+});
+
+window.updateGameConfig = (key, val) => {
+    if (gameConfigDefs[key]) gameConfig[key] = val;
+};
+
+</script>
+</body>
+</html>

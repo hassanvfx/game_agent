@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Signal Split</title>
+<link href="assets/fonts.googleapis.com/css2-family_Orbitron_wght_400_700_900_display_swap.css" rel="stylesheet">
+<style>
+    :root {
+        --bg: #060816;
+        --bg-deep: #02030a;
+        --fg: #f7fbff;
+        --muted: #97a5cf;
+        --cyan: #6ef2ff;
+        --cyan-strong: #00d8ff;
+        --pink: #ff4da6;
+        --violet: #7d6bff;
+        --yellow: #ffd76a;
+        --danger: #ff5f7c;
+        --panel: rgba(8, 14, 33, 0.62);
+        --panel-border: rgba(110, 242, 255, 0.28);
+        --overlay: rgba(2, 4, 12, 0.82);
+    }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(125, 107, 255, 0.18), transparent 36%),
+            radial-gradient(circle at bottom, rgba(0, 216, 255, 0.12), transparent 34%),
+            linear-gradient(180deg, var(--bg), var(--bg-deep));
+        color: var(--fg);
+        font-family: 'Orbitron', system-ui, sans-serif;
+    }
+
+    body {
+        position: relative;
+    }
+
+    body::before,
+    body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    body::before {
+        background:
+            radial-gradient(circle at 18% 18%, rgba(110, 242, 255, 0.22), transparent 16%),
+            radial-gradient(circle at 82% 22%, rgba(255, 77, 166, 0.14), transparent 18%),
+            radial-gradient(circle at 50% 78%, rgba(125, 107, 255, 0.18), transparent 26%);
+        filter: blur(28px);
+    }
+
+    body::after {
+        background:
+            linear-gradient(120deg, transparent 0 46%, rgba(110, 242, 255, 0.05) 50%, transparent 54%),
+            linear-gradient(180deg, rgba(255,255,255,0.035), transparent 28%);
+        opacity: 0.75;
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        position: relative;
+        z-index: 1;
+    }
+
+    #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 16px;
+        pointer-events: none;
+    }
+
+    #ui-layer::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(circle at center, transparent 0 46%, rgba(5, 8, 20, 0.2) 78%, rgba(1, 2, 8, 0.42) 100%);
+        z-index: -1;
+    }
+
+    .interactive {
+        pointer-events: auto;
+    }
+
+    #hud {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        width: 100%;
+        transition: opacity 0.2s;
+        gap: 12px;
+    }
+
+    .hud-label {
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+
+    .hud-value {
+        color: var(--fg);
+        text-shadow: 0 0 12px currentColor;
+    }
+
+    .panel-left,
+    .panel-right {
+        position: relative;
+        min-width: 0;
+        padding: 10px 12px;
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(12, 20, 42, 0.82), rgba(4, 8, 22, 0.6));
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            0 0 20px rgba(0, 216, 255, 0.12);
+        backdrop-filter: blur(10px);
+    }
+
+    .panel-left::after,
+    .panel-right::after {
+        content: '';
+        position: absolute;
+        inset: 1px;
+        border-radius: inherit;
+        pointer-events: none;
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    #score-display {
+        font-size: clamp(1.8rem, 5vw, 3rem);
+        font-weight: 600;
+    }
+
+    #best-display {
+        font-size: clamp(1.2rem, 3.5vw, 2rem);
+        color: var(--yellow);
+        text-shadow: 0 0 10px currentColor;
+    }
+
+    .panel-left {
+        text-align: left;
+    }
+
+    .panel-right {
+        text-align: right;
+    }
+
+    #mission-chip {
+        align-self: center;
+        margin-top: 12px;
+        padding: 8px 14px;
+        border: 1px solid rgba(110, 242, 255, 0.34);
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(10, 18, 40, 0.78), rgba(7, 12, 28, 0.54));
+        color: #dbe7ff;
+        font-size: clamp(0.85rem, 2.8vw, 1rem);
+        letter-spacing: 0.06em;
+        text-align: center;
+        text-shadow: 0 0 8px rgba(110, 242, 255, 0.28);
+        box-shadow: 0 0 18px rgba(0, 216, 255, 0.12);
+        max-width: min(88vw, 700px);
+    }
+
+    .display-font {
+        font-family: 'Orbitron', system-ui, sans-serif;
+    }
+
+    #game-over-screen {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        backdrop-filter: blur(8px);
+        background:
+            radial-gradient(circle at center, rgba(125, 107, 255, 0.16), transparent 28%),
+            linear-gradient(180deg, rgba(3, 6, 18, 0.76), var(--overlay));
+    }
+
+    .hidden {
+        display: none !important;
+    }
+
+    .overlay-title {
+        margin: 0 0 8px;
+        font-size: clamp(2.4rem, 8vw, 5rem);
+        font-weight: 700;
+        color: var(--pink);
+        text-shadow: 0 0 18px currentColor;
+    }
+
+    .overlay-subtitle {
+        margin: 0 0 24px;
+        color: #d7def5;
+        letter-spacing: 0.18em;
+        font-size: clamp(0.9rem, 3vw, 1.1rem);
+        text-transform: uppercase;
+        max-width: 30rem;
+    }
+
+    .overlay-score {
+        margin-bottom: 24px;
+        font-size: clamp(1.2rem, 4vw, 2rem);
+        color: var(--yellow);
+        text-shadow: 0 0 12px rgba(255, 215, 106, 0.25);
+    }
+
+    .cyber-btn {
+        background: linear-gradient(180deg, rgba(8, 15, 36, 0.95), rgba(5, 9, 24, 0.92));
+        border: 2px solid var(--cyan);
+        color: var(--cyan);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        box-shadow:
+            0 0 15px rgba(0, 216, 255, 0.34),
+            inset 0 0 0 1px rgba(255,255,255,0.05);
+        text-shadow: 0 0 5px var(--cyan);
+        transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, color 0.12s ease;
+        border-radius: 12px;
+        padding: 16px 32px;
+        font-size: clamp(1rem, 3.5vw, 1.25rem);
+        font-weight: 600;
+        font-family: 'Orbitron', system-ui, sans-serif;
+        cursor: pointer;
+    }
+
+    .cyber-btn:active {
+        background: var(--cyan);
+        color: #03101a;
+        transform: scale(0.97);
+        box-shadow: 0 0 30px rgba(0, 216, 255, 0.65);
+    }
+
+    .scanlines {
+        background:
+            linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2)),
+            linear-gradient(90deg, rgba(110, 242, 255, 0.02), rgba(255, 77, 166, 0.02));
+        background-size: 100% 4px, 100% 100%;
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0.3;
+        mix-blend-mode: screen;
+    }
+
+    .feedback-gif {
+        position: absolute;
+        width: min(28vw, 150px);
+        aspect-ratio: 1;
+        object-fit: cover;
+        border-radius: 18px;
+        border: 1px solid rgba(110, 242, 255, 0.35);
+        background: rgba(6, 10, 24, 0.38);
+        box-shadow: 0 0 24px rgba(0, 216, 255, 0.18);
+        opacity: 0;
+        transform: scale(0.84);
+        transition: opacity 0.22s ease, transform 0.22s ease;
+        pointer-events: none;
+        z-index: 40;
+    }
+
+    .feedback-gif.active {
+        opacity: 0.92;
+        transform: scale(1);
+    }
+
+    #signal-win-gif {
+        right: 16px;
+        bottom: 112px;
+    }
+
+    #signal-fail-gif {
+        left: 16px;
+        bottom: 112px;
+    }
+
+    @media (max-width: 640px) {
+        #ui-layer {
+            padding: 12px;
+        }
+
+        #hud {
+            gap: 8px;
+        }
+
+        .panel-left,
+        .panel-right {
+            padding: 8px 10px;
+        }
+
+        #mission-chip {
+            margin-top: 8px;
+            padding: 8px 10px;
+        }
+
+        .overlay-subtitle {
+            letter-spacing: 0.14em;
+        }
+
+        .cyber-btn {
+            width: min(100%, 18rem);
+            padding-inline: 18px;
+        }
+
+        .feedback-gif {
+            width: min(32vw, 112px);
+            bottom: 108px;
+        }
+    }
+</style>
+
+<!-- Game Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+  "baseTime": { "type": "number", "label": "Base Time (s)", "value": 2.5, "min": 1, "max": 5 },
+  "colorTop": { "type": "color", "label": "Top Color", "value": "#FF0055" },
+  "colorBot": { "type": "color", "label": "Bottom Color", "value": "#00FFFF" }
+}
+</script>
+
+<!-- Assets -->
+<img id="asset_grid" data-editable="image" data-label="Grid Texture" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHBhdGggZD0iTTAgMGg0MHY0MEgwVjB6IiBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMCwyNTUsMjU1LDAuMSkiIHN0cm9rZS13aWR0aD0iMSIvPjwvc3ZnPg==" hidden>
+<audio id="bgm_main" data-editable="audio" data-label="BGM" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_collect" data-editable="audio" data-label="Collect SFX" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_correct" data-editable="audio" data-label="Correct SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_wrong" data-editable="audio" data-label="Wrong SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+<audio id="sfx_ui" data-editable="audio" data-label="UI SFX" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div class="scanlines"></div>
+    <img id="signal-win-gif" class="feedback-gif" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Signal surge celebration" loading="lazy" decoding="async">
+    <img id="signal-fail-gif" class="feedback-gif" src="https://i.giphy.com/HdMNmMm7tHd1bs4VeQ.webp" alt="Signal collapse reaction" loading="lazy" decoding="async">
+
+    <div id="ui-layer">
+        <!-- HUD -->
+        <div id="hud">
+            <div class="panel-left">
+                <div class="hud-label">LINKS HELD</div>
+                <div id="score-display" class="hud-value">0</div>
+            </div>
+            <div class="panel-right">
+                <div class="hud-label">BEST CHAIN</div>
+                <div id="best-display" class="hud-value">0</div>
+            </div>
+        </div>
+
+        <div id="mission-chip" class="display-font">Guide the pulse pilot: tap the half with the stronger signal before the link drops.</div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden interactive">
+            <h1 class="overlay-title display-font">LINK LOST</h1>
+            <p class="overlay-subtitle">You picked the weaker channel or ran out of time.</p>
+            <div class="overlay-score">LINKS HELD: <span id="final-score">0</span></div>
+            <button id="restart-btn" class="cyber-btn">RECONNECT</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * §0 System Invariants & Config
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let cw = 0, ch = 0;
+let dpr = 1;
+let animationId;
+let initialized = false;
+let gameState = 'INIT'; // INIT, PLAYING, GAMEOVER
+
+// Config Parsing
+const configElement = document.getElementById('game-config');
+const gameConfig = JSON.parse(configElement.textContent);
+// Normalize config values
+Object.keys(gameConfig).forEach(k => {
+    if (typeof gameConfig[k] === 'object' && gameConfig[k].value !== undefined) {
+        gameConfig[k] = gameConfig[k].value;
+    }
+});
+
+// State
+let score = 0;
+let highScore = localStorage.getItem('signal_split_best') || 0;
+let lastTime = 0;
+let timeLeft = 0;
+let maxTime = 0;
+let shakeTime = 0;
+
+// Entities
+let topNumber = 0;
+let botNumber = 0;
+let bgOffset = 0;
+
+const bgmEl = document.getElementById('bgm_main');
+const audioElements = {
+    bgm: bgmEl,
+    collect: document.getElementById('sfx_collect'),
+    correct: document.getElementById('sfx_correct'),
+    wrong: document.getElementById('sfx_wrong'),
+    ui: document.getElementById('sfx_ui')
+};
+const gifElements = {
+    win: document.getElementById('signal-win-gif'),
+    fail: document.getElementById('signal-fail-gif')
+};
+const sfxCooldowns = new Map();
+let audioUnlocked = false;
+let gifTimer = 0;
+
+/**
+ * §1 Audio System
+ */
+function configureAudio() {
+    audioElements.bgm.volume = 0.22;
+    audioElements.collect.volume = 0.38;
+    audioElements.correct.volume = 0.5;
+    audioElements.wrong.volume = 0.56;
+    audioElements.ui.volume = 0.42;
+}
+
+function unlockAudio() {
+    audioUnlocked = true;
+    configureAudio();
+    if (bgmEl.paused && gameState !== 'GAMEOVER') {
+        bgmEl.currentTime = 0;
+        bgmEl.play().catch(() => {});
+    }
+}
+
+function playSfx(type) {
+    if (!audioUnlocked) return;
+    const sound = audioElements[type];
+    if (!sound) return;
+
+    const now = performance.now();
+    const minGap = type === 'collect' ? 90 : 140;
+    const lastPlayed = sfxCooldowns.get(type) || 0;
+    if (now - lastPlayed < minGap) return;
+    sfxCooldowns.set(type, now);
+
+    try {
+        sound.pause();
+        sound.currentTime = 0;
+        sound.play().catch(() => {});
+    } catch (_) {}
+}
+
+function syncBgm() {
+    if (!audioUnlocked) return;
+    if (gameState === 'PLAYING') {
+        if (bgmEl.paused) {
+            bgmEl.play().catch(() => {});
+        }
+    } else if (!bgmEl.paused) {
+        bgmEl.pause();
+    }
+}
+
+function showGif(type, duration = 900) {
+    const gif = gifElements[type];
+    if (!gif) return;
+    clearTimeout(gifTimer);
+    Object.values(gifElements).forEach((node) => node.classList.remove('active'));
+    gif.classList.add('active');
+    gifTimer = setTimeout(() => {
+        gif.classList.remove('active');
+    }, duration);
+}
+
+function vibrate(type) {
+    if (window.webkit?.messageHandlers?.gamezoneBridge) {
+        window.webkit.messageHandlers.gamezoneBridge.postMessage({
+            action: 'vibrate',
+            requestId: 'h5-' + Date.now(),
+            version: '1.0',
+            params: { style: type }
+        });
+    } else if (navigator.vibrate) {
+        navigator.vibrate(type === 'heavy' ? 200 : 50);
+    }
+}
+
+/**
+ * §2 Lifecycle & Resize
+ */
+const ro = new ResizeObserver(entries => {
+    const entry = entries[0];
+    const rect = entry.contentRect;
+
+    // Set canvas dimensions
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    cw = rect.width;
+    ch = rect.height;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (!initialized) {
+        initGame();
+        initialized = true;
+        // Start Loop
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    }
+});
+
+// Start observing
+document.addEventListener('DOMContentLoaded', () => {
+    ro.observe(canvas);
+    document.getElementById('best-display').textContent = highScore;
+    configureAudio();
+
+    // [agent-note][stage4] repaired: mobile-tap-actionability | element: #gameCanvas/#restart-btn | action: scoped gameplay input off global window handler
+    canvas.addEventListener('pointerdown', handleGameplayInput, { passive: false });
+    document.getElementById('restart-btn').addEventListener('click', handleRestart);
+});
+
+function initGame() {
+    setState('PLAYING');
+    startRound(true);
+}
+
+function setState(state) {
+    gameState = state;
+    const hud = document.getElementById('hud');
+    const goScreen = document.getElementById('game-over-screen');
+
+    if (state === 'PLAYING') {
+        score = 0;
+        document.getElementById('score-display').textContent = score;
+        hud.style.opacity = '1';
+        goScreen.classList.add('hidden');
+        gifElements.fail.classList.remove('active');
+        syncBgm();
+    } else if (state === 'GAMEOVER') {
+        syncBgm();
+        showGif('fail', 1800);
+        playSfx('wrong');
+        playSfx('ui');
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('signal_split_best', highScore);
+            document.getElementById('best-display').textContent = highScore;
+        }
+        document.getElementById('final-score').textContent = score;
+        goScreen.classList.remove('hidden');
+        vibrate('heavy');
+    }
+}
+
+function startRound(resetTime) {
+    // Generate two different numbers
+    let range = Math.min(10 + score * 5, 999);
+    topNumber = Math.floor(Math.random() * range);
+    do {
+        botNumber = Math.floor(Math.random() * range);
+    } while (botNumber === topNumber);
+
+    if (resetTime) {
+        // Time gets shorter as score increases
+        const difficultyMod = Math.min(score * 0.05, 1.5);
+        maxTime = Math.max(0.8, gameConfig.baseTime - difficultyMod);
+        timeLeft = maxTime;
+    }
+}
+
+/**
+ * §3 Game Logic & Input
+ */
+function handleRestart() {
+    unlockAudio();
+    if (gameState === 'GAMEOVER') {
+        playSfx('ui');
+        initGame();
+    }
+}
+
+function handleGameplayInput(e) {
+    if (gameState !== 'PLAYING') return;
+    e.preventDefault();
+    unlockAudio();
+
+    const y = e.clientY - canvas.getBoundingClientRect().top;
+    if (y < ch / 2) {
+        checkAnswer(topNumber, botNumber);
+    } else {
+        checkAnswer(botNumber, topNumber);
+    }
+}
+
+function checkAnswer(selected, other) {
+    if (selected > other) {
+        // Correct
+        score++;
+        document.getElementById('score-display').textContent = score;
+        playSfx('correct');
+        playSfx('collect');
+        showGif('win', 720);
+        vibrate('light');
+        // Add a bit of time back, but cap at max
+        timeLeft = Math.min(timeLeft + 0.5, maxTime);
+        startRound(false); // New numbers, keep flow
+    } else {
+        // Wrong
+        shakeTime = 0.5;
+        setState('GAMEOVER');
+    }
+}
+
+/**
+ * §4 Rendering & Loop
+ */
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+
+    update(dt);
+    draw();
+
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+function update(dt) {
+    if (gameState === 'PLAYING') {
+        timeLeft -= dt;
+        if (timeLeft <= 0) {
+            timeLeft = 0;
+            shakeTime = 0.5;
+            setState('GAMEOVER');
+        }
+
+        bgOffset += dt * 50;
+        if (bgOffset > 40) bgOffset = 0;
+    }
+
+    if (shakeTime > 0) shakeTime -= dt;
+}
+
+function draw() {
+    // Clear
+    const bgGradient = ctx.createLinearGradient(0, 0, 0, ch);
+    bgGradient.addColorStop(0, '#091027');
+    bgGradient.addColorStop(0.55, '#060816');
+    bgGradient.addColorStop(1, '#02030a');
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Shake effect
+    let sx = 0, sy = 0;
+    if (shakeTime > 0) {
+        const mag = shakeTime * 20;
+        sx = (Math.random() - 0.5) * mag;
+        sy = (Math.random() - 0.5) * mag;
+    }
+
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    drawSkyPulse();
+    drawGrid();
+
+    // Draw Split Line
+    const dividerGlow = ctx.createLinearGradient(0, ch / 2, cw, ch / 2);
+    dividerGlow.addColorStop(0, '#6ef2ff');
+    dividerGlow.addColorStop(0.5, '#ffffff');
+    dividerGlow.addColorStop(1, '#ff4da6');
+    ctx.beginPath();
+    ctx.moveTo(0, ch/2);
+    ctx.lineTo(cw, ch/2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = dividerGlow;
+    ctx.shadowBlur = 16;
+    ctx.shadowColor = '#ffffff';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Draw Numbers
+    if (gameState === 'PLAYING' || gameState === 'GAMEOVER') {
+        // Top Half
+        drawCard(topNumber, 0, 0, cw, ch/2, gameConfig.colorTop);
+        // Bottom Half
+        drawCard(botNumber, 0, ch/2, cw, ch/2, gameConfig.colorBot);
+    }
+
+    // Draw Timer Bar (Middle)
+    if (gameState === 'PLAYING') {
+        const ratio = timeLeft / maxTime;
+        const barH = 10;
+        const timerColor = ratio < 0.3 ? '#ff5f7c' : '#f7fbff';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(cw * 0.12, (ch / 2) - barH / 2, cw * 0.76, barH);
+
+        ctx.fillStyle = timerColor;
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = timerColor;
+
+        // Draw expanding bar from center
+        const w = cw * ratio;
+        ctx.fillRect((cw - w)/2, (ch/2) - barH/2, w, barH);
+        ctx.shadowBlur = 0;
+    }
+
+    ctx.restore();
+}
+
+function drawSkyPulse() {
+    ctx.save();
+    const topPulse = ctx.createRadialGradient(cw * 0.5, ch * 0.18, 20, cw * 0.5, ch * 0.18, cw * 0.42);
+    topPulse.addColorStop(0, 'rgba(110, 242, 255, 0.18)');
+    topPulse.addColorStop(1, 'rgba(110, 242, 255, 0)');
+    ctx.fillStyle = topPulse;
+    ctx.fillRect(0, 0, cw, ch);
+
+    const botPulse = ctx.createRadialGradient(cw * 0.5, ch * 0.82, 20, cw * 0.5, ch * 0.82, cw * 0.42);
+    botPulse.addColorStop(0, 'rgba(255, 77, 166, 0.14)');
+    botPulse.addColorStop(1, 'rgba(255, 77, 166, 0)');
+    ctx.fillStyle = botPulse;
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.restore();
+}
+
+function drawGrid() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(110, 242, 255, 0.12)';
+    ctx.lineWidth = 1;
+
+    // Vertical lines
+    for (let x = 0; x < cw; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, ch);
+        ctx.stroke();
+    }
+
+    // Horizontal moving lines
+    for (let y = bgOffset; y < ch; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(cw, y);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function drawCard(num, x, y, w, h, color) {
+    ctx.save();
+
+    // Background tint
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, color + '1f');
+    grad.addColorStop(0.5, color + '10');
+    grad.addColorStop(1, '#00000000');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, w, h);
+
+    const edgeGlow = ctx.createLinearGradient(x, y, x + w, y + h);
+    edgeGlow.addColorStop(0, color + '35');
+    edgeGlow.addColorStop(1, '#ffffff08');
+    ctx.strokeStyle = edgeGlow;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 8, y + 8, w - 16, h - 16);
+
+    // Character-like pulse core
+    const orbY = y + h / 2;
+    const orbRadius = Math.min(w, h) * 0.08;
+    const orb = ctx.createRadialGradient(x + w / 2, orbY, orbRadius * 0.2, x + w / 2, orbY, orbRadius * 2.8);
+    orb.addColorStop(0, '#ffffff');
+    orb.addColorStop(0.2, color);
+    orb.addColorStop(1, color + '00');
+    ctx.fillStyle = orb;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, orbY, orbRadius * 2.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Text
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Dynamic font size fitting
+    const fontSize = Math.min(w * 0.34, h * 0.48);
+    ctx.font = `700 ${fontSize}px 'Orbitron'`;
+
+    // Glow
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 26;
+
+    ctx.fillText(num, x + w/2, y + h/2);
+
+    // Decorative brackets
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    const pad = 20;
+    const len = 40;
+
+    // Corners
+    ctx.beginPath();
+    // Top Left
+    ctx.moveTo(x + pad, y + pad + len);
+    ctx.lineTo(x + pad, y + pad);
+    ctx.lineTo(x + pad + len, y + pad);
+    // Top Right
+    ctx.moveTo(x + w - pad - len, y + pad);
+    ctx.lineTo(x + w - pad, y + pad);
+    ctx.lineTo(x + w - pad, y + pad + len);
+    // Bot Left
+    ctx.moveTo(x + pad, y + h - pad - len);
+    ctx.lineTo(x + pad, y + h - pad);
+    ctx.lineTo(x + pad + len, y + h - pad);
+    // Bot Right
+    ctx.moveTo(x + w - pad - len, y + h - pad);
+    ctx.lineTo(x + w - pad, y + h - pad);
+    ctx.lineTo(x + w - pad, y + h - pad - len);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+</script>
+</body>
+</html>

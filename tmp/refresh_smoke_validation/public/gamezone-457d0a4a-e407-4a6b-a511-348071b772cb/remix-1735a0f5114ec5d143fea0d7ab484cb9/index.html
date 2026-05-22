@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Palette Pulse Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- [agent-note][stage3] resolved-font: title-display -> Audiowide, ui-readable -> Rajdhani from catalogs/fonts.json -->
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #12091f;
+    --bg-mid: #24103d;
+    --bg-bright: #4a1f73;
+    --panel: rgba(16, 10, 32, 0.4);
+    --panel-border: rgba(162, 239, 255, 0.38);
+    --text-main: #f7f3ff;
+    --text-soft: rgba(247, 243, 255, 0.82);
+    --glow-cyan: rgba(96, 232, 255, 0.45);
+    --glow-magenta: rgba(255, 92, 182, 0.38);
+    --shadow-strong: rgba(3, 4, 15, 0.6);
+    --success-glow: rgba(130, 255, 199, 0.45);
+    --danger-glow: rgba(255, 130, 180, 0.4);
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at top, #49206f 0%, #1a102d 38%, #090512 100%);
+    color: var(--text-main);
+    font-family: "Rajdhani", system-ui, sans-serif;
+  }
+
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::before {
+    background:
+      radial-gradient(circle at 20% 18%, rgba(255, 90, 162, 0.18), transparent 24%),
+      radial-gradient(circle at 78% 16%, rgba(114, 246, 255, 0.16), transparent 22%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 25%);
+    opacity: 0.95;
+  }
+
+  body::after {
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 100% 22px, 22px 100%;
+    mix-blend-mode: soft-light;
+    opacity: 0.35;
+  }
+
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  #game-container::before,
+  #game-container::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  #game-container::before {
+    background:
+      radial-gradient(circle at center, transparent 42%, rgba(5, 2, 14, 0.4) 100%);
+    z-index: 1;
+  }
+
+  #game-container::after {
+    inset: 12px;
+    border: 1px solid rgba(162, 239, 255, 0.18);
+    border-radius: 20px;
+    box-shadow:
+      inset 0 0 18px rgba(255, 255, 255, 0.05),
+      0 0 24px rgba(96, 232, 255, 0.1);
+    z-index: 1;
+  }
+
+  canvas {
+    display: block;
+    touch-action: none;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 0;
+  }
+
+  #ui-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+  #hud {
+    position: absolute;
+    top: max(0.8rem, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(88vw, 26rem);
+    padding: 0.55rem 0.9rem;
+    text-align: center;
+    color: var(--text-main);
+    font-family: "Rajdhani", system-ui, sans-serif;
+    font-size: clamp(0.92rem, 2.8vw, 1.1rem);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    text-shadow: 0 0 12px var(--glow-cyan), 0 4px 14px rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+    opacity: 0.92;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    background:
+      linear-gradient(180deg, rgba(39, 21, 67, 0.85), rgba(12, 9, 24, 0.78));
+    box-shadow:
+      0 0 18px rgba(96, 232, 255, 0.16),
+      inset 0 0 14px rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(4px);
+  }
+
+  #hud::before,
+  #hud::after {
+    content: "✦";
+    color: #7eeeff;
+    font-family: "Audiowide", system-ui, sans-serif;
+    font-size: 0.8em;
+    opacity: 0.88;
+    margin: 0 0.5rem;
+  }
+
+  .status-chip {
+    position: absolute;
+    left: max(0.8rem, env(safe-area-inset-left));
+    bottom: max(0.8rem, env(safe-area-inset-bottom));
+    max-width: min(52vw, 14rem);
+    padding: 0.5rem 0.7rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(8, 7, 18, 0.6);
+    box-shadow: 0 0 18px rgba(0, 0, 0, 0.25);
+    font-family: "Rajdhani", system-ui, sans-serif;
+    font-size: clamp(0.75rem, 2.2vw, 0.95rem);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  .status-chip.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .status-chip.is-positive {
+    box-shadow: 0 0 18px rgba(130, 255, 199, 0.2);
+    border-color: rgba(130, 255, 199, 0.28);
+    color: #defff1;
+  }
+
+  .status-chip.is-warning {
+    box-shadow: 0 0 18px rgba(255, 130, 180, 0.18);
+    border-color: rgba(255, 130, 180, 0.28);
+    color: #ffe4f0;
+  }
+
+  /* [agent-note][stage3] resolved-gif: celebration/fail overlays -> catalogs/gifs.json */
+  .reaction-badge {
+    position: absolute;
+    right: max(0.8rem, env(safe-area-inset-right));
+    bottom: max(0.8rem, env(safe-area-inset-bottom));
+    width: min(28vw, 112px);
+    aspect-ratio: 1;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(11, 8, 24, 0.5);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+  }
+
+  .reaction-badge.is-visible {
+    opacity: 0.92;
+    transform: translateY(0) scale(1);
+  }
+
+  .reaction-badge img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0.94;
+  }
+
+  .reaction-badge--fail {
+    bottom: calc(max(0.8rem, env(safe-area-inset-bottom)) + min(28vw, 124px));
+  }
+
+  .reaction-badge::after {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0.2rem 0.35rem;
+    background: linear-gradient(180deg, transparent, rgba(4, 3, 12, 0.88));
+    color: #f9fbff;
+    font-family: "Rajdhani", system-ui, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 480px) {
+    #game-container::after {
+      inset: 8px;
+      border-radius: 16px;
+    }
+
+    #hud {
+      width: min(92vw, 24rem);
+      padding: 0.5rem 0.75rem;
+      letter-spacing: 0.16em;
+    }
+
+    .reaction-badge {
+      width: min(24vw, 90px);
+      border-radius: 14px;
+    }
+
+    .reaction-badge--fail {
+      bottom: calc(max(0.8rem, env(safe-area-inset-bottom)) + min(24vw, 102px));
+    }
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui-layer">
+    <div id="hud">
+      Neon pulse counter
+    </div>
+    <div id="status-chip" class="status-chip" aria-live="polite"></div>
+    <div id="gif-badge-success" class="reaction-badge" data-label="Pulse Up">
+      <img src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="Celebration feedback animation" loading="lazy" decoding="async">
+    </div>
+    <div id="gif-badge-fail" class="reaction-badge reaction-badge--fail" data-label="Hyper Rush">
+      <img src="https://i.giphy.com/CITHEXm15BmhHVGZHq.webp" alt="Chaotic feedback animation" loading="lazy" decoding="async">
+    </div>
+  </div>
+</div>
+
+<audio id="bgm_main" data-editable="audio" data-label="Background Music" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="none" loop></audio>
+<audio id="sfx_count" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_milestone" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_overload" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3" preload="auto"></audio>
+<audio id="sfx_ui" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+
+<script id="game-config" type="application/x-game-config">
+{
+  "maxScale": { "type": "number", "label": "Max Scale", "value": 1.5, "min": 1, "max": 3 }
+}
+</script>
+
+<script>
+window.gameConfigDefs = {};
+window.gameConfig = {};
+
+const colors = [
+  "#1A1A1A", // 0: Negro
+  "#FF4B4B", // 1: Rojo
+  "#FFCC80", // 2: Naranja claro
+  "#FFF59D", // 3: Amarillo claro
+  "#A5D6A7", // 4: Verde claro
+  "#81D4FA", // 5: Celeste claro
+  "#CE93D8", // 6: Morado claro
+  "PASTEL_RAINBOW", // 7: Arcoiris claro
+  "#F48FB1", // 8: Rosa claro
+  "#EEEEEE"  // 9: Gris claro
+];
+
+const colorNames = [
+  "Black", "Red", "Soft Orange", "Soft Yellow", "Soft Green",
+  "Sky Blue", "Soft Purple", "Rainbow", "Soft Pink", "Soft Gray"
+];
+
+const GIF_VISIBLE_MS = 1150;
+const STATUS_VISIBLE_MS = 900;
+
+let canvas, ctx;
+let cw = 0, ch = 0;
+let dpr = window.devicePixelRatio || 1;
+let initialized = false;
+let gameState = 'PLAYING';
+
+let number = 0;
+let prevColorIndex = 0;
+let currColorIndex = 0;
+let prevPhase = 0;
+let currPhase = 0;
+let bgTransition = 1;
+
+let scale = 1;
+let numRot = 0;
+let scaleVel = 0;
+let rotVel = 0;
+let particles = [];
+let bgShapes = [];
+let starbursts = [];
+
+let audioCtx = null;
+let audioUnlocked = false;
+let statusTimer = null;
+let gifTimers = {};
+let sfxCooldowns = {};
+let audioRefs = {};
+
+class Particle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random() - 0.5) * 15;
+    this.vy = (Math.random() - 0.5) * 15;
+    this.life = 1;
+    this.color = colors[Math.floor(Math.random() * colors.length)];
+    if (this.color === 'PASTEL_RAINBOW' || this.color === 'RAINBOW') this.color = '#FFFFFF';
+    this.size = Math.random() * 20 + 10;
+    this.shape = Math.random() > 0.55 ? 'circle' : (Math.random() > 0.5 ? 'diamond' : 'square');
+    this.rot = Math.random() * Math.PI * 2;
+    this.vrot = (Math.random() - 0.5) * 0.4;
+  }
+  update(dt) {
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+    this.vy += 0.5 * dt * 60;
+    this.life -= dt * 1.5;
+    this.rot += this.vrot * dt * 60;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    ctx.globalAlpha = Math.max(0, this.life);
+    ctx.fillStyle = this.color;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3;
+    if (this.shape === 'circle') {
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (this.shape === 'diamond') {
+      ctx.beginPath();
+      ctx.moveTo(0, -this.size);
+      ctx.lineTo(this.size * 0.85, 0);
+      ctx.lineTo(0, this.size);
+      ctx.lineTo(-this.size * 0.85, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+      ctx.strokeRect(-this.size / 2, -this.size / 2, this.size, this.size);
+    }
+    ctx.restore();
+  }
+}
+
+function initAudio() {
+  if (!audioCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    audioCtx = new AudioContext();
+  }
+}
+
+function registerAudioRefs() {
+  audioRefs = {
+    bgm: document.getElementById('bgm_main'),
+    count: document.getElementById('sfx_count'),
+    milestone: document.getElementById('sfx_milestone'),
+    overload: document.getElementById('sfx_overload'),
+    ui: document.getElementById('sfx_ui')
+  };
+
+  if (audioRefs.bgm) {
+    audioRefs.bgm.volume = 0.2;
+  }
+  if (audioRefs.count) audioRefs.count.volume = 0.45;
+  if (audioRefs.milestone) audioRefs.milestone.volume = 0.5;
+  if (audioRefs.overload) audioRefs.overload.volume = 0.44;
+  if (audioRefs.ui) audioRefs.ui.volume = 0.36;
+}
+
+function unlockAudio() {
+  if (!audioUnlocked) {
+    initAudio();
+  }
+
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+
+  startBgm();
+  if (!audioUnlocked) {
+    playNamedSfx('ui', 450);
+  }
+  audioUnlocked = true;
+}
+
+function startBgm() {
+  const bgm = audioRefs.bgm;
+  if (!bgm) return;
+  bgm.muted = false;
+  bgm.play().catch(() => {});
+}
+
+function pauseBgm() {
+  const bgm = audioRefs.bgm;
+  if (!bgm) return;
+  bgm.pause();
+}
+
+function playNamedSfx(name, cooldown = 120) {
+  const now = performance.now();
+  if (sfxCooldowns[name] && now - sfxCooldowns[name] < cooldown) return;
+  sfxCooldowns[name] = now;
+
+  const audio = audioRefs[name];
+  if (!audio) return;
+  try {
+    audio.currentTime = 0;
+  } catch (err) {}
+  audio.play().catch(() => {});
+}
+
+function showStatus(text, tone = 'neutral') {
+  const chip = document.getElementById('status-chip');
+  if (!chip) return;
+
+  chip.textContent = text;
+  chip.className = 'status-chip is-visible';
+  if (tone === 'positive') chip.classList.add('is-positive');
+  if (tone === 'warning') chip.classList.add('is-warning');
+
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => {
+    chip.className = 'status-chip';
+  }, STATUS_VISIBLE_MS);
+}
+
+function flashGif(id, label, duration = GIF_VISIBLE_MS) {
+  const node = document.getElementById(id);
+  if (!node) return;
+
+  node.dataset.label = label;
+  node.classList.add('is-visible');
+  clearTimeout(gifTimers[id]);
+  gifTimers[id] = setTimeout(() => {
+    node.classList.remove('is-visible');
+  }, duration);
+}
+
+function vibrate(style) {
+  window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+    action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+    params: { style: style }
+  });
+}
+
+function setState(state) {
+  gameState = state;
+}
+
+function initGame() {
+  number = 0;
+  currColorIndex = 0;
+  currPhase = 0;
+  bgTransition = 1;
+  particles = [];
+  bgShapes = [];
+  starbursts = [];
+
+  for (let i = 0; i < 15; i++) {
+    bgShapes.push({
+      x: Math.random(),
+      y: Math.random(),
+      vx: (Math.random() - 0.5) * 0.05,
+      vy: (Math.random() - 0.5) * 0.05,
+      size: Math.random() * 60 + 20,
+      rot: Math.random() * Math.PI * 2,
+      vrot: (Math.random() - 0.5) * 1,
+      type: Math.floor(Math.random() * 3)
+    });
+  }
+
+  for (let i = 0; i < 18; i++) {
+    starbursts.push({
+      x: Math.random(),
+      y: Math.random(),
+      size: Math.random() * 14 + 8,
+      pulse: Math.random() * Math.PI * 2,
+      speed: Math.random() * 1.2 + 0.4
+    });
+  }
+
+  pauseBgm();
+  setState('PLAYING');
+}
+
+function handleMilestoneFeedback(currentNumber) {
+  if (currentNumber > 0 && currentNumber % 10 === 0) {
+    playNamedSfx('milestone', 180);
+    showStatus(`Color cycle ${currentNumber}`, 'positive');
+    flashGif('gif-badge-success', 'Combo Glow', 1300);
+  } else if (currentNumber > 0 && currentNumber % 7 === 0) {
+    playNamedSfx('overload', 220);
+    showStatus(`Hyper hue ${currentNumber}`, 'warning');
+    flashGif('gif-badge-fail', 'Hyper Rush', 980);
+  } else {
+    playNamedSfx('count', 70);
+  }
+}
+
+function handleGameInput(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  number++;
+  prevPhase = currPhase;
+  prevColorIndex = currColorIndex;
+
+  currPhase = Math.floor(number / 10) % 2;
+  currColorIndex = number % 10;
+  bgTransition = 0;
+
+  scale = window.gameConfig.maxScale || 1.5;
+  numRot = (Math.random() - 0.5) * 0.5;
+
+  for (let i = 0; i < 12; i++) {
+    particles.push(new Particle(x, y));
+  }
+
+  handleMilestoneFeedback(number);
+  vibrate('light');
+}
+
+function handleGlobalInput(e) {
+  unlockAudio();
+  if (e.type !== 'pointerdown') return;
+  e.preventDefault();
+  if (gameState === 'PLAYING') {
+    handleGameInput(e);
+  }
+}
+
+function handleVisibility() {
+  if (document.hidden) {
+    pauseBgm();
+  } else if (audioUnlocked) {
+    startBgm();
+  }
+}
+
+function drawColor(ctx, cw, ch, phase, index, time) {
+  if (phase === 1) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, cw, ch);
+  } else {
+    if (index === 7) {
+      const grad = ctx.createLinearGradient(0, 0, cw, ch);
+      grad.addColorStop(0, `hsl(${(time * 100) % 360}, 80%, 80%)`);
+      grad.addColorStop(1, `hsl(${((time * 100) + 180) % 360}, 80%, 80%)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, cw, ch);
+    } else {
+      ctx.fillStyle = colors[index];
+      ctx.fillRect(0, 0, cw, ch);
+    }
+  }
+}
+
+function drawStarbursts(ctx, cw, ch, time) {
+  ctx.save();
+  starbursts.forEach((star, index) => {
+    const pulse = 0.55 + Math.sin(time * star.speed + star.pulse) * 0.25;
+    const x = star.x * cw;
+    const y = star.y * ch;
+    const outer = star.size * (1 + pulse * 0.35);
+    const inner = outer * 0.35;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(time * 0.25 + index);
+    ctx.globalAlpha = 0.22 + pulse * 0.22;
+    ctx.fillStyle = index % 2 === 0 ? '#8ef7ff' : '#ff89da';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI / 4) * i;
+      const radius = i % 2 === 0 ? outer : inner;
+      const px = Math.cos(angle) * radius;
+      const py = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+function drawBgShapes(ctx, cw, ch, dt, phase) {
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  ctx.fillStyle = phase === 1 ? '#000000' : '#FFFFFF';
+  ctx.strokeStyle = phase === 1 ? '#000000' : '#FFFFFF';
+  ctx.lineWidth = 6;
+
+  bgShapes.forEach(s => {
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.rot += s.vrot * dt;
+    if (s.x < -0.1) s.x = 1.1;
+    if (s.x > 1.1) s.x = -0.1;
+    if (s.y < -0.1) s.y = 1.1;
+    if (s.y > 1.1) s.y = -0.1;
+
+    ctx.save();
+    ctx.translate(s.x * cw, s.y * ch);
+    ctx.rotate(s.rot);
+    ctx.beginPath();
+    if (s.type === 0) {
+      ctx.arc(0, 0, s.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (s.type === 1) {
+      ctx.rect(-s.size / 2, -s.size / 2, s.size, s.size);
+      ctx.stroke();
+    } else {
+      ctx.moveTo(0, -s.size);
+      ctx.lineTo(s.size * 0.866, s.size * 0.5);
+      ctx.lineTo(-s.size * 0.866, s.size * 0.5);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+function update(dt, time) {
+  bgTransition = Math.min(1, bgTransition + dt * 4);
+
+  scaleVel += (1 - scale) * 0.2;
+  scaleVel *= 0.75;
+  scale += scaleVel;
+
+  rotVel += (0 - numRot) * 0.2;
+  rotVel *= 0.75;
+  numRot += rotVel;
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update(dt);
+    if (particles[i].life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function draw(time) {
+  ctx.clearRect(0, 0, cw, ch);
+
+  if (bgTransition < 1) {
+    drawColor(ctx, cw, ch, prevPhase, prevColorIndex, time);
+    ctx.globalAlpha = bgTransition;
+    drawColor(ctx, cw, ch, currPhase, currColorIndex, time);
+    ctx.globalAlpha = 1.0;
+  } else {
+    drawColor(ctx, cw, ch, currPhase, currColorIndex, time);
+  }
+
+  drawStarbursts(ctx, cw, ch, time);
+  drawBgShapes(ctx, cw, ch, 0.016, currPhase);
+
+  particles.forEach(p => p.draw(ctx));
+
+  ctx.save();
+  ctx.translate(cw / 2, ch / 2);
+  ctx.rotate(numRot);
+
+  let displayScale = 1;
+  if (number > 99) displayScale = 0.8;
+  if (number > 999) displayScale = 0.6;
+  ctx.scale(scale * displayScale, scale * displayScale);
+
+  let textColor = '#FFFFFF';
+  if (currPhase === 1) {
+    textColor = colors[currColorIndex];
+    if (textColor === 'PASTEL_RAINBOW' || textColor === 'RAINBOW') {
+      textColor = `hsl(${(time * 100) % 360}, 80%, 80%)`;
+    }
+  }
+
+  const numberGradient = ctx.createLinearGradient(0, -140, 0, 80);
+  numberGradient.addColorStop(0, '#fffdf8');
+  numberGradient.addColorStop(0.55, textColor);
+  numberGradient.addColorStop(1, '#7cecff');
+
+  ctx.font = `700 160px "Audiowide", system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 20;
+  ctx.strokeStyle = 'rgba(8, 7, 17, 0.92)';
+  ctx.shadowColor = 'rgba(94, 235, 255, 0.28)';
+  ctx.shadowBlur = 24;
+  ctx.strokeText(number, 0, -20);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = numberGradient;
+  ctx.fillText(number, 0, -20);
+
+  ctx.save();
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-88, -118, 176, 18);
+  ctx.restore();
+
+  let cName = (currPhase === 1 && currColorIndex === 0) ? "White Flash" : colorNames[currColorIndex];
+  ctx.font = `700 28px "Rajdhani", system-ui, sans-serif`;
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = 'rgba(8, 7, 17, 0.9)';
+  ctx.fillStyle = '#f7f3ff';
+  ctx.strokeText(cName, 0, 108);
+  ctx.fillText(cName, 0, 108);
+
+  ctx.restore();
+}
+
+let lastTime = 0;
+function gameLoop(time) {
+  requestAnimationFrame(gameLoop);
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  try {
+    update(dt, time / 1000);
+    draw(time / 1000);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const conf = document.getElementById('game-config');
+  if (conf) {
+    try {
+      window.gameConfigDefs = JSON.parse(conf.textContent);
+      for (let k in window.gameConfigDefs) {
+        window.gameConfig[k] = window.gameConfigDefs[k].value;
+      }
+    } catch (e) {}
+  }
+
+  registerAudioRefs();
+
+  canvas = document.getElementById('gameCanvas');
+  ctx = canvas.getContext('2d');
+
+  const ro = new ResizeObserver(entries => {
+    for (let entry of entries) {
+      const cr = entry.contentRect;
+      cw = cr.width;
+      ch = cr.height;
+      canvas.width = cw * dpr;
+      canvas.height = ch * dpr;
+      canvas.style.width = cw + 'px';
+      canvas.style.height = ch + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      if (!initialized) {
+        initGame();
+        initialized = true;
+        requestAnimationFrame(gameLoop);
+      }
+    }
+  });
+  ro.observe(canvas);
+
+  document.addEventListener('visibilitychange', handleVisibility);
+  window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+  window.addEventListener('pointermove', handleGlobalInput, { passive: false });
+  window.addEventListener('pointerup', handleGlobalInput, { passive: false });
+  window.addEventListener('pointercancel', handleGlobalInput, { passive: false });
+});
+</script>
+</body>
+</html>

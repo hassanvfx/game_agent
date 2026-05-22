@@ -1,0 +1,1 @@
+/* Stage 04 policy cleanup: removed mirrored Tailwind CDN bundle because the game uses inline CSS only. */

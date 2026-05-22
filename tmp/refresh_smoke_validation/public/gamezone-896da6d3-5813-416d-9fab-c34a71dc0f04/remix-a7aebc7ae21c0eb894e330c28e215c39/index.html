@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Beaver Blaster: Dam Defense</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] resolved-font: ui/body -> Russo One | hud/title accent -> Press Start 2P via catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&amp;display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0b1730;
+            --bg-river: #1c4a7b;
+            --bg-foam: #76d7ff;
+            --panel: rgba(11, 23, 48, 0.76);
+            --panel-border: rgba(118, 215, 255, 0.42);
+            --hero-brown: #8a562f;
+            --hero-fur: #c98a52;
+            --hero-cream: #f4ddb8;
+            --mud: #5a3721;
+            --dam-gold: #ffbf47;
+            --danger: #ff6b57;
+            --enemy-shell: #7f4f2f;
+            --enemy-belly: #dca66c;
+            --text-main: #f6fbff;
+            --text-soft: #d7edff;
+            --shadow-deep: rgba(0, 0, 0, 0.35);
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(118, 215, 255, 0.18), transparent 28%),
+                linear-gradient(180deg, #112448 0%, var(--bg-deep) 40%, #081120 100%);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            font-family: 'Russo One', system-ui, sans-serif;
+            color: var(--text-main);
+        }
+        canvas { display: block; touch-action: none; }
+        .glass {
+            background: linear-gradient(180deg, rgba(17, 36, 72, 0.86), rgba(8, 17, 32, 0.92));
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 18px 40px var(--shadow-deep), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+        }
+        .font-casual { font-family: 'Russo One', system-ui, sans-serif; }
+        .font-action { font-family: 'Press Start 2P', 'Russo One', system-ui, sans-serif; letter-spacing: 0.08em; }
+        .hud-card {
+            background: linear-gradient(180deg, rgba(15, 34, 67, 0.82), rgba(9, 18, 34, 0.9));
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        }
+        .hud-score {
+            font-family: 'Press Start 2P', 'Russo One', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            text-shadow: 0 3px 0 rgba(34, 20, 7, 0.45);
+        }
+        .hud-bar {
+            background: rgba(5, 11, 23, 0.76);
+            border-color: rgba(118, 215, 255, 0.45);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+        }
+        .hud-bar-label {
+            color: #f6fbff;
+            letter-spacing: 0.18em;
+        }
+        .arcade-button {
+            background: linear-gradient(180deg, #ff6f59, #e04532);
+            border-color: rgba(255, 239, 214, 0.92);
+            box-shadow: 0 10px 20px rgba(71, 19, 10, 0.35), inset 0 4px 0 rgba(255,255,255,0.16);
+        }
+        .arcade-button:active { transform: scale(0.95); filter: brightness(1.06); }
+        .screen-card {
+            width: min(92vw, 24rem);
+            max-height: min(82vh, 34rem);
+            overflow-y: auto;
+        }
+        .title-shell {
+            text-shadow: 0 5px 0 rgba(28, 15, 3, 0.42), 0 0 18px rgba(255, 191, 71, 0.15);
+        }
+        .hint-chip {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+        .ammo-pip { transition: opacity 0.1s; }
+    </style>
+</head>
+<body class="font-casual text-white">
+
+    <!-- Config Definition -->
+    <script id="game-config" type="application/x-game-config">
+    {
+        "heroSpeed": { "type": "number", "label": "Beaver Speed", "value": 15, "min": 5, "max": 30 },
+        "fireRate": { "type": "number", "label": "Launch Rate (ms)", "value": 80, "min": 20, "max": 200 },
+        "maxAmmo": { "type": "number", "label": "Mud Stack", "value": 40, "min": 10, "max": 100 },
+        "enemySpawnRate": { "type": "number", "label": "Critter Rush (ms)", "value": 800, "min": 200, "max": 2000 }
+    }
+    </script>
+
+    <!-- Assets -->
+    <!-- [agent-note][stage3] resolved-audio: bgm/ui/combat -> catalogs/audios.json -->
+    <audio id="bgm_main" data-editable="audio" data-label="River Rampage Loop" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+    <audio id="sfx_start" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="auto"></audio>
+    <audio id="sfx_ui" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+    <audio id="sfx_shoot" src="https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3" preload="auto"></audio>
+    <audio id="sfx_empty" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_01.mp3" preload="auto"></audio>
+    <audio id="sfx_reload" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3" preload="auto"></audio>
+    <audio id="sfx_hit" src="https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_01.mp3" preload="auto"></audio>
+    <audio id="sfx_defeat" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3" preload="auto"></audio>
+    <audio id="sfx_gameover" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+    <img id="asset_hero" data-editable="image" data-label="Beaver Hero" src="data:image/svg+xml,%3Csvg xmlns='assets/www.w3.org/2000/svg.html' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%238B4513' stroke='%233E2723' stroke-width='4'/%3E%3Crect x='35' y='60' width='12' height='15' fill='white' rx='2'/%3E%3Crect x='53' y='60' width='12' height='15' fill='white' rx='2'/%3E%3Ccircle cx='35' cy='40' r='5' fill='black'/%3E%3Ccircle cx='65' cy='40' r='5' fill='black'/%3E%3Cellipse cx='50' cy='85' rx='30' ry='10' fill='%233E2723'/%3E%3C/svg%3E" hidden>
+
+    <!-- Game Container -->
+    <div id="game-container" class="relative w-full h-full">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- [agent-note][stage3] resolved-gif: hit/game-over feedback -> catalogs/gifs.json -->
+        <div id="feedback-gif-layer" class="absolute inset-x-0 top-4 z-30 flex flex-col items-center gap-3 pointer-events-none px-3">
+            <img id="hit-gif" alt="Hit reaction" class="hidden w-28 max-w-[32vw] rounded-2xl border border-white/20 shadow-2xl opacity-90" src="https://i.giphy.com/1AjEBGWggGXh9onllB.webp">
+            <img id="fail-gif" alt="Fail reaction" class="hidden w-32 max-w-[38vw] rounded-2xl border border-red-300/40 shadow-2xl opacity-95" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp">
+        </div>
+
+        <!-- HUD -->
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+        <div id="hud" class="absolute top-0 left-0 w-full p-4 pointer-events-none hidden flex justify-between items-start">
+            <div class="flex flex-col gap-2 rounded-2xl px-3 py-3 hud-card">
+                <div class="text-[1.65rem] leading-none hud-score text-yellow-300">DAM SCORE: <span id="scoreVal">0</span></div>
+                <div class="w-44 h-6 rounded-full border-2 overflow-hidden relative hud-bar">
+                    <div id="ammo-bar" class="h-full transition-all duration-100" style="width: 100%; background: linear-gradient(90deg, #ff9d31, #ffd166);"></div>
+                    <span class="absolute inset-0 flex items-center justify-center text-[0.65rem] font-semibold hud-bar-label">MUD STACK</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reload Button (Active UI) -->
+        <button id="reload-btn" class="absolute bottom-8 right-8 w-24 h-24 rounded-full border-4 shadow-lg flex items-center justify-center hidden pointer-events-auto z-40 arcade-button">
+            <div class="text-center leading-none">
+                <span class="block text-[1.35rem] font-action">RESTOCK</span>
+                <span class="text-[0.65rem] font-semibold tracking-[0.2em]">TAP!</span>
+            </div>
+        </button>
+
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+            
+            <!-- Start Screen -->
+            <div id="start-screen" class="glass screen-card p-6 rounded-[1.75rem] text-center pointer-events-auto transform transition-all hover:scale-[1.02]">
+                <div class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-white/10 text-5xl shadow-lg">🦫</div>
+                <h1 class="text-4xl sm:text-5xl mb-2 text-amber-300 font-action title-shell">BEAVER BLASTER</h1>
+                <p class="text-base mb-5 text-sky-100">Guard the dam with rapid mud shots and keep the river critters back.</p>
+                <div class="space-y-2 mb-6 text-sm opacity-95 text-left">
+                    <p class="hint-chip rounded-xl px-3 py-2">🎯 Drag to Move & Auto-Aim</p>
+                    <p class="hint-chip rounded-xl px-3 py-2">🪵 Hold to Launch Mud</p>
+                    <p class="hint-chip rounded-xl px-3 py-2">🔄 Tap the red restock buoy</p>
+                </div>
+                <button id="start-btn" class="px-8 py-4 text-white font-bold rounded-full text-lg shadow-lg transition-transform active:scale-95 arcade-button">
+                    PLAY NOW
+                </button>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="hidden glass screen-card p-6 rounded-[1.75rem] text-center pointer-events-auto">
+                <div class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-red-500/15 text-5xl shadow-lg">💥</div>
+                <h2 class="text-5xl text-red-400 mb-4 font-action title-shell">DAM BREACHED</h2>
+                <div class="text-xl mb-6 text-sky-50">Dam Score: <span id="finalScore" class="text-yellow-300 font-bold">0</span></div>
+                <button id="restart-btn" class="px-8 py-4 text-white font-bold rounded-full text-lg shadow-lg transition-transform active:scale-95 arcade-button">
+                    DEFEND AGAIN
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // §3.1 Configuration
+        window.gameConfigDefs = JSON.parse(document.getElementById('game-config').textContent);
+        window.gameConfig = {};
+        for (const key in window.gameConfigDefs) {
+            window.gameConfig[key] = window.gameConfigDefs[key].value;
+        }
+        
+        window.updateGameConfig = (key, val) => {
+            if (window.gameConfig.hasOwnProperty(key)) {
+                window.gameConfig[key] = val;
+                // Hot reload logic
+                if (key === 'maxAmmo') gameState.maxAmmo = val;
+            }
+        };
+
+        // §A.2 Audio Manager
+        class AudioManager {
+            constructor() {
+                this.ctx = null;
+                this.bgm = document.getElementById('bgm_main');
+                this.unlocked = false;
+                this.lastPlayed = new Map();
+                this.sfx = {
+                    start: document.getElementById('sfx_start'),
+                    ui: document.getElementById('sfx_ui'),
+                    shoot: document.getElementById('sfx_shoot'),
+                    empty: document.getElementById('sfx_empty'),
+                    reload: document.getElementById('sfx_reload'),
+                    hit: document.getElementById('sfx_hit'),
+                    defeat: document.getElementById('sfx_defeat'),
+                    gameover: document.getElementById('sfx_gameover')
+                };
+            }
+
+            init() {
+                if (this.ctx) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                
+                const unlock = () => {
+                    if (this.unlocked) return;
+                    this.ctx.resume().then(() => {
+                        this.unlocked = true;
+                        this.playBgm();
+                        // Silent buffer to warm up
+                        const buffer = this.ctx.createBuffer(1, 1, 22050);
+                        const source = this.ctx.createBufferSource();
+                        source.buffer = buffer;
+                        source.connect(this.ctx.destination);
+                        source.start(0);
+                    });
+                    document.removeEventListener('pointerdown', unlock);
+                    document.removeEventListener('keydown', unlock);
+                };
+
+                document.addEventListener('pointerdown', unlock, { passive: false });
+                document.addEventListener('keydown', unlock);
+            }
+
+            playBgm() {
+                if (!this.unlocked || !this.bgm) return;
+                this.bgm.volume = 0.2;
+                if (this.bgm.paused) {
+                    this.bgm.play().catch(() => {});
+                }
+            }
+
+            stopBgm() {
+                if (!this.bgm) return;
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            playSfx(name, { volume = 0.6, cooldown = 0 } = {}) {
+                if (!this.unlocked) return;
+                const audio = this.sfx[name];
+                if (!audio) return;
+                const now = performance.now();
+                const last = this.lastPlayed.get(name) || 0;
+                if (cooldown && now - last < cooldown) return;
+                this.lastPlayed.set(name, now);
+                try {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.volume = volume;
+                    audio.play().catch(() => {});
+                } catch (_) {}
+            }
+
+            playShoot() {
+                this.playSfx('shoot', { volume: 0.34, cooldown: 45 });
+            }
+
+            playReload() {
+                this.playSfx('reload', { volume: 0.45, cooldown: 220 });
+            }
+
+            playEmpty() {
+                this.playSfx('empty', { volume: 0.42, cooldown: 260 });
+            }
+
+            playHit() {
+                this.playSfx('hit', { volume: 0.4, cooldown: 70 });
+            }
+
+            playExplosion() {
+                this.playSfx('defeat', { volume: 0.5, cooldown: 110 });
+            }
+
+            playStart() {
+                this.playSfx('start', { volume: 0.45, cooldown: 250 });
+            }
+
+            playUi() {
+                this.playSfx('ui', { volume: 0.35, cooldown: 120 });
+            }
+
+            playGameOver() {
+                this.playSfx('gameover', { volume: 0.5, cooldown: 300 });
+            }
+        }
+
+        const audioManager = new AudioManager();
+
+        // Game State
+        const gameState = {
+            active: false,
+            score: 0,
+            lastTime: 0,
+            spawnTimer: 0,
+            fireTimer: 0,
+            ammo: 40,
+            reloading: false,
+            hero: { x: 0, y: 0, r: 25, angle: 0 },
+            input: { x: 0, y: 0, active: false },
+            bullets: [],
+            enemies: [],
+            particles: [],
+            waterOffset: 0
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const hitGif = document.getElementById('hit-gif');
+        const failGif = document.getElementById('fail-gif');
+        let feedbackTimers = [];
+        let animationId;
+
+        function clearFeedbackTimers() {
+            feedbackTimers.forEach(timer => clearTimeout(timer));
+            feedbackTimers = [];
+        }
+
+        function showFeedback(type, duration = 900) {
+            const target = type === 'fail' ? failGif : hitGif;
+            if (!target) return;
+            clearFeedbackTimers();
+            hitGif.classList.add('hidden');
+            failGif.classList.add('hidden');
+            target.classList.remove('hidden');
+            feedbackTimers.push(setTimeout(() => {
+                target.classList.add('hidden');
+            }, duration));
+        }
+
+        // Resize Logic
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = document.body.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            if (!gameState.active) {
+                gameState.hero.x = rect.width / 2;
+                gameState.hero.y = rect.height / 2;
+            }
+        }
+        window.addEventListener('resize', resize);
+
+        // Input Handling
+        function handleInput(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            gameState.input.x = e.clientX - rect.left;
+            gameState.input.y = e.clientY - rect.top;
+            if (e.type === 'pointerdown') {
+                gameState.input.active = true;
+                // Only unlock audio on user gesture
+                audioManager.init();
+            } else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+                gameState.input.active = false;
+            }
+        }
+
+        canvas.addEventListener('pointerdown', handleInput, { passive: false });
+        canvas.addEventListener('pointermove', handleInput, { passive: false });
+        canvas.addEventListener('pointerup', handleInput, { passive: false });
+        canvas.addEventListener('pointercancel', handleInput, { passive: false });
+
+        // Reload Logic
+        const reloadBtn = document.getElementById('reload-btn');
+        const ammoBar = document.getElementById('ammo-bar');
+        
+        function triggerReload() {
+            if (gameState.reloading || gameState.ammo >= window.gameConfig.maxAmmo) return;
+            gameState.reloading = true;
+            audioManager.playReload();
+            showFeedback('hit', 700);
+            
+            // Visual feedback
+            reloadBtn.classList.add('animate-spin');
+            
+            setTimeout(() => {
+                gameState.ammo = window.gameConfig.maxAmmo;
+                gameState.reloading = false;
+                reloadBtn.classList.remove('animate-spin');
+                updateHUD();
+            }, 1000);
+        }
+        
+        reloadBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            triggerReload();
+        });
+
+        function updateHUD() {
+            document.getElementById('scoreVal').innerText = gameState.score;
+            const pct = (gameState.ammo / window.gameConfig.maxAmmo) * 100;
+            ammoBar.style.width = `${pct}%`;
+            
+            if (gameState.ammo <= 0 && !gameState.reloading) {
+                reloadBtn.classList.add('animate-bounce');
+                ammoBar.style.backgroundColor = '#ef4444'; // Red
+            } else {
+                reloadBtn.classList.remove('animate-bounce');
+                ammoBar.style.backgroundColor = '#f97316'; // Orange
+            }
+        }
+
+        // Game Loop
+        function initGame() {
+            gameState.active = true;
+            gameState.score = 0;
+            gameState.ammo = window.gameConfig.maxAmmo;
+            gameState.bullets = [];
+            gameState.enemies = [];
+            gameState.particles = [];
+            gameState.reloading = false;
+            
+            const rect = canvas.getBoundingClientRect();
+            gameState.hero.x = rect.width / 2;
+            gameState.hero.y = rect.height / 2;
+            
+            audioManager.init();
+            audioManager.playStart();
+            audioManager.playBgm();
+            clearFeedbackTimers();
+            hitGif.classList.add('hidden');
+            failGif.classList.add('hidden');
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('reload-btn').classList.remove('hidden');
+            
+            updateHUD();
+            gameState.lastTime = performance.now();
+            requestAnimationFrame(loop);
+        }
+
+        function gameOver() {
+            gameState.active = false;
+            audioManager.playGameOver();
+            audioManager.stopBgm();
+            showFeedback('fail', 1800);
+            document.getElementById('finalScore').innerText = gameState.score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('reload-btn').classList.add('hidden');
+            // Shake effect
+            canvas.style.transform = 'translateX(0)';
+        }
+
+        function spawnEnemy() {
+            const rect = canvas.getBoundingClientRect();
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            const pad = 50;
+            
+            // 0:top, 1:right, 2:bottom, 3:left
+            if (side === 0) { x = Math.random() * rect.width; y = -pad; }
+            else if (side === 1) { x = rect.width + pad; y = Math.random() * rect.height; }
+            else if (side === 2) { x = Math.random() * rect.width; y = rect.height + pad; }
+            else { x = -pad; y = Math.random() * rect.height; }
+
+            gameState.enemies.push({
+                x, y,
+                r: 20,
+                hp: 3,
+                speed: 2 + Math.random() * 2,
+                color: `hsl(${Math.random() * 60}, 80%, 50%)` // Red/Orange/Yellow range
+            });
+        }
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                gameState.particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1.0,
+                    color: color,
+                    size: Math.random() * 4 + 2
+                });
+            }
+        }
+
+        function loop(timestamp) {
+            if (!gameState.active) return;
+            
+            const dt = Math.min((timestamp - gameState.lastTime) / 16.67, 4); // Cap dt
+            gameState.lastTime = timestamp;
+
+            const rect = canvas.getBoundingClientRect();
+
+            try {
+                // 1. Update Hero
+                if (gameState.input.active) {
+                    const dx = gameState.input.x - gameState.hero.x;
+                    const dy = gameState.input.y - gameState.hero.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist > 5) {
+                        const speed = window.gameConfig.heroSpeed * dt;
+                        const moveDist = Math.min(dist, speed);
+                        const angle = Math.atan2(dy, dx);
+                        gameState.hero.x += Math.cos(angle) * moveDist;
+                        gameState.hero.y += Math.sin(angle) * moveDist;
+                    }
+                }
+
+                // Clamp Hero
+                gameState.hero.x = Math.max(gameState.hero.r, Math.min(rect.width - gameState.hero.r, gameState.hero.x));
+                gameState.hero.y = Math.max(gameState.hero.r, Math.min(rect.height - gameState.hero.r, gameState.hero.y));
+
+                // 2. Auto Aim & Shoot
+                let nearest = null;
+                let minDist = Infinity;
+                gameState.enemies.forEach(e => {
+                    const d = Math.hypot(e.x - gameState.hero.x, e.y - gameState.hero.y);
+                    if (d < minDist) { minDist = d; nearest = e; }
+                });
+
+                if (nearest) {
+                    gameState.hero.angle = Math.atan2(nearest.y - gameState.hero.y, nearest.x - gameState.hero.x);
+                }
+
+                // Fire Logic
+                if (gameState.input.active && !gameState.reloading) {
+                    if (timestamp - gameState.fireTimer > window.gameConfig.fireRate) {
+                        if (gameState.ammo > 0) {
+                            gameState.ammo--;
+                            gameState.fireTimer = timestamp;
+                            audioManager.playShoot();
+                            updateHUD();
+                            
+                            // Recoil
+                            const recoil = 5;
+                            gameState.hero.x -= Math.cos(gameState.hero.angle) * recoil;
+                            gameState.hero.y -= Math.sin(gameState.hero.angle) * recoil;
+
+                            // Spawn Bullet (Poop)
+                            gameState.bullets.push({
+                                x: gameState.hero.x + Math.cos(gameState.hero.angle) * 30,
+                                y: gameState.hero.y + Math.sin(gameState.hero.angle) * 30,
+                                vx: Math.cos(gameState.hero.angle) * 15,
+                                vy: Math.sin(gameState.hero.angle) * 15,
+                                life: 60
+                            });
+                        } else {
+                            // Empty click
+                            if (timestamp - gameState.fireTimer > 500) {
+                                audioManager.playEmpty();
+                                gameState.fireTimer = timestamp;
+                            }
+                        }
+                    }
+                }
+
+                // 3. Spawning
+                if (timestamp - gameState.spawnTimer > window.gameConfig.enemySpawnRate) {
+                    spawnEnemy();
+                    gameState.spawnTimer = timestamp;
+                }
+
+                // 4. Physics & Collision
+                
+                // Bullets
+                for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                    const b = gameState.bullets[i];
+                    b.x += b.vx * dt;
+                    b.y += b.vy * dt;
+                    b.life -= dt;
+                    
+                    if (b.life <= 0 || b.x < 0 || b.x > rect.width || b.y < 0 || b.y > rect.height) {
+                        gameState.bullets.splice(i, 1);
+                        continue;
+                    }
+
+                    // Collision with Enemies
+                    for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                        const e = gameState.enemies[j];
+                        const dist = Math.hypot(b.x - e.x, b.y - e.y);
+                        if (dist < e.r + 10) {
+                            e.hp--;
+                            audioManager.playHit();
+                            showFeedback('hit', 500);
+                            gameState.bullets.splice(i, 1);
+                            createParticles(e.x, e.y, '#5D4037', 3); // Poop splat
+                            if (e.hp <= 0) {
+                                gameState.enemies.splice(j, 1);
+                                gameState.score += 10;
+                                updateHUD();
+                                createParticles(e.x, e.y, '#FF5252', 10);
+                                audioManager.playExplosion();
+                            }
+                            break; // Bullet consumed
+                        }
+                    }
+                }
+
+                // Enemies
+                for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                    const e = gameState.enemies[i];
+                    const angle = Math.atan2(gameState.hero.y - e.y, gameState.hero.x - e.x);
+                    e.x += Math.cos(angle) * e.speed * dt;
+                    e.y += Math.sin(angle) * e.speed * dt;
+
+                    // Hit Hero
+                    const dist = Math.hypot(e.x - gameState.hero.x, e.y - gameState.hero.y);
+                    if (dist < e.r + gameState.hero.r - 5) {
+                        gameOver();
+                        return;
+                    }
+                }
+
+                // Particles
+                for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                    const p = gameState.particles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.life -= 0.05 * dt;
+                    if (p.life <= 0) gameState.particles.splice(i, 1);
+                }
+
+                // 5. Draw
+                // Background Water
+                const riverGradient = ctx.createLinearGradient(0, 0, 0, rect.height);
+                riverGradient.addColorStop(0, '#13345f');
+                riverGradient.addColorStop(0.45, '#235b92');
+                riverGradient.addColorStop(1, '#0a1830');
+                ctx.fillStyle = riverGradient;
+                ctx.fillRect(0, 0, rect.width, rect.height);
+
+                gameState.waterOffset += dt * 0.5;
+
+                const moonGlow = ctx.createRadialGradient(rect.width * 0.5, rect.height * 0.18, 10, rect.width * 0.5, rect.height * 0.18, rect.width * 0.4);
+                moonGlow.addColorStop(0, 'rgba(118, 215, 255, 0.28)');
+                moonGlow.addColorStop(1, 'rgba(118, 215, 255, 0)');
+                ctx.fillStyle = moonGlow;
+                ctx.fillRect(0, 0, rect.width, rect.height);
+
+                ctx.strokeStyle = 'rgba(118, 215, 255, 0.34)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let y = 0; y < rect.height; y += 54) {
+                    for (let x = 0; x < rect.width; x += 20) {
+                        const wave = Math.sin((x + gameState.waterOffset * 20) * 0.02 + y) * 5;
+                        if (x===0) ctx.moveTo(x, y + wave);
+                        else ctx.lineTo(x, y + wave);
+                    }
+                }
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(8, 17, 32, 0.28)';
+                for (let y = 30; y < rect.height; y += 110) {
+                    ctx.fillRect(0, y + Math.sin(gameState.waterOffset + y) * 4, rect.width, 8);
+                }
+
+                // Draw Enemies
+                gameState.enemies.forEach(e => {
+                    ctx.save();
+                    ctx.translate(e.x, e.y);
+
+                    const shellGradient = ctx.createRadialGradient(-4, -6, 2, 0, 0, e.r + 8);
+                    shellGradient.addColorStop(0, '#f0c38c');
+                    shellGradient.addColorStop(0.45, e.color);
+                    shellGradient.addColorStop(1, '#5e3117');
+
+                    ctx.fillStyle = shellGradient;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, e.r + 1, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                    ctx.beginPath();
+                    ctx.arc(0, -2, e.r - 6, Math.PI, 0);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#f4ddb8';
+                    ctx.beginPath();
+                    ctx.ellipse(0, 4, 11, 8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(-5, -4, 4.5, 0, Math.PI*2);
+                    ctx.arc(5, -4, 4.5, 0, Math.PI*2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#14243f';
+                    ctx.beginPath();
+                    ctx.arc(-4, -4, 1.8, 0, Math.PI*2);
+                    ctx.arc(6, -4, 1.8, 0, Math.PI*2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = '#3e2310';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-8, 10);
+                    ctx.lineTo(-14, 16);
+                    ctx.moveTo(8, 10);
+                    ctx.lineTo(14, 16);
+                    ctx.stroke();
+
+                    ctx.restore();
+                });
+
+                // Draw Hero (Beaver)
+                ctx.save();
+                ctx.translate(gameState.hero.x, gameState.hero.y);
+                ctx.rotate(gameState.hero.angle);
+
+                const tailGradient = ctx.createLinearGradient(-35, 0, -8, 0);
+                tailGradient.addColorStop(0, '#402012');
+                tailGradient.addColorStop(1, '#6f3b22');
+                ctx.fillStyle = tailGradient;
+                ctx.beginPath();
+                ctx.ellipse(-23, 0, 17, 10, 0.1, 0, Math.PI*2);
+                ctx.fill();
+
+                const bodyGradient = ctx.createRadialGradient(6, -8, 3, 0, 0, gameState.hero.r + 10);
+                bodyGradient.addColorStop(0, '#d59a62');
+                bodyGradient.addColorStop(0.45, '#9a6136');
+                bodyGradient.addColorStop(1, '#61361f');
+                ctx.fillStyle = bodyGradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, gameState.hero.r + 1, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = 'rgba(255,255,255,0.09)';
+                ctx.beginPath();
+                ctx.arc(-4, -7, 10, Math.PI * 1.1, Math.PI * 1.9);
+                ctx.fill();
+
+                ctx.fillStyle = '#f2dfbf';
+                ctx.beginPath();
+                ctx.ellipse(8, 0, 14, 13, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#6f84a3';
+                ctx.beginPath();
+                ctx.roundRect(9, -6, 26, 12, 4);
+                ctx.fill();
+                ctx.fillStyle = '#22354f';
+                ctx.fillRect(33, -7, 7, 14);
+
+                ctx.fillStyle = '#f7f8fb';
+                ctx.beginPath();
+                ctx.arc(8, -10, 7.5, 0, Math.PI*2);
+                ctx.arc(8, 10, 7.5, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = '#15253f';
+                ctx.beginPath();
+                ctx.arc(12, -10, 2.6, 0, Math.PI*2);
+                ctx.arc(12, 10, 2.6, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = '#fffaf3';
+                ctx.fillRect(18, -5, 7, 10);
+                ctx.strokeStyle = '#5a3721';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(21.5, -5);
+                ctx.lineTo(21.5, 5);
+                ctx.stroke();
+
+                ctx.restore();
+
+                // Draw Bullets (Poop)
+                ctx.fillStyle = '#5D4037';
+                gameState.bullets.forEach(b => {
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Shine
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.beginPath();
+                    ctx.arc(b.x-2, b.y-2, 2, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#5D4037';
+                });
+
+                // Draw Particles
+                gameState.particles.forEach(p => {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                });
+
+                requestAnimationFrame(loop);
+
+            } catch (err) {
+                console.error("Game Loop Error:", err);
+            }
+        }
+
+        // Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            resize();
+            
+            document.getElementById('start-btn').addEventListener('click', () => {
+                audioManager.init();
+                audioManager.playUi();
+                initGame();
+            });
+            document.getElementById('restart-btn').addEventListener('click', () => {
+                audioManager.init();
+                audioManager.playUi();
+                initGame();
+            });
+        });
+
+    </script>
+</body>
+</html>

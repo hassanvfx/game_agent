@@ -1,0 +1,1 @@
+/* Stage 02 cleanup: local Tailwind mirror removed because original upstream URL was not approved for this workspace. */

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Neon Gate Run</title>
+    <!-- [agent-note][stage4] preserved-approved-fonts: title/ui -> catalogs/fonts.json (Audiowide + Orbitron + Press Start 2P) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #040611;
+            --bg-bottom: #0c1630;
+            --panel: rgba(12, 18, 36, 0.84);
+            --panel-border: rgba(135, 244, 255, 0.22);
+            --text: #eff7ff;
+            --muted: rgba(220, 234, 255, 0.72);
+            --pink: #ff2c84;
+            --cyan: #4df5ff;
+            --gold: #ffd964;
+            --violet: #8d73ff;
+            --shadow: rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top, rgba(77, 245, 255, 0.08), transparent 28%),
+                radial-gradient(circle at 20% 80%, rgba(255, 44, 132, 0.1), transparent 26%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .game-shell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at center, rgba(77, 245, 255, 0.05), transparent 40%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 20%);
+        }
+
+        .game-shell::before,
+        .game-shell::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .game-shell::before {
+            background:
+                linear-gradient(90deg, transparent 0%, rgba(77, 245, 255, 0.05) 50%, transparent 100%);
+            mix-blend-mode: screen;
+            opacity: 0.45;
+        }
+
+        .game-shell::after {
+            background:
+                repeating-linear-gradient(
+                    180deg,
+                    rgba(255, 255, 255, 0.03) 0 1px,
+                    transparent 1px 4px
+                );
+            opacity: 0.18;
+        }
+
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            padding: 20px 16px calc(28px + env(safe-area-inset-bottom));
+        }
+
+        .overlay-card {
+            width: min(92vw, 420px);
+            pointer-events: auto;
+            text-align: center;
+            padding: 24px 20px;
+            border-radius: 28px;
+            background:
+                linear-gradient(180deg, rgba(18, 28, 52, 0.96), rgba(10, 14, 28, 0.92));
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                0 18px 50px var(--shadow),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 0 28px rgba(77, 245, 255, 0.18);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .overlay-card.hidden,
+        .hud.hidden,
+        .tutorial-hint.hidden {
+            display: none;
+        }
+
+        .title-stack {
+            margin-bottom: 14px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 9px;
+            line-height: 1.4;
+            letter-spacing: 0.08em;
+            color: var(--cyan);
+            background: rgba(77, 245, 255, 0.08);
+            border: 1px solid rgba(77, 245, 255, 0.18);
+        }
+
+        .title {
+            margin: 0;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: clamp(2rem, 9vw, 3.5rem);
+            line-height: 0.92;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: transparent;
+            background: linear-gradient(90deg, var(--pink), var(--cyan), var(--gold));
+            -webkit-background-clip: text;
+            background-clip: text;
+            text-shadow: 0 0 20px rgba(77, 245, 255, 0.14);
+        }
+
+        .subtitle {
+            margin: 12px 0 0;
+            font-size: clamp(0.98rem, 4vw, 1.2rem);
+            line-height: 1.3;
+            color: var(--muted);
+        }
+
+        .hero-avatar {
+            position: relative;
+            width: 112px;
+            height: 112px;
+            margin: 0 auto 18px;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at 35% 30%, #ffffff 0 10%, #87fbff 11%, #42d7ff 28%, #161f55 58%, #0a0f1c 78%);
+            box-shadow:
+                0 0 0 6px rgba(77, 245, 255, 0.08),
+                0 0 34px rgba(77, 245, 255, 0.3),
+                0 0 68px rgba(141, 115, 255, 0.22);
+        }
+
+        .hero-avatar::before,
+        .hero-avatar::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            background: #081225;
+        }
+
+        .hero-avatar::before {
+            width: 16px;
+            height: 24px;
+            left: 28px;
+            top: 38px;
+            box-shadow: 40px 0 0 #081225;
+        }
+
+        .hero-avatar::after {
+            width: 44px;
+            height: 14px;
+            left: 34px;
+            top: 67px;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 3px 0 rgba(255, 255, 255, 0.2) inset;
+        }
+
+        .signal-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 18px 0 20px;
+        }
+
+        .signal-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            animation: pulseDot 1.5s ease-in-out infinite;
+            box-shadow: 0 0 12px currentColor;
+        }
+
+        .signal-dot:nth-child(2) { animation-delay: 0.15s; }
+        .signal-dot:nth-child(3) { animation-delay: 0.3s; }
+
+        .signal-dot.pink { background: var(--pink); color: var(--pink); }
+        .signal-dot.cyan { background: var(--cyan); color: var(--cyan); }
+        .signal-dot.gold { background: var(--gold); color: var(--gold); }
+
+        .cta-button {
+            border: 0;
+            width: min(100%, 260px);
+            min-height: 52px;
+            padding: 14px 18px;
+            border-radius: 999px;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: 1rem;
+            letter-spacing: 0.08em;
+            color: #04101f;
+            background: linear-gradient(90deg, var(--gold), var(--cyan));
+            box-shadow:
+                0 10px 24px rgba(0, 0, 0, 0.32),
+                0 0 22px rgba(77, 245, 255, 0.28);
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+            cursor: pointer;
+        }
+
+        .cta-button:active {
+            transform: scale(0.97);
+            filter: brightness(1.04);
+        }
+
+        .cta-button.alt {
+            background: linear-gradient(90deg, #ff628d, #ffd964);
+        }
+
+        .hud {
+            position: absolute;
+            top: calc(16px + env(safe-area-inset-top));
+            left: 16px;
+            pointer-events: none;
+        }
+
+        .hud-card {
+            min-width: 110px;
+            padding: 10px 12px 12px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(10, 17, 32, 0.88), rgba(9, 13, 24, 0.76));
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.25),
+                0 0 22px rgba(77, 245, 255, 0.14);
+        }
+
+        .hud-label {
+            display: block;
+            margin-bottom: 6px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.52rem;
+            line-height: 1.4;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 0.08em;
+        }
+
+        .hud-score {
+            display: block;
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(1rem, 4vw, 1.4rem);
+            color: var(--text);
+            text-shadow: 0 0 14px rgba(77, 245, 255, 0.32);
+        }
+
+        .tutorial-hint {
+            position: absolute;
+            bottom: calc(12px + env(safe-area-inset-bottom));
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(92vw, 320px);
+            padding: 10px 14px;
+            border-radius: 999px;
+            text-align: center;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.55rem;
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.78);
+            background: rgba(8, 12, 22, 0.62);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+            animation: hintPulse 1.6s ease-in-out infinite;
+        }
+
+        .results-title {
+            margin: 0 0 10px;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: clamp(1.9rem, 8vw, 2.8rem);
+            color: #ff7f9e;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            text-shadow: 0 0 18px rgba(255, 44, 132, 0.22);
+        }
+
+        .results-copy {
+            margin: 0 0 20px;
+            color: var(--muted);
+            font-size: 1rem;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: clamp(10px, 3vw, 24px);
+            bottom: calc(72px + env(safe-area-inset-bottom));
+            width: min(26vw, 120px);
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+            overflow: hidden;
+            background: rgba(8, 12, 22, 0.74);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            opacity: 0;
+            transform: translateY(10px) scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.96;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+        }
+
+        .feedback-label {
+            display: block;
+            padding: 6px 8px 8px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.45rem;
+            line-height: 1.4;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.78);
+            background: rgba(5, 10, 18, 0.72);
+        }
+
+        .score-readout {
+            display: inline-block;
+            margin: 0 0 22px;
+            padding: 12px 18px;
+            border-radius: 18px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.8rem;
+            line-height: 1.8;
+            color: var(--text);
+            background: rgba(77, 245, 255, 0.08);
+            border: 1px solid rgba(77, 245, 255, 0.16);
+        }
+
+        .score-value {
+            color: var(--cyan);
+        }
+
+        @keyframes pulseDot {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.85; }
+            50% { transform: translateY(-4px) scale(1.15); opacity: 1; }
+        }
+
+        @keyframes hintPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        @media (max-width: 480px) {
+            .overlay-card {
+                padding: 22px 16px;
+                border-radius: 24px;
+            }
+
+            .hero-avatar {
+                width: 96px;
+                height: 96px;
+                margin-bottom: 16px;
+            }
+
+            .hero-avatar::before {
+                left: 24px;
+                top: 33px;
+                width: 14px;
+                height: 20px;
+                box-shadow: 34px 0 0 #081225;
+            }
+
+            .hero-avatar::after {
+                left: 30px;
+                top: 59px;
+                width: 36px;
+                height: 12px;
+            }
+
+            .hud {
+                top: calc(12px + env(safe-area-inset-top));
+                left: 12px;
+            }
+
+            .hud-card {
+                min-width: 96px;
+                padding: 9px 10px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="game-shell">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-layer" class="ui-layer">
+            <div id="start-screen" class="overlay-card">
+                <div class="title-stack">
+                    <div class="eyebrow">SIGNAL HERO ONLINE</div>
+                    <h1 class="title">Neon Gate Run</h1>
+                    <p class="subtitle">Guide the radiant courier orb through incoming gates by syncing its live signal color.</p>
+                </div>
+
+                <div class="hero-avatar" aria-hidden="true"></div>
+
+                <div class="signal-row" aria-hidden="true">
+                    <div class="signal-dot pink"></div>
+                    <div class="signal-dot cyan"></div>
+                    <div class="signal-dot gold"></div>
+                </div>
+
+                <button id="start-btn" class="cta-button">START RUN</button>
+            </div>
+
+            <div id="game-over-screen" class="overlay-card hidden">
+                <h2 class="results-title">Signal Lost</h2>
+                <p class="results-copy">The courier fell out of phase with the gate stream.</p>
+                <div class="score-readout">GATES CLEARED<br><span id="finalScore" class="score-value">0</span></div>
+                <button id="restart-btn" class="cta-button alt">RUN AGAIN</button>
+            </div>
+
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+            <div id="hud" class="hud hidden">
+                <div class="hud-card">
+                    <span class="hud-label">GATES</span>
+                    <span id="score" class="hud-score">0</span>
+                </div>
+            </div>
+
+            <div id="tutorial-hint" class="tutorial-hint hidden">
+                TAP ANYWHERE TO CYCLE THE SIGNAL
+            </div>
+
+            <!-- [agent-note][stage3] resolved-gif: score-burst + fail-reaction -> catalogs/gifs.json -->
+            <!-- [agent-note][stage3] caution: keep-gif-off-playfield | reason: protect controls -->
+            <div id="score-gif" class="feedback-gif" aria-live="polite">
+                <img src="https://i.giphy.com/xbRW3zH8awEC3xZ0yh.webp" alt="Arcade burst reaction">
+                <span class="feedback-label">SYNC BURST</span>
+            </div>
+
+            <div id="fail-gif" class="feedback-gif" aria-live="polite">
+                <img src="https://i.giphy.com/7TcdqHUCFIfEaRJzKn.webp" alt="Signal loss reaction">
+                <span class="feedback-label">SIGNAL LOST</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3",
+                switch: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3",
+                score: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3"
+            }
+        };
+
+        class AudioController {
+            constructor() {
+                this.unlocked = false;
+                this.bgm = this.createAudio(ASSETS.bgm, 0.2, true);
+                this.sfx = Object.fromEntries(
+                    Object.entries(ASSETS.sfx).map(([key, src]) => [key, this.createAudio(src, key === 'fail' ? 0.58 : 0.5, false)])
+                );
+                this.lastPlayedAt = {};
+            }
+
+            createAudio(src, volume, loop) {
+                const audio = new Audio(src);
+                audio.preload = 'auto';
+                audio.volume = volume;
+                audio.loop = loop;
+                return audio;
+            }
+
+            unlock() {
+                if (this.unlocked) return;
+                this.unlocked = true;
+                const warmup = Object.values(this.sfx).slice(0, 1);
+                warmup.forEach((audio) => {
+                    audio.play().then(() => {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    }).catch(() => {});
+                });
+            }
+
+            playBGM() {
+                if (!this.unlocked) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            playSFX(key, cooldown = 90) {
+                const audio = this.sfx[key];
+                if (!audio || !this.unlocked) return;
+                const now = performance.now();
+                if (this.lastPlayedAt[key] && now - this.lastPlayedAt[key] < cooldown) return;
+                this.lastPlayedAt[key] = now;
+                try {
+                    audio.currentTime = 0;
+                } catch (_) {}
+                audio.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const PALETTE = [
+            { hex: '#FF2C84', glow: 'rgba(255, 44, 132, 0.6)' },
+            { hex: '#4DF5FF', glow: 'rgba(77, 245, 255, 0.6)' },
+            { hex: '#FFD964', glow: 'rgba(255, 217, 100, 0.6)' }
+        ];
+
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let frameCount = 0;
+        let gameSpeed = 5;
+
+        let player = {
+            y: 0,
+            radius: 20,
+            colorIndex: 0,
+            trail: []
+        };
+        let gates = [];
+        let particles = [];
+        let gateWarningPlayed = false;
+
+        const scoreGif = document.getElementById('score-gif');
+        const failGif = document.getElementById('fail-gif');
+        let feedbackTimer = null;
+
+        function showFeedbackGif(type) {
+            const active = type === 'score' ? scoreGif : failGif;
+            const inactive = type === 'score' ? failGif : scoreGif;
+            inactive.classList.remove('visible');
+            active.classList.add('visible');
+            window.clearTimeout(feedbackTimer);
+            feedbackTimer = window.setTimeout(() => {
+                active.classList.remove('visible');
+            }, type === 'score' ? 650 : 1600);
+        }
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            player.y = height - 150;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function initGame() {
+            score = 0;
+            gameSpeed = 6;
+            frameCount = 0;
+            player.colorIndex = 0;
+            player.trail = [];
+            gates = [];
+            particles = [];
+            gateWarningPlayed = false;
+            scoreGif.classList.remove('visible');
+            failGif.classList.remove('visible');
+            document.getElementById('score').innerText = '0';
+        }
+
+        function spawnGate() {
+            const gateHeight = 30;
+            const type = Math.floor(Math.random() * 3);
+            gates.push({
+                y: -50,
+                h: gateHeight,
+                type: type,
+                passed: false
+            });
+        }
+
+        function createExplosion(x, y, colorHex) {
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: colorHex
+                });
+            }
+        }
+
+        function drawBackground() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#040611');
+            gradient.addColorStop(0.55, '#09142d');
+            gradient.addColorStop(1, '#130a24');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const halo = ctx.createRadialGradient(width / 2, height * 0.22, 0, width / 2, height * 0.22, width * 0.48);
+            halo.addColorStop(0, 'rgba(77, 245, 255, 0.14)');
+            halo.addColorStop(0.45, 'rgba(141, 115, 255, 0.08)');
+            halo.addColorStop(1, 'rgba(4, 6, 17, 0)');
+            ctx.fillStyle = halo;
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = 0; i < 50; i++) {
+                const sx = (Math.sin(i * 132.1) * width + width) % width;
+                const sy = (Math.cos(i * 53.7) * height + frameCount * 0.5) % height;
+                const size = (i % 3) + 1;
+                ctx.globalAlpha = 0.18 + (i % 3) * 0.12;
+                ctx.fillStyle = i % 2 === 0 ? '#9cf9ff' : '#ffffff';
+                ctx.fillRect(sx, sy, size, size);
+            }
+            ctx.globalAlpha = 1.0;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(95, 213, 255, 0.14)';
+            ctx.lineWidth = 1;
+
+            const centerX = width / 2;
+            for (let i = -5; i <= 5; i++) {
+                const x = centerX + i * (width / 8);
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+
+            const gridSize = 80;
+            const offset = (frameCount * gameSpeed) % gridSize;
+            for (let y = offset; y < height; y += gridSize) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 44, 132, 0.08)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 5; i++) {
+                const y = height * 0.25 + i * 52 + Math.sin((frameCount + i * 15) * 0.03) * 4;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.quadraticCurveTo(width * 0.5, y - 16, width, y + 4);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawRoadTrail() {
+            const roadWidth = Math.min(width * 0.5, 300);
+            const centerX = width / 2;
+            const roadLeft = centerX - roadWidth / 2;
+
+            const roadGradient = ctx.createLinearGradient(roadLeft, 0, roadLeft + roadWidth, 0);
+            roadGradient.addColorStop(0, 'rgba(18, 26, 44, 0.96)');
+            roadGradient.addColorStop(0.5, 'rgba(24, 34, 62, 0.92)');
+            roadGradient.addColorStop(1, 'rgba(18, 26, 44, 0.96)');
+            ctx.fillStyle = roadGradient;
+            ctx.fillRect(roadLeft, 0, roadWidth, height);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(roadLeft, 0, roadWidth, height);
+            ctx.restore();
+
+            ctx.save();
+            ctx.shadowBlur = 26;
+            ctx.shadowColor = PALETTE[player.colorIndex].hex;
+            ctx.fillStyle = PALETTE[player.colorIndex].hex;
+            ctx.fillRect(centerX - 12, player.y - 8, 24, height - player.y + 8);
+            ctx.restore();
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.setLineDash([18, 24]);
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, height);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawPlayer() {
+            const centerX = width / 2;
+            const color = PALETTE[player.colorIndex];
+            const bob = Math.sin(frameCount * 0.16) * 2.5;
+
+            ctx.save();
+            ctx.translate(centerX, player.y + bob);
+
+            ctx.shadowBlur = 34;
+            ctx.shadowColor = color.hex;
+
+            const bodyGradient = ctx.createRadialGradient(-6, -8, 4, 0, 0, player.radius);
+            bodyGradient.addColorStop(0, '#ffffff');
+            bodyGradient.addColorStop(0.15, '#c9fdff');
+            bodyGradient.addColorStop(0.45, color.hex);
+            bodyGradient.addColorStop(1, '#121a43');
+
+            ctx.fillStyle = bodyGradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#091327';
+            ctx.beginPath();
+            ctx.arc(-6, -2, 2.6, 0, Math.PI * 2);
+            ctx.arc(6, -2, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(9, 19, 39, 0.85)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 6, 7, 0.15 * Math.PI, 0.85 * Math.PI);
+            ctx.stroke();
+
+            ctx.strokeStyle = color.hex;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, player.radius + 7 + Math.sin(frameCount * 0.2), 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawGates() {
+            const roadWidth = Math.min(width * 0.5, 300);
+            const centerX = width / 2;
+            const leftX = centerX - roadWidth / 2;
+
+            gates.forEach(gate => {
+                const color = PALETTE[gate.type];
+
+                ctx.save();
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = color.hex;
+
+                const gateGradient = ctx.createLinearGradient(leftX, gate.y, leftX + roadWidth, gate.y + gate.h);
+                gateGradient.addColorStop(0, 'rgba(255,255,255,0.55)');
+                gateGradient.addColorStop(0.2, color.hex);
+                gateGradient.addColorStop(0.8, color.hex);
+                gateGradient.addColorStop(1, 'rgba(255,255,255,0.55)');
+                ctx.fillStyle = gateGradient;
+                ctx.fillRect(leftX, gate.y, roadWidth, gate.h);
+
+                ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                ctx.fillRect(leftX - 10, gate.y - 6, 10, gate.h + 12);
+                ctx.fillRect(leftX + roadWidth, gate.y - 6, 10, gate.h + 12);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(leftX + 6, gate.y + 4, roadWidth - 12, gate.h - 8);
+
+                ctx.restore();
+            });
+        }
+
+        function drawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.globalAlpha = p.life;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = p.color;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            frameCount++;
+            score += Math.floor(gameSpeed / 5);
+            document.getElementById('score').innerText = Math.floor(score / 10);
+
+            if (frameCount % 600 === 0) {
+                gameSpeed += 0.5;
+            }
+
+            if (frameCount % Math.floor(1600 / gameSpeed) === 0) {
+                spawnGate();
+            }
+
+            const centerX = width / 2;
+
+            for (let i = gates.length - 1; i >= 0; i--) {
+                let gate = gates[i];
+                gate.y += gameSpeed;
+
+                if (!gate.passed &&
+                    gate.y + gate.h > player.y - player.radius &&
+                    gate.y < player.y + player.radius) {
+
+                    if (gate.type === player.colorIndex) {
+                        gate.passed = true;
+                        gateWarningPlayed = false;
+                        audio.playSFX('score', 80);
+                        showFeedbackGif('score');
+                        createExplosion(centerX, player.y, PALETTE[gate.type].hex);
+                        score += 50;
+                    } else {
+                        gameOver();
+                        return;
+                    }
+                }
+
+                if (!gate.passed && !gateWarningPlayed && gate.y > player.y - 120 && gate.y < player.y - 30 && gate.type !== player.colorIndex) {
+                    gateWarningPlayed = true;
+                    audio.playSFX('switch', 180);
+                }
+
+                if (gate.y > height) {
+                    gates.splice(i, 1);
+                    gateWarningPlayed = false;
+                }
+            }
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, width, height);
+
+            drawBackground();
+            drawRoadTrail();
+            drawGates();
+            drawPlayer();
+            drawParticles();
+
+            update();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail', 250);
+            showFeedbackGif('fail');
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('tutorial-hint').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = Math.floor(score / 10);
+
+            createExplosion(width / 2, player.y, '#FFF');
+            drawParticles();
+        }
+
+        function switchColor() {
+            if (!gameActive) return;
+            player.colorIndex = (player.colorIndex + 1) % 3;
+            gateWarningPlayed = false;
+            audio.playSFX('switch', 70);
+            createExplosion(width / 2, player.y, PALETTE[player.colorIndex].hex);
+        }
+
+        document.addEventListener('pointerdown', (e) => {
+            if (!gameActive) return;
+            if (e.target.closest('button')) return;
+            switchColor();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter') {
+                switchColor();
+            }
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', 0);
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('tutorial-hint').classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            gameLoop();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', 0);
+            audio.playBGM();
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('tutorial-hint').classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            gameLoop();
+        });
+    });
+    </script>
+</body>
+</html>

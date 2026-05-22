@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pixel Ark Workshop</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #07111f;
+            --bg-mid: #0c2742;
+            --panel: rgba(5, 13, 26, 0.72);
+            --panel-border: rgba(171, 232, 255, 0.45);
+            --panel-shadow: rgba(0, 0, 0, 0.42);
+            --sea: #2f86ff;
+            --foam: #a8e8ff;
+            --soil: #56c95a;
+            --grove: #147d54;
+            --settler: #ffe89b;
+            --flame: #ff6a3d;
+            --ember: #ffd166;
+            --ash: #2e3542;
+            --text-main: #f4fbff;
+            --text-soft: #c9efff;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(114, 221, 255, 0.1), transparent 38%),
+                linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-deep) 100%);
+            touch-action: manipulation;
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+        #game-container { position: relative; width: 100%; height: 100%; }
+        #game-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 12%, rgba(168, 232, 255, 0.15), transparent 18%),
+                radial-gradient(circle at 82% 20%, rgba(255, 209, 102, 0.12), transparent 16%),
+                linear-gradient(180deg, rgba(255,255,255,0.03), transparent 18%, transparent 82%, rgba(255,255,255,0.04));
+            opacity: 0.95;
+        }
+        canvas { display: block; touch-action: none; width: 100%; height: 100%; image-rendering: pixelated; }
+        .pixel-font { font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.12em; }
+        .ui-font { font-family: 'Exo 2', system-ui, sans-serif; }
+        .select-none { user-select: none; -webkit-user-select: none; }
+        .absolute { position: absolute; }
+        .inset-0 { inset: 0; }
+        .z-50 { z-index: 50; }
+        .pointer-events-none { pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .justify-end { justify-content: flex-end; }
+        .justify-center { justify-content: center; }
+        .items-center { align-items: center; }
+        .gap-2 { gap: 0.5rem; }
+        .pb-6 { padding-bottom: 1.5rem; }
+        .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+        .flex-wrap { flex-wrap: wrap; }
+        .text-center { text-align: center; }
+        .text-white { color: #fff; }
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .w-full { width: 100%; }
+        .relative { position: relative; }
+        .rounded-sm { border-radius: 0.125rem; }
+        .rounded-full { border-radius: 9999px; }
+        .w-4 { width: 1rem; }
+        .h-4 { height: 1rem; }
+        .w-3 { width: 0.75rem; }
+        .absolute.top-0 { top: 0; }
+        .absolute.left-0 { left: 0; }
+        .bg-blue-300 { background-color: #93c5fd; }
+        .bg-green-200 { background-color: #bbf7d0; }
+        .bg-green-800 { background-color: #166534; }
+        .bg-white { background-color: #fff; }
+        .bg-yellow-500 { background-color: #eab308; }
+        .bg-yellow-400 { background-color: #facc15; }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        #hud {
+            padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+        }
+        .tool-btn {
+            width: 48px;
+            height: 48px;
+            border: 2px solid rgba(229, 250, 255, 0.86);
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.03)),
+                rgba(12, 25, 43, 0.86);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.22) inset,
+                0 6px 14px var(--panel-shadow);
+            backdrop-filter: blur(4px);
+        }
+        .tool-btn.active {
+            border-color: var(--ember);
+            transform: translateY(2px) scale(0.98);
+            box-shadow:
+                0 0 0 1px rgba(255, 214, 102, 0.25) inset,
+                0 3px 10px rgba(0, 0, 0, 0.42),
+                0 0 16px rgba(255, 209, 102, 0.32);
+            filter: brightness(1.06);
+        }
+        .tool-btn:active {
+            transform: translateY(2px) scale(0.97);
+        }
+        #tool-name {
+            display: inline-block;
+            min-width: 8.5rem;
+            padding: 0.55rem 0.8rem 0.45rem;
+            border: 2px solid var(--panel-border);
+            border-radius: 999px;
+            background: var(--panel);
+            color: var(--text-main);
+            box-shadow: 0 8px 20px var(--panel-shadow);
+        }
+        .tool-icon { width: 24px; height: 24px; }
+
+        #media-feedback {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .feedback-gif {
+            position: absolute;
+            width: clamp(72px, 20vw, 128px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 2px solid rgba(244, 251, 255, 0.55);
+            background: rgba(5, 13, 26, 0.55);
+            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+            opacity: 0;
+            transform: scale(0.82);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .feedback-gif.visible {
+            opacity: 0.88;
+            transform: scale(1);
+        }
+        #feedback-fire {
+            right: clamp(8px, 4vw, 20px);
+            top: clamp(8px, 4vw, 22px);
+        }
+        #feedback-settler {
+            left: clamp(8px, 4vw, 20px);
+            top: clamp(8px, 10vh, 72px);
+        }
+
+        @media (max-width: 480px) {
+            .tool-btn {
+                width: 44px;
+                height: 44px;
+            }
+            #tool-name {
+                min-width: 7.25rem;
+                font-size: 0.65rem;
+            }
+            .feedback-gif {
+                width: 72px;
+                border-radius: 14px;
+            }
+            #feedback-settler {
+                top: 68px;
+            }
+        }
+    </style>
+    <script id="game-config" type="application/x-game-config">
+    {
+        "brushSize": { "type": "number", "label": "Zone Size", "value": 2, "min": 1, "max": 5 },
+        "simSpeed": { "type": "number", "label": "World Tempo", "value": 10, "min": 1, "max": 20 }
+    }
+    </script>
+</head>
+<body>
+    <div id="game-container" class="select-none">
+        <canvas id="gameCanvas"></canvas>
+        <div id="media-feedback" aria-hidden="true">
+            <!-- [agent-note][stage3] resolved-gif: fire-chaos + settler-celebrate -> catalogs/gifs.json -->
+            <img id="feedback-fire" class="feedback-gif" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" alt="">
+            <img id="feedback-settler" class="feedback-gif" src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="">
+        </div>
+        <div id="ui-layer" class="absolute inset-0 z-50 pointer-events-none flex flex-col justify-end pb-6">
+            <div id="hud" class="w-full flex justify-center gap-2 pointer-events-auto px-2 flex-wrap">
+                <div class="tool-btn active" data-tool="0" style="background-color: #1E90FF;" onclick="selectTool(0)">
+                    <div class="w-4 h-4 bg-blue-300"></div>
+                </div>
+                <div class="tool-btn" data-tool="1" style="background-color: #32CD32;" onclick="selectTool(1)">
+                    <div class="w-4 h-4 bg-green-200"></div>
+                </div>
+                <div class="tool-btn" data-tool="2" style="background-color: #228B22;" onclick="selectTool(2)">
+                    <div class="w-4 h-4 bg-green-800"></div>
+                </div>
+                <div class="tool-btn" data-tool="3" style="background-color: #F4A460;" onclick="selectTool(3)">
+                    <div class="w-3 h-4 bg-white rounded-sm relative"><div class="absolute top-0 left-0 w-full h-1 bg-yellow-500"></div></div>
+                </div>
+                <div class="tool-btn" data-tool="4" style="background-color: #FF4500;" onclick="selectTool(4)">
+                    <div class="w-4 h-4 bg-yellow-400 rounded-full"></div>
+                </div>
+            </div>
+            <div class="text-center text-white text-xs mt-2 pixel-font" style="text-shadow: 0 2px 0 rgba(0,0,0,0.75), 0 0 10px rgba(168,232,255,0.35);">
+                <span id="tool-name">SEA</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assets -->
+    <!-- [agent-note][stage3] resolved-font: primary=Cinzel secondary=Exo 2 -> catalogs/fonts.json -->
+    <!-- [agent-note][stage5] repaired: bgm-loop-availability-and-volume-cap | element: #bgm_main | action: swapped to approved catalog loop with verified availability and enforced <=20% loop volume -->
+    <audio id="bgm_main" data-editable="audio" data-label="Background Music" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" preload="auto" loop></audio>
+    <audio id="sfx_ui" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="none"></audio>
+    <audio id="sfx_spawn" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="none"></audio>
+    <audio id="sfx_fire" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3" preload="none"></audio>
+    <audio id="sfx_loss" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="none"></audio>
+
+    <script>
+        // --- Core System Variables ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        let cw = 0, ch = 0, dpr = window.devicePixelRatio || 1;
+        let initialized = false;
+        let gameState = 'STARTING';
+        let lastTime = 0;
+        let audioCtx = null;
+        let bgmUnlocked = false;
+        const sfxCooldowns = new Map();
+        let fireFeedbackTimeout = null;
+        let settlerFeedbackTimeout = null;
+        
+        window.gameConfig = { brushSize: 2, simSpeed: 10 };
+
+        // --- Game State ---
+        const COLS = 40;
+        let ROWS = 0;
+        let cellSize = 0;
+        let grid = [];
+        let entities = [];
+        let particles = [];
+        let currentTool = 0; // 0:Sea, 1:Soil, 2:Grove, 3:Settlers, 4:Flame
+        let isPointerDown = false;
+        let pointerX = 0, pointerY = 0;
+        let simAccumulator = 0;
+        let shakeTime = 0;
+
+        const TERRAIN = {
+            WATER: 0, LAND: 1, FOREST: 2, FIRE: 3, BURNED: 4
+        };
+        const COLORS = {
+            [TERRAIN.WATER]: '#2F86FF',
+            [TERRAIN.LAND]: '#56C95A',
+            [TERRAIN.FOREST]: '#147D54',
+            [TERRAIN.FIRE]: '#FF6A3D',
+            [TERRAIN.BURNED]: '#2E3542'
+        };
+        const DETAIL_COLORS = {
+            foam: '#A8E8FF',
+            soilGlow: '#B9F78B',
+            canopy: '#0B5A3C',
+            canopyLight: '#6DE0A2',
+            flameCore: '#FFE083',
+            flameGlow: '#FFAA4C',
+            ashGlow: '#5F6B82',
+            settlerCloak: '#43D4FF',
+            settlerTrim: '#FFE89B',
+            settlerFace: '#FFF5D6'
+        };
+        const TOOL_NAMES = ["SEA", "SOIL", "GROVE", "SETTLERS", "FLAME"];
+
+        // --- Audio System ---
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+        }
+
+        function unlockAudio() {
+            initAudio();
+            if (audioCtx?.state === 'suspended') audioCtx.resume().catch(() => {});
+            const bgm = document.getElementById('bgm_main');
+            if (bgm && !bgmUnlocked) {
+                bgm.volume = 0.2;
+                bgm.play().catch(() => {});
+                bgmUnlocked = true;
+            }
+        }
+
+        function playAudio(id, volume = 0.5, cooldown = 0) {
+            const now = performance.now();
+            const lastPlayed = sfxCooldowns.get(id) || 0;
+            if (cooldown > 0 && now - lastPlayed < cooldown) return;
+            const audio = document.getElementById(id);
+            if (!audio) return;
+            sfxCooldowns.set(id, now);
+            try {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = volume;
+                audio.play().catch(() => {});
+            } catch (_) {}
+        }
+
+        function showFeedback(id, duration = 900) {
+            const node = document.getElementById(id);
+            if (!node) return;
+            node.classList.add('visible');
+            if (id === 'feedback-fire') {
+                clearTimeout(fireFeedbackTimeout);
+                fireFeedbackTimeout = setTimeout(() => node.classList.remove('visible'), duration);
+            } else if (id === 'feedback-settler') {
+                clearTimeout(settlerFeedbackTimeout);
+                settlerFeedbackTimeout = setTimeout(() => node.classList.remove('visible'), duration);
+            } else {
+                setTimeout(() => node.classList.remove('visible'), duration);
+            }
+        }
+
+        function vibrate(style = 'light') {
+            window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+                action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+                params: { style }
+            });
+        }
+
+        // --- Initialization & Resize ---
+        function resize(entries) {
+            const rect = entries[0].contentRect;
+            cw = rect.width;
+            ch = rect.height;
+            
+            canvas.width = cw * dpr;
+            canvas.height = ch * dpr;
+            canvas.style.width = cw + 'px';
+            canvas.style.height = ch + 'px';
+            
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            cellSize = cw / COLS;
+            ROWS = Math.ceil(ch / cellSize);
+
+            if (!initialized) {
+                initGame();
+            } else {
+                // Resize grid safely
+                const newGrid = new Uint8Array(COLS * ROWS);
+                for(let y=0; y<ROWS; y++) {
+                    for(let x=0; x<COLS; x++) {
+                        if (y < grid.length / COLS) {
+                            newGrid[y*COLS + x] = grid[y*COLS + x];
+                        } else {
+                            newGrid[y*COLS + x] = TERRAIN.WATER;
+                        }
+                    }
+                }
+                grid = newGrid;
+            }
+        }
+
+        function initGame() {
+            grid = new Uint8Array(COLS * ROWS);
+            // Default terrain: some land in middle
+            for(let y=0; y<ROWS; y++) {
+                for(let x=0; x<COLS; x++) {
+                    let type = TERRAIN.WATER;
+                    if (Math.abs(x - COLS/2) < 10 && Math.abs(y - ROWS/2) < 10) {
+                        type = TERRAIN.LAND;
+                    }
+                    grid[y*COLS + x] = type;
+                }
+            }
+            entities = [];
+            particles = [];
+            setState('PLAYING');
+            initialized = true;
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function setState(newState) {
+            gameState = newState;
+        }
+
+        // --- Input Handling ---
+        function handleGlobalInput(e) {
+            unlockAudio();
+            if (e.type === 'pointerdown') {
+                isPointerDown = true;
+                updatePointer(e);
+                applyTool();
+            } else if (e.type === 'pointermove') {
+                if (isPointerDown) {
+                    updatePointer(e);
+                    applyTool();
+                }
+            } else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+                isPointerDown = false;
+            }
+        }
+
+        function updatePointer(e) {
+            const rect = canvas.getBoundingClientRect();
+            pointerX = e.clientX - rect.left;
+            pointerY = e.clientY - rect.top;
+        }
+
+        window.selectTool = function(index) {
+            currentTool = index;
+            document.querySelectorAll('.tool-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', i === index);
+            });
+            document.getElementById('tool-name').innerText = TOOL_NAMES[index];
+            playAudio('sfx_ui', 0.42, 70);
+        };
+
+        function applyTool() {
+            if (gameState !== 'PLAYING') return;
+            
+            const gx = Math.floor(pointerX / cellSize);
+            const gy = Math.floor(pointerY / cellSize);
+            
+            if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return;
+
+            let acted = false;
+
+            if (currentTool === 3) {
+                // Spawn Settler
+                if (Math.random() > 0.8) {
+                    entities.push({
+                        x: gx, y: gy,
+                        rx: gx * cellSize, ry: gy * cellSize,
+                        type: 'settler',
+                        life: 100,
+                        timer: 0
+                    });
+                    playAudio('sfx_spawn', 0.46, 180);
+                    showFeedback('feedback-settler', 1100);
+                    vibrate('light');
+                    spawnParticles(gx, gy, '#FFF', 5);
+                    acted = true;
+                }
+            } else {
+                // Terrain Brushes
+                const r = window.gameConfig.brushSize;
+                for(let dy = -r; dy <= r; dy++) {
+                    for(let dx = -r; dx <= r; dx++) {
+                        if (dx*dx + dy*dy <= r*r) {
+                            const nx = gx + dx;
+                            const ny = gy + dy;
+                            if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                                const idx = ny * COLS + nx;
+                                let newType = grid[idx];
+                                
+                                if (currentTool === 0) newType = TERRAIN.WATER;
+                                else if (currentTool === 1) newType = TERRAIN.LAND;
+                                else if (currentTool === 2) {
+                                    if (grid[idx] === TERRAIN.LAND) newType = TERRAIN.FOREST;
+                                }
+                                else if (currentTool === 4) {
+                                    newType = TERRAIN.FIRE;
+                                    shakeTime = 0.2;
+                                }
+
+                                if (grid[idx] !== newType) {
+                                    grid[idx] = newType;
+                                    acted = true;
+                                    if (Math.random() > 0.7) {
+                                        spawnParticles(nx, ny, COLORS[newType], 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (acted) {
+                    if (currentTool === 4) {
+                        playAudio('sfx_fire', 0.5, 180);
+                        showFeedback('feedback-fire', 950);
+                        vibrate('heavy');
+                    } else {
+                        if (Math.random() > 0.82) playAudio('sfx_ui', 0.22, 90);
+                    }
+                }
+            }
+        }
+
+        function spawnParticles(gx, gy, color, count) {
+            for(let i=0; i<count; i++) {
+                particles.push({
+                    x: (gx + 0.5) * cellSize,
+                    y: (gy + 0.5) * cellSize,
+                    vx: (Math.random() - 0.5) * 50,
+                    vy: (Math.random() - 0.5) * 50,
+                    life: 0.5 + Math.random() * 0.5,
+                    color: color
+                });
+            }
+        }
+
+        // --- Simulation Logic ---
+        function simulateGrid() {
+            // Process fire spread and burnout
+            for(let i = 0; i < grid.length; i++) {
+                if (grid[i] === TERRAIN.FIRE) {
+                    if (Math.random() < 0.2) {
+                        grid[i] = TERRAIN.BURNED; // burnout
+                    } else {
+                        // spread
+                        const x = i % COLS;
+                        const y = Math.floor(i / COLS);
+                        const neighbors = [
+                            {dx: 1, dy: 0}, {dx: -1, dy: 0},
+                            {dx: 0, dy: 1}, {dx: 0, dy: -1}
+                        ];
+                        for(let n of neighbors) {
+                            const nx = x + n.dx;
+                            const ny = y + n.dy;
+                            if (nx >=0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                                const nidx = ny * COLS + nx;
+                                if (grid[nidx] === TERRAIN.FOREST || grid[nidx] === TERRAIN.LAND) {
+                                    if (Math.random() < 0.1) grid[nidx] = TERRAIN.FIRE;
+                                }
+                            }
+                        }
+                    }
+                } else if (grid[i] === TERRAIN.BURNED) {
+                    if (Math.random() < 0.01) grid[i] = TERRAIN.LAND; // recover
+                }
+            }
+        }
+
+        function updateEntities(dt) {
+            for (let i = entities.length - 1; i >= 0; i--) {
+                let e = entities[i];
+                e.timer += dt;
+                
+                // Move logic
+                if (e.timer > 0.5) {
+                    e.timer = 0;
+                    const dirs = [{dx:1,dy:0}, {dx:-1,dy:0}, {dx:0,dy:1}, {dx:0,dy:-1}];
+                    const dir = dirs[Math.floor(Math.random() * dirs.length)];
+                    const nx = e.x + dir.dx;
+                    const ny = e.y + dir.dy;
+                    
+                    if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                        const cellType = grid[ny * COLS + nx];
+                        if (cellType !== TERRAIN.WATER && cellType !== TERRAIN.FIRE) {
+                            e.x = nx;
+                            e.y = ny;
+                        }
+                        if (cellType === TERRAIN.FIRE) {
+                            e.life -= 50;
+                        }
+                    }
+                }
+
+                // Interpolate render pos
+                const targetRx = e.x * cellSize;
+                const targetRy = e.y * cellSize;
+                e.rx += (targetRx - e.rx) * 10 * dt;
+                e.ry += (targetRy - e.ry) * 10 * dt;
+                
+                // Safety
+                if (!isFinite(e.rx) || !isFinite(e.ry)) {
+                    e.rx = cw/2; e.ry = ch/2; e.x = Math.floor(COLS/2); e.y = Math.floor(ROWS/2);
+                }
+
+                if (e.life <= 0) {
+                    playAudio('sfx_loss', 0.5, 220);
+                    showFeedback('feedback-fire', 1200);
+                    spawnParticles(e.x, e.y, '#FFF', 10);
+                    entities.splice(i, 1);
+                }
+            }
+        }
+
+        function updateParticles(dt) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        // --- Render Loop ---
+        function gameLoop(timestamp) {
+            requestAnimationFrame(gameLoop);
+            
+            let dt = (timestamp - lastTime) / 1000;
+            if (dt > 0.1) dt = 0.1; // cap
+            lastTime = timestamp;
+
+            try {
+                if (gameState === 'PLAYING') {
+                    // Sim Accumulator
+                    simAccumulator += dt;
+                    const simStep = 1 / window.gameConfig.simSpeed;
+                    while (simAccumulator >= simStep) {
+                        simulateGrid();
+                        simAccumulator -= simStep;
+                    }
+
+                    updateEntities(dt);
+                    updateParticles(dt);
+                    if (shakeTime > 0) shakeTime -= dt;
+                }
+
+                render();
+            } catch (err) {
+                console.error("Loop error:", err);
+            }
+        }
+
+        function render() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, cw, ch);
+
+            ctx.save();
+            if (shakeTime > 0) {
+                const mag = shakeTime * 20;
+                ctx.translate((Math.random()-0.5)*mag, (Math.random()-0.5)*mag);
+            }
+
+            // Draw Grid
+            for(let y=0; y<ROWS; y++) {
+                for(let x=0; x<COLS; x++) {
+                    const type = grid[y*COLS + x];
+                    const px = x * cellSize;
+                    const py = y * cellSize;
+
+                    ctx.fillStyle = COLORS[type];
+                    ctx.fillRect(px, py, cellSize, cellSize);
+
+                    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                    ctx.fillRect(px, py, cellSize, Math.max(1, cellSize * 0.08));
+
+                    if (type === TERRAIN.WATER) {
+                        ctx.fillStyle = DETAIL_COLORS.foam;
+                        ctx.fillRect(px + cellSize * 0.12, py + cellSize * 0.18, cellSize * 0.28, Math.max(1, cellSize * 0.1));
+                        ctx.fillRect(px + cellSize * 0.52, py + cellSize * 0.5, cellSize * 0.2, Math.max(1, cellSize * 0.08));
+                    } else if (type === TERRAIN.LAND) {
+                        ctx.fillStyle = DETAIL_COLORS.soilGlow;
+                        ctx.fillRect(px + cellSize * 0.16, py + cellSize * 0.2, cellSize * 0.16, cellSize * 0.16);
+                        ctx.fillRect(px + cellSize * 0.62, py + cellSize * 0.58, cellSize * 0.12, cellSize * 0.12);
+                    } else if (type === TERRAIN.FOREST) {
+                        ctx.fillStyle = DETAIL_COLORS.canopy;
+                        ctx.fillRect(px + cellSize * 0.18, py + cellSize * 0.24, cellSize * 0.64, cellSize * 0.54);
+                        ctx.fillStyle = DETAIL_COLORS.canopyLight;
+                        ctx.fillRect(px + cellSize * 0.3, py + cellSize * 0.16, cellSize * 0.18, cellSize * 0.18);
+                        ctx.fillRect(px + cellSize * 0.54, py + cellSize * 0.34, cellSize * 0.12, cellSize * 0.12);
+                        ctx.fillStyle = '#5A341D';
+                        ctx.fillRect(px + cellSize * 0.45, py + cellSize * 0.58, cellSize * 0.1, cellSize * 0.24);
+                    } else if (type === TERRAIN.FIRE) {
+                        ctx.fillStyle = DETAIL_COLORS.flameGlow;
+                        ctx.fillRect(px + cellSize * 0.22, py + cellSize * 0.24, cellSize * 0.56, cellSize * 0.56);
+                        ctx.fillStyle = DETAIL_COLORS.flameCore;
+                        ctx.fillRect(px + cellSize * 0.36, py + (Math.random() > 0.5 ? cellSize * 0.12 : cellSize * 0.2), cellSize * 0.24, cellSize * 0.34);
+                    } else if (type === TERRAIN.BURNED) {
+                        ctx.fillStyle = DETAIL_COLORS.ashGlow;
+                        ctx.fillRect(px + cellSize * 0.2, py + cellSize * 0.64, cellSize * 0.42, Math.max(1, cellSize * 0.08));
+                        ctx.fillRect(px + cellSize * 0.58, py + cellSize * 0.34, cellSize * 0.1, cellSize * 0.1);
+                    }
+                }
+            }
+
+            // Draw Entities
+            for (let e of entities) {
+                const bob = Math.sin((lastTime / 140) + e.x + e.y) * cellSize * 0.06;
+                const ex = e.rx;
+                const ey = e.ry + bob;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fillRect(ex + cellSize * 0.22, ey + cellSize * 0.74, cellSize * 0.42, cellSize * 0.08);
+
+                ctx.fillStyle = DETAIL_COLORS.settlerCloak;
+                ctx.fillRect(ex + cellSize * 0.24, ey + cellSize * 0.34, cellSize * 0.52, cellSize * 0.44);
+
+                ctx.fillStyle = DETAIL_COLORS.settlerTrim;
+                ctx.fillRect(ex + cellSize * 0.22, ey + cellSize * 0.28, cellSize * 0.56, cellSize * 0.08);
+
+                ctx.fillStyle = DETAIL_COLORS.settlerFace;
+                ctx.fillRect(ex + cellSize * 0.34, ey + cellSize * 0.08, cellSize * 0.32, cellSize * 0.26);
+
+                ctx.fillStyle = '#16324F';
+                ctx.fillRect(ex + cellSize * 0.38, ey + cellSize * 0.16, cellSize * 0.06, cellSize * 0.06);
+                ctx.fillRect(ex + cellSize * 0.56, ey + cellSize * 0.16, cellSize * 0.06, cellSize * 0.06);
+            }
+
+            // Draw Particles
+            for (let p of particles) {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, cellSize*0.4, cellSize*0.4);
+            }
+            ctx.globalAlpha = 1.0;
+
+            // Draw Brush Preview
+            if (isPointerDown) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 2;
+                const r = window.gameConfig.brushSize * cellSize;
+                ctx.beginPath();
+                ctx.arc(pointerX, pointerY, Math.max(0, r), 0, Math.PI*2);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // --- Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Parse config
+            const configScript = document.getElementById('game-config');
+            if (configScript) {
+                try {
+                    const defs = JSON.parse(configScript.textContent);
+                    window.gameConfigDefs = defs;
+                    for (let k in defs) window.gameConfig[k] = defs[k].value;
+                } catch(e) {}
+            }
+
+            // Input bindings
+            canvas.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+            canvas.addEventListener('pointermove', handleGlobalInput, { passive: false });
+            window.addEventListener('pointerup', handleGlobalInput, { passive: false });
+            window.addEventListener('pointercancel', handleGlobalInput, { passive: false });
+
+            // [agent-note][stage4] repaired: mobile-action-path | element: #gameCanvas | action: scoped touch suppression to gameplay surface to avoid blocking HUD taps
+            canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+            // Observer
+            const ro = new ResizeObserver(entries => {
+                if(entries.length > 0) resize(entries);
+            });
+            ro.observe(canvas);
+        });
+
+    </script>
+</body>
+</html>

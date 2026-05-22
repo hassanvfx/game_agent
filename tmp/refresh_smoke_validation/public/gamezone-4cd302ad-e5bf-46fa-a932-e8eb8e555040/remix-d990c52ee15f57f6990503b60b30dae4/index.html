@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Color Gate Control</title>
+    <!-- [agent-note][stage4] remapped-font: title->Orbitron, ui->Exo 2 via catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@400;600&display=swap">
+    <style>
+        :root {
+            --bg-deep: #060913;
+            --bg-mid: #10192d;
+            --panel: rgba(10, 18, 38, 0.72);
+            --panel-border: rgba(129, 215, 255, 0.28);
+            --panel-shadow: rgba(0, 0, 0, 0.45);
+            --text-main: #eff9ff;
+            --text-muted: rgba(211, 233, 255, 0.68);
+            --cyan: #6fe7ff;
+            --cyan-strong: #23bff5;
+            --gold: #ffd85b;
+            --danger: #ff5879;
+            --success: #5df4a3;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at 50% 50%, rgba(35, 191, 245, 0.16), transparent 28%),
+                radial-gradient(circle at top, rgba(111, 231, 255, 0.12), transparent 32%),
+                linear-gradient(180deg, #08101d 0%, var(--bg-deep) 44%, #03050c 100%);
+            color: var(--text-main);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        button {
+            font: inherit;
+            border: 0;
+            cursor: pointer;
+        }
+
+        .game-shell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .game-shell::before,
+        .game-shell::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .game-shell::before {
+            background:
+                radial-gradient(circle at 20% 18%, rgba(111, 231, 255, 0.16), transparent 18%),
+                radial-gradient(circle at 80% 12%, rgba(255, 216, 91, 0.11), transparent 18%),
+                radial-gradient(circle at 50% 82%, rgba(93, 244, 163, 0.10), transparent 16%);
+            opacity: 0.95;
+        }
+
+        .game-shell::after {
+            background-image:
+                linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mix-blend-mode: screen;
+            opacity: 0.38;
+        }
+
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 2;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            width: clamp(88px, 20vw, 140px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.22);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+            opacity: 0;
+            transform: scale(0.72);
+            transition: opacity 180ms ease, transform 180ms ease;
+            mix-blend-mode: screen;
+        }
+
+        .feedback-gif.show {
+            opacity: 0.96;
+            transform: scale(1);
+        }
+
+        #score-gif {
+            right: 12px;
+            top: min(108px, 18vh);
+        }
+
+        #fail-gif {
+            left: 50%;
+            bottom: calc(110px + env(safe-area-inset-bottom));
+            transform: translateX(-50%) scale(0.72);
+            width: min(42vw, 180px);
+        }
+
+        #fail-gif.show {
+            transform: translateX(-50%) scale(1);
+        }
+
+        .overlay-card {
+            width: min(100% - 32px, 380px);
+            padding: 26px 22px 22px;
+            border-radius: 26px;
+            pointer-events: auto;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            background:
+                linear-gradient(180deg, rgba(14, 24, 49, 0.92), rgba(6, 12, 26, 0.86));
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                0 20px 40px var(--panel-shadow),
+                inset 0 1px 0 rgba(255,255,255,0.1),
+                0 0 24px rgba(35, 191, 245, 0.18);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+
+        .overlay-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(135deg, rgba(111, 231, 255, 0.16), transparent 35%),
+                linear-gradient(315deg, rgba(255, 216, 91, 0.12), transparent 40%);
+            pointer-events: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 11px;
+            letter-spacing: 0.26em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .brand-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, var(--cyan), var(--cyan-strong));
+            box-shadow: 0 0 10px rgba(111, 231, 255, 0.65);
+        }
+
+        .title {
+            margin: 0;
+            font-family: 'Orbitron', 'Exo 2', sans-serif;
+            font-size: clamp(2.2rem, 9vw, 3.9rem);
+            line-height: 0.88;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.45);
+            position: relative;
+        }
+
+        .title .accent {
+            color: var(--gold);
+            text-shadow: 0 0 18px rgba(255, 216, 91, 0.45);
+        }
+
+        .subtitle {
+            margin: 14px 0 20px;
+            color: #b9dfff;
+            font-size: clamp(0.92rem, 3.6vw, 1.08rem);
+            line-height: 1.45;
+            font-weight: 700;
+        }
+
+        .character-preview {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 0 auto 18px;
+            max-width: 220px;
+        }
+
+        .wedge-chip {
+            aspect-ratio: 1;
+            border-radius: 18px;
+            position: relative;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.35),
+                0 8px 14px rgba(0, 0, 0, 0.18);
+            border: 1px solid rgba(255,255,255,0.18);
+        }
+
+        .wedge-chip::after {
+            content: "";
+            position: absolute;
+            inset: 24%;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.22);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+        }
+
+        .wedge-red { background: linear-gradient(180deg, #ff7a86, #e43d64); }
+        .wedge-blue { background: linear-gradient(180deg, #72d4ff, #2f73ff); }
+        .wedge-yellow { background: linear-gradient(180deg, #ffe985, #ffb92b); }
+        .wedge-green { background: linear-gradient(180deg, #8af5a4, #1fcb84); }
+
+        .arcade-btn {
+            width: 100%;
+            min-height: 56px;
+            border-radius: 18px;
+            padding: 14px 18px;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: white;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(180deg, #2fe4ff 0%, #2277ff 100%);
+            border: 1px solid rgba(255,255,255,0.18);
+            box-shadow:
+                0 14px 28px rgba(0, 0, 0, 0.28),
+                inset 0 1px 0 rgba(255,255,255,0.24),
+                0 0 16px rgba(35, 191, 245, 0.24);
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+        }
+
+        .arcade-btn::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.24), transparent 42%);
+            pointer-events: none;
+        }
+
+        .arcade-btn:hover,
+        .arcade-btn:focus-visible {
+            transform: translateY(-2px);
+            filter: brightness(1.04);
+            box-shadow:
+                0 18px 30px rgba(0, 0, 0, 0.30),
+                inset 0 1px 0 rgba(255,255,255,0.28),
+                0 0 22px rgba(35, 191, 245, 0.30);
+        }
+
+        .arcade-btn:active,
+        .arcade-btn.is-pressed {
+            transform: translateY(1px) scale(0.985);
+        }
+
+        .arcade-btn.alt {
+            background: linear-gradient(180deg, #fff2a8 0%, #ff9f50 100%);
+            color: #1d2334;
+            box-shadow:
+                0 14px 28px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255,255,255,0.26),
+                0 0 18px rgba(255, 216, 91, 0.28);
+        }
+
+        .hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: max(14px, env(safe-area-inset-top)) max(14px, 4vw) 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe */
+        .hud-cluster {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+            padding: 11px 13px 10px;
+            border-radius: 18px;
+            background:
+                linear-gradient(180deg, rgba(11, 19, 38, 0.84), rgba(8, 13, 28, 0.70));
+            border: 1px solid rgba(129, 215, 255, 0.22);
+            box-shadow:
+                0 10px 24px rgba(0, 0, 0, 0.24),
+                inset 0 1px 0 rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .hud-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .hud-value {
+            color: var(--text-main);
+            font-weight: 700;
+            line-height: 1;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        }
+
+        .hud-value.score {
+            font-size: clamp(1.8rem, 7vw, 2.4rem);
+        }
+
+        .hud-value.high {
+            font-size: clamp(1.2rem, 5vw, 1.6rem);
+            color: var(--gold);
+        }
+
+        .tutorial-hint {
+            position: absolute;
+            left: 50%;
+            bottom: calc(22px + env(safe-area-inset-bottom));
+            transform: translateX(-50%);
+            width: min(100% - 32px, 320px);
+            text-align: center;
+            padding: 12px 16px;
+            border-radius: 999px;
+            color: rgba(239, 249, 255, 0.86);
+            background: rgba(7, 14, 30, 0.74);
+            border: 1px solid rgba(111, 231, 255, 0.2);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            animation: floatHint 1.2s ease-in-out infinite;
+        }
+
+        @keyframes floatHint {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-5px); }
+        }
+
+        .overline {
+            margin: 0 0 6px;
+            font-size: 0.72rem;
+            letter-spacing: 0.24em;
+            color: rgba(255,255,255,0.58);
+            text-transform: uppercase;
+        }
+
+        .score-final {
+            margin: 6px 0 20px;
+            font-size: clamp(2.6rem, 12vw, 4.2rem);
+            color: var(--gold);
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(255, 216, 91, 0.35);
+        }
+
+        .status-copy {
+            margin: 0;
+            color: #ffd0d9;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .microcopy {
+            margin: 14px 0 0;
+            color: rgba(217, 234, 255, 0.6);
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 640px) {
+            .overlay-card {
+                padding: 22px 18px 18px;
+                border-radius: 22px;
+            }
+
+            .character-preview {
+                gap: 8px;
+                margin-bottom: 16px;
+            }
+
+            .hud {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            .hud-cluster {
+                padding: 10px 11px 9px;
+            }
+
+            .hud-label {
+                font-size: 0.62rem;
+            }
+
+            .tutorial-hint {
+                font-size: 0.68rem;
+                letter-spacing: 0.16em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="game-shell">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- [agent-note][stage3] resolved-gif: score-burst + breach-reaction -> catalogs/gifs.json -->
+        <div id="feedback-layer" aria-hidden="true">
+            <img id="score-gif" class="feedback-gif hidden" alt="" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp">
+            <img id="fail-gif" class="feedback-gif hidden" alt="" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp">
+        </div>
+
+        <div id="ui-layer" class="ui-layer">
+            <div id="start-screen" class="overlay-card">
+                <div class="brand-mark"><span class="brand-dot"></span>Signal Defense Grid</div>
+                <h1 class="title">Color<br><span class="accent">Gate</span></h1>
+                <p class="subtitle">Rotate the prism gate to catch matching signal dice before they breach the core.</p>
+                <div class="character-preview" aria-hidden="true">
+                    <div class="wedge-chip wedge-red"></div>
+                    <div class="wedge-chip wedge-blue"></div>
+                    <div class="wedge-chip wedge-yellow"></div>
+                    <div class="wedge-chip wedge-green"></div>
+                </div>
+                <button id="start-btn" class="arcade-btn">Start Shift</button>
+                <p class="microcopy">One tap rotates the gate clockwise. Stay fast, stay color-true.</p>
+            </div>
+
+            <div id="game-over-screen" class="hidden overlay-card">
+                <p class="overline">Containment failed</p>
+                <h2 class="title" style="font-size: clamp(2rem, 10vw, 3.2rem); margin-bottom: 8px;"><span style="color: var(--danger);">Breach!</span></h2>
+                <p class="status-copy">Signals blocked</p>
+                <div class="score-final" id="finalScore">0</div>
+                <button id="restart-btn" class="arcade-btn alt">Reset Gate</button>
+            </div>
+
+            <div id="hud" class="hud hidden">
+                <div class="hud-cluster">
+                    <span class="hud-label">Blocked</span>
+                    <span id="score" class="hud-value score">0</span>
+                </div>
+                <div class="hud-cluster" style="align-items: flex-end;">
+                    <span class="hud-label">Best Shift</span>
+                    <span id="high-score" class="hud-value high">0</span>
+                </div>
+            </div>
+
+            <!-- [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction -->
+            <div id="tutorial-hint" class="tutorial-hint hidden">Tap to Rotate Gate</div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ENABLE_ANIMATIONS = true;
+
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3",
+                rotate: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                score: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                streak: "https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3"
+            }
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.bgm = this.createAudio(ASSETS.bgm, { loop: true, volume: 0.2 });
+                this.sfx = Object.fromEntries(
+                    Object.entries(ASSETS.sfx).map(([key, url]) => [key, this.createAudio(url, { preload: 'auto', volume: key === 'rotate' ? 0.32 : 0.62 })])
+                );
+                this.lastPlayedAt = {};
+            }
+
+            createAudio(src, options = {}) {
+                const audio = new Audio(src);
+                Object.assign(audio, options);
+                return audio;
+            }
+
+            unlock() {
+                this.enabled = true;
+            }
+
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+
+            playSFX(key, debounceMs = 90) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const now = performance.now();
+                if (this.lastPlayedAt[key] && now - this.lastPlayedAt[key] < debounceMs) return;
+                this.lastPlayedAt[key] = now;
+
+                const source = this.sfx[key];
+                try {
+                    source.currentTime = 0;
+                    source.play().catch(() => {});
+                } catch (_) {
+                    const clone = source.cloneNode();
+                    clone.volume = source.volume;
+                    clone.play().catch(() => {});
+                }
+            }
+        }
+
+        class FeedbackController {
+            constructor() {
+                this.scoreGif = document.getElementById('score-gif');
+                this.failGif = document.getElementById('fail-gif');
+                this.timers = new Map();
+            }
+
+            flash(element, duration = 900) {
+                if (!element) return;
+                clearTimeout(this.timers.get(element));
+                element.classList.remove('hidden');
+                requestAnimationFrame(() => element.classList.add('show'));
+                const timer = setTimeout(() => {
+                    element.classList.remove('show');
+                    setTimeout(() => element.classList.add('hidden'), 180);
+                }, duration);
+                this.timers.set(element, timer);
+            }
+
+            score() {
+                this.flash(this.scoreGif, 700);
+            }
+
+            fail() {
+                this.flash(this.failGif, 1500);
+            }
+        }
+
+        const audio = new AudioController();
+        const feedback = new FeedbackController();
+
+        /** 3. GAME CONSTANTS & STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const startButton = document.getElementById('start-btn');
+        const restartButton = document.getElementById('restart-btn');
+        const gameContainer = document.getElementById('game-container');
+
+        const COLORS = [
+            { name: 'red', hex: '#ef4444', glow: 'rgba(239, 68, 68, 0.45)' },
+            { name: 'blue', hex: '#3b82f6', glow: 'rgba(59, 130, 246, 0.45)' },
+            { name: 'yellow', hex: '#eab308', glow: 'rgba(234, 179, 8, 0.45)' },
+            { name: 'green', hex: '#22c55e', glow: 'rgba(34, 197, 94, 0.45)' }
+        ];
+
+        let width, height, centerX, centerY;
+        let gameActive = false;
+        let score = 0;
+        let highScore = localStorage.getItem('ludo_high_score') || 0;
+        document.getElementById('high-score').innerText = highScore;
+
+        let playerRotationIndex = 0;
+        let currentRotationAngle = 0;
+        let targetRotationAngle = 0;
+
+        let enemies = [];
+        let particles = [];
+        let spawnTimer = 0;
+        let spawnInterval = 120;
+        let gameSpeed = 2.5;
+
+        let bgOffset = 0;
+        let pulseTick = 0;
+
+        /** 4. RESIZE & INIT */
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            centerX = width / 2;
+            centerY = height / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function initGame() {
+            score = 0;
+            spawnInterval = 100;
+            gameSpeed = 3;
+            spawnTimer = 0;
+            enemies = [];
+            particles = [];
+            playerRotationIndex = 0;
+            targetRotationAngle = 0;
+            currentRotationAngle = 0;
+            pulseTick = 0;
+            document.getElementById('score').innerText = score;
+            document.getElementById('tutorial-hint').classList.remove('hidden');
+            setTimeout(() => document.getElementById('tutorial-hint').classList.add('hidden'), 3000);
+        }
+
+        /** 5. HELPERS */
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: color,
+                    size: Math.random() * 5 + 2
+                });
+            }
+        }
+
+        function drawDicePips(ctx, x, y, size, val) {
+            ctx.fillStyle = "rgba(255,255,255,0.92)";
+            const pipSize = size * 0.15;
+            const gap = size * 0.25;
+
+            const p = (dx, dy) => {
+                ctx.beginPath();
+                ctx.arc(x + dx, y + dy, pipSize, 0, Math.PI * 2);
+                ctx.fill();
+            };
+
+            if (val % 2 === 1) p(0, 0);
+            if (val > 1) { p(-gap, -gap); p(gap, gap); }
+            if (val > 3) { p(gap, -gap); p(-gap, gap); }
+            if (val === 6) { p(-gap, 0); p(gap, 0); }
+        }
+
+        function drawRoundedRect(x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        /** 6. GAME LOOP */
+        function update() {
+            if (!gameActive) return;
+
+            pulseTick += 0.04;
+
+            if (score > 0 && score % 5 === 0) {
+                if (spawnInterval > 40) spawnInterval -= 0.05;
+                if (gameSpeed < 10) gameSpeed += 0.005;
+            }
+
+            currentRotationAngle += (targetRotationAngle - currentRotationAngle) * 0.15;
+
+            spawnTimer++;
+            if (spawnTimer > spawnInterval) {
+                spawnTimer = 0;
+                const side = Math.floor(Math.random() * 4);
+                const colorIdx = Math.floor(Math.random() * 4);
+                const pips = Math.floor(Math.random() * 6) + 1;
+
+                let ex, ey;
+                const spawnDist = Math.max(width, height) / 2 + 50;
+
+                if (side === 0) { ex = centerX; ey = centerY - spawnDist; }
+                else if (side === 1) { ex = centerX + spawnDist; ey = centerY; }
+                else if (side === 2) { ex = centerX; ey = centerY + spawnDist; }
+                else { ex = centerX - spawnDist; ey = centerY; }
+
+                enemies.push({
+                    x: ex, y: ey,
+                    side: side,
+                    colorIdx: colorIdx,
+                    pips: pips,
+                    active: true
+                });
+            }
+
+            const playerSize = 60;
+            const hitDist = playerSize + 30;
+
+            enemies.forEach(e => {
+                if (!e.active) return;
+
+                const dx = centerX - e.x;
+                const dy = centerY - e.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const vx = (dx / dist) * gameSpeed;
+                const vy = (dy / dist) * gameSpeed;
+
+                e.x += vx;
+                e.y += vy;
+
+                if (dist < hitDist) {
+                    e.active = false;
+
+                    const facingIndex = (e.side - playerRotationIndex + 4) % 4;
+                    const facingColor = COLORS[facingIndex];
+                    const enemyColor = COLORS[e.colorIdx];
+
+                    if (facingColor.name === enemyColor.name) {
+                        score++;
+                        document.getElementById('score').innerText = score;
+                        audio.playSFX('score', 70);
+                        if (score > 0 && score % 5 === 0) {
+                            audio.playSFX('streak', 160);
+                        }
+                        feedback.score();
+                        createExplosion(e.x, e.y, enemyColor.hex);
+                    } else {
+                        gameOver();
+                    }
+                }
+            });
+
+            particles.forEach((p, i) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+                if (p.life <= 0) particles.splice(i, 1);
+            });
+
+            enemies = enemies.filter(e => e.active);
+        }
+
+        function drawBackground() {
+            const bgGradient = ctx.createRadialGradient(centerX, centerY, 80, centerX, centerY, Math.max(width, height) * 0.7);
+            bgGradient.addColorStop(0, 'rgba(24, 54, 88, 0.22)');
+            bgGradient.addColorStop(0.45, 'rgba(7, 15, 31, 0.12)');
+            bgGradient.addColorStop(1, 'rgba(2, 4, 10, 0)');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.strokeStyle = 'rgba(111, 231, 255, 0.07)';
+            ctx.lineWidth = 1.5;
+            bgOffset = (bgOffset + 0.5) % 48;
+
+            ctx.beginPath();
+            for (let x = (bgOffset % 48); x < width; x += 48) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+            for (let y = (bgOffset % 48); y < height; y += 48) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+
+            const laneRadius = Math.min(width, height) * 0.23;
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.strokeStyle = 'rgba(111, 231, 255, 0.08)';
+            ctx.lineWidth = 2;
+            for (let i = 1; i <= 3; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, laneRadius * i * 0.78, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(currentRotationAngle);
+
+            const size = 66;
+            const pulse = Math.sin(pulseTick) * 3;
+            const coreRadius = 18 + pulse * 0.3;
+
+            COLORS.forEach((color, index) => {
+                const corners = [
+                    [[0, 0], [-size, -size], [size, -size]],
+                    [[0, 0], [size, -size], [size, size]],
+                    [[0, 0], [size, size], [-size, size]],
+                    [[0, 0], [-size, size], [-size, -size]]
+                ][index];
+
+                ctx.save();
+                ctx.shadowBlur = 26;
+                ctx.shadowColor = color.glow;
+                ctx.fillStyle = color.hex;
+                ctx.beginPath();
+                ctx.moveTo(corners[0][0], corners[0][1]);
+                ctx.lineTo(corners[1][0], corners[1][1]);
+                ctx.lineTo(corners[2][0], corners[2][1]);
+                ctx.closePath();
+                ctx.fill();
+
+                const highlight = ctx.createLinearGradient(0, 0, corners[1][0], corners[1][1]);
+                highlight.addColorStop(0, 'rgba(255,255,255,0.28)');
+                highlight.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = highlight;
+                ctx.fill();
+                ctx.restore();
+            });
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.36)';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(-size, -size, size * 2, size * 2);
+
+            ctx.beginPath();
+            ctx.moveTo(-size, 0);
+            ctx.lineTo(size, 0);
+            ctx.moveTo(0, -size);
+            ctx.lineTo(0, size);
+            ctx.strokeStyle = 'rgba(255,255,255,0.24)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.shadowBlur = 28;
+            ctx.shadowColor = 'rgba(255,255,255,0.4)';
+            const coreGradient = ctx.createRadialGradient(0, 0, 4, 0, 0, coreRadius);
+            coreGradient.addColorStop(0, '#ffffff');
+            coreGradient.addColorStop(0.45, '#dcf5ff');
+            coreGradient.addColorStop(1, '#74dfff');
+            ctx.fillStyle = coreGradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, coreRadius + 7 + pulse * 0.25, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawEnemies() {
+            enemies.forEach(e => {
+                ctx.save();
+                ctx.translate(e.x, e.y);
+
+                ctx.shadowBlur = 22;
+                ctx.shadowColor = COLORS[e.colorIdx].glow;
+
+                const dSize = 44;
+                const half = dSize / 2;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.32)';
+                ctx.beginPath();
+                ctx.ellipse(6, 8, 19, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                drawRoundedRect(-half, -half, dSize, dSize, 10);
+                const bodyGradient = ctx.createLinearGradient(-half, -half, half, half);
+                bodyGradient.addColorStop(0, 'rgba(255,255,255,0.22)');
+                bodyGradient.addColorStop(0.18, COLORS[e.colorIdx].hex);
+                bodyGradient.addColorStop(1, 'rgba(10,10,18,0.34)');
+                ctx.fillStyle = bodyGradient;
+                ctx.fill();
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255,255,255,0.34)';
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(-half + 7, -half + 8);
+                ctx.lineTo(half - 10, -half + 8);
+                ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                drawDicePips(ctx, 0, 0, dSize / 2, e.pips);
+
+                ctx.restore();
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = p.color;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            drawBackground();
+            drawPlayer();
+            drawEnemies();
+            drawParticles();
+        }
+
+        function gameLoop() {
+            if (gameActive) {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            audio.playSFX('fail', 250);
+            feedback.fail();
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('ludo_high_score', highScore);
+                document.getElementById('high-score').innerText = highScore;
+            }
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        /** 7. CONTROLS */
+        function rotatePlayer() {
+            if (!gameActive) return;
+            playerRotationIndex = (playerRotationIndex + 1) % 4;
+            targetRotationAngle += Math.PI / 2;
+            audio.playSFX('rotate', 50);
+        }
+
+        function attachButtonFeedback(button) {
+            if (!button) return;
+            button.addEventListener('pointerdown', () => button.classList.add('is-pressed'));
+            ['pointerup', 'pointerleave', 'pointercancel'].forEach(eventName => {
+                button.addEventListener(eventName, () => button.classList.remove('is-pressed'));
+            });
+        }
+
+        attachButtonFeedback(startButton);
+        attachButtonFeedback(restartButton);
+
+        function startRun() {
+            audio.unlock();
+            audio.playSFX('start', 120);
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameActive = true;
+            initGame();
+            draw();
+            gameLoop();
+        }
+
+        startButton.addEventListener('click', () => {
+            startRun();
+        });
+
+        restartButton.addEventListener('click', () => {
+            startRun();
+        });
+
+        gameContainer.addEventListener('pointerdown', () => {
+            audio.unlock();
+        }, { once: true });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            rotatePlayer();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowRight') {
+                rotatePlayer();
+            }
+        });
+
+        if (!ENABLE_ANIMATIONS) {
+            document.documentElement.style.setProperty('--animation-state', 'paused');
+        }
+
+        draw();
+    });
+    </script>
+</body>
+</html>

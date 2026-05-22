@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Breakroom Bistro: Weekend Shift Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #fff7db;
+      --ink: #47382d;
+      --leaf: #79b978;
+      --mint: #c9f2d0;
+      --sun: #ffd95f;
+      --peach: #ffb8a3;
+      --berry: #ff6478;
+      --sky: #a9ddff;
+      --paper: rgba(255, 250, 221, .92);
+      --panel: rgba(255, 247, 219, .78);
+      --shadow: rgba(95, 66, 50, .24);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      font-family: "Exo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 50% -8%, #fff3a6 0 15%, transparent 36%),
+        linear-gradient(180deg, #ffe4d0 0%, #d7f3dc 49%, #bfe6ff 100%);
+      touch-action: manipulation;
+    }
+    button { font-family: inherit; border: 0; cursor: pointer; color: inherit; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .hidden { display: none !important; }
+    #game {
+      position: relative;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      isolation: isolate;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.35), transparent 22%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.16) 0 2px, transparent 2px 38px);
+    }
+    #game::before, #game::after {
+      content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    }
+    #game::before {
+      background:
+        radial-gradient(circle at 9% 18%, rgba(255,255,255,.75) 0 5px, transparent 6px),
+        radial-gradient(circle at 86% 10%, rgba(255,255,255,.7) 0 4px, transparent 5px),
+        radial-gradient(circle at 74% 72%, rgba(255,255,255,.42) 0 7px, transparent 8px),
+        linear-gradient(120deg, transparent 0 65%, rgba(255,255,255,.18) 66% 68%, transparent 69%);
+      animation: officeFloat 13s ease-in-out infinite alternate;
+    }
+    #game::after {
+      opacity: .58;
+      background-image:
+        linear-gradient(45deg, transparent 47%, rgba(121,185,120,.45) 48% 52%, transparent 53%),
+        radial-gradient(ellipse at 8% 90%, rgba(121,185,120,.55) 0 4%, transparent 4.4%),
+        radial-gradient(ellipse at 94% 88%, rgba(255,184,163,.45) 0 5%, transparent 5.5%);
+      background-size: 76px 76px, 220px 180px, 240px 190px;
+      animation: gardenDrift 18s linear infinite;
+    }
+    @keyframes officeFloat { from { transform: translateY(-4px); } to { transform: translateY(8px); } }
+    @keyframes gardenDrift { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 76px 76px, 22px -18px, -28px 18px; } }
+    #stage { position: absolute; inset: 0; z-index: 1; }
+    .hud {
+      position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top));
+      z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none;
+    }
+    .pill {
+      min-height: 42px; padding: 8px 12px; border-radius: 999px;
+      background: var(--paper); border: 2px solid rgba(255,255,255,.8);
+      box-shadow: 0 8px 20px var(--shadow), inset 0 -2px rgba(95,66,50,.08);
+      display: flex; align-items: center; gap: 7px; font-weight: 800;
+      backdrop-filter: blur(10px);
+    }
+    .scoreValue { font-family: Bangers, cursive; font-size: 25px; letter-spacing: 1px; color: #e28d3e; text-shadow: 1px 1px #fff; }
+    #memo { max-width: 48%; justify-content: center; text-align: center; font-size: clamp(11px, 2.8vw, 14px); color: #785d3b; }
+    .controls {
+      position: absolute; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 6;
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+      padding: 0 12px; pointer-events: auto;
+    }
+    .foodBtn {
+      min-height: 74px; border-radius: 24px; border: 3px solid rgba(255,255,255,.86);
+      box-shadow: 0 9px 0 rgba(119,83,57,.28), 0 15px 28px rgba(91,63,48,.2), inset 0 -4px rgba(80,45,25,.12);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      transition: transform .08s ease, filter .08s ease; user-select: none;
+    }
+    .foodBtn:active, .foodBtn.pressed { transform: translateY(6px) scale(.98); box-shadow: 0 3px 0 rgba(119,83,57,.28), 0 9px 18px rgba(91,63,48,.18); }
+    .foodBtn .icon { font-size: clamp(25px, 7vw, 34px); line-height: 1; filter: drop-shadow(0 2px rgba(255,255,255,.5)); }
+    .foodBtn .label { font-size: clamp(10px, 2.7vw, 13px); font-weight: 900; letter-spacing: .4px; }
+    .foodBtn .sub { font-size: clamp(8px, 2.1vw, 10px); opacity: .75; font-weight: 800; }
+    .burger { background: linear-gradient(180deg, #ffe7a0, #f4aa4f); }
+    .pizza { background: linear-gradient(180deg, #ffc0c7, #ff7288); }
+    .salad { background: linear-gradient(180deg, #cdf6b5, #67c96c); }
+    .screen {
+      position: absolute; inset: 0; z-index: 9; display: grid; place-items: center;
+      padding: 18px; background: radial-gradient(circle at 50% 25%, rgba(255,255,255,.55), rgba(255,236,202,.38) 38%, rgba(114,179,135,.35));
+      backdrop-filter: blur(5px);
+    }
+    .card {
+      width: min(92vw, 430px); max-height: min(88vh, 720px); overflow: auto;
+      border-radius: 34px; padding: clamp(18px, 5vw, 28px); text-align: center;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.88), rgba(255,247,219,.9)),
+        repeating-linear-gradient(0deg, transparent 0 22px, rgba(121,185,120,.12) 23px 24px);
+      border: 3px solid rgba(255,255,255,.95);
+      box-shadow: 0 22px 54px rgba(91,63,48,.24), inset 0 -8px rgba(255,184,163,.16);
+      position: relative;
+    }
+    .card::before { content:"🌿"; position:absolute; left:16px; top:12px; font-size:28px; transform: rotate(-18deg); }
+    .card::after { content:"☕"; position:absolute; right:18px; top:12px; font-size:27px; transform: rotate(12deg); }
+    .kicker { font-weight: 900; color: #7baa66; letter-spacing: 1.6px; font-size: 12px; text-transform: uppercase; }
+    h1, h2 { font-family: Bangers, cursive; margin: 6px 0 8px; letter-spacing: 1.5px; line-height: .92; color: #6f5434; text-shadow: 2px 2px #fff0b6, 4px 4px rgba(255,184,163,.45); }
+    h1 { font-size: clamp(46px, 15vw, 76px); }
+    h2 { font-size: clamp(40px, 13vw, 64px); }
+    .copy { margin: 10px auto 16px; max-width: 32ch; font-weight: 700; line-height: 1.35; color: #735f46; }
+    .miniChef {
+      width: 152px; height: 116px; margin: 6px auto 14px; position: relative;
+    }
+    .miniChef .head { position:absolute; left:43px; top:30px; width:66px; height:58px; border-radius: 44% 44% 49% 49%; background:#ffd95f; border:3px solid #785d3b; box-shadow: inset -7px -6px rgba(215,151,45,.15); }
+    .miniChef .ear { position:absolute; top:18px; width:23px; height:52px; border-radius: 50% 50% 40% 40%; background:#ffd95f; border:3px solid #785d3b; transform-origin: bottom; }
+    .miniChef .ear.l { left:34px; transform: rotate(-25deg); } .miniChef .ear.r { right:34px; transform: rotate(25deg); }
+    .miniChef .hat { position:absolute; left:38px; top:0; width:78px; height:43px; border-radius: 40px 40px 18px 18px; background:#fff8f1; border:3px solid #785d3b; }
+    .miniChef .hat::after { content:""; position:absolute; left:13px; right:13px; bottom:-12px; height:18px; background:#fff8f1; border:3px solid #785d3b; border-radius:9px; }
+    .miniChef .eye { position:absolute; top:52px; width:7px; height:10px; background:#47382d; border-radius:50%; } .miniChef .eye.l{left:60px}.miniChef .eye.r{right:60px}
+    .miniChef .cheek { position:absolute; top:64px; width:12px; height:8px; border-radius:50%; background:#ff9989; } .miniChef .cheek.l{left:51px}.miniChef .cheek.r{right:51px}
+    .miniChef .body { position:absolute; left:49px; top:82px; width:54px; height:32px; border-radius:16px 16px 10px 10px; background:#f7fff4; border:3px solid #785d3b; }
+    .chips { display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin: 12px 0 18px; }
+    .chip { padding: 7px 9px; border-radius: 999px; background: rgba(255,255,255,.68); border: 2px dashed rgba(121,185,120,.56); font-weight: 900; font-size: 12px; }
+    .cta {
+      min-width: 190px; min-height: 55px; padding: 13px 24px; border-radius: 999px;
+      background: linear-gradient(180deg, #ffd95f, #f1a846); border: 3px solid white;
+      box-shadow: 0 9px 0 rgba(137,91,43,.35), 0 16px 30px rgba(91,63,48,.2);
+      font-weight: 1000; font-size: 17px; text-transform: uppercase; letter-spacing: .8px;
+    }
+    .cta:active { transform: translateY(6px); box-shadow: 0 3px 0 rgba(137,91,43,.35), 0 8px 18px rgba(91,63,48,.16); }
+    .danger .card { background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,221,217,.92)); }
+    .stamp { display:inline-block; padding: 4px 12px; border: 5px solid #ff6478; color:#ff6478; border-radius: 12px; transform: rotate(-4deg); text-shadow:none; }
+    .toast {
+      position: absolute; left: 50%; top: 92px; transform: translateX(-50%) translateY(-8px);
+      z-index: 8; opacity: 0; pointer-events:none; transition: opacity .18s, transform .18s;
+      background: rgba(255,255,255,.9); border: 2px solid #fff; border-radius: 999px; padding: 9px 14px;
+      box-shadow: 0 12px 25px rgba(91,63,48,.18); font-weight: 900; max-width: 88vw; text-align:center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    @media (min-aspect-ratio: 9/12) and (max-height: 720px) {
+      .controls { max-width: 520px; margin: 0 auto; left: 50%; right: auto; transform: translateX(-50%); width: 100%; }
+      .foodBtn { min-height: 64px; }
+    }
+    @media (max-width: 340px) { .pill { padding: 7px 9px; min-height: 38px; } #memo { display:none; } .controls { gap:6px; padding:0 8px;} .foodBtn { border-radius:18px; min-height:68px;} }
+  </style>
+</head>
+<body>
+  <main id="game" aria-label="Breakroom Bistro cooking simulator game">
+    <canvas id="stage"></canvas>
+    <section id="hud" class="hud hidden" aria-live="polite">
+      <div class="pill"><span>🍽️ Plates</span><span id="score" class="scoreValue">0</span></div>
+      <div id="memo" class="pill">Serve the front sticky note</div>
+      <div class="pill"><span>🌿 Weekend chill</span></div>
+    </section>
+    <div id="toast" class="toast">its giving fresh prep</div>
+    <nav id="controls" class="controls hidden" aria-label="Food controls">
+      <button class="foodBtn burger" data-type="BURGER" id="btnBurger" aria-label="Serve Bun Memo burger"><span class="icon">🍔</span><span class="label">BUN MEMO</span><span class="sub">tap 1</span></button>
+      <button class="foodBtn pizza" data-type="PIZZA" id="btnPizza" aria-label="Serve Pizza Deck"><span class="icon">🍕</span><span class="label">PIZZA DECK</span><span class="sub">tap 2</span></button>
+      <button class="foodBtn salad" data-type="SALAD" id="btnSalad" aria-label="Serve Garden Bowl salad"><span class="icon">🥗</span><span class="label">GARDEN BOWL</span><span class="sub">tap 3</span></button>
+    </nav>
+    <section id="start" class="screen">
+      <div class="card">
+        <div class="kicker">cooking simulator • office parody • cozy weekend shift</div>
+        <h1>Breakroom<br>Bistro</h1>
+        <div class="miniChef" aria-hidden="true"><span class="ear l"></span><span class="ear r"></span><span class="hat"></span><span class="head"></span><span class="eye l"></span><span class="eye r"></span><span class="cheek l"></span><span class="cheek r"></span><span class="body"></span></div>
+        <p class="copy">You are the Assistant to the Regional Chef. Tap the matching dish for the front coworker's sticky-note order before their meeting energy expires.</p>
+        <div class="chips" aria-hidden="true"><span class="chip">cottagecore counter</span><span class="chip">one-thumb taps</span><span class="chip">its giving snack audit</span></div>
+        <button id="startBtn" class="cta">Start Weekend Shift</button>
+      </div>
+    </section>
+    <section id="gameOver" class="screen danger hidden">
+      <div class="card">
+        <div class="kicker">regional kitchen report</div>
+        <h2><span class="stamp">Shift Spilled</span></h2>
+        <p id="reason" class="copy">A coworker got the wrong plate.</p>
+        <p class="copy">Final cozy plates: <strong id="finalScore" class="scoreValue">0</strong></p>
+        <button id="restartBtn" class="cta">Run It Back</button>
+      </div>
+    </section>
+  </main>
+  <script>
+  (() => {
+    'use strict';
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const hud = document.getElementById('hud');
+    const controls = document.getElementById('controls');
+    const startScreen = document.getElementById('start');
+    const overScreen = document.getElementById('gameOver');
+    const scoreEl = document.getElementById('score');
+    const finalScoreEl = document.getElementById('finalScore');
+    const reasonEl = document.getElementById('reason');
+    const toast = document.getElementById('toast');
+
+    const TYPES = ['BURGER', 'PIZZA', 'SALAD'];
+    const TYPE_META = {
+      BURGER: { emoji: '🍔', label: 'Bun Memo', color: '#f1a846', accent: '#ffe6a0' },
+      PIZZA: { emoji: '🍕', label: 'Pizza Deck', color: '#ff6478', accent: '#ffc0c7' },
+      SALAD: { emoji: '🥗', label: 'Garden Bowl', color: '#67c96c', accent: '#c9f2d0' }
+    };
+    const coworkerNames = ['Pam-tree', 'Jim Jam', 'Dwight Sprout', 'Angela Apple', 'Kevin Chili', 'Stanley Seeds', 'Kelly Kettle', 'Creed Crouton'];
+
+    const audio = {
+      ctx: null,
+      unlocked: false,
+      unlock() {
+        if (this.unlocked) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = this.ctx || new AC();
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        this.unlocked = true;
+      },
+      beep(kind) {
+        if (!this.ctx || !this.unlocked) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = kind === 'bad' ? 'sawtooth' : 'sine';
+        osc.frequency.setValueAtTime(kind === 'bad' ? 130 : kind === 'start' ? 330 : 520, now);
+        osc.frequency.exponentialRampToValueAtTime(kind === 'bad' ? 80 : 760, now + .16);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(kind === 'bad' ? .08 : .055, now + .02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + .22);
+        osc.connect(gain); gain.connect(this.ctx.destination); osc.start(now); osc.stop(now + .24);
+      }
+    };
+    window.addEventListener('pointerdown', () => audio.unlock(), { once: true, passive: true });
+    window.addEventListener('keydown', () => audio.unlock(), { once: true });
+
+    const state = {
+      active: false,
+      score: 0,
+      difficulty: 0,
+      lastTime: 0,
+      lastSpawn: 0,
+      customers: [],
+      particles: [],
+      shake: 0,
+      w: 0,
+      h: 0
+    };
+    const config = { spawnRate: 2000, patienceDecay: 12, maxQueue: 5 };
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const rect = canvas.getBoundingClientRect();
+      state.w = rect.width; state.h = rect.height;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function rnd(min, max) { return min + Math.random() * (max - min); }
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 760);
+    }
+    function spawnCustomer() {
+      const type = TYPES[Math.floor(Math.random() * TYPES.length)];
+      const idx = Math.floor(Math.random() * coworkerNames.length);
+      state.customers.push({
+        id: Date.now() + Math.random(), type, name: coworkerNames[idx],
+        x: state.w + 90, y: 160, tx: state.w / 2, ty: 180,
+        patience: 100, wobble: Math.random() * 10,
+        shirt: ['#a9ddff', '#ffd0dc', '#c9f2d0', '#ffe6a0', '#d8c6ff'][idx % 5],
+        tie: ['#ff6478', '#79b978', '#f1a846', '#65a8d8'][idx % 4]
+      });
+    }
+    function particles(x, y, color, count, word) {
+      for (let i = 0; i < count; i++) state.particles.push({
+        x, y, vx: rnd(-80, 80), vy: rnd(-170, -35), life: rnd(.55, .95), max: 1, color,
+        size: rnd(4, 12), rot: rnd(-1, 1), word: i === 0 ? word : ''
+      });
+    }
+
+    function handleInput(type) {
+      if (!state.active) return;
+      const front = state.customers[0];
+      if (!front) { showToast('no sticky note yet'); return; }
+      const meta = TYPE_META[type];
+      const btn = document.querySelector(`[data-type="${type}"]`);
+      btn && btn.classList.add('pressed'); setTimeout(() => btn && btn.classList.remove('pressed'), 110);
+      if (front.type === type) {
+        state.score += 1;
+        state.difficulty = Math.floor(state.score / 3);
+        scoreEl.textContent = state.score;
+        state.customers.shift();
+        particles(front.x, front.y - 30, meta.color, 18, 'its giving');
+        showToast(`${meta.label} delivered. cozy audit passed.`);
+        audio.beep('good');
+        if (state.customers.length === 0) state.lastSpawn = 0;
+      } else {
+        state.shake = .9;
+        particles(front.x, front.y - 20, '#ff6478', 24, 'NOPE');
+        gameOver(`Wrong plate: ${front.name} asked for ${TYPE_META[front.type].label}, not ${meta.label}.`);
+      }
+    }
+    function startGame() {
+      audio.unlock(); audio.beep('start');
+      Object.assign(state, { active: true, score: 0, difficulty: 0, lastTime: performance.now(), lastSpawn: 0, customers: [], particles: [], shake: 0 });
+      scoreEl.textContent = '0'; finalScoreEl.textContent = '0';
+      startScreen.classList.add('hidden'); overScreen.classList.add('hidden'); hud.classList.remove('hidden'); controls.classList.remove('hidden');
+      spawnCustomer();
+      showToast('front sticky note only — tap the matching dish');
+    }
+    function gameOver(reason) {
+      if (!state.active) return;
+      state.active = false;
+      reasonEl.textContent = reason;
+      finalScoreEl.textContent = state.score;
+      hud.classList.add('hidden'); controls.classList.add('hidden'); overScreen.classList.remove('hidden');
+      showToast('shift spilled, run it back');
+      audio.beep('bad');
+    }
+
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('restartBtn').addEventListener('click', startGame);
+    document.querySelectorAll('.foodBtn').forEach(btn => {
+      btn.addEventListener('click', () => handleInput(btn.dataset.type));
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === '1') handleInput('BURGER');
+      if (e.key === '2') handleInput('PIZZA');
+      if (e.key === '3') handleInput('SALAD');
+      if ((e.key === 'Enter' || e.key === ' ') && !state.active && !startScreen.classList.contains('hidden')) startGame();
+    });
+
+    function update(dt, t) {
+      if (!state.active) return;
+      state.shake = Math.max(0, state.shake - dt * 2.8);
+      const spawnRate = Math.max(580, config.spawnRate - state.difficulty * 115);
+      const decay = config.patienceDecay + state.difficulty * 2.2;
+      if (state.customers.length < config.maxQueue && t - state.lastSpawn > spawnRate) { spawnCustomer(); state.lastSpawn = t; }
+      const centerX = state.w / 2;
+      const baseY = Math.max(142, state.h * .26);
+      for (let i = state.customers.length - 1; i >= 0; i--) {
+        const c = state.customers[i];
+        const offset = i;
+        c.tx = centerX + (offset - Math.min(state.customers.length - 1, 2) / 2) * Math.min(78, state.w * .19);
+        c.ty = baseY + Math.min(offset, 2) * 62 + Math.max(0, offset - 2) * 20;
+        c.x += (c.tx - c.x) * Math.min(1, dt * 5.2);
+        c.y += (c.ty - c.y) * Math.min(1, dt * 5.2);
+        c.wobble += dt * 5;
+        if (i === 0) c.patience -= decay * dt;
+        if (i === 0 && c.patience <= 0) {
+          state.shake = 1;
+          gameOver(`${c.name}'s meeting ran long; the ${TYPE_META[c.type].label} never landed.`);
+        }
+      }
+    }
+    function updateParticles(dt) {
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 230 * dt; p.rot += dt;
+        if (p.life <= 0) state.particles.splice(i, 1);
+      }
+    }
+
+    function draw(t) {
+      const w = state.w, h = state.h;
+      let sx = 0, sy = 0;
+      if (state.shake > 0) { sx = rnd(-7, 7) * state.shake; sy = rnd(-5, 5) * state.shake; }
+      ctx.save(); ctx.translate(sx, sy);
+      drawWorld(w, h, t);
+      state.customers.forEach((c, i) => drawCoworker(c, i === 0));
+      drawChef(w / 2, h - 218 + Math.sin(t * 4) * 2, t);
+      state.particles.forEach(drawParticle);
+      ctx.restore();
+    }
+    function roundRect(x, y, w, h, r) {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath(); ctx.moveTo(x + rr, y); ctx.arcTo(x + w, y, x + w, y + h, rr); ctx.arcTo(x + w, y + h, x, y + h, rr); ctx.arcTo(x, y + h, x, y, rr); ctx.arcTo(x, y, x + w, y, rr); ctx.closePath();
+    }
+    function drawWorld(w, h, t) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#ffe8cf'); g.addColorStop(.45, '#d8f3df'); g.addColorStop(1, '#bfe5ff'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,.38)';
+      for (let i = 0; i < 8; i++) { const x = (i * 103 + t * 14) % (w + 80) - 40; ctx.beginPath(); ctx.ellipse(x, 78 + (i % 4) * 33, 26, 10, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = 'rgba(255,255,255,.28)';
+      for (let x = -20; x < w + 20; x += 52) { ctx.fillRect(x, 96, 26, 85); ctx.fillRect(x + 7, 105, 12, 66); }
+      ctx.fillStyle = '#ffeaa2';
+      for (let i = 0; i < 5; i++) { const x = 26 + i * ((w - 52) / 4); ctx.beginPath(); ctx.arc(x, 72 + Math.sin(t * 2 + i) * 3, 9, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(120,93,59,.25)'; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 62); ctx.stroke(); }
+      drawMemoBoard(w, h, t);
+      const counterY = h - 250;
+      ctx.fillStyle = '#fff4c2'; roundRect(0, counterY, w, 300, 32); ctx.fill();
+      ctx.fillStyle = '#d69d60'; roundRect(0, counterY + 32, w, 270, 26); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(0, counterY + 8, w, 20);
+      for (let x = 12; x < w; x += 54) { ctx.fillStyle = 'rgba(114,80,48,.12)'; roundRect(x, counterY + 68, 36, 18, 8); ctx.fill(); }
+      drawPlanters(w, h, t);
+      drawCoffeeMachine(w, h, t);
+    }
+    function drawMemoBoard(w, h, t) {
+      const bw = Math.min(330, w * .72), bh = 82, x = (w - bw) / 2, y = Math.max(88, h * .13);
+      ctx.fillStyle = 'rgba(145,112,70,.16)'; roundRect(x, y, bw, bh, 18); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,93,59,.24)'; ctx.lineWidth = 2; ctx.stroke();
+      const colors = ['#fff0a6', '#ffd0dc', '#c9f2d0', '#d5ecff'];
+      for (let i = 0; i < 7; i++) { ctx.save(); ctx.translate(x + 18 + i * (bw - 36) / 6, y + 18 + Math.sin(t * 1.4 + i) * 2); ctx.rotate((i % 2 ? -1 : 1) * .06); ctx.fillStyle = colors[i % colors.length]; roundRect(-12, -10, 24, 22, 4); ctx.fill(); ctx.restore(); }
+      ctx.fillStyle = '#785d3b'; ctx.font = '700 12px Exo 2'; ctx.textAlign = 'center'; ctx.fillText('breakroom requests board', w / 2, y + bh - 13);
+    }
+    function drawPlanters(w, h, t) {
+      for (const x of [28, w - 74]) {
+        ctx.fillStyle = '#be8a58'; roundRect(x, h - 178, 48, 34, 9); ctx.fill();
+        for (let i = 0; i < 5; i++) { ctx.fillStyle = i % 2 ? '#79b978' : '#5da665'; ctx.beginPath(); ctx.ellipse(x + 11 + i * 8, h - 178 + Math.sin(t * 2 + i) * 2, 6, 18, (i - 2) * .22, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+    function drawCoffeeMachine(w, h, t) {
+      const x = 22, y = h - 278;
+      ctx.fillStyle = '#9ec7de'; roundRect(x, y, 70, 66, 12); ctx.fill();
+      ctx.fillStyle = '#6b5547'; roundRect(x + 15, y + 13, 40, 20, 6); ctx.fill();
+      ctx.fillStyle = '#fff7db'; ctx.font = '900 10px Exo 2'; ctx.textAlign = 'center'; ctx.fillText('BOSS', x + 35, y + 27);
+      ctx.strokeStyle = 'rgba(255,255,255,.62)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + 48, y + 48); ctx.bezierCurveTo(x + 54, y + 36 + Math.sin(t*4)*2, x + 61, y + 38, x + 62, y + 28); ctx.stroke();
+    }
+    function drawChef(x, y, t) {
+      ctx.save(); ctx.translate(x, y);
+      ctx.strokeStyle = '#6d5239'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.fillStyle = '#ffd95f'; ctx.beginPath(); ctx.ellipse(-34, -54, 13, 32, -.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(34, -54, 13, 32, .45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#f9fff6'; roundRect(-29, 15, 58, 58, 18); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#79b978'; roundRect(-20, 33, 40, 30, 12); ctx.fill();
+      ctx.fillStyle = '#ffd95f'; ctx.beginPath(); ctx.ellipse(0, -20, 43, 39, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fffaf4'; roundRect(-39, -70, 78, 32, 16); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(-23, -69, 16, 0, Math.PI * 2); ctx.arc(0, -76, 18, 0, Math.PI * 2); ctx.arc(23, -69, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#47382d'; ctx.beginPath(); ctx.ellipse(-15, -23, 4, 7, 0, 0, Math.PI * 2); ctx.ellipse(15, -23, 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff9989'; ctx.beginPath(); ctx.ellipse(-25, -10, 8, 5, 0, 0, Math.PI * 2); ctx.ellipse(25, -10, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#47382d'; ctx.beginPath(); ctx.arc(0, -13, 9, .15, Math.PI - .15); ctx.stroke();
+      drawPlate(-54 + Math.sin(t * 5) * 2, 10, 'BURGER', .68); drawPlate(54 + Math.cos(t * 5) * 2, 10, 'SALAD', .68);
+      ctx.restore();
+    }
+    function drawCoworker(c, active) {
+      const meta = TYPE_META[c.type]; const x = c.x, y = c.y + Math.sin(c.wobble) * 2;
+      ctx.save(); ctx.globalAlpha = active ? 1 : .76; ctx.translate(x, y);
+      if (active) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(0, 26, 78, 52, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.strokeStyle = '#6d5239'; ctx.lineWidth = 3;
+      ctx.fillStyle = c.shirt; roundRect(-27, 36, 54, 50, 16); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c.tie; ctx.beginPath(); ctx.moveTo(0, 42); ctx.lineTo(10, 70); ctx.lineTo(0, 82); ctx.lineTo(-10, 70); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffcfaa'; ctx.beginPath(); ctx.ellipse(0, 2, 34, 36, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#785d3b'; ctx.beginPath(); ctx.ellipse(0, -18, 36, 17, 0, Math.PI, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#47382d'; ctx.beginPath(); ctx.arc(-11, 1, 3, 0, Math.PI * 2); ctx.arc(11, 1, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#47382d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 13, 8, active ? .2 : .6, active ? Math.PI - .2 : Math.PI - .6); ctx.stroke();
+      ctx.fillStyle = meta.accent; roundRect(-48, -82, 96, 49, 9); ctx.fill(); ctx.strokeStyle = '#6d5239'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#6d5239'; ctx.font = '900 10px Exo 2'; ctx.textAlign = 'center'; ctx.fillText(c.name, 0, -65);
+      drawPlate(-18, -45, c.type, .42); ctx.fillStyle = '#6d5239'; ctx.font = '900 9px Exo 2'; ctx.textAlign = 'left'; ctx.fillText(meta.label, 2, -42);
+      if (active) {
+        const pct = Math.max(0, c.patience / 100);
+        ctx.fillStyle = 'rgba(109,82,57,.2)'; roundRect(-41, 94, 82, 10, 5); ctx.fill();
+        ctx.fillStyle = pct < .3 ? '#ff6478' : pct < .58 ? '#ffd95f' : '#79b978'; roundRect(-41, 94, 82 * pct, 10, 5); ctx.fill();
+        ctx.fillStyle = '#6d5239'; ctx.font = '900 9px Exo 2'; ctx.textAlign = 'center'; ctx.fillText('front sticky note', 0, 116);
+      }
+      ctx.restore();
+    }
+    function drawPlate(x, y, type, scale = 1) {
+      const meta = TYPE_META[type];
+      ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+      ctx.fillStyle = '#fffaf4'; ctx.beginPath(); ctx.ellipse(0, 0, 28, 18, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#6d5239'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = '24px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(meta.emoji, 0, -2);
+      ctx.restore();
+    }
+    function drawParticle(p) {
+      const a = Math.max(0, p.life / p.max); ctx.save(); ctx.globalAlpha = Math.min(1, a);
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      if (p.word) { ctx.font = '22px Bangers'; ctx.textAlign = 'center'; ctx.fillStyle = p.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeText(p.word, 0, 0); ctx.fillText(p.word, 0, 0); }
+      else { ctx.fillStyle = p.color; roundRect(-p.size/2, -p.size/2, p.size, p.size, 3); ctx.fill(); }
+      ctx.restore();
+    }
+    function loop(t) {
+      if (!state.lastTime) state.lastTime = t;
+      const dt = Math.min((t - state.lastTime) / 1000, .1); state.lastTime = t;
+      update(dt, t); updateParticles(dt); draw(t / 1000); requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+    window.__gameState = state;
+    window.__serveTest = handleInput;
+  })();
+  </script>
+</body>
+</html>

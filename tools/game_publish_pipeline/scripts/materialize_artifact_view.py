@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from check_app_json_state import generate_report, report_has_failures
+
 SCRIPT_PATH = Path(__file__).resolve()
 TOOL_ROOT = SCRIPT_PATH.parents[1]
 REPO_ROOT = TOOL_ROOT.parents[1]
@@ -41,6 +43,28 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("latest-wins", "first-wins"),
         default="latest-wins",
         help="Merge policy when the same composite key appears across runs.",
+    )
+    parser.set_defaults(validate_final_state=True)
+    parser.add_argument(
+        "--validate-final-state",
+        dest="validate_final_state",
+        action="store_true",
+        help="Validate the final root app.json against public and obfuscated folder state after materialization.",
+    )
+    parser.add_argument(
+        "--no-validate-final-state",
+        dest="validate_final_state",
+        action="store_false",
+        help="Skip final root app.json validation after materialization.",
+    )
+    parser.add_argument(
+        "--strict-final-state-validation",
+        action="store_true",
+        help="Exit non-zero when final-state validation finds missing folders/indexes or identical public/obfuscated HTML.",
+    )
+    parser.add_argument(
+        "--validation-report-path",
+        help="Optional path to write the full final-state validation JSON report.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print merge plan without writing files.")
     return parser
@@ -177,6 +201,46 @@ def merge_payloads(paths: list[Path], precedence: str) -> tuple[dict[str, Any], 
     return merged, stats
 
 
+def summarize_validation_report(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "app_json_path": report["app_json_path"],
+        "mode": report["mode"],
+        "app_json_md5": report["app_json_md5"],
+        "public_state_md5": report["public_state_md5"],
+        "obfuscated_state_md5": report["obfuscated_state_md5"],
+        "combined_state_md5": report["combined_state_md5"],
+        "cache_key": report["cache_key"],
+        "entry_count": report["entry_count"],
+        "valid_public_count": report["valid_public_count"],
+        "valid_obfuscated_count": report["valid_obfuscated_count"],
+        "missing_public_folder_count": report["missing_public_folder_count"],
+        "missing_public_index_count": report["missing_public_index_count"],
+        "missing_obfuscated_folder_count": report["missing_obfuscated_folder_count"],
+        "missing_obfuscated_index_count": report["missing_obfuscated_index_count"],
+        "same_html_count": report["same_html_count"],
+        "failure_count": report["failure_count"],
+        "failure_samples": report["failures"][:10],
+        "identical_html_samples": report["identical_html_entries"][:10],
+    }
+
+
+def run_final_state_validation(
+    *,
+    public_root: Path,
+    obfuscated_root: Path,
+    report_path: str | None,
+) -> dict[str, Any]:
+    report = generate_report(
+        app_json_path=obfuscated_root / APP_NAME,
+        public_root=public_root,
+        obfuscated_root=obfuscated_root,
+        mode="both",
+    )
+    if report_path:
+        write_json(Path(report_path).resolve(), report)
+    return report
+
+
 def main() -> None:
     args = build_parser().parse_args()
     runs_root = Path(args.runs_root).resolve()
@@ -189,6 +253,8 @@ def main() -> None:
     print(f"[materialize] run source: {run_source}", flush=True)
     print(f"[materialize] runs root: {runs_root}", flush=True)
     print(f"[materialize] precedence: {args.precedence}", flush=True)
+    print(f"[materialize] validate_final_state: {args.validate_final_state}", flush=True)
+    print(f"[materialize] strict_final_state_validation: {args.strict_final_state_validation}", flush=True)
     print(f"[materialize] dry_run: {args.dry_run}", flush=True)
     print(f"[materialize] run count: {len(run_dirs)}", flush=True)
     for idx, run_dir in enumerate(run_dirs, start=1):
@@ -199,6 +265,8 @@ def main() -> None:
         "run_source": run_source,
         "runs_root": str(runs_root),
         "precedence": args.precedence,
+        "validate_final_state": bool(args.validate_final_state),
+        "strict_final_state_validation": bool(args.strict_final_state_validation),
         "dry_run": bool(args.dry_run),
         "runs": [str(path) for path in run_dirs],
         "public": {},
@@ -240,6 +308,44 @@ def main() -> None:
                 "removed_samples": sanitize_stats["removed_samples"],
             }
         result[scope_name] = scope_report
+
+    validation_status: dict[str, Any] = {
+        "enabled": bool(args.validate_final_state),
+        "strict": bool(args.strict_final_state_validation),
+        "status": "skipped_dry_run" if args.dry_run else "skipped_disabled",
+    }
+
+    if not args.dry_run and args.validate_final_state:
+        print("[materialize] final-state validation: start", flush=True)
+        validation_report = run_final_state_validation(
+            public_root=public_root,
+            obfuscated_root=obfuscated_root,
+            report_path=args.validation_report_path,
+        )
+        validation_status = {
+            "enabled": True,
+            "strict": bool(args.strict_final_state_validation),
+            "status": "passed" if not report_has_failures(validation_report) else "failed",
+            "summary": summarize_validation_report(validation_report),
+        }
+        if args.validation_report_path:
+            validation_status["report_path"] = str(Path(args.validation_report_path).resolve())
+        print(
+            "[materialize] final-state validation: "
+            f"status={validation_status['status']} "
+            f"entry_count={validation_report['entry_count']} "
+            f"failure_count={validation_report['failure_count']} "
+            f"same_html_count={validation_report['same_html_count']}",
+            flush=True,
+        )
+
+        result["final_state_validation"] = validation_status
+        print(json.dumps(result, indent=2))
+        if args.strict_final_state_validation and report_has_failures(validation_report):
+            raise SystemExit(1)
+        return
+
+    result["final_state_validation"] = validation_status
 
     print(json.dumps(result, indent=2))
 

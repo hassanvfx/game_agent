@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Signal Forge RNG</title>
+<style>
+    /* [agent-note][stage4] repaired: font-remap | action: replaced prior non-catalog font mix with approved catalog sci-fi UI stack */
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap');
+    
+    :root {
+        --bg-primary: #05070d;
+        --bg-panel: rgba(7, 12, 24, 0.58);
+        --bg-panel-strong: rgba(12, 20, 38, 0.82);
+        --text-dim: #97acc7;
+        --text-faint: #51637a;
+        --text-bright: #f8fbff;
+        --accent: #57e8ff;
+        --accent-strong: #00b8ff;
+        --accent-warm: #7af7c4;
+        --danger: #ff4f7d;
+        --border-soft: rgba(135, 223, 255, 0.28);
+        --panel-glow: rgba(72, 184, 255, 0.18);
+        --success-flash: rgba(122, 247, 196, 0.88);
+        --warning-flash: rgba(255, 79, 125, 0.82);
+    }
+
+    html, body { 
+        width: 100%; 
+        height: 100%; 
+        margin: 0; 
+        padding: 0; 
+        overflow: hidden; 
+        background:
+            radial-gradient(circle at top, #14233e 0%, #07111f 38%, #02050a 100%);
+        font-family: 'Rajdhani', system-ui, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    
+    #game-container { 
+        position: relative; 
+        width: 100%; 
+        height: 100%; 
+        background:
+            radial-gradient(circle at 50% 35%, rgba(59, 130, 246, 0.18) 0%, rgba(10, 17, 34, 0) 42%),
+            linear-gradient(180deg, #08111f 0%, #03060d 100%);
+    }
+
+    #game-container::before,
+    #game-container::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    #game-container::before {
+        background:
+            radial-gradient(circle at 50% 50%, rgba(87, 232, 255, 0.12), transparent 38%),
+            linear-gradient(180deg, rgba(255,255,255,0.04), transparent 28%);
+        opacity: 0.9;
+    }
+
+    #game-container::after {
+        background:
+            repeating-linear-gradient(
+                180deg,
+                rgba(255,255,255,0.02) 0 2px,
+                transparent 2px 6px
+            );
+        mix-blend-mode: soft-light;
+        opacity: 0.35;
+    }
+    
+    canvas { 
+        display: block; 
+        width: 100%; 
+        height: 100%; 
+        touch-action: manipulation;
+    }
+
+    /* UI Layer */
+    #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 1.5rem;
+        pointer-events: none;
+        box-sizing: border-box;
+    }
+    
+    .hud-text {
+        text-shadow: 0 0 10px currentColor;
+    }
+
+    .hud-card {
+        border: 1px solid var(--border-soft);
+        background: linear-gradient(180deg, rgba(12, 20, 38, 0.88), rgba(4, 9, 19, 0.72));
+        box-shadow:
+            0 0 0 1px rgba(255,255,255,0.03) inset,
+            0 10px 28px rgba(0, 0, 0, 0.24),
+            0 0 22px var(--panel-glow);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    .hidden { display: none !important; }
+
+    .hud-top {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        padding-top: 2rem;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .signal-header {
+        min-width: min(20rem, 86vw);
+        padding: 0.7rem 1rem 0.8rem;
+        border-radius: 1.15rem;
+    }
+
+    .hud-kicker {
+        font-size: 0.72rem;
+        color: var(--accent-warm);
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+    }
+
+    #oura-name {
+        margin: 0.25rem 0 0;
+        font-family: 'Orbitron', 'Rajdhani', system-ui, sans-serif;
+        font-size: clamp(2rem, 6vw, 3rem);
+        font-weight: 700;
+        color: var(--text-bright);
+        letter-spacing: 0.14em;
+        text-align: center;
+    }
+
+    #oura-rarity {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        align-self: center;
+        margin-top: 0.35rem;
+        padding: 0.42rem 1rem;
+        border-radius: 999px;
+        border: 1px solid var(--border-soft);
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.88);
+        background: var(--bg-panel);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 0 18px rgba(87, 232, 255, 0.16);
+    }
+
+    .hud-bottom {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        padding-bottom: max(2.5rem, env(safe-area-inset-bottom));
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .control-stack {
+        min-width: min(19rem, 86vw);
+        padding: 0.85rem 0.9rem 1rem;
+        border-radius: 1.25rem;
+    }
+
+    #auto-roll-toggle {
+        font-size: 0.75rem;
+        color: var(--accent);
+        letter-spacing: 0.16em;
+        animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    #roll-btn {
+        position: relative;
+        overflow: hidden;
+        pointer-events: auto;
+        padding: 1.05rem 2.4rem;
+        border: 2px solid rgba(87, 232, 255, 0.85);
+        border-radius: 1rem;
+        background: linear-gradient(180deg, rgba(8, 35, 59, 0.95), rgba(6, 18, 34, 0.95));
+        box-shadow:
+            0 0 0 1px rgba(255,255,255,0.04) inset,
+            0 0 26px rgba(0, 184, 255, 0.28),
+            0 12px 26px rgba(0, 0, 0, 0.28);
+        transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #roll-btn:hover {
+        background: linear-gradient(180deg, rgba(12, 47, 79, 0.98), rgba(6, 21, 42, 0.98));
+        box-shadow:
+            0 0 0 1px rgba(255,255,255,0.05) inset,
+            0 0 32px rgba(87, 232, 255, 0.34),
+            0 14px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    #roll-btn:active {
+        transform: scale(0.95);
+    }
+
+    .roll-btn-glow {
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(120deg, rgba(87, 232, 255, 0.1), rgba(122, 247, 196, 0.03) 45%, transparent 65%),
+            radial-gradient(circle at 50% 0%, rgba(255,255,255,0.12), transparent 48%);
+        transition: background-color 0.2s ease;
+    }
+
+    #roll-btn:hover .roll-btn-glow {
+        background:
+            linear-gradient(120deg, rgba(87, 232, 255, 0.18), rgba(122, 247, 196, 0.06) 45%, transparent 65%),
+            radial-gradient(circle at 50% 0%, rgba(255,255,255,0.2), transparent 48%);
+    }
+
+    .roll-btn-label {
+        position: relative;
+        z-index: 1;
+        font-family: 'Orbitron', 'Rajdhani', system-ui, sans-serif;
+        font-size: 1.08rem;
+        font-weight: 700;
+        color: #dcfbff;
+        letter-spacing: 0.26em;
+    }
+
+    .roll-btn-bar {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        height: 0.22rem;
+        background: linear-gradient(90deg, var(--accent), var(--accent-warm));
+        box-shadow: 0 0 15px var(--accent);
+    }
+
+    .hud-tip {
+        font-size: 0.74rem;
+        color: var(--text-dim);
+        letter-spacing: 0.08em;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 0.55; }
+        50% { opacity: 1; }
+    }
+
+    .feedback-strip {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 5rem;
+        width: min(20rem, 86vw);
+        pointer-events: none;
+    }
+
+    .reaction-gif {
+        width: clamp(4.25rem, 18vw, 6.5rem);
+        height: clamp(4.25rem, 18vw, 6.5rem);
+        object-fit: cover;
+        border-radius: 1rem;
+        border: 1px solid rgba(135, 223, 255, 0.35);
+        background: rgba(5, 10, 20, 0.62);
+        box-shadow: 0 0 20px rgba(0, 184, 255, 0.18);
+        opacity: 0;
+        transform: translateY(0.5rem) scale(0.92);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .reaction-gif.active {
+        opacity: 0.96;
+        transform: translateY(0) scale(1);
+    }
+
+    .status-chip {
+        position: absolute;
+        top: max(1rem, env(safe-area-inset-top));
+        left: 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.5rem 0.8rem;
+        border-radius: 999px;
+        border: 1px solid rgba(135, 223, 255, 0.28);
+        background: rgba(4, 10, 19, 0.78);
+        color: var(--text-dim);
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        z-index: 55;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    .status-dot {
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 10px currentColor;
+    }
+
+    .status-chip.live .status-dot {
+        background: var(--success-flash);
+    }
+
+    .status-chip.alert .status-dot {
+        background: var(--warning-flash);
+    }
+
+    @media (max-width: 640px) {
+        #ui-layer {
+            padding: 1rem;
+        }
+
+        .hud-top {
+            padding-top: 1.2rem;
+        }
+
+        .hud-bottom {
+            gap: 0.85rem;
+        }
+
+        #roll-btn {
+            width: min(18rem, 88vw);
+            padding: 1rem 1.8rem;
+        }
+
+        .hud-tip {
+            max-width: 85vw;
+        }
+
+        .status-chip {
+            left: 50%;
+            transform: translateX(-50%);
+            top: max(0.65rem, env(safe-area-inset-top));
+            font-size: 0.68rem;
+            max-width: 88vw;
+        }
+
+        .feedback-strip {
+            min-height: 4.25rem;
+        }
+    }
+</style>
+</head>
+<body>
+
+<!-- Asset Declaration -->
+<div id="assets" style="display: none;">
+    <!-- [agent-note][stage3] resolved-audio: ui/roll/win/fail + gameplay loop -> catalogs/audios.json -->
+    <audio id="bgm_main" data-editable="audio" data-label="Forge Floor Loop" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="auto" loop></audio>
+    <audio id="sfx_ui_click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+    <audio id="sfx_scan_tick" src="https://gamezone-virid.vercel.app/assets/audios/sfx/projectile_01.mp3" preload="auto"></audio>
+    <audio id="sfx_success" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3" preload="auto"></audio>
+    <audio id="sfx_bonus" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3" preload="auto"></audio>
+    <audio id="sfx_fail" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+</div>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+  "rollSpeed": { "type": "number", "label": "Roll Speed (ms)", "value": 100, "min": 50, "max": 500 },
+  "particleCount": { "type": "number", "label": "Particle Intensity", "value": 50, "min": 10, "max": 200 }
+}
+</script>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="status-chip" class="status-chip"><span class="status-dot"></span><span id="status-text">Audio standby</span></div>
+    
+    <div id="ui-layer">
+        <!-- Top HUD -->
+        <div id="hud-top" class="hud-top">
+            <!-- [agent-note][stage2] preserve: hud-top placement | reason: already centered and mobile-safe -->
+            <div class="signal-header hud-card">
+                <div class="hud-kicker">Current Signal</div>
+                <h1 id="oura-name" class="hud-text">STATIC</h1>
+                <div id="oura-rarity">1 IN 1</div>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div id="hud-bottom" class="hud-bottom">
+            <!-- [agent-note][stage3] resolved-gif: rare pull celebration + low tier fail reaction -> catalogs/gifs.json -->
+            <div class="feedback-strip">
+                <img id="rare-gif" class="reaction-gif" alt="Rare signal reaction" src="https://i.giphy.com/Y4nmq4GOnLf4XIgALX.webp">
+                <img id="fail-gif" class="reaction-gif" alt="Low tier signal reaction" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp">
+            </div>
+            <!-- [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction -->
+            <div class="control-stack hud-card">
+                <div id="auto-roll-toggle" class="hidden">SCANNING...</div>
+                <button id="roll-btn" type="button">
+                    <div class="roll-btn-glow"></div>
+                    <span class="roll-btn-label">SCAN</span>
+                    <div class="roll-btn-bar"></div>
+                </button>
+                <div class="hud-tip">Tap to scan for a higher signal tier.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * Signal Forge RNG - Single File Implementation
+ * Style: CYBER_NEON
+ */
+
+// --- Constants & Config ---
+const SIGNAL_TIERS = [
+    { name: "STATIC", chance: 1, color: "#FFFFFF", glow: "#FFFFFF", type: "ring" },
+    { name: "CLEAR", chance: 1/2, color: "#A0A0A0", glow: "#CCCCCC", type: "ring" },
+    { name: "BOOSTED", chance: 1/4, color: "#4ADE80", glow: "#22C55E", type: "pulse" },
+    { name: "PRIME", chance: 1/8, color: "#60A5FA", glow: "#3B82F6", type: "wave" },
+    { name: "OVERDRIVE", chance: 1/16, color: "#C084FC", glow: "#A855F7", type: "orbit" },
+    { name: "LEGEND", chance: 1/64, color: "#FACC15", glow: "#EAB308", type: "burst" },
+    { name: "ANOMALY", chance: 1/256, color: "#F43F5E", glow: "#E11D48", type: "glitch" },
+    { name: "ASCENDANT", chance: 1/1000, color: "#22D3EE", glow: "#06B6D4", type: "ascend" },
+    { name: "NULL CORE", chance: 1/5000, color: "#000000", glow: "#FFFFFF", type: "void" } // Secret
+];
+
+const CONFIG = {
+    heroSize: 0.15, // % of min(cw, ch)
+    gravity: 800,
+    shakeDecay: 0.9,
+    baseRollDuration: 2000
+};
+
+// --- Global State ---
+let canvas, ctx;
+let cw = 0, ch = 0;
+let dpr = 1;
+let lastTime = 0;
+let initialized = false;
+let gameState = 'IDLE'; // IDLE, ROLLING
+let rollTimer = 0;
+let rollTargetTime = 0;
+let currentSignal = SIGNAL_TIERS[0];
+let displaySignal = SIGNAL_TIERS[0]; // What is shown during roll animation
+let shake = 0;
+let particles = [];
+let audioCtx = null;
+let bgm = null;
+let statusText = null;
+let statusChip = null;
+let audioUnlocked = false;
+let rollingTickGate = 0;
+let audioEls = {};
+let rareGifEl = null;
+let failGifEl = null;
+let feedbackTimer = 0;
+
+// Signal caster state
+const hero = {
+    yOffset: 0,
+    floatTime: 0
+};
+
+// --- Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Parse Config
+    try {
+        const configEl = document.getElementById('game-config');
+        if (configEl) {
+            const userConfig = JSON.parse(configEl.textContent);
+            // Apply simple overrides if needed, mostly we use static constants for simplicity here
+        }
+    } catch(e) { console.error('Config parse error', e); }
+
+    // 2. Setup DOM
+    canvas = document.getElementById('gameCanvas');
+    bgm = document.getElementById('bgm_main');
+    statusText = document.getElementById('status-text');
+    statusChip = document.getElementById('status-chip');
+    rareGifEl = document.getElementById('rare-gif');
+    failGifEl = document.getElementById('fail-gif');
+    audioEls = {
+        uiClick: document.getElementById('sfx_ui_click'),
+        scanTick: document.getElementById('sfx_scan_tick'),
+        success: document.getElementById('sfx_success'),
+        bonus: document.getElementById('sfx_bonus'),
+        fail: document.getElementById('sfx_fail')
+    };
+    
+    // 3. Resize Observer
+    const ro = new ResizeObserver(entries => {
+        const entry = entries[0];
+        if (entry) {
+            const { width, height } = entry.contentRect;
+            resize(width, height);
+            if (!initialized) {
+                initGame();
+            }
+        }
+    });
+    ro.observe(canvas);
+
+    // 4. Input Binding
+    const btn = document.getElementById('roll-btn');
+    btn.addEventListener('pointerenter', () => playMediaSfx('uiClick', 0.25));
+    btn.addEventListener('pointerdown', handleInput);
+    window.addEventListener('pointerdown', (e) => {
+        // Fallback if they click canvas
+        if(e.target === canvas) handleInput(e);
+    }, { passive: false });
+});
+
+function resize(width, height) {
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    
+    cw = width;
+    ch = height;
+    
+    ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Clamp/Reset entities if needed
+}
+
+function initGame() {
+    if (initialized) return;
+    
+    // Init Audio Context
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+        audioCtx = new AudioContext();
+    }
+
+    if (bgm) {
+        bgm.volume = 0.2;
+    }
+    Object.values(audioEls).forEach((audio) => {
+        if (audio) audio.volume = 0.48;
+    });
+    if (audioEls.bonus) {
+        audioEls.bonus.volume = 0.42;
+    }
+    updateStatus('Audio standby', 'idle');
+
+    // Start Loop
+    initialized = true;
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+// --- Audio / Feedback System ---
+function updateStatus(message, mode = 'idle') {
+    if (statusText) {
+        statusText.textContent = message;
+    }
+    if (statusChip) {
+        statusChip.classList.toggle('live', mode === 'live');
+        statusChip.classList.toggle('alert', mode === 'alert');
+    }
+}
+
+function unlockAudio() {
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+    }
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    if (bgm && bgm.paused) {
+        bgm.play().then(() => {
+            updateStatus('Forge loop online', 'live');
+        }).catch(() => {
+            updateStatus('Audio muted', 'alert');
+        });
+    }
+}
+
+function playMediaSfx(key, resetTo = 0) {
+    const audio = audioEls[key];
+    if (!audio || !audioUnlocked) return;
+    try {
+        if (resetTo === 0 || audio.currentTime > 0.08) {
+            audio.currentTime = resetTo;
+        }
+        audio.play().catch(() => {});
+    } catch (_) {}
+}
+
+function playRollTick() {
+    if (performance.now() < rollingTickGate) return;
+    rollingTickGate = performance.now() + 85;
+    playMediaSfx('scanTick');
+}
+
+function playWinSound(tierIndex) {
+    if (tierIndex >= 5) {
+        playMediaSfx('success');
+        playMediaSfx('bonus');
+        updateStatus('Rare signal locked', 'live');
+    } else if (tierIndex <= 1) {
+        playMediaSfx('fail');
+        updateStatus('Weak signal only', 'alert');
+    } else {
+        playMediaSfx('success');
+        updateStatus('Signal stabilized', 'live');
+    }
+    
+    if (tierIndex > 4) {
+        navigator.vibrate?.(180);
+    } else {
+        navigator.vibrate?.(40);
+    }
+}
+
+function clearReactionGifs() {
+    rareGifEl?.classList.remove('active');
+    failGifEl?.classList.remove('active');
+}
+
+function showReactionGif(kind) {
+    clearReactionGifs();
+    if (kind === 'rare') {
+        rareGifEl?.classList.add('active');
+    } else if (kind === 'fail') {
+        failGifEl?.classList.add('active');
+    }
+    feedbackTimer = kind ? 1.8 : 0;
+}
+
+// --- Input Handling ---
+function handleInput(e) {
+    e.preventDefault(); // Prevent zoom/scroll
+    unlockAudio();
+    
+    if (gameState === 'IDLE') {
+        startRoll();
+    }
+}
+
+// --- Game Logic ---
+function startRoll() {
+    gameState = 'ROLLING';
+    rollTimer = 0;
+    rollTargetTime = CONFIG.baseRollDuration;
+    clearReactionGifs();
+    playMediaSfx('uiClick');
+    updateStatus('Scanning signal bands', 'live');
+    
+    // Disable button visual
+    const btn = document.getElementById('roll-btn');
+    btn.style.opacity = '0.5';
+    btn.querySelector('.roll-btn-label').innerText = "SCANNING...";
+}
+
+function resolveRoll() {
+    gameState = 'IDLE';
+    
+    // Weighted RNG
+    const rand = Math.random();
+    let selected = SIGNAL_TIERS[0];
+    
+    // Actually, let's just do a simple check from rarest to commonest for simplicity
+    for (let i = SIGNAL_TIERS.length - 1; i >= 0; i--) {
+        if (rand < SIGNAL_TIERS[i].chance) {
+            selected = SIGNAL_TIERS[i];
+            break;
+        }
+    }
+    
+    currentSignal = selected;
+    displaySignal = selected;
+    
+    // UI Update
+    updateHUD(selected);
+    
+    // Effects
+    const tierIndex = SIGNAL_TIERS.indexOf(selected);
+    shake = tierIndex * 2;
+    spawnParticles(tierIndex * 10 + 10, selected.color);
+    showReactionGif(tierIndex >= 5 ? 'rare' : tierIndex <= 1 ? 'fail' : null);
+    playWinSound(tierIndex);
+    
+    // Button Reset
+    const btn = document.getElementById('roll-btn');
+    btn.style.opacity = '1';
+    btn.querySelector('.roll-btn-label').innerText = "SCAN";
+}
+
+function updateHUD(signal) {
+    const nameEl = document.getElementById('oura-name');
+    const rarityEl = document.getElementById('oura-rarity');
+    
+    nameEl.innerText = signal.name;
+    nameEl.style.color = signal.color;
+    nameEl.style.textShadow = `0 0 20px ${signal.glow}`;
+    
+    rarityEl.innerText = `1 IN ${Math.round(1/signal.chance)}`;
+    rarityEl.style.borderColor = signal.color;
+}
+
+function spawnParticles(count, color) {
+    const cx = cw / 2;
+    const cy = ch / 2 - 50;
+    
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 200 + 50;
+        particles.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            color: color,
+            size: Math.random() * 4 + 1
+        });
+    }
+}
+
+// --- Rendering ---
+function drawStickman(ctx, x, y, scale, color, glow, time) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    const capeWave = Math.sin(time * 4) * 3;
+    const visorGlow = 0.5 + Math.sin(time * 6) * 0.2;
+    
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowBlur = 16;
+    ctx.shadowColor = glow;
+
+    // Character silhouette / cape
+    ctx.fillStyle = 'rgba(12, 28, 54, 0.82)';
+    ctx.beginPath();
+    ctx.moveTo(-4, -26);
+    ctx.quadraticCurveTo(-38, 6, -28, 58);
+    ctx.quadraticCurveTo(-6, 42, 0, 26);
+    ctx.quadraticCurveTo(7, 44, 28, 58 + capeWave);
+    ctx.quadraticCurveTo(40, 8, 4, -26);
+    ctx.closePath();
+    ctx.fill();
+
+    // Core body glow
+    const bodyGlow = ctx.createLinearGradient(0, -58, 0, 64);
+    bodyGlow.addColorStop(0, 'rgba(255,255,255,0.95)');
+    bodyGlow.addColorStop(0.45, color);
+    bodyGlow.addColorStop(1, 'rgba(90, 250, 255, 0.72)');
+    ctx.strokeStyle = bodyGlow;
+    ctx.lineWidth = 5;
+
+    // Head shell
+    ctx.fillStyle = 'rgba(8, 17, 33, 0.95)';
+    ctx.beginPath();
+    ctx.arc(0, -50, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Visor
+    ctx.fillStyle = `rgba(135, 245, 255, ${0.6 + visorGlow * 0.2})`;
+    ctx.beginPath();
+    ctx.roundRect(-10, -55, 20, 8, 4);
+    ctx.fill();
+
+    // Crest antenna
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -68);
+    ctx.lineTo(0, -80);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, -83, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    ctx.strokeStyle = bodyGlow;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, -32);
+    ctx.lineTo(0, 28);
+    ctx.stroke();
+
+    // Shoulders
+    ctx.beginPath();
+    ctx.moveTo(-16, -22);
+    ctx.lineTo(16, -22);
+    ctx.stroke();
+
+    // Arms
+    ctx.beginPath();
+    ctx.moveTo(-16, -18);
+    ctx.lineTo(-26, 4);
+    ctx.lineTo(-12, 22);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(16, -18);
+    ctx.lineTo(26, 4);
+    ctx.lineTo(12, 22);
+    ctx.stroke();
+
+    // Chest core
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(8, 3);
+    ctx.lineTo(0, 14);
+    ctx.lineTo(-8, 3);
+    ctx.closePath();
+    ctx.fill();
+
+    // Legs
+    ctx.beginPath();
+    ctx.moveTo(0, 28);
+    ctx.lineTo(-16, 70);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0, 28);
+    ctx.lineTo(16, 70);
+    ctx.stroke();
+
+    // Boots
+    ctx.strokeStyle = 'rgba(255,255,255,0.88)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-18, 70);
+    ctx.lineTo(-8, 70);
+    ctx.moveTo(18, 70);
+    ctx.lineTo(8, 70);
+    ctx.stroke();
+    
+    ctx.restore();
+}
+
+function drawAura(ctx, x, y, signal, time) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    const color = signal.color;
+    const glow = signal.glow;
+    
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = glow;
+    
+    if (signal.type === 'ring') {
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 80 + Math.sin(time * 2) * 5, 0, Math.PI * 2);
+        ctx.stroke();
+    } else if (signal.type === 'pulse') {
+        ctx.lineWidth = 3;
+        for(let i=0; i<3; i++) {
+            let r = (time * 50 + i * 30) % 100;
+            let alpha = 1 - (r / 100);
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(0, 0, 40 + r, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    } else if (signal.type === 'wave') {
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        for(let i=0; i<=Math.PI*2; i+=0.1) {
+            let r = 90 + Math.sin(i * 5 + time * 3) * 10;
+            let px = Math.cos(i) * r;
+            let py = Math.sin(i) * r;
+            if(i===0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    } else if (signal.type === 'orbit') {
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 90, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        for(let i=0; i<3; i++) {
+            let ang = time * 2 + (i * (Math.PI*2/3));
+            let ox = Math.cos(ang) * 90;
+            let oy = Math.sin(ang) * 90;
+            ctx.beginPath();
+            ctx.arc(ox, oy, 10, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    } else if (signal.type === 'burst' || signal.type === 'ascend') {
+        // Sun rays
+        const rays = 12;
+        for(let i=0; i<rays; i++) {
+            let ang = (Math.PI * 2 / rays) * i + time;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(ang) * 60, Math.sin(ang) * 60);
+            ctx.lineTo(Math.cos(ang) * 120, Math.sin(ang) * 120);
+            ctx.lineWidth = 4;
+            ctx.stroke();
+        }
+        // Core
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 60, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (signal.type === 'glitch' || signal.type === 'void') {
+        // Glitchy squares
+        for(let i=0; i<5; i++) {
+            if(Math.random() > 0.5) continue;
+            let w = Math.random() * 100 + 50;
+            let h = Math.random() * 10;
+            let ox = (Math.random() - 0.5) * 100;
+            let oy = (Math.random() - 0.5) * 200;
+            ctx.fillStyle = Math.random() > 0.5 ? color : '#FFFFFF';
+            ctx.fillRect(ox, oy, w, h);
+        }
+        // Rings
+        ctx.lineWidth = Math.random() * 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 90, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+function gameLoop(time) {
+    const dt = Math.min((time - lastTime) / 1000, 0.05);
+    lastTime = time;
+    
+    // Logic
+    hero.floatTime += dt;
+    hero.yOffset = Math.sin(hero.floatTime * 2) * 10;
+    
+    // Shake decay
+    if (shake > 0) {
+        shake *= CONFIG.shakeDecay;
+        if (shake < 0.5) shake = 0;
+    }
+    
+    // Rolling Logic
+    if (gameState === 'ROLLING') {
+        rollTimer += dt * 1000;
+        
+        // Cycle visuals every 100ms
+        if (Math.floor(rollTimer / 100) > Math.floor((rollTimer - dt*1000) / 100)) {
+            const randIndex = Math.floor(Math.random() * SIGNAL_TIERS.length);
+            displaySignal = SIGNAL_TIERS[randIndex];
+            updateHUD(displaySignal);
+            playRollTick();
+            
+            // Light vibration
+            if (navigator.vibrate) navigator.vibrate(5);
+        }
+        
+        if (rollTimer >= rollTargetTime) {
+            resolveRoll();
+        }
+    }
+    
+    if (feedbackTimer > 0) {
+        feedbackTimer -= dt;
+        if (feedbackTimer <= 0) {
+            clearReactionGifs();
+        }
+    }
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+    
+    // Drawing
+    ctx.clearRect(0, 0, cw, ch);
+    
+    // Background Grid (Cyber Neon)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(40, 40, 80, 0.3)';
+    ctx.lineWidth = 1;
+    const gridSize = 40;
+    const offset = (time / 100) % gridSize;
+    // Vertical
+    for (let x = offset; x < cw; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+    }
+    // Horizontal (Perspective simulation)
+    for (let y = offset; y < ch; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+    }
+    ctx.restore();
+    
+    // Apply Shake
+    ctx.save();
+    if (shake > 0) {
+        const sx = (Math.random() - 0.5) * shake * 10;
+        const sy = (Math.random() - 0.5) * shake * 10;
+        ctx.translate(sx, sy);
+    }
+    
+    // Center coords
+    const cx = cw / 2;
+    const cy = ch / 2 - 50 + hero.yOffset;
+    
+    // Draw Aura (Behind)
+    drawAura(ctx, cx, cy, displaySignal, hero.floatTime);
+    
+    // Draw Signal Caster
+    drawStickman(ctx, cx, cy, 1.5, displaySignal.color, displaySignal.glow, hero.floatTime);
+    
+    // Draw Particles
+    for (let p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+    
+    ctx.restore(); // End Shake
+    
+    requestAnimationFrame(gameLoop);
+}
+
+</script>
+</body>
+</html>

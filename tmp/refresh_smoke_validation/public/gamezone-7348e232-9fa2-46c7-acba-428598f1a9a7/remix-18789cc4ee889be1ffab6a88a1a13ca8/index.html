@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Group A Gauntlet</title>
+    <script src="assets/cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- [agent-note][stage4] approved-fonts: title/display -> Russo One, HUD/UI -> Rajdhani via catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&family=Russo+One&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #56c7ff;
+            --accent: #89ffb6;
+            --accent-hot: #ffd166;
+            --danger: #ff5b7f;
+            --ink: #08111f;
+            --panel: rgba(10, 20, 38, 0.84);
+            --panel-strong: rgba(6, 14, 28, 0.94);
+            --line: rgba(126, 220, 255, 0.48);
+            --glow: 0 0 24px rgba(86, 199, 255, 0.24);
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(60, 140, 255, 0.2), transparent 30%),
+                linear-gradient(180deg, #07101d 0%, #0b1628 45%, #08111f 100%);
+            color: #f4fbff;
+            font-family: "Rajdhani", system-ui, sans-serif;
+            touch-action: none; /* Critical for mobile game control */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .panel {
+            background:
+                linear-gradient(180deg, rgba(18, 35, 63, 0.92), rgba(7, 16, 31, 0.92)),
+                radial-gradient(circle at top, rgba(137, 255, 182, 0.18), transparent 45%);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 22px 20px;
+            width: min(85%, 360px);
+            max-width: 360px;
+            box-shadow: 0 18px 48px rgba(0,0,0,0.46), inset 0 0 0 1px rgba(255,255,255,0.05);
+            text-align: center;
+            transform: scale(1);
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            color: #f4fbff;
+            position: relative;
+            overflow: hidden;
+        }
+        .panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 18%, rgba(86, 199, 255, 0.24), transparent 24%),
+                radial-gradient(circle at 82% 14%, rgba(137, 255, 182, 0.16), transparent 20%);
+            pointer-events: none;
+        }
+        .panel > * {
+            position: relative;
+            z-index: 1;
+        }
+        .btn {
+            background: linear-gradient(135deg, var(--primary), #1676ff 58%, var(--accent));
+            color: #04101c;
+            border: 1px solid rgba(255,255,255,0.35);
+            padding: 14px 24px;
+            border-radius: 999px;
+            font-size: 1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            box-shadow: 0 12px 24px rgba(11, 91, 198, 0.35);
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.1s;
+            width: 100%;
+            margin-top: 18px;
+            font-family: "Russo One", "Rajdhani", sans-serif;
+        }
+        .btn:active {
+            transform: scale(0.96);
+            box-shadow: 0 8px 16px rgba(11, 91, 198, 0.3);
+            filter: brightness(1.06);
+        }
+        .title-font {
+            font-family: "Russo One", "Rajdhani", sans-serif;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .hud-mono {
+            font-family: "Rajdhani", system-ui, sans-serif;
+            letter-spacing: 0.12em;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ff7a8f, #ff4f5f);
+            box-shadow: 0 12px 24px rgba(220, 53, 69, 0.34);
+            color: #fff8fb;
+        }
+
+        .hud-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: max(16px, env(safe-area-inset-top)) 16px 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: linear-gradient(to bottom, rgba(4, 9, 18, 0.84) 0%, transparent 100%);
+            gap: 12px;
+        }
+        .hud-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 999px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+            background: rgba(255,255,255,0.9);
+            color: #07101d;
+            letter-spacing: 0.2em;
+        }
+        .match-title {
+            color: #ffffff;
+            font-weight: 700;
+            font-size: clamp(1.6rem, 5vw, 2rem);
+            margin-top: 4px;
+            text-shadow: 0 4px 12px rgba(0,0,0,0.35);
+        }
+        .hud-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .hud-caption {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: rgba(228, 247, 255, 0.84);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+        .score-dots {
+            display: flex;
+            gap: 6px;
+        }
+        .score-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.65);
+            border: 1px solid rgba(255,255,255,0.18);
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.25);
+        }
+        .score-dot.complete {
+            background: linear-gradient(135deg, #7dfcc4, #2dd4bf);
+        }
+        .score-dot.active {
+            background: linear-gradient(135deg, #ffffff, #8fe8ff);
+            box-shadow: 0 0 12px rgba(143, 232, 255, 0.85);
+            animation: pulseDot 1s ease-in-out infinite alternate;
+        }
+
+        .team-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.08);
+            margin-bottom: 8px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.84rem;
+            align-items: center;
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #e7f8ff;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+        .team-row.active {
+            background: linear-gradient(135deg, rgba(86, 199, 255, 0.24), rgba(137, 255, 182, 0.16));
+            border: 1px solid rgba(126, 220, 255, 0.7);
+            box-shadow: var(--glow);
+        }
+        .team-row.beaten {
+            opacity: 0.62;
+            background: rgba(153, 181, 200, 0.14);
+            text-decoration: line-through;
+        }
+        .team-side {
+            display: flex;
+            align-items: center;
+        }
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.35);
+            margin-right: 10px;
+            display: inline-block;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
+        }
+        .active .status-dot { background: var(--primary); box-shadow: 0 0 10px rgba(86, 199, 255, 0.9); }
+        .beaten .status-dot { background: var(--accent); }
+
+        .goal-msg {
+            font-size: clamp(2.6rem, 10vw, 4rem);
+            font-weight: 900;
+            color: #fff4c2;
+            text-shadow: 0 4px 0 rgba(0,0,0,0.55), 0 0 20px rgba(255, 209, 102, 0.65);
+            position: absolute;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            z-index: 20;
+        }
+        .screen-icon {
+            font-size: 3.3rem;
+            margin-bottom: 8px;
+        }
+        .hero-title {
+            font-size: clamp(2.4rem, 8vw, 3.2rem);
+            margin: 0 0 6px;
+            background: linear-gradient(90deg, #c9f5ff, #c4ffe1);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .hero-subtitle {
+            color: rgba(192, 243, 255, 0.78);
+            font-weight: 700;
+            font-size: 0.94rem;
+            margin: 0 0 22px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        .panel-copy {
+            color: rgba(226, 232, 240, 0.86);
+            margin: 0 0 20px;
+            font-size: 1rem;
+        }
+        .helper-copy {
+            font-size: 0.8rem;
+            color: rgba(192, 243, 255, 0.62);
+            margin-top: 14px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .feedback-stack {
+            position: absolute;
+            right: 12px;
+            bottom: max(14px, env(safe-area-inset-bottom));
+            width: min(35vw, 110px);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            z-index: 18;
+            pointer-events: none;
+        }
+        .reaction-gif {
+            width: 100%;
+            max-width: 110px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.18);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+            background: rgba(7,16,31,0.6);
+            object-fit: cover;
+            aspect-ratio: 1 / 1;
+            opacity: 0;
+            transform: translateY(10px) scale(0.9);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        .reaction-gif.show {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+        .reaction-gif.win {
+            max-width: 104px;
+            aspect-ratio: 0.95 / 1;
+        }
+        .audio-pill {
+            position: absolute;
+            left: 12px;
+            bottom: max(14px, env(safe-area-inset-bottom));
+            z-index: 18;
+            pointer-events: none;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(5, 16, 31, 0.72);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: rgba(226, 247, 255, 0.9);
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        @media (max-width: 420px) {
+            .panel {
+                padding: 20px 16px;
+                width: min(90%, 340px);
+            }
+            .btn {
+                padding: 13px 18px;
+                font-size: 0.95rem;
+            }
+            .feedback-stack {
+                width: min(29vw, 92px);
+                right: 8px;
+            }
+            .reaction-gif,
+            .reaction-gif.win {
+                max-width: 92px;
+            }
+            .audio-pill {
+                left: 8px;
+                right: auto;
+                max-width: 58vw;
+                font-size: 0.74rem;
+            }
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes pulseDot {
+            from { transform: scale(0.95); }
+            to { transform: scale(1.1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-canvas"></div>
+
+    <div id="ui-layer">
+        <div id="hud" class="hud-top hidden">
+            <div>
+                <div class="hud-badge title-font">GROUP A RUN</div>
+                <div id="match-title" class="match-title title-font">BLOCKER: QATAR</div>
+            </div>
+            <div class="hud-right">
+                <div class="hud-caption hud-mono">Clear Streak</div>
+                <div id="score-dots" class="score-dots"></div>
+            </div>
+        </div>
+
+        <div id="start-screen" class="panel interactive">
+            <div class="screen-icon">⚡</div>
+            <h1 class="hero-title title-font">Group A Gauntlet</h1>
+            <p class="hero-subtitle hud-mono">Dribble past every blocker</p>
+
+            <div id="bracket-list"></div>
+
+            <button id="btn-start" class="btn">Start Run</button>
+            <p class="helper-copy hud-mono">Tap, hold, and drag to cut through the lane</p>
+        </div>
+
+        <div id="fail-screen" class="panel interactive hidden">
+            <div class="screen-icon">🛑</div>
+            <h2 class="title-font" style="font-size: 2rem; margin: 0 0 10px; color: #ff8ca1;">Run Stopped</h2>
+            <p class="panel-copy">A blocker cut off your lane before the finish line.</p>
+            <button id="btn-retry" class="btn btn-danger">Retry Run</button>
+        </div>
+
+        <div id="win-screen" class="panel interactive hidden">
+            <div class="screen-icon">🏆</div>
+            <h2 class="title-font" style="font-size: 2rem; margin: 0 0 10px; color: #ffe082;">Group Cleared</h2>
+            <p class="panel-copy">You dribbled through every Group A defense and finished the gauntlet.</p>
+            <button id="btn-reset" class="btn">Run Again</button>
+        </div>
+
+        <div id="msg-goal" class="goal-msg hidden title-font">Clear!</div>
+
+        <!-- [agent-note][stage3] resolved-gif: fail-feedback + win-feedback -> catalogs/gifs.json, kept compact off playfield for mobile safety -->
+        <div class="feedback-stack" aria-hidden="true">
+            <img
+                id="gif-fail"
+                class="reaction-gif"
+                alt=""
+                src="https://i.giphy.com/BfOcbEYf0YLZ0czxGF.webp"
+                loading="lazy"
+                decoding="async"
+            >
+            <img
+                id="gif-win"
+                class="reaction-gif win"
+                alt=""
+                src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp"
+                loading="lazy"
+                decoding="async"
+            >
+        </div>
+
+        <div id="audio-pill" class="audio-pill hud-mono">Audio armed on first tap</div>
+    </div>
+
+    <script type="module">
+        import * as THREE from './assets/cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+
+        const TEAMS = [
+            { id: 'QAT', name: 'QATAR', color: 0x8d1b3d, sec: 0xffffff },
+            { id: 'ECU', name: 'ECUADOR', color: 0xffce00, sec: 0x003399 },
+            { id: 'SEN', name: 'SENEGAL', color: 0x00853f, sec: 0xffff00 },
+            { id: 'NED', name: 'NETHERLANDS', color: 0xf36c21, sec: 0xffffff }
+        ];
+
+        const CONFIG = {
+            fieldW: 26,
+            fieldH: 45,
+            playerSpeed: 0.15,
+            cameraHeight: 35,
+            cameraZ: 25
+        };
+
+        const MEDIA = {
+            audio: {
+                menuOpen: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3',
+                startRun: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3',
+                laneMove: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_hover_02.mp3',
+                goal: 'https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3',
+                fail: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3',
+                bgm: 'https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3',
+                victoryLoop: 'https://gamezone-virid.vercel.app/assets/audios/music/victory_loop_01.mp3',
+                defeatLoop: 'https://gamezone-virid.vercel.app/assets/audios/music/defeat_loop_01.mp3'
+            },
+            gifs: {
+                fail: 'https://i.giphy.com/BfOcbEYf0YLZ0czxGF.webp',
+                win: 'https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp'
+            }
+        };
+
+        const STATE = {
+            active: false,
+            level: 0,
+            frameCount: 0,
+            touching: false,
+            audioReady: false,
+            destroyed: false
+        };
+
+        const AudioSys = {
+            players: {},
+            lastSfxAt: {},
+            enabled: true,
+            preload() {
+                Object.entries(MEDIA.audio).forEach(([key, url]) => {
+                    const player = new Audio(url);
+                    player.preload = 'auto';
+                    player.crossOrigin = 'anonymous';
+                    player.playsInline = true;
+                    if (key.includes('Loop') || key === 'bgm') {
+                        player.loop = true;
+                    }
+                    player.volume = key === 'bgm' ? 0.2 : key === 'victoryLoop' || key === 'defeatLoop' ? 0.2 : 0.45;
+                    this.players[key] = player;
+                });
+            },
+            arm() {
+                if (STATE.audioReady || !this.enabled) return;
+                STATE.audioReady = true;
+                this.updatePill('Audio live');
+            },
+            updatePill(text) {
+                const pill = document.getElementById('audio-pill');
+                if (pill) pill.textContent = text;
+            },
+            stopLoops(except = null) {
+                ['bgm', 'victoryLoop', 'defeatLoop'].forEach((key) => {
+                    if (except && key === except) return;
+                    const player = this.players[key];
+                    if (!player) return;
+                    player.pause();
+                    player.currentTime = 0;
+                });
+            },
+            startLoop(key) {
+                if (!STATE.audioReady || !this.enabled) return;
+                const player = this.players[key];
+                if (!player) return;
+                this.stopLoops(key);
+                player.currentTime = 0;
+                player.play().catch(() => {
+                    this.enabled = false;
+                    this.updatePill('Audio optional');
+                });
+            },
+            playSfx(key, cooldown = 140) {
+                if (!STATE.audioReady || !this.enabled) return;
+                const now = performance.now();
+                const last = this.lastSfxAt[key] || 0;
+                if (now - last < cooldown) return;
+                this.lastSfxAt[key] = now;
+
+                const base = this.players[key];
+                if (!base) return;
+
+                try {
+                    const shot = base.cloneNode();
+                    shot.volume = base.volume;
+                    shot.crossOrigin = 'anonymous';
+                    shot.playsInline = true;
+                    shot.play().catch(() => {});
+                } catch {
+                    base.currentTime = 0;
+                    base.play().catch(() => {});
+                }
+            }
+        };
+
+        let scene, camera, renderer;
+        let playerObj, ballObj;
+        let enemies = [];
+        let particles = [];
+        let raycaster, pointer;
+        let groundPlane;
+        let targetPos = new THREE.Vector3(0, 0, 18);
+        let lastMoveCue = 0;
+        let gifTimers = [];
+
+        function init() {
+            const container = document.getElementById('game-canvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x08111f);
+            scene.fog = new THREE.Fog(0x08111f, 28, 72);
+
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+            camera.position.set(0, CONFIG.cameraHeight, CONFIG.cameraZ);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0x9fdcff, 0.68);
+            scene.add(ambient);
+
+            const hemi = new THREE.HemisphereLight(0x8fe8ff, 0x061220, 0.55);
+            scene.add(hemi);
+
+            const dirLight = new THREE.DirectionalLight(0xf4fbff, 0.96);
+            dirLight.position.set(12, 30, 12);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.left = -20;
+            dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 25;
+            dirLight.shadow.camera.bottom = -25;
+            scene.add(dirLight);
+
+            createField();
+            createPlayer();
+
+            raycaster = new THREE.Raycaster();
+            pointer = new THREE.Vector2();
+            setupInput(container);
+            setupButtons();
+            setupVisibilityHandling();
+
+            AudioSys.preload();
+            updateStartScreen();
+
+            requestAnimationFrame(animate);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+        }
+
+        function createField() {
+            const geo = new THREE.PlaneGeometry(CONFIG.fieldW + 4, CONFIG.fieldH + 4);
+            const mat = new THREE.MeshLambertMaterial({ color: 0x0f8b57 });
+            groundPlane = new THREE.Mesh(geo, mat);
+            groundPlane.rotation.x = -Math.PI / 2;
+            groundPlane.receiveShadow = true;
+            scene.add(groundPlane);
+
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xb9f6ff, opacity: 0.65, transparent: true });
+
+            const borderGeo = new THREE.PlaneGeometry(0.3, CONFIG.fieldH);
+            const leftLine = new THREE.Mesh(borderGeo, lineMat);
+            leftLine.rotation.x = -Math.PI / 2;
+            leftLine.position.set(-CONFIG.fieldW / 2, 0.02, 0);
+            scene.add(leftLine);
+
+            const rightLine = new THREE.Mesh(borderGeo, lineMat);
+            rightLine.rotation.x = -Math.PI / 2;
+            rightLine.position.set(CONFIG.fieldW / 2, 0.02, 0);
+            scene.add(rightLine);
+
+            const goalGeo = new THREE.PlaneGeometry(CONFIG.fieldW, 0.5);
+            const goalLine = new THREE.Mesh(goalGeo, new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+            goalLine.rotation.x = -Math.PI / 2;
+            goalLine.position.set(0, 0.02, -CONFIG.fieldH / 2 + 2);
+            scene.add(goalLine);
+
+            const stripeGeo = new THREE.PlaneGeometry(CONFIG.fieldW + 4, 4);
+            const stripeMat = new THREE.MeshBasicMaterial({ color: 0x16a36f, transparent: true, opacity: 0.18 });
+            for (let z = -20; z <= 20; z += 8) {
+                const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+                stripe.rotation.x = -Math.PI / 2;
+                stripe.position.set(0, 0.01, z);
+                scene.add(stripe);
+            }
+        }
+
+        function createPlayer() {
+            playerObj = new THREE.Group();
+
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3fb7ff, emissive: 0x0b2b45, emissiveIntensity: 0.45 });
+            const trimMat = new THREE.MeshLambertMaterial({ color: 0xffd166, emissive: 0x5a4110, emissiveIntensity: 0.35 });
+            const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 1.2, 10), bodyMat);
+            body.position.y = 0.62;
+            body.castShadow = true;
+            playerObj.add(body);
+
+            const shoulders = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.07, 10, 18), trimMat);
+            shoulders.rotation.x = Math.PI / 2;
+            shoulders.position.y = 1.02;
+            playerObj.add(shoulders);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 18, 18), skinMat);
+            head.position.y = 1.42;
+            head.castShadow = true;
+            playerObj.add(head);
+
+            const visor = new THREE.Mesh(
+                new THREE.BoxGeometry(0.4, 0.12, 0.24),
+                new THREE.MeshLambertMaterial({ color: 0x08111f, emissive: 0x56c7ff, emissiveIntensity: 0.45 })
+            );
+            visor.position.set(0, 1.42, 0.18);
+            playerObj.add(visor);
+
+            ballObj = new THREE.Mesh(
+                new THREE.SphereGeometry(0.25, 16, 16),
+                new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0f3554, emissiveIntensity: 0.18 })
+            );
+            ballObj.position.set(0, 0.25, 0.6);
+            ballObj.castShadow = true;
+            playerObj.add(ballObj);
+
+            scene.add(playerObj);
+            resetPlayerPos();
+        }
+
+        function createEnemy(team, x, z) {
+            const grp = new THREE.Group();
+
+            const mat = new THREE.MeshLambertMaterial({ color: team.color, emissive: team.sec, emissiveIntensity: 0.14 });
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.45, 0.55), mat);
+            body.position.y = 0.72;
+            body.castShadow = true;
+            grp.add(body);
+
+            const crest = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.62), new THREE.MeshLambertMaterial({ color: team.sec }));
+            crest.position.set(0, 0.78, 0.02);
+            grp.add(crest);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshLambertMaterial({ color: 0xffccaa }));
+            head.position.y = 1.62;
+            head.castShadow = true;
+            grp.add(head);
+
+            grp.position.set(x, 0, z);
+            scene.add(grp);
+
+            return {
+                mesh: grp,
+                baseX: x,
+                speed: (Math.random() * 0.1 + 0.05) * (Math.random() > 0.5 ? 1 : -1),
+                range: 3 + Math.random() * 4
+            };
+        }
+
+        function resetPlayerPos() {
+            targetPos.set(0, 0, CONFIG.fieldH / 2 - 4);
+            playerObj.position.copy(targetPos);
+            playerObj.rotation.set(0, 0, 0);
+        }
+
+        function armMedia() {
+            AudioSys.arm();
+        }
+
+        function setupVisibilityHandling() {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    AudioSys.stopLoops();
+                } else if (STATE.active) {
+                    AudioSys.startLoop('bgm');
+                }
+            });
+        }
+
+        function setupButtons() {
+            const buttons = [
+                document.getElementById('btn-start'),
+                document.getElementById('btn-retry'),
+                document.getElementById('btn-reset')
+            ];
+
+            buttons.forEach((button) => {
+                button.addEventListener('pointerdown', armMedia, { passive: true });
+                button.addEventListener('pointerenter', () => AudioSys.playSfx('menuOpen', 180));
+            });
+
+            document.getElementById('btn-start').addEventListener('click', startMatch);
+            document.getElementById('btn-retry').addEventListener('click', startMatch);
+            document.getElementById('btn-reset').addEventListener('click', resetRun);
+        }
+
+        function startMatch() {
+            armMedia();
+            AudioSys.playSfx('startRun');
+            AudioSys.startLoop('bgm');
+            AudioSys.updatePill('Match audio active');
+            hideAllPanels();
+            hideFeedback();
+            STATE.active = true;
+            STATE.frameCount = 0;
+
+            document.getElementById('hud').classList.remove('hidden');
+
+            const team = TEAMS[STATE.level];
+            document.getElementById('match-title').textContent = `BLOCKER: ${team.name}`;
+
+            const dots = document.getElementById('score-dots');
+            dots.innerHTML = '';
+            for (let i = 0; i < TEAMS.length; i++) {
+                const dot = document.createElement('div');
+                dot.className = `score-dot ${i < STATE.level ? 'complete' : (i === STATE.level ? 'active' : '')}`;
+                dots.appendChild(dot);
+            }
+
+            resetPlayerPos();
+            spawnEnemies();
+        }
+
+        function resetRun() {
+            armMedia();
+            AudioSys.playSfx('menuOpen');
+            AudioSys.stopLoops();
+            AudioSys.updatePill('Lobby audio ready');
+            hideFeedback();
+            STATE.level = 0;
+            STATE.active = false;
+            document.getElementById('win-screen').classList.add('hidden');
+            document.getElementById('fail-screen').classList.add('hidden');
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+            updateStartScreen();
+            resetPlayerPos();
+            clearEnemies();
+        }
+
+        function hideAllPanels() {
+            document.querySelectorAll('.panel').forEach((el) => el.classList.add('hidden'));
+        }
+
+        function clearEnemies() {
+            enemies.forEach((enemy) => scene.remove(enemy.mesh));
+            enemies = [];
+        }
+
+        function spawnEnemies() {
+            clearEnemies();
+
+            const team = TEAMS[STATE.level];
+            const count = 5 + (STATE.level * 3);
+            const startZ = 10;
+            const endZ = -15;
+            const zStep = (startZ - endZ) / count;
+
+            for (let i = 0; i < count; i++) {
+                const z = startZ - (i * zStep) + (Math.random() - 0.5) * 2;
+                const x = (Math.random() - 0.5) * (CONFIG.fieldW - 4);
+                const enemy = createEnemy(team, x, z);
+                enemy.speed *= (1 + STATE.level * 0.2);
+                enemies.push(enemy);
+            }
+        }
+
+        function update() {
+            if (!STATE.active) return;
+            STATE.frameCount++;
+
+            const speed = CONFIG.playerSpeed;
+            playerObj.position.x += (targetPos.x - playerObj.position.x) * speed;
+            playerObj.position.z += (targetPos.z - playerObj.position.z) * speed;
+
+            const dx = targetPos.x - playerObj.position.x;
+            const dz = targetPos.z - playerObj.position.z;
+            if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
+                playerObj.rotation.y = Math.atan2(dx, dz);
+            }
+
+            ballObj.position.y = 0.25 + Math.abs(Math.sin(STATE.frameCount * 0.5)) * 0.2;
+            ballObj.position.z = 0.6 + Math.sin(STATE.frameCount * 0.2) * 0.1;
+
+            enemies.forEach((enemy) => {
+                enemy.mesh.position.x += enemy.speed;
+                if (Math.abs(enemy.mesh.position.x - enemy.baseX) > enemy.range ||
+                    Math.abs(enemy.mesh.position.x) > CONFIG.fieldW / 2 - 1) {
+                    enemy.speed *= -1;
+                }
+
+                enemy.mesh.position.y = Math.abs(Math.sin(STATE.frameCount * 0.2 + enemy.baseX)) * 0.1;
+
+                const dist = playerObj.position.distanceTo(enemy.mesh.position);
+                if (dist < 1.0) {
+                    gameOver();
+                }
+            });
+
+            if (playerObj.position.z < -CONFIG.fieldH / 2 + 2) {
+                levelComplete();
+            }
+        }
+
+        function gameOver() {
+            if (!STATE.active) return;
+            STATE.active = false;
+            AudioSys.playSfx('fail', 250);
+            AudioSys.startLoop('defeatLoop');
+            AudioSys.updatePill('Defeat sting active');
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('fail-screen').classList.remove('hidden');
+            showFeedback('fail', 2200);
+        }
+
+        function levelComplete() {
+            if (!STATE.active) return;
+            STATE.active = false;
+            AudioSys.playSfx('goal', 250);
+            AudioSys.updatePill('Checkpoint cleared');
+            spawnConfetti();
+            showFeedback('win', 1700);
+
+            const msg = document.getElementById('msg-goal');
+            msg.classList.remove('hidden');
+
+            setTimeout(() => {
+                msg.classList.add('hidden');
+                STATE.level++;
+                if (STATE.level >= TEAMS.length) {
+                    gameWin();
+                } else {
+                    AudioSys.stopLoops();
+                    AudioSys.updatePill('Next matchup ready');
+                    updateStartScreen();
+                    document.getElementById('hud').classList.add('hidden');
+                    document.getElementById('start-screen').classList.remove('hidden');
+                }
+            }, 2000);
+        }
+
+        function gameWin() {
+            AudioSys.startLoop('victoryLoop');
+            AudioSys.updatePill('Victory loop active');
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('win-screen').classList.remove('hidden');
+            showFeedback('win', 3000);
+        }
+
+        function spawnConfetti() {
+            for (let i = 0; i < 60; i++) {
+                const geo = new THREE.PlaneGeometry(0.3, 0.3);
+                const mat = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff, side: THREE.DoubleSide });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(
+                    (Math.random() - 0.5) * 10,
+                    10 + Math.random() * 5,
+                    -CONFIG.fieldH / 2
+                );
+                scene.add(mesh);
+                particles.push({
+                    mesh,
+                    vel: new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * -0.5, (Math.random() - 0.5) * 0.5)
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.mesh.position.add(p.vel);
+                p.mesh.rotation.x += 0.1;
+                p.mesh.rotation.y += 0.1;
+                if (p.mesh.position.y < 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function animate() {
+            if (STATE.destroyed) return;
+            requestAnimationFrame(animate);
+            update();
+            updateParticles();
+            renderer.render(scene, camera);
+        }
+
+        function setupInput(el) {
+            function handleInput(e) {
+                armMedia();
+                if (!STATE.active) return;
+
+                const clientX = e.clientX;
+                const clientY = e.clientY;
+
+                pointer.x = (clientX / el.clientWidth) * 2 - 1;
+                pointer.y = -(clientY / el.clientHeight) * 2 + 1;
+
+                raycaster.setFromCamera(pointer, camera);
+                const intersects = raycaster.intersectObject(groundPlane);
+
+                if (intersects.length > 0) {
+                    const pt = intersects[0].point;
+                    const x = Math.max(-CONFIG.fieldW / 2 + 1, Math.min(CONFIG.fieldW / 2 - 1, pt.x));
+                    const z = Math.max(-CONFIG.fieldH / 2 + 1, Math.min(CONFIG.fieldH / 2 - 1, pt.z));
+                    targetPos.set(x, 0, z);
+
+                    const now = performance.now();
+                    if (now - lastMoveCue > 240) {
+                        lastMoveCue = now;
+                        AudioSys.playSfx('laneMove', 220);
+                    }
+                }
+            }
+
+            el.addEventListener('pointerdown', (e) => {
+                STATE.touching = true;
+                handleInput(e);
+            }, { passive: true });
+
+            el.addEventListener('pointermove', (e) => {
+                if (STATE.touching) handleInput(e);
+            }, { passive: true });
+
+            el.addEventListener('pointerup', () => {
+                STATE.touching = false;
+            }, { passive: true });
+
+            el.addEventListener('pointerleave', () => {
+                STATE.touching = false;
+            }, { passive: true });
+        }
+
+        function showFeedback(type, duration = 1800) {
+            hideFeedback();
+            const el = document.getElementById(type === 'win' ? 'gif-win' : 'gif-fail');
+            if (!el) return;
+            el.src = type === 'win' ? MEDIA.gifs.win : MEDIA.gifs.fail;
+            el.classList.add('show');
+            const timer = setTimeout(() => {
+                el.classList.remove('show');
+            }, duration);
+            gifTimers.push(timer);
+        }
+
+        function hideFeedback() {
+            gifTimers.forEach((timer) => clearTimeout(timer));
+            gifTimers = [];
+            document.querySelectorAll('.reaction-gif').forEach((gif) => gif.classList.remove('show'));
+        }
+
+        function updateStartScreen() {
+            const list = document.getElementById('bracket-list');
+            list.innerHTML = '';
+            TEAMS.forEach((team, i) => {
+                const div = document.createElement('div');
+                let statusClass = '';
+                if (i < STATE.level) statusClass = 'beaten';
+                else if (i === STATE.level) statusClass = 'active';
+
+                div.className = `team-row ${statusClass}`;
+                div.innerHTML = `
+                    <span class="team-side"><span class="status-dot"></span>${team.name}</span>
+                    <span class="hud-mono" style="color: #94a3b8;">${team.id}</span>
+                `;
+                list.appendChild(div);
+            });
+
+            const btn = document.getElementById('btn-start');
+            btn.textContent = STATE.level > 0 ? 'Next Run' : 'Start Run';
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Signal Match</title>
+    <!-- [agent-note][stage3] resolved-font: title -> Audiowide, ui/body -> Exo 2 from catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600;700&display=swap">
+    
+    <style>
+        :root {
+            --bg-base: #08111f;
+            --bg-deep: #040812;
+            --panel: rgba(12, 28, 49, 0.88);
+            --panel-shadow: #06101c;
+            --accent: #7bf7ff;
+            --accent-strong: #4cc8ff;
+            --accent-shadow: #1579b3;
+            --signal-gold: #ffd76a;
+            --danger: #ff5f7f;
+            --text-main: #e8f6ff;
+            --text-soft: #8db6d6;
+            --grid-line: rgba(123, 247, 255, 0.08);
+            --panel-border: rgba(123, 247, 255, 0.28);
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(76, 200, 255, 0.2), transparent 34%),
+                linear-gradient(180deg, var(--bg-base) 0%, var(--bg-deep) 100%);
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+
+        body {
+            color: var(--text-main);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            user-select: none;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 50% 12%, rgba(123, 247, 255, 0.12), transparent 22%),
+                linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #game-container::before {
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 44px 44px;
+            opacity: 0.9;
+        }
+
+        #game-container::after {
+            inset: 12px;
+            border: 1px solid rgba(123, 247, 255, 0.12);
+            border-radius: 28px;
+            box-shadow:
+                inset 0 0 0 1px rgba(255,255,255,0.03),
+                0 0 40px rgba(76, 200, 255, 0.08);
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        #restart-btn {
+            touch-action: manipulation;
+        }
+
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+            gap: 12px;
+            transition: opacity 0.3s ease;
+        }
+
+        .clay-panel {
+            background: linear-gradient(180deg, rgba(19, 40, 68, 0.95), rgba(7, 20, 36, 0.94));
+            border-radius: 24px;
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.08),
+                0 10px 0 var(--panel-shadow),
+                0 18px 36px rgba(0,0,0,0.35),
+                0 0 22px rgba(76, 200, 255, 0.14);
+            backdrop-filter: blur(10px);
+        }
+
+        .clay-btn {
+            background: linear-gradient(180deg, var(--signal-gold), #ffab49);
+            color: #07111d;
+            border: 0;
+            border-radius: 16px;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.55),
+                0 6px 0 #c96d1f,
+                0 10px 18px rgba(0,0,0,0.25);
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.15s ease;
+            cursor: pointer;
+            font-family: 'Exo 2', system-ui, sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .clay-btn:active {
+            transform: translateY(6px);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.55),
+                0 0 0 #c96d1f,
+                0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .clay-btn:hover {
+            filter: brightness(1.06);
+        }
+
+        .text-shadow-soft {
+            text-shadow: 0 0 16px rgba(123, 247, 255, 0.2);
+        }
+
+        .hud-card {
+            padding: 12px 24px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-main);
+            pointer-events: auto;
+            font-family: 'Exo 2', system-ui, sans-serif;
+        }
+
+        .mission-card {
+            min-width: 160px;
+        }
+
+        .mission-label {
+            display: block;
+            color: var(--text-soft);
+            font-size: 0.72rem;
+            letter-spacing: 0.16em;
+            margin-bottom: 4px;
+        }
+
+        .mission-value {
+            display: block;
+            font-family: 'Audiowide', 'Exo 2', system-ui, sans-serif;
+            font-size: 0.95rem;
+            letter-spacing: 0.06em;
+        }
+
+        .accent-text {
+            color: var(--accent);
+            font-weight: 800;
+            text-shadow: 0 0 10px rgba(123, 247, 255, 0.35);
+        }
+
+        .feedback-strip {
+            align-self: center;
+            margin-bottom: 24px;
+            min-height: 84px;
+            width: min(280px, calc(100vw - 40px));
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+        }
+
+        .feedback-gif {
+            position: relative;
+            width: 132px;
+            max-width: 38vw;
+            border-radius: 18px;
+            border: 1px solid rgba(123, 247, 255, 0.35);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+            opacity: 0;
+            transform: translateY(18px) scale(0.9);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            background: rgba(6, 16, 28, 0.7);
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+
+        #reaction-fail {
+            margin-right: -18px;
+            z-index: 1;
+        }
+
+        #reaction-win {
+            z-index: 2;
+        }
+
+        #game-over-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 7, 16, 0.55);
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+        }
+
+        #game-over-screen.hidden {
+            display: none;
+        }
+
+        .game-over-card {
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            max-width: 360px;
+            width: calc(100% - 32px);
+            box-sizing: border-box;
+        }
+
+        .game-over-kicker {
+            margin: 0 0 10px;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: 0.95rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .game-over-title {
+            margin: 0 0 10px;
+            font-family: 'Audiowide', system-ui, sans-serif;
+            font-size: clamp(2rem, 6vw, 3rem);
+            line-height: 1;
+            color: #f4fbff;
+        }
+
+        .game-over-copy {
+            margin: 0 0 24px;
+            font-size: 1.1rem;
+            color: var(--text-soft);
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        #restart-btn {
+            width: 100%;
+            padding: 18px 16px;
+            font-family: 'Audiowide', 'Exo 2', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        @media (max-width: 640px) {
+            #ui-layer {
+                padding: 16px;
+            }
+
+            #hud {
+                gap: 10px;
+            }
+
+            .hud-card {
+                padding: 10px 14px;
+                font-size: 0.92rem;
+            }
+
+            .mission-card {
+                min-width: 128px;
+            }
+
+            .feedback-strip {
+                min-height: 70px;
+                margin-bottom: 14px;
+            }
+
+            .feedback-gif {
+                width: 102px;
+                max-width: 33vw;
+                border-radius: 14px;
+            }
+
+            .game-over-card {
+                padding: 28px 22px;
+            }
+
+            .game-over-copy {
+                font-size: 1rem;
+            }
+        }
+    </style>
+
+    <script id="game-config" type="application/x-game-config">
+    {
+        "themeColor": { "type": "color", "label": "Card Back Color", "value": "#FF9F43" }
+    }
+    </script>
+</head>
+<body>
+    <!-- [agent-note][stage3] resolved-audio: loop + sfx mapped from catalogs/audios.json with gesture-safe playback -->
+    <audio id="bgm_main" data-editable="audio" data-label="Background Music" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3" preload="none" loop></audio>
+    <audio id="sfx_flip" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+    <audio id="sfx_match" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3" preload="auto"></audio>
+    <audio id="sfx_mismatch" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+    <audio id="sfx_win" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3" preload="auto"></audio>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="hud">
+                <div class="clay-panel hud-card">
+                    Signal Sweeps: <span id="moves-count" class="accent-text">0</span>
+                </div>
+                <div class="clay-panel hud-card mission-card">
+                    <span class="mission-label">Uplink Mood</span>
+                    <span id="status-text" class="mission-value">Calibrating</span>
+                </div>
+            </div>
+
+            <!-- [agent-note][stage3] resolved-gif: fail feedback + win celebration from catalogs/gifs.json kept off the playfield -->
+            <div class="feedback-strip" aria-hidden="true">
+                <img id="reaction-fail" class="feedback-gif" alt="" src="https://i.giphy.com/3o7aTskHEUdgCQAXde.webp">
+                <img id="reaction-win" class="feedback-gif" alt="" src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp">
+            </div>
+
+            <div id="game-over-screen" class="hidden">
+                <div class="clay-panel game-over-card">
+                    <p class="game-over-kicker">Archive Synced</p>
+                    <h2 class="game-over-title text-shadow-soft">All Signals Locked</h2>
+                    <p class="game-over-copy">You paired every beacon in <span id="final-moves" class="accent-text">0</span> sweeps.</p>
+                    <button id="restart-btn" class="clay-btn">Scan Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- System Variables ---
+        let canvas, ctx, ro;
+        let cw = 0, ch = 0, dpr = 1;
+        let initialized = false;
+        let gameState = 'PLAYING'; // PLAYING, GAMEOVER
+        let lastTime = 0;
+
+        // --- Game Variables ---
+        let cards = [];
+        let particles = [];
+        let flippedCards = [];
+        let isProcessing = false;
+        let matchTimer = 0;
+        let winTimer = 0;
+        let moves = 0;
+        let pairsMatched = 0;
+        
+        window.gameConfig = { themeColor: '#FF9F43' };
+
+        // --- Audio + Feedback System ---
+        let audioUnlocked = false;
+        const sfxCooldowns = {};
+        let feedbackTimer = null;
+
+        function safePlayAudio(el, volume = 1, { loop = false, reset = true } = {}) {
+            if (!el || !audioUnlocked) return;
+            try {
+                el.loop = loop;
+                el.volume = volume;
+                if (reset) el.currentTime = 0;
+                const playPromise = el.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {});
+                }
+            } catch (e) {}
+        }
+
+        function unlockAudio() {
+            if (audioUnlocked) return;
+            audioUnlocked = true;
+            playLoop();
+        }
+
+        function playLoop() {
+            const bgm = document.getElementById('bgm_main');
+            safePlayAudio(bgm, 0.2, { loop: true, reset: false });
+        }
+
+        function stopLoop() {
+            const bgm = document.getElementById('bgm_main');
+            if (!bgm) return;
+            try { bgm.pause(); } catch (e) {}
+        }
+
+        function playSfx(id, volume, minGap = 120) {
+            const now = performance.now();
+            if (sfxCooldowns[id] && now - sfxCooldowns[id] < minGap) return;
+            sfxCooldowns[id] = now;
+            safePlayAudio(document.getElementById(id), volume, { loop: false, reset: true });
+        }
+
+        function showReaction(type, duration = 900) {
+            const failEl = document.getElementById('reaction-fail');
+            const winEl = document.getElementById('reaction-win');
+            if (!failEl || !winEl) return;
+
+            failEl.classList.remove('visible');
+            winEl.classList.remove('visible');
+            if (feedbackTimer) clearTimeout(feedbackTimer);
+
+            const target = type === 'win' ? winEl : failEl;
+            target.classList.add('visible');
+            feedbackTimer = setTimeout(() => {
+                target.classList.remove('visible');
+            }, duration);
+        }
+
+        function setStatusText(text) {
+            const status = document.getElementById('status-text');
+            if (status) status.textContent = text;
+        }
+
+        function vibrate(style = 'light') {
+            try {
+                window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+                    action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+                    params: { style: style }
+                });
+            } catch(e){}
+        }
+
+        // --- Symbols Definition ---
+        const SYMBOLS = [
+            { id: 0, draw: drawCircle, color: '#ff6b7d', glyph: '◉', title: 'Pulse Core' },
+            { id: 1, draw: drawSquare, color: '#5ce1ff', glyph: '▣', title: 'Data Crate' },
+            { id: 2, draw: drawTriangle, color: '#4cffb2', glyph: '△', title: 'Vector Spike' },
+            { id: 3, draw: drawStar, color: '#ffd76a', glyph: '✦', title: 'Star Ping' },
+            { id: 4, draw: drawHeart, color: '#ff8be6', glyph: '♡', title: 'Echo Heart' },
+            { id: 5, draw: drawDiamond, color: '#7ab8ff', glyph: '◇', title: 'Prism Cache' },
+            { id: 6, draw: drawCross, color: '#7bf7ff', glyph: '✚', title: 'Cross Relay' },
+            { id: 7, draw: drawMoon, color: '#a887ff', glyph: '☾', title: 'Moon Cipher' }
+        ];
+
+        function drawCircle(ctx, r) { ctx.arc(0, 0, r, 0, Math.PI*2); }
+        function drawSquare(ctx, r) { ctx.roundRect(-r, -r, r*2, r*2, r*0.4); }
+        function drawTriangle(ctx, r) {
+            ctx.moveTo(0, -r);
+            ctx.lineTo(r, r);
+            ctx.lineTo(-r, r);
+            ctx.closePath();
+        }
+        function drawStar(ctx, r) {
+            for(let i=0; i<5; i++) {
+                ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*r, -Math.sin((18+i*72)/180*Math.PI)*r);
+                ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*r*0.5, -Math.sin((54+i*72)/180*Math.PI)*r*0.5);
+            }
+            ctx.closePath();
+        }
+        function drawHeart(ctx, r) {
+            ctx.moveTo(0, r*0.5);
+            ctx.bezierCurveTo(-r, -r*0.5, -r*1.5, -r*1.5, 0, -r*0.5);
+            ctx.bezierCurveTo(r*1.5, -r*1.5, r, -r*0.5, 0, r*0.5);
+        }
+        function drawDiamond(ctx, r) {
+            ctx.moveTo(0, -r*1.2);
+            ctx.lineTo(r*0.9, 0);
+            ctx.lineTo(0, r*1.2);
+            ctx.lineTo(-r*0.9, 0);
+            ctx.closePath();
+        }
+        function drawCross(ctx, r) {
+            const w = r*0.4;
+            ctx.moveTo(-w, -r); ctx.lineTo(w, -r); ctx.lineTo(w, -w);
+            ctx.lineTo(r, -w); ctx.lineTo(r, w); ctx.lineTo(w, w);
+            ctx.lineTo(w, r); ctx.lineTo(-w, r); ctx.lineTo(-w, w);
+            ctx.lineTo(-r, w); ctx.lineTo(-r, -w); ctx.lineTo(-w, -w);
+            ctx.closePath();
+        }
+        function drawMoon(ctx, r) {
+            ctx.arc(0, 0, r, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.arc(r*0.3, -r*0.2, r*0.9, 0, Math.PI*2);
+        }
+
+        // --- Core Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const configEl = document.getElementById('game-config');
+            if (configEl) {
+                try {
+                    const defs = JSON.parse(configEl.textContent);
+                    for (let k in defs) window.gameConfig[k] = defs[k].value;
+                } catch(e){}
+            }
+
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d', { alpha: false });
+
+            ro = new ResizeObserver(entries => {
+                const rect = entries[0].contentRect;
+                resize(rect.width, rect.height);
+            });
+            ro.observe(canvas);
+
+            window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+            document.getElementById('restart-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                handleGlobalInput(e);
+            });
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopLoop();
+                } else if (audioUnlocked && gameState === 'PLAYING') {
+                    playLoop();
+                }
+            });
+
+            setStatusText('Tap to start');
+        });
+
+        function resize(w, h) {
+            dpr = window.devicePixelRatio || 1;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            cw = w;
+            ch = h;
+            
+            if (!initialized) {
+                initGame();
+                initialized = true;
+                requestAnimationFrame(loop);
+            } else {
+                repositionCards();
+            }
+        }
+
+        function setState(newState) {
+            gameState = newState;
+            const goScreen = document.getElementById('game-over-screen');
+            const hud = document.getElementById('hud');
+            if (newState === 'PLAYING') {
+                goScreen.classList.add('hidden');
+                hud.style.opacity = '1';
+                if (audioUnlocked) playLoop();
+            } else if (newState === 'GAMEOVER') {
+                goScreen.classList.remove('hidden');
+                hud.style.opacity = '0';
+                document.getElementById('final-moves').innerText = moves;
+                stopLoop();
+                setStatusText('Archive synced');
+                showReaction('win', 2200);
+            }
+        }
+
+        function initGame() {
+            moves = 0;
+            pairsMatched = 0;
+            flippedCards = [];
+            isProcessing = false;
+            matchTimer = 0;
+            winTimer = 0;
+            particles = [];
+            document.getElementById('moves-count').innerText = moves;
+            setStatusText(audioUnlocked ? 'Sweep the signal grid' : 'Tap to start');
+            
+            let deck = [];
+            for(let i=0; i<8; i++) {
+                deck.push(SYMBOLS[i]);
+                deck.push(SYMBOLS[i]);
+            }
+            for(let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+
+            cards = [];
+            for(let i=0; i<16; i++) {
+                cards.push({
+                    id: i,
+                    symbol: deck[i],
+                    x: cw/2, y: ch/2,
+                    targetX: 0, targetY: 0,
+                    w: 0, h: 0,
+                    flipProgress: 0, targetFlip: 0,
+                    scale: 0, targetScale: 1,
+                    isMatched: false,
+                    isFlipped: false,
+                    shakeOffset: 0
+                });
+            }
+            repositionCards();
+            
+            cards.forEach((c, idx) => {
+                c.scale = 0;
+                setTimeout(() => { c.targetScale = 1; }, idx * 50);
+            });
+            
+            setState('PLAYING');
+        }
+
+        function repositionCards() {
+            const cols = 4;
+            const rows = 4;
+            const padding = Math.max(8, cw * 0.02);
+            const maxWidth = cw * 0.9;
+            const isCompactMobile = cw <= 640 || ch <= 760;
+            const topClearance = isCompactMobile ? 112 : 128;
+            const bottomClearance = isCompactMobile ? 118 : 144;
+            const maxHeight = Math.min(ch * 0.65, ch - topClearance - bottomClearance);
+            
+            const cardW = Math.min((maxWidth - padding*(cols-1)) / cols, 120);
+            const cardH = Math.min((maxHeight - padding*(rows-1)) / rows, 140);
+            
+            const gridHeight = rows * cardH + (rows - 1) * padding;
+            const startX = (cw - (cols * cardW + (cols-1)*padding)) / 2;
+            const startY = topClearance + Math.max(0, (ch - topClearance - bottomClearance - gridHeight) / 2);
+
+            cards.forEach((c, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                c.targetX = startX + col * (cardW + padding);
+                c.targetY = startY + row * (cardH + padding);
+                c.w = cardW;
+                c.h = cardH;
+                c.x = c.targetX;
+                c.y = c.targetY;
+            });
+        }
+
+        function handleGlobalInput(e) {
+            unlockAudio();
+            if (e.type !== 'pointerdown' && e.type !== 'click') return;
+            
+            if (gameState === 'GAMEOVER') {
+                if (e.target.id === 'restart-btn') {
+                    playSfx('sfx_flip', 0.45, 80);
+                    initGame();
+                }
+                return;
+            }
+
+            if (gameState === 'PLAYING' && e.type === 'pointerdown') {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                handleTap(x, y);
+            }
+        }
+
+        function handleTap(x, y) {
+            if (isProcessing) return;
+            
+            let tappedCard = null;
+            for (let i = cards.length - 1; i >= 0; i--) {
+                const c = cards[i];
+                if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) {
+                    tappedCard = c;
+                    break;
+                }
+            }
+
+            if (!tappedCard || tappedCard.isMatched || tappedCard.isFlipped) return;
+
+            tappedCard.targetFlip = 1;
+            tappedCard.isFlipped = true;
+            tappedCard.scale = 0.9;
+            flippedCards.push(tappedCard);
+            
+            playSfx('sfx_flip', 0.35, 60);
+            setStatusText(`Tracking ${tappedCard.symbol.title}`);
+            vibrate('light');
+
+            if (flippedCards.length === 2) {
+                moves++;
+                document.getElementById('moves-count').innerText = moves;
+                isProcessing = true;
+                matchTimer = 0.6;
+            }
+        }
+
+        function resolveMatch() {
+            const [c1, c2] = flippedCards;
+            if (c1.symbol.id === c2.symbol.id) {
+                c1.isMatched = true;
+                c2.isMatched = true;
+                c1.scale = 1.15; c1.targetScale = 1;
+                c2.scale = 1.15; c2.targetScale = 1;
+                playSfx('sfx_match', 0.42, 100);
+                vibrate('medium');
+                spawnParticles(c1.x + c1.w/2, c1.y + c1.h/2, c1.symbol.color);
+                spawnParticles(c2.x + c2.w/2, c2.y + c2.h/2, c2.symbol.color);
+                setStatusText(`Linked ${c1.symbol.title}`);
+                
+                pairsMatched++;
+                if (pairsMatched === 8) {
+                    winTimer = 1.0;
+                    playSfx('sfx_win', 0.54, 150);
+                    vibrate('heavy');
+                }
+            } else {
+                c1.targetFlip = 0; c1.isFlipped = false;
+                c2.targetFlip = 0; c2.isFlipped = false;
+                c1.shakeOffset = 1;
+                c2.shakeOffset = 1;
+                playSfx('sfx_mismatch', 0.38, 120);
+                showReaction('fail', 900);
+                setStatusText('Signal drift detected');
+                vibrate('light');
+            }
+            flippedCards = [];
+            isProcessing = false;
+        }
+
+        function spawnParticles(x, y, color) {
+            for(let i=0; i<8; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 50 + Math.random() * 100;
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1.0,
+                    color: color,
+                    size: 4 + Math.random() * 6
+                });
+            }
+        }
+
+        function update(dt) {
+            if (gameState === 'PLAYING') {
+                if (isProcessing && matchTimer > 0) {
+                    matchTimer -= dt;
+                    if (matchTimer <= 0) resolveMatch();
+                }
+
+                if (winTimer > 0) {
+                    winTimer -= dt;
+                    if (winTimer <= 0) setState('GAMEOVER');
+                }
+            }
+
+            cards.forEach(c => {
+                if (c.flipProgress !== c.targetFlip) {
+                    const dir = c.targetFlip > c.flipProgress ? 1 : -1;
+                    c.flipProgress += dir * dt * 6;
+                    if ((dir === 1 && c.flipProgress >= 1) || (dir === -1 && c.flipProgress <= 0)) {
+                        c.flipProgress = c.targetFlip;
+                    }
+                }
+                c.scale += (c.targetScale - c.scale) * dt * 12;
+                
+                if (c.shakeOffset > 0) {
+                    c.shakeOffset -= dt * 2;
+                    if (c.shakeOffset < 0) c.shakeOffset = 0;
+                }
+            });
+
+            particles.forEach(p => {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 200 * dt;
+                p.life -= dt * 1.5;
+            });
+            particles = particles.filter(p => p.life > 0);
+        }
+
+        function drawClayRect(x, y, w, h, radius, color, shadowColor, isPressed) {
+            const offset = isPressed ? 2 : 8;
+            const yPos = isPressed ? y + 6 : y;
+
+            ctx.fillStyle = shadowColor;
+            ctx.beginPath();
+            ctx.roundRect(x, yPos + offset, w, h, radius);
+            ctx.fill();
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(x, yPos, w, h, radius);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.beginPath();
+            ctx.roundRect(x, yPos, w, h * 0.15, radius);
+            ctx.fill();
+        }
+
+        function drawSignalFrame(x, y, w, h, color, active) {
+            const radius = Math.min(w, h) * 0.15;
+            ctx.save();
+            ctx.strokeStyle = active ? 'rgba(123, 247, 255, 0.85)' : 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = active ? 3 : 2;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, radius);
+            ctx.stroke();
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            const inset = Math.min(w, h) * 0.12;
+            ctx.beginPath();
+            ctx.moveTo(x + inset, y + inset * 0.65);
+            ctx.lineTo(x + inset * 2.1, y + inset * 0.65);
+            ctx.moveTo(x + w - inset * 2.1, y + inset * 0.65);
+            ctx.lineTo(x + w - inset, y + inset * 0.65);
+            ctx.moveTo(x + inset, y + h - inset * 0.65);
+            ctx.lineTo(x + inset * 2.1, y + h - inset * 0.65);
+            ctx.moveTo(x + w - inset * 2.1, y + h - inset * 0.65);
+            ctx.lineTo(x + w - inset, y + h - inset * 0.65);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawSignalGlyph(symbol, size, isMatched) {
+            ctx.save();
+            ctx.font = `${Math.round(size * 0.95)}px Audiowide, 'Exo 2', sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = symbol.color;
+            ctx.shadowBlur = isMatched ? 24 : 16;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(symbol.glyph, 0, size * 0.02);
+            ctx.restore();
+        }
+
+        function draw() {
+            const grad = ctx.createLinearGradient(0, 0, 0, ch);
+            grad.addColorStop(0, '#091528');
+            grad.addColorStop(0.55, '#08111f');
+            grad.addColorStop(1, '#040812');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, cw, ch);
+
+            ctx.save();
+            ctx.globalAlpha = 0.22;
+            for (let i = 0; i < 7; i++) {
+                const orbitX = cw * (0.12 + i * 0.14);
+                const orbitY = ch * (0.18 + (i % 2) * 0.13);
+                const orbitR = 16 + (i % 3) * 10;
+                const ring = ctx.createRadialGradient(orbitX, orbitY, 0, orbitX, orbitY, orbitR * 2.8);
+                ring.addColorStop(0, 'rgba(123, 247, 255, 0.2)');
+                ring.addColorStop(1, 'rgba(123, 247, 255, 0)');
+                ctx.fillStyle = ring;
+                ctx.beginPath();
+                ctx.arc(orbitX, orbitY, orbitR * 2.8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            cards.forEach(c => {
+                if (c.scale <= 0.01) return;
+                
+                ctx.save();
+                let shakeX = 0;
+                if (c.shakeOffset > 0) shakeX = Math.sin(c.shakeOffset * Math.PI * 8) * 6;
+                
+                ctx.translate(c.x + c.w/2 + shakeX, c.y + c.h/2);
+                ctx.scale(c.scale, c.scale);
+
+                const flipScale = Math.cos(c.flipProgress * Math.PI);
+                ctx.scale(flipScale, 1);
+
+                const isFront = c.flipProgress > 0.5;
+                const w = c.w;
+                const h = c.h;
+                const x = -w/2;
+                const y = -h/2;
+                const radius = Math.min(w, h) * 0.15;
+
+                if (isFront) {
+                    const bgColor = c.isMatched ? '#102844' : '#0d2139';
+                    drawClayRect(x, y, w, h, radius, bgColor, 'rgba(2,7,16,0.8)', c.isMatched);
+                    drawSignalFrame(x, y, w, h, c.symbol.color, c.isMatched);
+
+                    ctx.save();
+                    ctx.scale(Math.sign(flipScale), 1);
+
+                    const coreGlow = ctx.createRadialGradient(0, 0, 4, 0, 0, Math.min(w, h) * 0.34);
+                    coreGlow.addColorStop(0, 'rgba(255,255,255,0.42)');
+                    coreGlow.addColorStop(0.45, `${c.symbol.color}55`);
+                    coreGlow.addColorStop(1, 'rgba(255,255,255,0)');
+                    ctx.fillStyle = coreGlow;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, Math.min(w, h) * 0.34, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = c.symbol.color;
+                    ctx.lineWidth = Math.max(3, Math.min(w, h) * 0.04);
+                    ctx.shadowColor = c.symbol.color;
+                    ctx.shadowBlur = c.isMatched ? 18 : 10;
+                    ctx.beginPath();
+                    c.symbol.draw(ctx, Math.min(w, h) * 0.24);
+                    ctx.stroke();
+                    if (c.symbol.id !== 6 && c.symbol.id !== 7) {
+                        ctx.fillStyle = `${c.symbol.color}22`;
+                        ctx.fill();
+                    }
+
+                    drawSignalGlyph(c.symbol, Math.min(w, h) * 0.33, c.isMatched);
+                    ctx.restore();
+
+                } else {
+                    const themeColor = window.gameConfig.themeColor || '#7bf7ff';
+                    drawClayRect(x, y, w, h, radius, '#091426', 'rgba(2,7,16,0.8)', false);
+                    drawSignalFrame(x, y, w, h, themeColor, false);
+
+                    const pulse = ctx.createRadialGradient(0, 0, 2, 0, 0, Math.min(w,h) * 0.35);
+                    pulse.addColorStop(0, 'rgba(123,247,255,0.65)');
+                    pulse.addColorStop(0.5, 'rgba(123,247,255,0.12)');
+                    pulse.addColorStop(1, 'rgba(123,247,255,0)');
+                    ctx.fillStyle = pulse;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, Math.min(w,h) * 0.32, 0, Math.PI*2);
+                    ctx.fill();
+
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.font = `${Math.round(Math.min(w,h) * 0.18)}px Audiowide, system-ui, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('SYNC', 0, -Math.min(w,h) * 0.02);
+
+                    ctx.strokeStyle = themeColor;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-Math.min(w,h)*0.18, Math.min(w,h)*0.12);
+                    ctx.lineTo(Math.min(w,h)*0.18, Math.min(w,h)*0.12);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            });
+
+            particles.forEach(p => {
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+        }
+
+        function loop(timestamp) {
+            requestAnimationFrame(loop);
+            try {
+                if (!lastTime) lastTime = timestamp;
+                const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+                lastTime = timestamp;
+                
+                update(dt);
+                draw();
+            } catch (e) {
+                console.error("Loop error:", e);
+            }
+        }
+    </script>
+</body>
+</html>

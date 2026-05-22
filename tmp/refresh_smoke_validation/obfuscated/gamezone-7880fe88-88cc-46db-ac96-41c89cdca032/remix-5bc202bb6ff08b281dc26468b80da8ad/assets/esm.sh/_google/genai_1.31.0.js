@@ -1,0 +1,1 @@
+export*from'/@google/genai@1.31.0/es2022/genai.mjs';

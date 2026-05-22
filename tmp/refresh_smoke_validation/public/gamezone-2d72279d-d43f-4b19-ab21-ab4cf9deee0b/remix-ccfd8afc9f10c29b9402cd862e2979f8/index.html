@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Signal Garden 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- [agent-note][stage4] resolved-font: title -> Cinzel, ui -> Rajdhani using exact catalogs/fonts.json URLs -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sky-top: #071a22;
+            --sky-bottom: #12374a;
+            --mist: #89ecff;
+            --mint: #74f7ba;
+            --pond: #081117;
+            --panel: rgba(7, 26, 34, 0.72);
+            --panel-border: rgba(137, 236, 255, 0.5);
+            --panel-shadow: rgba(0, 0, 0, 0.34);
+            --status-text: #d9fef4;
+            --title-text: #effff9;
+            --accent: #74f7ba;
+            --accent-strong: #3ddca4;
+            --vine-dark: #0d5335;
+            --vine-mid: #19a86f;
+            --vine-glow: #8bf7d0;
+        }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background:
+            radial-gradient(circle at 20% 18%, rgba(116,247,186,0.14), transparent 30%),
+            radial-gradient(circle at 78% 14%, rgba(137,236,255,0.16), transparent 26%),
+            linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+            font-family: 'Rajdhani', sans-serif; }
+        body { color: #def7ee; }
+        #game-container { position: relative; width: 100%; height: 100%; user-select: none; overflow: hidden; touch-action: none; }
+        #game-container::before,
+        #game-container::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+        #game-container::before {
+            background:
+                radial-gradient(circle at 14% 78%, rgba(116,247,186,0.16), transparent 18%),
+                radial-gradient(circle at 84% 72%, rgba(137,236,255,0.13), transparent 20%);
+            opacity: 0.95;
+        }
+        #game-container::after {
+            inset: auto 0 0;
+            height: 34%;
+            background:
+                radial-gradient(ellipse at center, rgba(7,17,23,0), rgba(7,17,23,0.72) 70%),
+                repeating-linear-gradient(90deg, rgba(116,247,186,0.05) 0 2px, transparent 2px 34px);
+            opacity: 0.8;
+        }
+        canvas { position: relative; z-index: 1; display: block; touch-action: none; width: 100%; height: 100%; }
+        #ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: space-between; padding: calc(1rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) calc(1rem + env(safe-area-inset-left, 0px)); }
+        #hud { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 1rem; }
+        .hud-level,
+        .hud-status {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 10px 24px var(--panel-shadow), inset 0 0 0 1px rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .hud-level {
+            color: var(--title-text);
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-shadow: 0 0 10px rgba(137,236,255,0.2);
+            font-family: 'Cinzel', serif;
+            border-radius: 999px;
+            padding: 0.7rem 1rem 0.62rem;
+        }
+        .hud-status {
+            color: var(--status-text);
+            font-size: 0.86rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-align: right;
+            max-width: 16rem;
+            border-radius: 1rem;
+            padding: 0.72rem 0.9rem;
+            line-height: 1.15;
+        }
+        #game-over-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            background:
+                radial-gradient(circle at center, rgba(7,26,34,0.55), rgba(7,17,23,0.82)),
+                rgba(2, 10, 13, 0.28);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        #game-over-screen.hidden { display: none; }
+        .overlay-title {
+            color: var(--title-text);
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 400;
+            margin-bottom: 0.75rem;
+            font-family: 'Cinzel', serif;
+            letter-spacing: 0.08em;
+            text-align: center;
+            text-shadow: 0 0 18px rgba(137,236,255,0.35);
+        }
+        .overlay-subtitle {
+            color: #d4fff1;
+            font-size: 1rem;
+            margin-bottom: 1.75rem;
+            text-align: center;
+            max-width: 20rem;
+            line-height: 1.3;
+        }
+        .pointer-events-auto { pointer-events: auto; }
+        #restart-btn {
+            padding: 1rem 2.35rem;
+            background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+            color: #06201a;
+            border: 0;
+            border-radius: 999px;
+            font: 700 1rem 'Rajdhani', sans-serif;
+            letter-spacing: 0.16em;
+            box-shadow: 0 12px 28px rgba(61,220,164,0.35), inset 0 -2px 0 rgba(0,0,0,0.18);
+            cursor: pointer;
+            transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+            touch-action: manipulation;
+        }
+        #restart-btn:active { transform: scale(0.95); }
+        #restart-btn:hover { filter: brightness(1.05); box-shadow: 0 14px 30px rgba(61,220,164,0.42), inset 0 -2px 0 rgba(0,0,0,0.18); }
+        #feedback-reel {
+            position: absolute;
+            right: 1rem;
+            bottom: 1rem;
+            width: min(27vw, 8.5rem);
+            min-width: 4.5rem;
+            padding: 0.4rem;
+            border-radius: 1rem;
+            background: rgba(7, 26, 34, 0.52);
+            border: 1px solid rgba(137, 236, 255, 0.35);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+            opacity: 0;
+            transform: translateY(12px) scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        #feedback-reel.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        #feedback-reel img {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 0.8rem;
+        }
+        #feedback-caption {
+            margin-top: 0.35rem;
+            color: #effff9;
+            font: 700 0.72rem 'Rajdhani', sans-serif;
+            letter-spacing: 0.12em;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .floating { animation: float 3s ease-in-out infinite; }
+        @media (max-width: 640px) {
+            #hud { align-items: flex-start; gap: 0.6rem; }
+            .hud-level { font-size: 0.92rem; letter-spacing: 0.14em; padding: 0.62rem 0.9rem 0.56rem; }
+            .hud-status { font-size: 0.72rem; max-width: 11rem; padding: 0.58rem 0.74rem; }
+            #restart-btn { width: min(80vw, 18rem); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container" class="select-none">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-layer">
+        <div id="hud">
+            <div class="hud-level">BED <span id="level-display">1</span></div>
+            <div class="hud-status" id="status-text">Rotate each plot until the whole garden is irrigated.</div>
+        </div>
+        <div id="game-over-screen" class="hidden pointer-events-auto">
+            <div class="overlay-title">BED RESTORED</div>
+            <div class="overlay-subtitle">The water path is flowing through every plot. Tap to tend the next bed.</div>
+            <button id="restart-btn">NEXT BED</button>
+        </div>
+        <!-- [agent-note][stage3] resolved-gif: bloom/win feedback -> catalogs/gifs.json, compact reel kept off playfield -->
+        <div id="feedback-reel" aria-hidden="true">
+            <img id="feedback-gif" alt="Garden reaction loop">
+            <div id="feedback-caption">GARDEN FLOW</div>
+        </div>
+    </div>
+</div>
+
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/success/bloom -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="Background Music" src="https://gamezone-virid.vercel.app/assets/audios/ambience/ambience_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_rotate" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+<audio id="sfx_bloom" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3" preload="auto"></audio>
+<audio id="sfx_complete" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_restart" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3" preload="auto"></audio>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+const levelDisplay = document.getElementById('level-display');
+const statusText = document.getElementById('status-text');
+const gameOverScreen = document.getElementById('game-over-screen');
+const feedbackReel = document.getElementById('feedback-reel');
+const feedbackGif = document.getElementById('feedback-gif');
+const feedbackCaption = document.getElementById('feedback-caption');
+const bgm = document.getElementById('bgm_main');
+const sfxRotate = document.getElementById('sfx_rotate');
+const sfxBloom = document.getElementById('sfx_bloom');
+const sfxComplete = document.getElementById('sfx_complete');
+const sfxRestart = document.getElementById('sfx_restart');
+
+const STATUS_COPY = {
+    playing: 'Rotate each plot until the whole garden is irrigated.',
+    transition: 'Water is spreading to every plot...',
+    next: 'A larger bed is ready for careful watering.'
+};
+
+let cw = 0, ch = 0, dpr = window.devicePixelRatio || 1;
+let initialized = false;
+let gameState = 'PLAYING';
+let lastTime = 0;
+let time = 0;
+
+// Game Config
+window.gameConfig = {
+    themeColor: '#74f7ba',
+    inactiveColor: '#32586a',
+    bgStart: '#071a22',
+    bgEnd: '#12374a',
+    tileDepth: 12,
+    isoScale: 0.6,
+    glowColor: 'rgba(116, 247, 186, 0.32)',
+    leafColor: '#9effd8',
+    bloomColor: '#89ecff',
+    stemColor: '#0c6c48',
+    stemShadow: '#0a3d2c',
+    pondHighlight: '#dffef8'
+};
+
+// State
+let level = 1;
+let gridSize = 3;
+let grid = [];
+let transitionAlpha = 0;
+let audioCtx = null;
+let audioUnlocked = false;
+let lastBloomCount = 1;
+let feedbackTimer = null;
+const FEEDBACK_GIFS = {
+    bloom: { src: 'https://i.giphy.com/DX3i6ABlOz0mYVcLj9.webp', caption: 'PLOT BLOOM' },
+    win: { src: 'https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp', caption: 'BED RESTORED' }
+};
+
+function safePlay(media, volume = 1) {
+    if (!media) return;
+    try {
+        media.pause();
+        media.currentTime = 0;
+        media.volume = volume;
+        media.play().catch(() => {});
+    } catch (_) {}
+}
+
+function syncBgmForState() {
+    if (!audioUnlocked) return;
+    bgm.volume = gameState === 'GAMEOVER' ? 0.16 : 0.2;
+    if (document.hidden) {
+        bgm.pause();
+        return;
+    }
+    bgm.play().catch(() => {});
+}
+
+function unlockAudio() {
+    if (!audioUnlocked) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        audioUnlocked = true;
+    }
+    syncBgmForState();
+}
+
+function showFeedback(type, duration = 1600) {
+    const entry = FEEDBACK_GIFS[type];
+    if (!entry || !feedbackReel || !feedbackGif) return;
+    feedbackGif.src = entry.src;
+    feedbackCaption.textContent = entry.caption;
+    feedbackReel.classList.add('visible');
+    clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => feedbackReel.classList.remove('visible'), duration);
+}
+
+function vibrate(style = 'light') {
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0', params: { style }
+    });
+}
+
+const DIRS = [
+    { dx: 0, dy: -1, bit: 1, opp: 4 }, // UP
+    { dx: 1, dy: 0, bit: 2, opp: 8 },  // RIGHT
+    { dx: 0, dy: 1, bit: 4, opp: 1 },  // DOWN
+    { dx: -1, dy: 0, bit: 8, opp: 2 }  // LEFT
+];
+
+function getEffectiveMask(mask, rot) {
+    let r = Math.round(rot) % 4;
+    return ((mask << r) | (mask >> (4 - r))) & 15;
+}
+
+function generateLevel() {
+    gridSize = Math.min(7, 3 + Math.floor((level - 1) / 4));
+    grid = [];
+    lastBloomCount = 1;
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            grid.push({
+                x, y, mask: 0, rot: 0, targetRot: 0, powered: false,
+                floatOffset: Math.random() * Math.PI * 2
+            });
+        }
+    }
+
+    let visited = Array(gridSize * gridSize).fill(false);
+    let stack = [0];
+    visited[0] = true;
+
+    while (stack.length > 0) {
+        let currIdx = stack[stack.length - 1];
+        let cx = currIdx % gridSize;
+        let cy = Math.floor(currIdx / gridSize);
+        let unvisited = [];
+
+        for (let d of DIRS) {
+            let nx = cx + d.dx, ny = cy + d.dy;
+            if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize && !visited[ny * gridSize + nx]) {
+                unvisited.push({ x: nx, y: ny, dir: d });
+            }
+        }
+
+        if (unvisited.length > 0) {
+            let next = unvisited[Math.floor(Math.random() * unvisited.length)];
+            grid[cy * gridSize + cx].mask |= next.dir.bit;
+            grid[next.y * gridSize + next.x].mask |= next.dir.opp;
+            visited[next.y * gridSize + next.x] = true;
+            stack.push(next.y * gridSize + next.x);
+        } else {
+            stack.pop();
+        }
+    }
+
+    grid.forEach(cell => {
+        let r = Math.floor(Math.random() * 4);
+        cell.rot = cell.targetRot = r;
+    });
+
+    updatePower();
+}
+
+function updatePower() {
+    grid.forEach(c => c.powered = false);
+    let startIdx = Math.floor(gridSize / 2) * gridSize + Math.floor(gridSize / 2);
+    let queue = [startIdx];
+    grid[startIdx].powered = true;
+
+    let head = 0;
+    while (head < queue.length) {
+        let currIdx = queue[head++];
+        let cell = grid[currIdx];
+        let effMask = getEffectiveMask(cell.mask, cell.targetRot);
+
+        for (let i = 0; i < 4; i++) {
+            let d = DIRS[i];
+            if (effMask & d.bit) {
+                let nx = cell.x + d.dx, ny = cell.y + d.dy;
+                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
+                    let nextIdx = ny * gridSize + nx;
+                    let nCell = grid[nextIdx];
+                    if (!nCell.powered) {
+                        let nEffMask = getEffectiveMask(nCell.mask, nCell.targetRot);
+                        if (nEffMask & d.opp) {
+                            nCell.powered = true;
+                            queue.push(nextIdx);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+function toIso(x, y, z = 0) {
+    // Basic isometric projection
+    let ix = (x - y) * Math.cos(Math.PI / 6);
+    let iy = (x + y) * Math.sin(Math.PI / 6) - z;
+    return { x: ix, y: iy };
+}
+
+function drawTile(ctx, cell, size) {
+    const floatY = Math.sin(time * 2 + cell.floatOffset) * 5;
+    const pos = toIso(cell.x * size, cell.y * size, floatY);
+    const centerX = cw / 2 + pos.x;
+    const centerY = ch / 2 + pos.y;
+
+    const depth = window.gameConfig.tileDepth;
+    const color = cell.powered ? window.gameConfig.themeColor : window.gameConfig.inactiveColor;
+    const stemColor = cell.powered ? window.gameConfig.stemColor : '#183847';
+    const rimColor = cell.powered ? window.gameConfig.bloomColor : '#5a7a89';
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+
+    let p1 = toIso(-size / 2.2, -size / 2.2);
+    let p2 = toIso(size / 2.2, -size / 2.2);
+    let p3 = toIso(size / 2.2, size / 2.2);
+    let p4 = toIso(-size / 2.2, size / 2.2);
+
+    // Draw floating planter base
+    ctx.fillStyle = cell.powered ? '#0d5335' : '#27404d';
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(p4.x, p4.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.translate(0, -depth);
+
+    // Lily-pad top face
+    const tileGradient = ctx.createLinearGradient(0, p1.y, 0, p3.y);
+    tileGradient.addColorStop(0, cell.powered ? '#f3fffb' : '#d7e4ea');
+    tileGradient.addColorStop(1, cell.powered ? '#d7fff0' : '#aabfc8');
+    ctx.fillStyle = tileGradient;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(p4.x, p4.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = rimColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (cell.powered) {
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.shadowBlur = size * 0.2;
+        ctx.shadowColor = window.gameConfig.glowColor;
+        ctx.fillStyle = 'rgba(116, 247, 186, 0.08)';
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Content (vine paths)
+    ctx.save();
+    ctx.transform(Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), -Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0, 0);
+    ctx.rotate(cell.rot * Math.PI / 2);
+
+    ctx.lineCap = 'round';
+
+    const hs = size * 0.4;
+    if (cell.powered) {
+        ctx.strokeStyle = 'rgba(139, 247, 208, 0.16)';
+        ctx.lineWidth = size * 0.3;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = window.gameConfig.glowColor;
+        ctx.beginPath();
+        if (cell.mask & 1) { ctx.moveTo(0, 0); ctx.lineTo(0, -hs); }
+        if (cell.mask & 2) { ctx.moveTo(0, 0); ctx.lineTo(hs, 0); }
+        if (cell.mask & 4) { ctx.moveTo(0, 0); ctx.lineTo(0, hs); }
+        if (cell.mask & 8) { ctx.moveTo(0, 0); ctx.lineTo(-hs, 0); }
+        ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = stemColor;
+    ctx.lineWidth = size * 0.2;
+    ctx.beginPath();
+    if (cell.mask & 1) { ctx.moveTo(0, 0); ctx.lineTo(0, -hs); }
+    if (cell.mask & 2) { ctx.moveTo(0, 0); ctx.lineTo(hs, 0); }
+    if (cell.mask & 4) { ctx.moveTo(0, 0); ctx.lineTo(0, hs); }
+    if (cell.mask & 8) { ctx.moveTo(0, 0); ctx.lineTo(-hs, 0); }
+    ctx.stroke();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size * 0.1;
+    if (cell.powered) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = color;
+    }
+    ctx.beginPath();
+    if (cell.mask & 1) { ctx.moveTo(0, 0); ctx.lineTo(0, -hs); }
+    if (cell.mask & 2) { ctx.moveTo(0, 0); ctx.lineTo(hs, 0); }
+    if (cell.mask & 4) { ctx.moveTo(0, 0); ctx.lineTo(0, hs); }
+    if (cell.mask & 8) { ctx.moveTo(0, 0); ctx.lineTo(-hs, 0); }
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = cell.powered ? window.gameConfig.leafColor : '#7ba2ad';
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = cell.powered ? window.gameConfig.bloomColor : '#b6cad3';
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Character-first bloom marker on the active spring tile
+    if (cell.x === Math.floor(gridSize / 2) && cell.y === Math.floor(gridSize / 2)) {
+        ctx.save();
+        ctx.translate(0, -size * 0.48);
+        ctx.rotate(Math.sin(time * 1.6) * 0.12);
+        ctx.fillStyle = cell.powered ? '#ffe8fb' : '#dde9ef';
+        for (let petal = 0; petal < 5; petal++) {
+            ctx.rotate((Math.PI * 2) / 5);
+            ctx.beginPath();
+            ctx.ellipse(0, -size * 0.11, size * 0.08, size * 0.15, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = cell.powered ? '#ffd15c' : '#a8c0ca';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.065, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    ctx.restore();
+}
+
+function draw() {
+    let grad = ctx.createLinearGradient(0, 0, 0, ch);
+    grad.addColorStop(0, window.gameConfig.bgStart);
+    grad.addColorStop(1, window.gameConfig.bgEnd);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, cw, ch);
+
+    const size = Math.min(cw, ch) / (gridSize * 1.2);
+    
+    // Sort tiles for correct isometric layering (back to front)
+    const sortedGrid = [...grid].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    
+    sortedGrid.forEach(cell => {
+        drawTile(ctx, cell, size);
+    });
+
+    if (gameState === 'TRANSITION') {
+        ctx.fillStyle = `rgba(212, 255, 241, ${transitionAlpha * 0.55})`;
+        ctx.fillRect(0, 0, cw, ch);
+    }
+}
+
+function handleInput(e) {
+    unlockAudio();
+    if (gameState === 'GAMEOVER') {
+        resetGame();
+        return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const size = Math.min(cw, ch) / (gridSize * 1.2);
+    let clickedCell = null;
+    let minDist = Infinity;
+
+    grid.forEach(cell => {
+        const floatY = Math.sin(time * 2 + cell.floatOffset) * 5;
+        const pos = toIso(cell.x * size, cell.y * size, floatY - window.gameConfig.tileDepth);
+        const cx = cw / 2 + pos.x;
+        const cy = ch / 2 + pos.y;
+        const dist = Math.hypot(mx - cx, my - cy);
+        if (dist < size * 0.5 && dist < minDist) {
+            minDist = dist;
+            clickedCell = cell;
+        }
+    });
+
+    if (clickedCell) {
+        clickedCell.targetRot += 1;
+        safePlay(sfxRotate, 0.32);
+        vibrate('light');
+        updatePower();
+        checkWin();
+    }
+}
+
+function checkWin() {
+    const poweredCount = grid.filter(c => c.powered).length;
+    if (poweredCount > lastBloomCount) {
+        lastBloomCount = poweredCount;
+        safePlay(sfxBloom, 0.25);
+        showFeedback('bloom', 900);
+    }
+
+    if (poweredCount === grid.length) {
+        gameState = 'GAMEOVER';
+        statusText.innerText = STATUS_COPY.transition;
+        gameOverScreen.classList.remove('hidden');
+        safePlay(sfxComplete, 0.36);
+        showFeedback('win', 2200);
+        syncBgmForState();
+        vibrate('medium');
+    }
+}
+
+function resetGame() {
+    level = 1;
+    levelDisplay.innerText = level;
+    generateLevel();
+    gameState = 'PLAYING';
+    statusText.innerText = STATUS_COPY.playing;
+    gameOverScreen.classList.add('hidden');
+    safePlay(sfxRestart, 0.28);
+    syncBgmForState();
+}
+
+function nextLevel() {
+    level++;
+    levelDisplay.innerText = level;
+    generateLevel();
+    gameState = 'PLAYING';
+    statusText.innerText = STATUS_COPY.next;
+    transitionAlpha = 0;
+    gameOverScreen.classList.add('hidden');
+    safePlay(sfxRestart, 0.28);
+    syncBgmForState();
+}
+
+function gameLoop(timestamp) {
+    let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    time += dt;
+
+    if (gameState === 'PLAYING') {
+        grid.forEach(c => {
+            if (c.rot < c.targetRot) {
+                c.rot += dt * 8;
+                if (c.rot >= c.targetRot) c.rot = c.targetRot;
+            }
+        });
+    }
+
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+const ro = new ResizeObserver(entries => {
+    for (let entry of entries) {
+        cw = entry.contentRect.width;
+        ch = entry.contentRect.height;
+        canvas.width = cw * dpr;
+        canvas.height = ch * dpr;
+        canvas.style.width = cw + 'px';
+        canvas.style.height = ch + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (!initialized) {
+            generateLevel();
+            statusText.innerText = STATUS_COPY.playing;
+            initialized = true;
+            requestAnimationFrame(gameLoop);
+        }
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    ro.observe(canvas);
+    // [agent-note][stage4] repaired: mobile-action-risk | element: canvas/ui controls | action: scope gameplay taps to canvas so overlay button taps are not intercepted
+    canvas.addEventListener('pointerdown', handleInput);
+    document.getElementById('restart-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        nextLevel();
+    });
+    document.addEventListener('visibilitychange', syncBgmForState);
+});
+</script>
+</body>
+</html>

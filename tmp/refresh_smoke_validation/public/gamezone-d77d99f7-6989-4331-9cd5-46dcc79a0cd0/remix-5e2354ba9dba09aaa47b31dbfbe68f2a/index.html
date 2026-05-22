@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Rocket Launch Rush</title>
+    <!-- [agent-note][stage4] repaired: font-remap | action: removed mirrored font asset and switched UI fallback to catalog fonts -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap');
+        :root {
+            --bg-top: #040817;
+            --bg-bottom: #0a1434;
+            --panel: rgba(8, 16, 37, 0.86);
+            --panel-border: rgba(96, 231, 255, 0.28);
+            --hud-glow: rgba(75, 208, 255, 0.24);
+            --aqua: #74f5ff;
+            --aqua-strong: #35d8ff;
+            --violet: #8f78ff;
+            --green: #8bffb4;
+            --gold: #ffd76a;
+            --danger: #ff5f7a;
+            --text: #eef7ff;
+            --muted: #91a7c7;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(73, 191, 255, 0.16), transparent 24%),
+                radial-gradient(circle at 82% 12%, rgba(143, 120, 255, 0.18), transparent 20%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 22%, rgba(116, 245, 255, 0.12), transparent 0 12%),
+                radial-gradient(circle at 80% 30%, rgba(255, 215, 106, 0.08), transparent 0 10%),
+                radial-gradient(circle at 60% 75%, rgba(143, 120, 255, 0.12), transparent 0 14%);
+            opacity: 0.9;
+        }
+
+        #game-container::after {
+            content: "🚀";
+            position: absolute;
+            top: 12.5vh;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: clamp(2.8rem, 10vw, 4.8rem);
+            filter: drop-shadow(0 0 18px rgba(117, 245, 255, 0.45));
+            pointer-events: none;
+            animation: heroFloat 2.8s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 0;
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass to canvas if needed, but we use buttons */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 1;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            background: linear-gradient(180deg, rgba(1, 7, 20, 0.92), rgba(1, 7, 20, 0.12));
+            pointer-events: auto;
+        }
+
+        .hud-stack {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .hud-badge,
+        .history-pill,
+        .bet-input-row,
+        .controls-area {
+            border: 1px solid var(--panel-border);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 0 20px var(--hud-glow);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .hud-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: rgba(7, 17, 41, 0.72);
+            color: var(--aqua);
+            font-family: 'Press Start 2P', 'Rajdhani', system-ui, sans-serif;
+            font-size: 0.74rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .history-pill {
+            background: rgba(9, 20, 49, 0.75);
+            padding: 5px 9px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            margin-right: 4px;
+            color: var(--muted);
+            font-weight: 700;
+        }
+        .history-pill.high { color: var(--green); }
+        .history-pill.low { color: #ff8f8f; }
+
+        /* Center Display */
+        .center-display {
+            text-align: center;
+            pointer-events: none;
+            margin-bottom: auto;
+            margin-top: 10vh;
+            padding: 0 18px;
+            position: relative;
+        }
+        
+        #multiplier-display {
+            font-family: 'Press Start 2P', 'Rajdhani', system-ui, sans-serif;
+            font-size: clamp(2.1rem, 8vw, 3.5rem);
+            font-weight: 400;
+            color: var(--text);
+            text-shadow: 0 0 14px rgba(116, 245, 255, 0.35), 0 0 32px rgba(143, 120, 255, 0.2);
+            transition: color 0.2s;
+            letter-spacing: 0.04em;
+            line-height: 1;
+        }
+        
+        .status-text {
+            font-size: clamp(1rem, 3.8vw, 1.2rem);
+            color: #d7e4ff;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        #winnings-display {
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            font-size: clamp(1rem, 4vw, 1.45rem);
+            color: var(--green);
+            height: 30px;
+            text-shadow: 0 0 12px rgba(139, 255, 180, 0.45);
+        }
+
+        /* Bottom Controls */
+        .controls-area {
+            background: linear-gradient(180deg, rgba(9, 19, 46, 0.96), rgba(6, 12, 30, 0.98));
+            padding: 16px;
+            border-top: 1px solid rgba(116, 245, 255, 0.34);
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-bottom: max(18px, env(safe-area-inset-bottom));
+            border-top-left-radius: 18px;
+            border-top-right-radius: 18px;
+        }
+
+        .bet-input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            background: rgba(7, 17, 41, 0.82);
+            padding: 10px;
+            border-radius: 14px;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 16px 18px;
+            font-family: 'Press Start 2P', 'Rajdhani', system-ui, sans-serif;
+            font-size: clamp(0.92rem, 4.3vw, 1.1rem);
+            letter-spacing: 0.08em;
+            font-weight: 400;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.08);
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: transform 0.1s, filter 0.1s, box-shadow 0.18s ease;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        }
+        .action-btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+
+        .btn-bet {
+            background: linear-gradient(180deg, #8bffb4, #28d97d);
+            color: #02130a;
+            box-shadow: 0 8px 24px rgba(40, 217, 125, 0.32);
+        }
+        .btn-cashout {
+            background: linear-gradient(180deg, #ffe27f, #ffb938);
+            color: #221200;
+            box-shadow: 0 8px 24px rgba(255, 185, 56, 0.34);
+        }
+        .btn-wait {
+            background: linear-gradient(180deg, #445a88, #324566);
+            color: #b4c0da;
+            cursor: not-allowed;
+            box-shadow: 0 8px 22px rgba(31, 47, 76, 0.28);
+        }
+        .btn-red {
+            background: linear-gradient(180deg, #ff7a92, #ef476f);
+            color: #fff;
+            box-shadow: 0 8px 24px rgba(239, 71, 111, 0.34);
+        }
+
+        .chip-btn {
+            background: linear-gradient(180deg, rgba(87, 109, 151, 0.95), rgba(53, 71, 110, 0.95));
+            color: #fff;
+            border: 1px solid rgba(116, 245, 255, 0.18);
+            padding: 9px 13px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+            min-width: 56px;
+        }
+
+        .label-mini {
+            font-size: 0.72rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 700;
+        }
+
+        .value-strong {
+            font-size: 1.2rem;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .feedback-overlay {
+            position: absolute;
+            left: 50%;
+            bottom: calc(170px + env(safe-area-inset-bottom));
+            transform: translateX(-50%);
+            width: min(34vw, 150px);
+            height: min(34vw, 150px);
+            border-radius: 18px;
+            border: 1px solid rgba(116, 245, 255, 0.28);
+            background: rgba(4, 11, 28, 0.82);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 0 22px rgba(116, 245, 255, 0.16);
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .feedback-overlay.visible {
+            opacity: 0.96;
+            transform: translateX(-50%) translateY(-4px);
+        }
+
+        .feedback-overlay img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .feedback-caption {
+            position: absolute;
+            inset: auto 8px 8px 8px;
+            padding: 6px 8px;
+            border-radius: 10px;
+            background: rgba(3, 8, 20, 0.78);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-align: center;
+            color: var(--text);
+        }
+
+        /* Animations */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        @keyframes heroFloat {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-10px); }
+        }
+
+        .shake-anim { animation: shake 0.5s; }
+
+        @media (max-width: 480px) {
+            .top-bar {
+                padding: 12px 12px 0;
+                align-items: flex-start;
+            }
+
+            .hud-badge {
+                font-size: 0.66rem;
+                padding: 6px 10px;
+            }
+
+            .controls-area {
+                padding: 14px 12px;
+                padding-bottom: max(16px, env(safe-area-inset-bottom));
+            }
+
+            .bet-input-row {
+                padding: 9px;
+            }
+
+            .history-pill {
+                font-size: 0.72rem;
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="feedback-overlay" class="feedback-overlay" aria-live="polite">
+        <img id="feedback-gif" alt="Mission feedback animation">
+        <div id="feedback-caption" class="feedback-caption">Mission ready</div>
+    </div>
+
+    <div id="ui-layer">
+        <!-- Top HUD -->
+        <div class="top-bar">
+            <div class="hud-stack">
+                <div id="history-bar" style="display:flex;">
+                    <!-- History pills injected here -->
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div class="hud-badge">🛰️ Mission Funds</div>
+                <div id="balance-display" class="value-strong" style="margin-top:4px;">$1,000.00</div>
+            </div>
+        </div>
+
+        <!-- Center Game Info -->
+        <div class="center-display">
+            <div id="game-status" class="status-text">LOCK IN YOUR LAUNCH</div>
+            <div id="multiplier-display">1.00x</div>
+            <div id="winnings-display"></div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="controls-area">
+            <!-- Bet Amount Selector -->
+            <div class="bet-input-row" id="bet-controls">
+                <button class="chip-btn" onclick="game.adjustBet(-10)">-10</button>
+                <div style="text-align:center;">
+                    <div class="label-mini">Fuel Load</div>
+                    <div id="bet-amount" class="value-strong">$10</div>
+                </div>
+                <button class="chip-btn" onclick="game.adjustBet(10)">+10</button>
+            </div>
+
+            <!-- Main Action Button -->
+            <button id="main-btn" class="action-btn btn-bet">LAUNCH IN</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const MEDIA = {
+    fonts: {
+        primary: 'Rajdhani',
+        secondary: 'Press Start 2P'
+    },
+    audio: {
+        uiClick: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3',
+        start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3',
+        success: 'https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_02.mp3',
+        blocked: 'https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3',
+        crash: 'https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3',
+        warning: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3',
+        loop: 'https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3'
+    },
+    gifs: {
+        success: 'https://i.giphy.com/YUacjDxhp6cYteVMVf.webp',
+        fail: 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp'
+    }
+};
+
+/**
+ * AUDIO MANAGER
+ * Catalog-backed audio with safe gesture initialization and synth fallback.
+ */
+class MediaAudioManager {
+    constructor() {
+        this.ctx = null;
+        this.muted = false;
+        this.initialized = false;
+        this.lastPlayAt = {};
+        this.activeAudioElements = new Set();
+        this.loopAudio = null;
+        this.loopSource = null;
+        this.loopReady = false;
+    }
+
+    init() {
+        if (this.initialized) {
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume().catch(() => {});
+            }
+            if (this.loopAudio) {
+                this.loopAudio.play().catch(() => {});
+            }
+            return;
+        }
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = AudioContext ? new AudioContext() : null;
+        this.initialized = true;
+        this.prepareLoopElement();
+    }
+
+    prepareLoopElement() {
+        this.loopAudio = new Audio(MEDIA.audio.loop);
+        this.loopAudio.loop = true;
+        this.loopAudio.preload = 'auto';
+        this.loopAudio.volume = 0.18;
+        this.loopAudio.playsInline = true;
+        this.loopAudio.addEventListener('canplaythrough', () => {
+            this.loopReady = true;
+        }, { once: true });
+        this.loopAudio.addEventListener('error', () => {
+            this.loopReady = false;
+        }, { once: true });
+    }
+
+    playTone(freq, type, duration, vol = 0.08) {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playNoise(duration) {
+        if (this.muted || !this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        noise.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+    }
+
+    playBuffered(url, { volume = 0.22, debounce = 100, fallback } = {}) {
+        if (this.muted) return;
+        const now = performance.now();
+        const previous = this.lastPlayAt[url] || 0;
+        if (now - previous < debounce) return;
+        this.lastPlayAt[url] = now;
+
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        audio.volume = volume;
+        audio.playsInline = true;
+        const cleanup = () => this.activeAudioElements.delete(audio);
+        audio.addEventListener('ended', cleanup, { once: true });
+        audio.addEventListener('error', () => {
+            cleanup();
+            if (fallback) fallback();
+        }, { once: true });
+        this.activeAudioElements.add(audio);
+        audio.play().catch(() => {
+            cleanup();
+            if (fallback) fallback();
+        });
+    }
+
+    playUiClick() {
+        this.playBuffered(MEDIA.audio.uiClick, {
+            volume: 0.18,
+            debounce: 70,
+            fallback: () => this.playTone(880, 'triangle', 0.07, 0.06)
+        });
+    }
+
+    playStart() {
+        this.playBuffered(MEDIA.audio.start, {
+            volume: 0.2,
+            debounce: 200,
+            fallback: () => this.playTone(520, 'sawtooth', 0.12, 0.08)
+        });
+    }
+
+    playSuccess() {
+        this.playBuffered(MEDIA.audio.success, {
+            volume: 0.24,
+            debounce: 240,
+            fallback: () => {
+                this.playTone(523.25, 'sine', 0.18, 0.12);
+                setTimeout(() => this.playTone(659.25, 'sine', 0.24, 0.1), 90);
+            }
+        });
+    }
+
+    playBlocked() {
+        this.playBuffered(MEDIA.audio.blocked, {
+            volume: 0.18,
+            debounce: 180,
+            fallback: () => this.playTone(190, 'square', 0.12, 0.08)
+        });
+    }
+
+    playCrash() {
+        this.playBuffered(MEDIA.audio.crash, {
+            volume: 0.3,
+            debounce: 300,
+            fallback: () => this.playNoise(0.45)
+        });
+    }
+
+    playWarning() {
+        this.playBuffered(MEDIA.audio.warning, {
+            volume: 0.16,
+            debounce: 500,
+            fallback: () => this.playTone(320, 'sawtooth', 0.14, 0.07)
+        });
+    }
+
+    startLoop() {
+        if (this.muted || !this.loopAudio) return;
+        this.loopAudio.play().catch(() => {});
+    }
+
+    stopLoop() {
+        if (!this.loopAudio) return;
+        this.loopAudio.pause();
+        this.loopAudio.currentTime = 0;
+    }
+
+    setLoopIntensity(multiplier) {
+        if (!this.loopAudio) return;
+        const normalized = Math.min(Math.max((multiplier - 1) / 3, 0), 1);
+        this.loopAudio.volume = Math.min(0.2, 0.16 + normalized * 0.04);
+    }
+
+    stopAll() {
+        this.activeAudioElements.forEach((audio) => {
+            try {
+                audio.pause();
+                audio.currentTime = 0;
+            } catch {}
+        });
+        this.activeAudioElements.clear();
+    }
+}
+
+/**
+ * GAME LOGIC
+ */
+const STATES = {
+    IDLE: 0,
+    BETTING: 1,
+    FLYING: 2,
+    CRASHED: 3,
+    CASHOUT: 4
+};
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.audio = new MediaAudioManager();
+        
+        // Game State
+        this.state = STATES.IDLE;
+        this.balance = 1000;
+        this.currentBet = 10;
+        this.multiplier = 1.00;
+        this.crashPoint = 0;
+        this.history = [];
+        
+        // Animation Vars
+        this.planeX = 50;
+        this.planeY = this.height - 100;
+        this.trail = [];
+        this.particles = [];
+        this.gridOffset = 0;
+        
+        // Timers
+        this.bettingTime = 0;
+        this.startTime = 0;
+
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        // UI Refs
+        this.uiBalance = document.getElementById('balance-display');
+        this.uiMultiplier = document.getElementById('multiplier-display');
+        this.uiStatus = document.getElementById('game-status');
+        this.uiBtn = document.getElementById('main-btn');
+        this.uiBetAmount = document.getElementById('bet-amount');
+        this.uiWinnings = document.getElementById('winnings-display');
+        this.uiHistory = document.getElementById('history-bar');
+        this.feedbackOverlay = document.getElementById('feedback-overlay');
+        this.feedbackGif = document.getElementById('feedback-gif');
+        this.feedbackCaption = document.getElementById('feedback-caption');
+        this.feedbackTimer = null;
+        this.warningPlayed = false;
+
+        // Input
+        this.uiBtn.addEventListener('click', () => this.handleMainAction());
+        
+        // Start Loop
+        this.startBettingPhase();
+        requestAnimationFrame(() => this.loop());
+    }
+
+    resize() {
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+    }
+
+    adjustBet(amount) {
+        if (this.state !== STATES.BETTING) {
+            this.audio.playBlocked();
+            return;
+        }
+        this.audio.playUiClick();
+        this.currentBet += amount;
+        if (this.currentBet < 10) this.currentBet = 10;
+        if (this.currentBet > this.balance) this.currentBet = this.balance;
+        this.updateUI();
+    }
+
+    handleMainAction() {
+        this.audio.init(); // Ensure audio context starts on user interaction
+        this.audio.startLoop();
+
+        if (this.state === STATES.BETTING) {
+            // Player locks in bet
+            if (this.balance >= this.currentBet) {
+                this.balance -= this.currentBet;
+                this.playerBetPlaced = true;
+                this.uiBtn.className = "action-btn btn-wait";
+                this.uiBtn.innerText = "LAUNCH QUEUED";
+                this.uiBtn.disabled = true;
+                this.audio.playStart();
+                this.showFeedback('Mission queued', 'success');
+                this.updateUI();
+            } else {
+                this.audio.playBlocked();
+                this.showFeedback('Insufficient fuel', 'fail');
+            }
+        } else if (this.state === STATES.FLYING) {
+            if (this.playerBetPlaced && !this.playerCashedOut) {
+                this.cashOut();
+            }
+        }
+    }
+
+    startBettingPhase() {
+        this.state = STATES.BETTING;
+        this.multiplier = 1.00;
+        this.planeX = 50;
+        this.planeY = this.height - 50;
+        this.trail = [];
+        this.particles = [];
+        this.playerBetPlaced = false;
+        this.playerCashedOut = false;
+        
+        // Reset UI
+        this.uiBtn.className = "action-btn btn-bet";
+        this.uiBtn.innerText = "LOCK LAUNCH";
+        this.uiBtn.disabled = false;
+        this.uiStatus.innerText = "NEXT LAUNCH WINDOW";
+        this.uiMultiplier.style.color = "#fff";
+        this.uiWinnings.innerText = "";
+        
+        // 5 Second countdown
+        let countdown = 5;
+        this.uiMultiplier.innerText = countdown.toFixed(1) + "s";
+        
+        const interval = setInterval(() => {
+            if (this.state !== STATES.BETTING) {
+                clearInterval(interval);
+                return;
+            }
+            countdown -= 0.1;
+            this.uiMultiplier.innerText = Math.abs(countdown).toFixed(1) + "s";
+            
+            if (countdown <= 0) {
+                clearInterval(interval);
+                this.startFlight();
+            }
+        }, 100);
+    }
+
+    startFlight() {
+        this.state = STATES.FLYING;
+        this.startTime = Date.now();
+        this.audio.startLoop();
+        
+        // Determine Crash Point (Weighted Random)
+        // 1% chance of instant crash (1.0x)
+        // Distribution heavily skewed to 1.0 - 2.0
+        const r = Math.random();
+        // Simple algorithm: E = 100 / (100 - r*100) ... simplified
+        // Let's use a standard crash curve approximation
+        // Crash = 0.99 / (1 - random)
+        this.crashPoint = Math.floor((0.99 / (1 - r)) * 100) / 100;
+        if (this.crashPoint < 1.00) this.crashPoint = 1.00;
+        
+        // UI Update
+        if (this.playerBetPlaced) {
+            this.uiBtn.className = "action-btn btn-cashout";
+            this.uiBtn.innerText = "ABORT FOR REWARD";
+            this.uiBtn.disabled = false;
+        } else {
+            this.uiBtn.className = "action-btn btn-wait";
+            this.uiBtn.innerText = "AWAIT NEXT WINDOW";
+        }
+        
+        this.uiStatus.innerText = "ALTITUDE MULTIPLIER";
+        this.warningPlayed = false;
+        this.showFeedback(this.playerBetPlaced ? 'Boost engaged' : 'Launch live', 'success', 1400);
+    }
+
+    cashOut() {
+        this.playerCashedOut = true;
+        this.audio.playSuccess();
+        const winAmount = Math.floor(this.currentBet * this.multiplier);
+        this.balance += winAmount;
+        
+        this.uiBtn.className = "action-btn btn-wait";
+        this.uiBtn.innerText = "SAFE RECOVERY!";
+        this.uiWinnings.innerText = `+ $${winAmount}`;
+        this.showFeedback('Safe recovery', 'success', 1900);
+        this.updateUI();
+    }
+
+    crash() {
+        this.state = STATES.CRASHED;
+        this.audio.stopLoop();
+        this.audio.stopAll();
+        this.audio.playCrash();
+        
+        // Explosion particles
+        for(let i=0; i<30; i++) {
+            this.particles.push({
+                x: this.planeX,
+                y: this.planeY,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color: `hsl(${Math.random()*60}, 100%, 50%)`
+            });
+        }
+
+        // UI
+        this.uiMultiplier.style.color = "#ef4444"; // Red
+        this.uiStatus.innerText = "ROCKET LOST";
+        document.getElementById('multiplier-display').classList.add('shake-anim');
+        setTimeout(() => document.getElementById('multiplier-display').classList.remove('shake-anim'), 500);
+
+        if (this.playerBetPlaced && !this.playerCashedOut) {
+            this.uiBtn.className = "action-btn btn-red";
+            this.uiBtn.innerText = "MISSION FAILED";
+        }
+        this.showFeedback('Rocket lost', 'fail', 2200);
+
+        // Add to history
+        this.addToHistory(this.multiplier);
+
+        // Restart timer
+        setTimeout(() => this.startBettingPhase(), 3000);
+    }
+
+    addToHistory(val) {
+        this.history.unshift(val);
+        if (this.history.length > 5) this.history.pop();
+        
+        this.uiHistory.innerHTML = '';
+        this.history.forEach(h => {
+            const div = document.createElement('div');
+            div.className = `history-pill ${h >= 2.0 ? 'high' : 'low'}`;
+            div.innerText = h.toFixed(2) + 'x';
+            this.uiHistory.appendChild(div);
+        });
+    }
+
+    updateUI() {
+        this.uiBalance.innerText = `$${this.balance.toFixed(2)}`;
+        this.uiBetAmount.innerText = `$${this.currentBet}`;
+    }
+
+    showFeedback(message, type = 'success', duration = 1600) {
+        if (!this.feedbackOverlay || !this.feedbackGif) return;
+        const gifUrl = type === 'fail' ? MEDIA.gifs.fail : MEDIA.gifs.success;
+        this.feedbackGif.src = gifUrl;
+        this.feedbackCaption.textContent = message;
+        this.feedbackOverlay.classList.add('visible');
+        clearTimeout(this.feedbackTimer);
+        this.feedbackTimer = setTimeout(() => {
+            this.feedbackOverlay.classList.remove('visible');
+        }, duration);
+    }
+
+    loop() {
+        // Clear
+        this.ctx.fillStyle = '#0f172a';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Draw Grid (Moving Effect)
+        this.ctx.strokeStyle = '#1e293b';
+        this.ctx.lineWidth = 1;
+        this.gridOffset = (this.gridOffset + 2) % 50;
+        
+        this.ctx.beginPath();
+        // Vertical lines
+        for (let x = 0; x < this.width; x += 50) {
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.height);
+        }
+        // Horizontal lines (scrolling down to simulate up movement)
+        for (let y = this.gridOffset; y < this.height; y += 50) {
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.width, y);
+        }
+        this.ctx.stroke();
+
+        if (this.state === STATES.FLYING) {
+            // Update Multiplier
+            const elapsed = (Date.now() - this.startTime) / 1000;
+            // Exponential growth formula
+            this.multiplier = 1.00 + (Math.pow(elapsed, 2) * 0.1); 
+            
+            this.audio.setLoopIntensity(this.multiplier);
+            if (!this.warningPlayed && this.playerBetPlaced && this.multiplier >= Math.max(1.6, this.crashPoint * 0.72)) {
+                this.warningPlayed = true;
+                this.audio.playWarning();
+            }
+
+            // Check Crash
+            if (this.multiplier >= this.crashPoint) {
+                this.multiplier = this.crashPoint;
+                this.crash();
+            }
+
+            // Update UI Text
+            this.uiMultiplier.innerText = this.multiplier.toFixed(2) + "x";
+
+            // Move Plane visuals
+            // Curve logic: X moves linear, Y moves exponential
+            // We map this to screen coordinates
+            const progress = Math.min(elapsed / 10, 1); // Clamp visual progress
+            this.planeX = 50 + (this.width * 0.7 * progress);
+            this.planeY = (this.height - 100) - (this.height * 0.5 * Math.pow(progress, 1.5));
+
+            // Add trail
+            this.trail.push({x: this.planeX, y: this.planeY});
+            if (this.trail.length > 100) this.trail.shift();
+
+        }
+
+        // Draw Trail (Graph)
+        if (this.trail.length > 1) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.trail[0].x, this.trail[0].y);
+            for (let i = 1; i < this.trail.length; i++) {
+                this.ctx.lineTo(this.trail[i].x, this.trail[i].y);
+            }
+            this.ctx.strokeStyle = '#22c55e'; // Neon Green
+            this.ctx.lineWidth = 4;
+            this.ctx.lineCap = 'round';
+            this.ctx.stroke();
+            
+            // Fill under graph
+            this.ctx.lineTo(this.trail[this.trail.length-1].x, this.height);
+            this.ctx.lineTo(this.trail[0].x, this.height);
+            this.ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+            this.ctx.fill();
+        }
+
+        // Draw Plane (Triangle)
+        if (this.state !== STATES.CRASHED) {
+            this.ctx.save();
+            this.ctx.translate(this.planeX, this.planeY);
+            // Rotate based on slope
+            const angle = -Math.PI / 4 - (this.multiplier * 0.1); // Tilt up
+            this.ctx.rotate(Math.max(angle, -1.2)); 
+            
+            // Rocket Body
+            this.ctx.beginPath();
+            this.ctx.moveTo(10, 0);
+            this.ctx.lineTo(-10, 10);
+            this.ctx.lineTo(-10, -10);
+            this.ctx.closePath();
+            this.ctx.fillStyle = '#ef4444'; // Red
+            this.ctx.fill();
+            
+            // Flame
+            if (this.state === STATES.FLYING) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(-10, 5);
+                this.ctx.lineTo(-20 - Math.random()*10, 0);
+                this.ctx.lineTo(-10, -5);
+                this.ctx.fillStyle = '#fbbf24'; // Orange
+                this.ctx.fill();
+            }
+            this.ctx.restore();
+        }
+
+        // Draw Particles (Explosion)
+        if (this.state === STATES.CRASHED) {
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+                const p = this.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+                
+                if (p.life <= 0) {
+                    this.particles.splice(i, 1);
+                    continue;
+                }
+                
+                this.ctx.globalAlpha = p.life;
+                this.ctx.fillStyle = p.color;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.globalAlpha = 1.0;
+            }
+        }
+
+        requestAnimationFrame(() => this.loop());
+    }
+}
+
+// Init
+const game = new Game();
+
+</script>
+</body>
+</html>

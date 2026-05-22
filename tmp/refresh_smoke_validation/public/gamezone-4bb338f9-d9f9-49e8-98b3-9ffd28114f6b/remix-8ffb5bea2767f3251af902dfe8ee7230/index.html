@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Neon Dispatch: Intercept Protocol</title>
+    <!-- [agent-note][stage4] repaired-font-map: display-ui=Rajdhani, terminal-ui=VT323 via catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #040814;
+            --bg-mid: #0a1630;
+            --panel: rgba(10, 20, 42, 0.86);
+            --panel-border: rgba(98, 224, 255, 0.3);
+            --panel-glow: rgba(78, 194, 255, 0.22);
+            --text-main: #eef8ff;
+            --text-dim: #87a7c7;
+            --accent-cyan: #62e0ff;
+            --accent-gold: #ffc857;
+            --accent-red: #ff627d;
+            --accent-blue: #69a8ff;
+            --road-dark: #14233d;
+            --road-mid: #203559;
+            --shadow-heavy: 0 14px 32px rgba(0, 0, 0, 0.42);
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(98, 224, 255, 0.1), transparent 35%),
+                linear-gradient(180deg, #07101f 0%, var(--bg-deep) 100%);
+            color: var(--text-main);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 15%, rgba(255, 200, 87, 0.08), transparent 24%),
+                radial-gradient(circle at 82% 12%, rgba(105, 168, 255, 0.08), transparent 28%);
+            opacity: 0.9;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+        .hidden { display: none !important; }
+
+        .relative { position: relative; }
+        .absolute { position: absolute; }
+        .inset-0 { inset: 0; }
+        .top-1\/3 { top: 33.333333%; }
+        .bottom-8 { bottom: 2rem; }
+        .left-0 { left: 0; }
+        .left-4 { left: 1rem; }
+        .right-4 { right: 1rem; }
+        .w-full { width: 100%; }
+        .h-full { height: 100%; }
+        .max-w-sm { max-width: 24rem; }
+        .flex { display: flex; }
+        .flex-1 { flex: 1 1 0%; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .gap-3 { gap: 0.75rem; }
+        .gap-4 { gap: 1rem; }
+        .block { display: block; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .select-none { user-select: none; }
+        .transform { transform: translateZ(0); }
+        .transition-all { transition: all 0.3s ease; }
+        .transition-transform { transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background-color 0.18s ease; }
+        .duration-300 { transition-duration: 0.3s; }
+        .rounded, .rounded-sm { border-radius: 14px; }
+        .border, .border-t-2, .border-y-2, .border-b, .border-l-4, .border-r-4 { border-style: solid; }
+        .border { border-width: 1px; }
+        .border-t-2 { border-top-width: 2px; }
+        .border-y-2 { border-top-width: 2px; border-bottom-width: 2px; }
+        .border-b { border-bottom-width: 1px; }
+        .border-l-4 { border-left-width: 4px; }
+        .border-r-4 { border-right-width: 4px; }
+        .p-4 { padding: 1rem; }
+        .p-6 { padding: 1.25rem; }
+        .p-8 { padding: 1.5rem; }
+        .px-3 { padding-left: 0.85rem; padding-right: 0.85rem; }
+        .px-6 { padding-left: 1.25rem; padding-right: 1.25rem; }
+        .py-1 { padding-top: 0.45rem; padding-bottom: 0.45rem; }
+        .py-4 { padding-top: 0.95rem; padding-bottom: 0.95rem; }
+        .pb-2 { padding-bottom: 0.5rem; }
+        .pb-6 { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+        .pt-6 { padding-top: max(1.5rem, env(safe-area-inset-top)); }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-3 { margin-bottom: 0.75rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mb-8 { margin-bottom: 1.5rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mt-4 { margin-top: 1rem; }
+        .h-20 { height: 5rem; }
+        .w-2 { width: 0.5rem; }
+        .h-2 { height: 0.5rem; }
+
+        .glass {
+            background:
+                linear-gradient(180deg, rgba(17, 30, 60, 0.94), rgba(8, 16, 32, 0.92));
+            backdrop-filter: blur(8px);
+            border-color: var(--panel-border);
+            box-shadow: var(--shadow-heavy), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .crt-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 40;
+            background:
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%),
+                linear-gradient(90deg, rgba(98, 224, 255, 0.045), rgba(255, 200, 87, 0.02), rgba(255, 98, 125, 0.05));
+            background-size: 100% 2px, 3px 100%;
+            opacity: 0.85;
+        }
+
+        .scanline {
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(90deg, transparent, rgba(98, 224, 255, 0.32), transparent);
+            position: absolute;
+            animation: scan 6s linear infinite;
+            pointer-events: none;
+            z-index: 41;
+        }
+
+        @keyframes scan { 0% { top: -5%; } 100% { top: 105%; } }
+        @keyframes blink { 50% { opacity: 0; } }
+        @keyframes pulseRing {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 98, 125, 0.3); }
+            50% { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(255, 98, 125, 0); }
+        }
+
+        .typewriter::after { content: '█'; animation: blink 1s step-start infinite; color: var(--accent-gold); }
+
+        #game-container { background: linear-gradient(180deg, var(--bg-mid), var(--bg-deep)); }
+        #ui-layer { pointer-events: none; }
+        #ui-layer > * { pointer-events: auto; }
+
+        .noir-text {
+            font-family: 'VT323', monospace;
+            text-shadow: 0 0 8px rgba(98, 224, 255, 0.18);
+            letter-spacing: 0.05em;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            z-index: 6;
+            width: min(26vw, 120px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 14px;
+            border: 1px solid rgba(98, 224, 255, 0.35);
+            background: rgba(3, 8, 20, 0.72);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+            opacity: 0;
+            transform: scale(0.85);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            pointer-events: none;
+        }
+
+        .feedback-gif.active {
+            opacity: 0.95;
+            transform: scale(1);
+        }
+
+        #gif-alert {
+            top: clamp(5rem, 18vh, 8.5rem);
+            right: 1rem;
+        }
+
+        #gif-outcome {
+            bottom: clamp(7rem, 18vh, 10.5rem);
+            left: 1rem;
+        }
+
+        #hud {
+            position: relative;
+            z-index: 3;
+        }
+
+        #hud .glass,
+        #timer-display {
+            min-width: 112px;
+        }
+
+        #hud span:last-child,
+        #dialogue-box,
+        #go-title,
+        #restart-btn,
+        #btn-arrest,
+        #btn-shoot {
+            text-transform: uppercase;
+        }
+
+        #hud .glass span:first-child,
+        #timer-display span:first-child,
+        #dialogue-box .text-amber-600,
+        #action-controls .text-slate-500 {
+            font-size: 0.7rem;
+            letter-spacing: 0.22em;
+        }
+
+        #dialogue-box {
+            border-color: rgba(255, 200, 87, 0.5);
+            box-shadow: var(--shadow-heavy), 0 0 24px rgba(255, 200, 87, 0.12);
+        }
+
+        #dialogue-box::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(255, 200, 87, 0.07), transparent 55%);
+        }
+
+        #action-controls {
+            z-index: 5;
+        }
+
+        /* [agent-note][stage2] preserve: control-zone | reason: already mobile-safe */
+        #action-controls button,
+        #restart-btn {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            letter-spacing: 0.08em;
+            box-shadow: var(--shadow-heavy);
+        }
+
+        #btn-arrest {
+            background: linear-gradient(180deg, rgba(8, 39, 67, 0.95), rgba(10, 24, 42, 0.95));
+            color: #8be7ff;
+        }
+
+        #btn-shoot {
+            background: linear-gradient(180deg, rgba(72, 14, 28, 0.95), rgba(36, 8, 16, 0.95));
+            color: #ff8ba2;
+        }
+
+        #btn-arrest:active,
+        #btn-shoot:active,
+        #restart-btn:active {
+            transform: scale(0.96);
+            filter: brightness(1.08);
+        }
+
+        #game-over-screen {
+            padding: 1rem;
+        }
+
+        /* [agent-note][stage2] visual-intent: neon-arcade dispatch panels | scope: menus,hud */
+        #game-over-screen .glass {
+            max-height: min(88vh, 32rem);
+            overflow-y: auto;
+            border-color: rgba(105, 168, 255, 0.28);
+        }
+
+        #go-icon {
+            filter: drop-shadow(0 0 16px rgba(98, 224, 255, 0.16));
+        }
+
+        .animate-pulse {
+            animation: pulseRing 1.8s ease-in-out infinite;
+        }
+
+        .bg-black\/95 { background: rgba(0, 0, 0, 0.95); }
+        .backdrop-blur-md { backdrop-filter: blur(10px); }
+        .bg-slate-950 { background: #020617; }
+        .bg-slate-800 { background: rgba(15, 23, 42, 0.96); }
+        .active\:bg-slate-700:active { background: rgba(30, 41, 59, 0.96); }
+        .text-slate-100 { color: #f1f5f9; }
+        .text-slate-200 { color: #e2e8f0; }
+        .text-slate-400 { color: var(--text-dim); }
+        .text-slate-500 { color: #6f88a9; }
+        .text-amber-500 { color: var(--accent-gold); }
+        .text-amber-600 { color: #ffb84d; }
+        .text-red-500 { color: var(--accent-red); }
+        .text-blue-400 { color: #7adfff; }
+        .text-blue-500 { color: #7aa8ff; }
+        .border-slate-600 { border-color: rgba(148, 163, 184, 0.3); }
+        .border-slate-700 { border-color: rgba(100, 116, 139, 0.35); }
+        .border-amber-600 { border-color: rgba(255, 184, 77, 0.65); }
+        .border-red-900 { border-color: rgba(127, 29, 29, 0.7); }
+        .bg-red-500 { background: var(--accent-red); }
+        .font-bold { font-weight: 700; }
+        .font-mono { font-family: 'VT323', monospace; }
+        .uppercase { text-transform: uppercase; }
+        .tracking-widest { letter-spacing: 0.18em; }
+        .tracking-tighter { letter-spacing: -0.03em; }
+        .leading-relaxed { line-height: 1.55; }
+        .text-xs { font-size: 0.76rem; }
+        .text-sm { font-size: 0.95rem; }
+        .text-lg { font-size: 1.2rem; }
+        .text-xl { font-size: 1.35rem; }
+        .text-2xl { font-size: 1.45rem; }
+        .text-4xl { font-size: clamp(1.7rem, 5vw, 2.2rem); }
+        .text-6xl { font-size: clamp(2.8rem, 11vw, 4rem); }
+        .hover\:bg-amber-600:hover { background: #d99225; }
+        .bg-amber-700 { background: linear-gradient(180deg, #b97716, #8b5b10); }
+        .text-amber-100 { color: #fff5d6; }
+        .grayscale { filter: grayscale(1); }
+        .opacity-80 { opacity: 0.8; }
+        .shadow-lg { box-shadow: var(--shadow-heavy); }
+        .shadow-blue-900\/20, .shadow-red-900\/20 { box-shadow: var(--shadow-heavy); }
+        .p-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+        @media (max-width: 640px) {
+            #hud {
+                padding: 0.85rem;
+                padding-top: max(1rem, env(safe-area-inset-top));
+            }
+
+            #hud .glass,
+            #timer-display {
+                min-width: 96px;
+                padding-left: 0.7rem;
+                padding-right: 0.7rem;
+            }
+
+            #dialogue-box {
+                top: 28%;
+                left: 0.85rem;
+                right: 0.85rem;
+                padding: 1rem;
+            }
+
+            #dialogue-text {
+                font-size: 1rem;
+            }
+
+            #action-controls {
+                bottom: 0.8rem;
+                padding-left: 0.85rem;
+                padding-right: 0.85rem;
+                padding-bottom: max(0.9rem, env(safe-area-inset-bottom));
+            }
+
+            #action-controls button {
+                height: 4.5rem;
+                font-size: 1.15rem;
+            }
+
+            #game-over-screen .glass {
+                padding: 1.1rem;
+            }
+
+            .feedback-gif {
+                width: min(32vw, 94px);
+            }
+
+            #gif-alert {
+                top: max(4.75rem, env(safe-area-inset-top) + 3.75rem);
+                right: 0.85rem;
+            }
+
+            #gif-outcome {
+                bottom: max(6.25rem, env(safe-area-inset-bottom) + 5.25rem);
+                left: 0.85rem;
+            }
+
+            #restart-btn {
+                font-size: 1rem;
+                padding-top: 0.9rem;
+                padding-bottom: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Asset Declarations -->
+<img id="asset_player" data-editable="image" data-label="Detective Icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3QgeD0iMjAiIHk9IjEwIiB3aWR0aD0iMjQiIGhlaWdodD0iMTUiIGZpbGw9IiMzMzMiLz48cmVjdCB4PSIxMCIgeT0iMjIiIHdpZHRoPSI0NCIgaGVpZ2h0PSI1IiBmaWxsPSIjMzMzIi8+PC9zdmc+" hidden>
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/fail/win/combat mapped via catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="Gameplay Music" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="none" loop></audio>
+<audio id="sfx_ring" data-editable="audio" data-label="Dispatch Alert" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+<audio id="sfx_collision" data-editable="audio" data-label="Interceptor Collision" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3" preload="auto"></audio>
+<audio id="sfx_confirm" data-editable="audio" data-label="Confirm Action" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_success" data-editable="audio" data-label="Mission Success" src="https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3" preload="auto"></audio>
+<audio id="sfx_fail" data-editable="audio" data-label="Mission Failure" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "chaseSpeed": { "type": "number", "label": "Chase Speed", "value": 100, "min": 60, "max": 150 },
+    "reactionTime": { "type": "number", "label": "Arrest Time (s)", "value": 2.0, "min": 1.0, "max": 5.0 },
+    "rainIntensity": { "type": "number", "label": "Rain Intensity", "value": 50, "min": 10, "max": 100 }
+}
+</script>
+
+<!-- Game Container -->
+<div id="game-container" class="relative w-full h-full select-none bg-slate-950">
+    <canvas id="gameCanvas"></canvas>
+    <div class="crt-overlay"></div>
+    <div class="scanline"></div>
+    <!-- [agent-note][stage3] resolved-gif: alert + outcome overlays use catalogs/gifs.json and stay off core controls -->
+    <img id="gif-alert" class="feedback-gif" src="https://i.giphy.com/wBvdVGaSsamOxPy5qY.webp" alt="Dispatch alert feedback overlay">
+    <img id="gif-outcome" class="feedback-gif" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" alt="Outcome feedback overlay">
+    
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute inset-0 z-50 flex flex-col justify-between p-safe">
+        
+        <!-- Top HUD -->
+        <div id="hud" class="w-full flex justify-between p-4 pt-6">
+            <div class="glass px-3 py-1 rounded-sm border-l-4 border-amber-600">
+                <span class="text-xs text-slate-400 block tracking-widest">MISSION ID</span>
+                <span class="text-xl text-amber-500 font-bold tracking-tighter">NX-4092</span>
+            </div>
+            <div id="timer-display" class="glass px-3 py-1 rounded-sm border-r-4 border-red-900 hidden">
+                <span class="text-xs text-slate-400 block tracking-widest text-right">TIME</span>
+                <span id="phase-timer" class="text-xl text-red-500 font-mono font-bold">00:00</span>
+            </div>
+        </div>
+
+        <!-- Dialogue Box -->
+        <div id="dialogue-box" class="hidden absolute top-1/3 left-4 right-4 glass p-6 border-t-2 border-amber-600 transform transition-all duration-300">
+            <div class="flex items-center gap-3 mb-3 border-b border-slate-700 pb-2">
+                <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                <span class="text-amber-600 text-xs font-bold uppercase tracking-widest">Dispatch Burst</span>
+            </div>
+            <div id="dialogue-text" class="text-lg text-slate-200 noir-text leading-relaxed typewriter"></div>
+            <div class="text-right text-xs text-slate-500 mt-4 animate-pulse">TAP TO LAUNCH >></div>
+        </div>
+
+        <!-- Action Controls -->
+        <div id="action-controls" class="hidden absolute bottom-8 left-0 w-full px-6 pb-6">
+            <div class="flex gap-4">
+                <button id="btn-arrest" class="flex-1 h-20 bg-slate-800 rounded border border-slate-600 text-2xl font-bold text-blue-400 active:bg-slate-700 active:scale-95 transition-transform shadow-lg shadow-blue-900/20">
+                    TAG
+                </button>
+                <button id="btn-shoot" class="flex-1 h-20 bg-slate-800 rounded border border-slate-600 text-2xl font-bold text-red-500 active:bg-slate-700 active:scale-95 transition-transform shadow-lg shadow-red-900/20">
+                    BLAST
+                </button>
+            </div>
+            <div class="text-center mt-2 text-xs text-slate-500 uppercase tracking-widest">Lock your response</div>
+        </div>
+
+        <!-- Game Over -->
+        <div id="game-over-screen" class="hidden absolute inset-0 flex items-center justify-center bg-black/95 backdrop-blur-md">
+            <div class="glass p-8 w-full max-w-sm text-center border-y-2 border-slate-700">
+                <div id="go-icon" class="text-6xl mb-4 grayscale opacity-80"></div>
+                <h2 id="go-title" class="text-4xl font-bold text-slate-100 mb-2 tracking-tighter uppercase"></h2>
+                <p id="go-msg" class="text-slate-400 noir-text text-sm mb-8"></p>
+                <button id="restart-btn" class="w-full py-4 bg-amber-700 text-amber-100 font-bold text-lg tracking-widest hover:bg-amber-600 active:scale-95 transition-all uppercase">
+                    Reboot Run
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/** 
+ * §0 CORE SYSTEMS 
+ */
+const CONFIG_DEFS = JSON.parse(document.getElementById('game-config').textContent);
+window.gameConfig = Object.fromEntries(Object.entries(CONFIG_DEFS).map(([k, v]) => [k, v.value]));
+window.updateGameConfig = (k, v) => { if(window.gameConfig[k] !== undefined) window.gameConfig[k] = v; };
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+let cw = 0, ch = 0, dpr = 1;
+let lastTime = 0;
+let initialized = false;
+let gameState = 'OFFICE'; // OFFICE, DIALOGUE, DRIVING, ARREST, GAMEOVER
+let stateTimer = 0;
+let phaseTime = 0;
+
+// Entities
+let particles = [];
+let entities = [];
+let player = { x: 0, y: 0, w: 0, h: 0, shaking: false };
+let suspect = null;
+let shakeIntensity = 0;
+
+/**
+ * §1 AUDIO ENGINE (Web Audio API)
+ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const audioBuffers = {};
+const bgm = document.getElementById('bgm_main');
+const gifAlert = document.getElementById('gif-alert');
+const gifOutcome = document.getElementById('gif-outcome');
+let isMuted = false;
+let ringLoopSource = null;
+let bgmStarted = false;
+let audioInitialized = false;
+let activeSfx = new Map();
+let gifTimers = {};
+
+async function initAudio() {
+    if (audioInitialized) return;
+    audioInitialized = true;
+    const load = async (id, url) => {
+        try {
+            const res = await fetch(url);
+            const buf = await res.arrayBuffer();
+            audioBuffers[id] = await audioCtx.decodeAudioData(buf);
+        } catch(e) { console.warn('Audio fail:', id); }
+    };
+    await Promise.all([...document.querySelectorAll('audio')].map(el => load(el.id, el.src)));
+}
+
+function playSfx(id, rate=1, vol=1, loop=false) {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    if (activeSfx.has(id) && !loop) {
+        const existing = activeSfx.get(id);
+        try { existing.stop(0); } catch (e) {}
+        activeSfx.delete(id);
+    }
+    const buf = audioBuffers[id];
+    if (!buf) { synthesizeSfx(id); return null; }
+    
+    const src = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    src.loop = loop;
+    gain.gain.value = vol;
+    src.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.onended = () => {
+        if (activeSfx.get(id) === src) activeSfx.delete(id);
+    };
+    src.start(0);
+    if (loop || vol <= 0.6) activeSfx.set(id, src);
+    return src;
+}
+
+function stopLoop(sourceRef) {
+    if (!sourceRef) return null;
+    try { sourceRef.stop(0); } catch (e) {}
+    return null;
+}
+
+function ensureBgm() {
+    if (bgmStarted) return;
+    bgmStarted = true;
+    playSfx('bgm_main', 1, 0.28, true);
+}
+
+function syncAudioForState() {
+    if (gameState === 'GAMEOVER') {
+        ringLoopSource = stopLoop(ringLoopSource);
+        return;
+    }
+    if (gameState === 'OFFICE' || gameState === 'DRIVING' || gameState === 'ARREST' || gameState === 'DIALOGUE') {
+        ensureBgm();
+    }
+}
+
+function showGif(target, activeSrc, duration = 1500) {
+    if (!target) return;
+    if (gifTimers[target.id]) clearTimeout(gifTimers[target.id]);
+    target.src = activeSrc;
+    target.classList.add('active');
+    gifTimers[target.id] = setTimeout(() => {
+        target.classList.remove('active');
+    }, duration);
+}
+
+function synthesizeSfx(type) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    
+    if (type === 'shoot') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.2);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    } else {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    }
+}
+
+function vibrate(style) {
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'vib-'+Date.now(), version: '1.0',
+        params: { style }
+    });
+}
+
+/**
+ * §2 GAME LOGIC & STATE
+ */
+function initGame() {
+    initialized = true;
+    startPhase('OFFICE');
+}
+
+function startPhase(phase) {
+    gameState = phase;
+    stateTimer = 0;
+    entities = [];
+    particles = [];
+    
+    // UI Reset
+    ['dialogue-box','action-controls','game-over-screen','timer-display'].forEach(id => 
+        document.getElementById(id).classList.add('hidden'));
+    document.getElementById('hud').classList.remove('hidden');
+
+    if (phase === 'OFFICE') {
+        // Setup Office Scene
+        player = { x: cw/2, y: ch*0.6, w: 100, h: 100, shaking: false }; // Phone is focus
+        createRain(100);
+        ringLoopSource = stopLoop(ringLoopSource);
+    } else if (phase === 'DRIVING') {
+        player = { x: cw/2, y: ch-120, w: 40, h: 70, vx: 0 };
+        phaseTime = 15; // 15s chase
+        document.getElementById('timer-display').classList.remove('hidden');
+    } else if (phase === 'ARREST') {
+        suspect = { x: cw/2, y: ch*0.4, w: 60, h: 120, frame: 0 };
+        phaseTime = window.gameConfig.reactionTime;
+        document.getElementById('action-controls').classList.remove('hidden');
+        document.getElementById('timer-display').classList.remove('hidden');
+    }
+}
+
+function createRain(count) {
+    for(let i=0; i<count; i++) {
+        particles.push({
+            x: Math.random() * cw,
+            y: Math.random() * ch,
+            vy: 10 + Math.random() * 20,
+            l: 5 + Math.random() * 10,
+            type: 'rain'
+        });
+    }
+}
+
+function update(dt) {
+    stateTimer += dt;
+
+    // Phase: OFFICE
+    if (gameState === 'OFFICE') {
+        if (stateTimer > 1.5 && !player.shaking) {
+            player.shaking = true;
+            if (!ringLoopSource) ringLoopSource = playSfx('sfx_ring', 1, 0.34, true);
+            showGif(gifAlert, 'https://i.giphy.com/wBvdVGaSsamOxPy5qY.webp', 2200);
+            vibrate('medium');
+        }
+        // Rain update
+        particles.forEach(p => {
+            if(p.type === 'rain') {
+                p.y += p.vy * 60 * dt;
+                if(p.y > ch) p.y = -20;
+            }
+        });
+    }
+
+    // Phase: DRIVING
+    else if (gameState === 'DRIVING') {
+        phaseTime -= dt;
+        document.getElementById('phase-timer').innerText = `00:${Math.ceil(phaseTime).toString().padStart(2,'0')}`;
+        
+        // Player Movement
+        const targetX = Math.max(30, Math.min(cw-30, pointerX));
+        player.x += (targetX - player.x) * 5 * dt;
+
+        // Road Particles (Lines)
+        if (Math.random() < 0.2) {
+            particles.push({ x: cw/3, y: -50, vy: window.gameConfig.chaseSpeed * 4, type: 'road', h: 40 });
+            particles.push({ x: cw*2/3, y: -50, vy: window.gameConfig.chaseSpeed * 4, type: 'road', h: 40 });
+        }
+        
+        // Traffic
+        if (Math.random() < 0.02 * window.gameConfig.chaseSpeed/100) {
+            entities.push({ 
+                x: Math.random() > 0.5 ? cw*0.25 : cw*0.75, 
+                y: -100, w: 40, h: 70, type: 'car', color: '#ef4444' 
+            });
+        }
+
+        // Update Entities
+        for (let i = entities.length-1; i>=0; i--) {
+            let e = entities[i];
+            e.y += window.gameConfig.chaseSpeed * 3 * dt;
+            
+            // Collision
+            if (Math.abs(e.x - player.x) < 35 && Math.abs(e.y - player.y) < 60) {
+                shakeScreen(20);
+                playSfx('sfx_collision', 1, 0.55);
+                showGif(gifOutcome, 'https://i.giphy.com/roB5nN2qNNfhUKcprN.webp', 1800);
+                gameOver(false, "RUN LOST", "Your interceptor clipped civilian traffic.");
+            }
+            if (e.y > ch+100) entities.splice(i, 1);
+        }
+
+        if (phaseTime <= 0) startPhase('ARREST');
+    }
+
+    // Phase: ARREST
+    else if (gameState === 'ARREST') {
+        phaseTime -= dt;
+        document.getElementById('phase-timer').innerText = phaseTime.toFixed(2);
+        
+        // Suspect Animation
+        suspect.frame += dt * 5;
+        suspect.x = cw/2 + Math.sin(stateTimer * 2) * 20;
+
+        if (phaseTime <= 0) {
+            playSfx('sfx_fail', 1, 0.5);
+            showGif(gifOutcome, 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp', 1800);
+            gameOver(false, "WINDOW MISSED", "The rogue mech fired before you committed.");
+        }
+    }
+
+    // Global Particles
+    for (let i = particles.length-1; i>=0; i--) {
+        let p = particles[i];
+        if (p.type === 'road') {
+            p.y += p.vy * dt;
+            if (p.y > ch) particles.splice(i, 1);
+        }
+    }
+
+    // Shake Decay
+    if (shakeIntensity > 0) {
+        shakeIntensity *= 0.9;
+        if (shakeIntensity < 0.5) shakeIntensity = 0;
+    }
+}
+
+function draw() {
+     // Clear & Shake
+     const sceneGradient = ctx.createLinearGradient(0, 0, 0, ch);
+     sceneGradient.addColorStop(0, '#07101f');
+     sceneGradient.addColorStop(1, '#040814');
+     ctx.fillStyle = sceneGradient;
+     ctx.fillRect(0, 0, cw, ch);
+    
+    let dx = 0, dy = 0;
+    if (shakeIntensity > 0) {
+        dx = (Math.random()-0.5)*shakeIntensity;
+        dy = (Math.random()-0.5)*shakeIntensity;
+    }
+    ctx.save();
+    ctx.translate(dx, dy);
+
+    if (gameState === 'OFFICE') drawOffice();
+    else if (gameState === 'DRIVING') drawDriving();
+    else if (gameState === 'ARREST') drawArrest();
+    
+    ctx.restore();
+}
+
+/**
+ * §3 RENDERERS
+ */
+ function drawOffice() {
+     const skyGrad = ctx.createLinearGradient(0, 0, 0, ch);
+     skyGrad.addColorStop(0, '#08162c');
+     skyGrad.addColorStop(1, '#030712');
+     ctx.fillStyle = skyGrad;
+     ctx.fillRect(0, 0, cw, ch);
+
+     const winW = cw * 0.42;
+     const winH = ch * 0.32;
+     const winX = cw * 0.08;
+     const winY = ch * 0.08;
+
+     const neonGlow = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+     neonGlow.addColorStop(0, 'rgba(82, 216, 255, 0.14)');
+     neonGlow.addColorStop(1, 'rgba(8, 16, 32, 0.45)');
+     ctx.fillStyle = neonGlow;
+     ctx.fillRect(winX, winY, winW, winH);
+
+     ctx.strokeStyle = 'rgba(99, 210, 255, 0.24)';
+     ctx.lineWidth = 1.2;
+     ctx.beginPath();
+     particles.forEach(p => {
+         if (p.type === 'rain' && p.x > winX && p.x < winX + winW && p.y > winY && p.y < winY + winH) {
+             ctx.moveTo(p.x, p.y);
+             ctx.lineTo(p.x - 2, p.y + p.l + 6);
+         }
+     });
+     ctx.stroke();
+
+     ctx.strokeStyle = '#10233d';
+     ctx.lineWidth = 6;
+     ctx.strokeRect(winX, winY, winW, winH);
+     ctx.beginPath();
+     ctx.moveTo(winX + winW / 2, winY);
+     ctx.lineTo(winX + winW / 2, winY + winH);
+     ctx.moveTo(winX, winY + winH / 2);
+     ctx.lineTo(winX + winW, winY + winH / 2);
+     ctx.stroke();
+
+     const skylineY = ch * 0.23;
+     for (let i = 0; i < 8; i++) {
+         const bx = i * (cw / 7.2);
+         const bw = 34 + (i % 3) * 16;
+         const bh = 60 + (i % 4) * 26;
+         ctx.fillStyle = i % 2 === 0 ? '#0d1a31' : '#132342';
+         ctx.fillRect(bx, skylineY, bw, bh);
+         ctx.fillStyle = 'rgba(255, 200, 87, 0.5)';
+         for (let wy = skylineY + 8; wy < skylineY + bh - 4; wy += 14) {
+             for (let wx = bx + 6; wx < bx + bw - 4; wx += 10) {
+                 if ((wx + wy + i) % 3 === 0) ctx.fillRect(wx, wy, 4, 6);
+             }
+         }
+     }
+
+     ctx.fillStyle = '#020617';
+     ctx.beginPath();
+     ctx.arc(cw * 0.72, ch * 0.48, 42, 0, Math.PI * 2);
+     ctx.fill();
+     ctx.fillRect(cw * 0.62, ch * 0.43, 86, 12);
+     ctx.fillRect(cw * 0.67, ch * 0.36, 44, 30);
+     ctx.beginPath();
+     ctx.ellipse(cw * 0.72, ch * 0.71, 84, 152, 0, Math.PI, 0);
+     ctx.fill();
+
+     const deskGrad = ctx.createLinearGradient(0, ch * 0.62, 0, ch);
+     deskGrad.addColorStop(0, '#351206');
+     deskGrad.addColorStop(1, '#190a05');
+     ctx.fillStyle = deskGrad;
+     ctx.beginPath();
+     ctx.moveTo(0, ch);
+     ctx.lineTo(0, ch * 0.6);
+     ctx.lineTo(cw, ch * 0.62);
+     ctx.lineTo(cw, ch);
+     ctx.fill();
+
+     const lampGlow = ctx.createRadialGradient(cw * 0.23, ch * 0.58, 10, cw * 0.23, ch * 0.82, 220);
+     lampGlow.addColorStop(0, 'rgba(255, 200, 87, 0.5)');
+     lampGlow.addColorStop(0.35, 'rgba(255, 200, 87, 0.18)');
+     lampGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+     ctx.fillStyle = lampGlow;
+     ctx.beginPath();
+     ctx.moveTo(cw * 0.23, ch * 0.56);
+     ctx.lineTo(cw * 0.54, ch);
+     ctx.lineTo(-cw * 0.08, ch);
+     ctx.closePath();
+     ctx.fill();
+
+     ctx.fillStyle = '#8f4d16';
+     ctx.fillRect(cw * 0.17, ch * 0.55, 32, 42);
+     ctx.fillStyle = '#ffd978';
+     ctx.fillRect(cw * 0.18, ch * 0.58, 28, 10);
+
+     const px = cw * 0.5;
+     const py = ch * 0.7;
+     const shake = player.shaking ? (Math.random() - 0.5) * 5 : 0;
+
+     const phoneGlow = ctx.createRadialGradient(px, py, 12, px, py, 84);
+     phoneGlow.addColorStop(0, 'rgba(98, 224, 255, 0.18)');
+     phoneGlow.addColorStop(1, 'rgba(98, 224, 255, 0)');
+     ctx.fillStyle = phoneGlow;
+     ctx.beginPath();
+     ctx.ellipse(px, py, 78, 52, 0, 0, Math.PI * 2);
+     ctx.fill();
+
+     ctx.fillStyle = '#070d18';
+     ctx.beginPath();
+     ctx.roundRect(px - 54, py - 10, 108, 38, 18);
+     ctx.fill();
+
+     ctx.fillStyle = '#101c32';
+     ctx.beginPath();
+     ctx.ellipse(px, py + 6, 46, 32, 0, 0, Math.PI * 2);
+     ctx.fill();
+
+     ctx.fillStyle = '#9bdfff';
+     ctx.beginPath();
+     ctx.arc(px, py - 2, 16, 0, Math.PI * 2);
+     ctx.fill();
+
+     ctx.fillStyle = '#07101f';
+     for (let i = 0; i < 8; i++) {
+         const ang = i * (Math.PI / 4);
+         ctx.beginPath();
+         ctx.arc(px + Math.cos(ang) * 10, py - 2 + Math.sin(ang) * 10, 2.2, 0, Math.PI * 2);
+         ctx.fill();
+     }
+
+     ctx.save();
+     ctx.translate(px + shake, py - 24 + shake);
+     ctx.rotate(-0.12);
+     const handsetGrad = ctx.createLinearGradient(-42, 0, 42, 0);
+     handsetGrad.addColorStop(0, '#1d355f');
+     handsetGrad.addColorStop(0.5, '#234e86');
+     handsetGrad.addColorStop(1, '#132847');
+     ctx.fillStyle = handsetGrad;
+     ctx.beginPath();
+     ctx.roundRect(-42, -12, 84, 24, 12);
+     ctx.fill();
+
+     ctx.fillStyle = '#234e86';
+     ctx.beginPath();
+     ctx.arc(-40, 0, 16, 0, Math.PI * 2);
+     ctx.fill();
+     ctx.beginPath();
+     ctx.arc(40, 0, 16, 0, Math.PI * 2);
+     ctx.fill();
+
+     ctx.strokeStyle = 'rgba(98, 224, 255, 0.45)';
+     ctx.lineWidth = 2;
+     ctx.beginPath();
+     ctx.moveTo(-18, -2);
+     ctx.lineTo(18, -2);
+     ctx.stroke();
+     ctx.restore();
+
+     if (player.shaking) {
+         ctx.strokeStyle = 'rgba(255, 98, 125, 0.85)';
+         ctx.lineWidth = 3;
+         ctx.beginPath();
+         ctx.arc(px, py - 16, 54 + Math.sin(stateTimer * 14) * 4, Math.PI * 1.1, Math.PI * 1.9);
+         ctx.stroke();
+         ctx.beginPath();
+         ctx.arc(px, py - 16, 68 + Math.cos(stateTimer * 14) * 3, Math.PI * 1.15, Math.PI * 1.85);
+         ctx.stroke();
+
+             if (Math.floor(Date.now() / 200) % 2 === 0) {
+                 ctx.fillStyle = '#ff627d';
+                 ctx.font = '24px VT323, monospace';
+                 ctx.fillText('RING', px + 42, py - 42);
+             }
+     }
+ }
+
+ function drawDriving() {
+     const roadGrad = ctx.createLinearGradient(0, 0, 0, ch);
+     roadGrad.addColorStop(0, '#203559');
+     roadGrad.addColorStop(1, '#0f1b30');
+     ctx.fillStyle = roadGrad;
+     ctx.fillRect(0, 0, cw, ch);
+
+     ctx.fillStyle = '#0f1828';
+     ctx.fillRect(0, 0, 24, ch);
+     ctx.fillRect(cw - 24, 0, 24, ch);
+
+     ctx.strokeStyle = 'rgba(98, 224, 255, 0.16)';
+     ctx.lineWidth = 2;
+     ctx.beginPath();
+     ctx.moveTo(cw * 0.33, 0);
+     ctx.lineTo(cw * 0.33, ch);
+     ctx.moveTo(cw * 0.66, 0);
+     ctx.lineTo(cw * 0.66, ch);
+     ctx.stroke();
+
+     ctx.fillStyle = '#d7ecff';
+     particles.forEach(p => {
+         if (p.type === 'road') ctx.fillRect(p.x, p.y, 5, p.h);
+     });
+
+     ctx.fillStyle = '#3aa0ff';
+     ctx.shadowBlur = 16;
+     ctx.shadowColor = 'rgba(106, 182, 255, 0.75)';
+     ctx.beginPath();
+     ctx.roundRect(player.x - player.w / 2, player.y, player.w, player.h, 8);
+     ctx.fill();
+     ctx.fillStyle = '#a6e5ff';
+     ctx.fillRect(player.x - player.w / 2 + 4, player.y + 10, player.w - 8, 16);
+     ctx.fillStyle = '#62e0ff';
+     ctx.fillRect(player.x - player.w / 2 + 8, player.y + player.h - 10, player.w - 16, 4);
+     ctx.shadowBlur = 0;
+
+     entities.forEach(e => {
+         const enemyGrad = ctx.createLinearGradient(e.x - e.w / 2, e.y, e.x + e.w / 2, e.y + e.h);
+         enemyGrad.addColorStop(0, '#ff6f83');
+         enemyGrad.addColorStop(1, '#901b3a');
+         ctx.fillStyle = enemyGrad;
+         ctx.beginPath();
+         ctx.roundRect(e.x - e.w / 2, e.y, e.w, e.h, 8);
+         ctx.fill();
+         ctx.fillStyle = '#ffb2c0';
+         ctx.fillRect(e.x - e.w / 2 + 4, e.y + 10, e.w - 8, 12);
+         ctx.fillStyle = '#ff627d';
+         ctx.fillRect(e.x - e.w / 2 + 3, e.y + e.h - 6, 10, 5);
+         ctx.fillRect(e.x + e.w / 2 - 13, e.y + e.h - 6, 10, 5);
+     });
+ }
+
+ function drawArrest() {
+     const alleyGrad = ctx.createLinearGradient(0, 0, 0, ch);
+     alleyGrad.addColorStop(0, '#08111f');
+     alleyGrad.addColorStop(1, '#02060f');
+     ctx.fillStyle = alleyGrad;
+     ctx.fillRect(0, 0, cw, ch);
+
+     const spotlight = ctx.createRadialGradient(cw / 2, ch / 2, 50, cw / 2, ch / 2, cw);
+     spotlight.addColorStop(0, 'rgba(98, 224, 255, 0.12)');
+     spotlight.addColorStop(0.35, 'rgba(255,255,255,0.06)');
+     spotlight.addColorStop(1, 'rgba(0,0,0,0.9)');
+     ctx.fillStyle = spotlight;
+     ctx.fillRect(0, 0, cw, ch);
+
+     ctx.fillStyle = 'rgba(98, 224, 255, 0.08)';
+     ctx.fillRect(cw * 0.16, 0, 8, ch);
+     ctx.fillRect(cw * 0.82, 0, 10, ch);
+
+     const sx = suspect.x;
+     const sy = suspect.y;
+     ctx.fillStyle = '#030712';
+     ctx.fillRect(sx - 22, sy, 44, 84);
+     ctx.beginPath();
+     ctx.arc(sx, sy - 10, 15, 0, Math.PI * 2);
+     ctx.fill();
+
+     ctx.strokeStyle = '#030712';
+     ctx.lineWidth = 9;
+     ctx.beginPath();
+     ctx.moveTo(sx + 14, sy + 20);
+     ctx.lineTo(sx + 42, sy + 10);
+     ctx.stroke();
+
+     ctx.fillStyle = '#9cb0c9';
+     ctx.fillRect(sx + 35, sy + 5, 15, 8);
+
+     ctx.strokeStyle = 'rgba(98, 224, 255, 0.22)';
+     ctx.lineWidth = 2;
+     ctx.beginPath();
+     ctx.arc(sx, sy + 18, 34 + Math.sin(stateTimer * 4) * 4, 0, Math.PI * 2);
+     ctx.stroke();
+
+     ctx.strokeStyle = '#ff627d';
+     ctx.lineWidth = 2;
+     ctx.beginPath();
+     ctx.arc(cw / 2, ch * 0.4, 100 - (phaseTime * 10), 0, Math.PI * 2);
+     ctx.stroke();
+     ctx.beginPath();
+     ctx.moveTo(cw / 2 - 18, ch * 0.4);
+     ctx.lineTo(cw / 2 + 18, ch * 0.4);
+     ctx.moveTo(cw / 2, ch * 0.4 - 18);
+     ctx.lineTo(cw / 2, ch * 0.4 + 18);
+     ctx.stroke();
+ }
+
+/**
+ * §4 INPUT & CONTROL
+ */
+let pointerX = 0;
+
+function handleGlobalInput(e) {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    initAudio();
+    syncAudioForState();
+
+    if (gameState === 'GAMEOVER') { restartGame(); return; }
+    
+    if (gameState === 'OFFICE') {
+        if (player.shaking) {
+            // Answer Phone
+            player.shaking = false;
+            ringLoopSource = stopLoop(ringLoopSource);
+            playSfx('sfx_confirm', 1, 0.4);
+            showDialogue();
+        }
+    } else if (gameState === 'DIALOGUE') {
+        startPhase('DRIVING');
+    }
+}
+
+function showDialogue() {
+    gameState = 'DIALOGUE';
+    const box = document.getElementById('dialogue-box');
+    box.classList.remove('hidden');
+    document.getElementById('dialogue-text').innerText = "ROGUE UNIT ZERO BREACHED SECTOR 4.\nTHREAD THE TRAFFIC GRID.\nTAG OR BLAST ON CONTACT.";
+    showGif(gifAlert, 'https://i.giphy.com/TytHun5lKuMdzUYVxl.webp', 1600);
+    vibrate('light');
+}
+
+function gameOver(win, title, msg) {
+    gameState = 'GAMEOVER';
+    const screen = document.getElementById('game-over-screen');
+    screen.classList.remove('hidden');
+    document.getElementById('go-title').innerText = title;
+    document.getElementById('go-title').className = `text-4xl font-bold mb-2 tracking-tighter uppercase ${win ? 'text-blue-500' : 'text-red-500'}`;
+    document.getElementById('go-msg').innerText = msg;
+    document.getElementById('go-icon').innerText = win ? '🛰️' : '⚠️';
+    
+    if (win) {
+        playSfx('sfx_success', 1, 0.48);
+        showGif(gifOutcome, 'https://i.giphy.com/10gLW3UdTnQzdu.webp', 2200);
+    } else {
+        playSfx('sfx_fail', 1, 0.5);
+        showGif(gifOutcome, 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp', 2200);
+        vibrate('heavy');
+        shakeScreen(15);
+    }
+}
+
+function shakeScreen(amt) {
+    shakeIntensity = amt;
+}
+
+function restartGame() {
+    initGame();
+}
+
+// Event Listeners
+window.addEventListener('pointermove', e => {
+    const rect = canvas.getBoundingClientRect();
+    pointerX = e.clientX - rect.left;
+});
+window.addEventListener('pointerdown', e => {
+    handleGlobalInput(e);
+    const rect = canvas.getBoundingClientRect();
+    pointerX = e.clientX - rect.left;
+}, { passive: false });
+
+document.getElementById('restart-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleGlobalInput(e);
+    restartGame();
+});
+
+document.getElementById('btn-arrest').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if(gameState !== 'ARREST') return;
+    playSfx('sfx_confirm', 0.94, 0.4);
+    gameOver(true, "TARGET TAGGED", "Dispatch logged a clean capture.");
+});
+
+document.getElementById('btn-shoot').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if(gameState !== 'ARREST') return;
+    shakeScreen(20);
+    playSfx('sfx_collision', 1.04, 0.5);
+    showGif(gifOutcome, 'https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp', 1800);
+    gameOver(true, "TARGET SCRAPPED", "The rogue unit was stopped cold.");
+});
+
+/**
+ * §5 LOOP & INIT
+ */
+function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    if (initialized && gameState !== 'GAMEOVER') {
+        update(dt);
+    }
+    draw();
+    requestAnimationFrame(loop);
+}
+
+const ro = new ResizeObserver(entries => {
+    const r = entries[0].contentRect;
+    canvas.width = r.width * window.devicePixelRatio;
+    canvas.height = r.height * window.devicePixelRatio;
+    cw = r.width;
+    ch = r.height;
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    if (!initialized) initGame();
+    else if (gameState === 'OFFICE') startPhase('OFFICE'); // Redraw office on resize
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    ro.observe(canvas);
+    requestAnimationFrame(loop);
+});
+
+</script>
+</body>
+</html>

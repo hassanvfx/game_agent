@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Boost Run: Event Feed</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage3] resolved-font: title/ui -> Orbitron + Exo 2 from catalogs/fonts.json -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@400;600&family=Material+Symbols+Rounded" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        shell: '#08111f',
+                        panel: '#0f1d31',
+                        panelEdge: '#244566',
+                        lane: '#0a1324',
+                        signal: '#4cf7ff',
+                        spark: '#7eff8a',
+                        warning: '#ff7a5c',
+                        roadGray: '#142338',
+                        messageGlow: '#85d7ff'
+                    },
+                    fontFamily: {
+                        sans: ['Exo 2', 'sans-serif'],
+                        display: ['Orbitron', 'sans-serif']
+                    },
+                    boxShadow: {
+                        neon: '0 0 24px rgba(76, 247, 255, 0.22)',
+                        panel: '0 18px 50px rgba(0, 0, 0, 0.35)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg-deep: #060c17;
+            --bg-mid: #0d1830;
+            --panel: rgba(15, 29, 49, 0.92);
+            --panel-strong: rgba(12, 22, 39, 0.97);
+            --panel-edge: rgba(120, 208, 255, 0.2);
+            --text-main: #eef7ff;
+            --text-dim: #95aeca;
+            --signal: #4cf7ff;
+            --signal-soft: rgba(76, 247, 255, 0.14);
+            --spark: #7eff8a;
+            --warn: #ff7a5c;
+            --danger: #ff5c7a;
+            --track: #0b1324;
+            --track-edge: #17243a;
+            --glow: 0 0 18px rgba(76, 247, 255, 0.28);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Exo 2', sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(76, 247, 255, 0.14), transparent 30%),
+                radial-gradient(circle at bottom, rgba(126, 255, 138, 0.08), transparent 24%),
+                linear-gradient(180deg, var(--bg-mid), var(--bg-deep));
+            color: var(--text-main);
+        }
+
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+        .display-font { font-family: 'Orbitron', sans-serif; letter-spacing: 0.08em; }
+        .glass-overlay { background: rgba(3, 8, 16, 0.92); backdrop-filter: blur(7px); }
+        .material-symbols-rounded {
+            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+            font-size: 1.25rem;
+            line-height: 1;
+        }
+        .feedback-gif {
+            position: absolute;
+            right: 12px;
+            width: 84px;
+            max-width: 22vw;
+            opacity: 0;
+            transform: scale(0.9);
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+            filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.28));
+            z-index: 18;
+        }
+        .feedback-gif.show {
+            opacity: 0.95;
+            transform: scale(1);
+        }
+        #crash-gif {
+            top: 78px;
+        }
+        #win-gif {
+            top: 130px;
+        }
+
+        .scroller::-webkit-scrollbar { width: 8px; }
+        .scroller::-webkit-scrollbar-track { background: rgba(10, 19, 36, 0.72); }
+        .scroller::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, rgba(76, 247, 255, 0.35), rgba(36, 69, 102, 0.9));
+            border-radius: 999px;
+        }
+
+        .server-icon {
+            transition: transform 0.2s ease, border-radius 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .server-icon:hover {
+            border-radius: 30%;
+            background-color: rgba(76, 247, 255, 0.18);
+            box-shadow: var(--glow);
+            transform: translateY(-1px);
+        }
+
+        .message-anim { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes flashRed {
+            0% { background-color: rgba(255, 92, 122, 0.4); }
+            100% { background-color: transparent; }
+        }
+
+        .damage-flash { animation: flashRed 0.2s ease-out; }
+
+        #channel-sidebar { transition: transform 0.3s ease-in-out; }
+        .sidebar-closed { transform: translateX(-100%); }
+        .sidebar-open { transform: translateX(0); }
+
+        .hud-chip {
+            background: linear-gradient(180deg, rgba(7, 16, 31, 0.92), rgba(14, 29, 52, 0.92));
+            border: 1px solid rgba(122, 214, 255, 0.32);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+            backdrop-filter: blur(6px);
+        }
+
+        .info-card {
+            border: 1px solid rgba(122, 214, 255, 0.18);
+            background: linear-gradient(180deg, rgba(12, 21, 37, 0.96), rgba(8, 16, 31, 0.96));
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .launch-btn,
+        .menu-btn {
+            transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+        }
+
+        .launch-btn:active,
+        .menu-btn:active {
+            transform: scale(0.97);
+            filter: brightness(1.06);
+        }
+
+        .arcade-frame {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .arcade-frame::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.06), transparent 18%),
+                linear-gradient(90deg, rgba(76, 247, 255, 0.07), transparent 30%, transparent 70%, rgba(126, 255, 138, 0.06));
+        }
+
+        .signal-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: var(--signal);
+            box-shadow: 0 0 10px rgba(76, 247, 255, 0.8);
+            display: inline-block;
+        }
+
+        .status-pill {
+            background: rgba(76, 247, 255, 0.1);
+            border: 1px solid rgba(76, 247, 255, 0.24);
+        }
+
+        .modal-safe {
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+        }
+
+        .modal-safe-content { overflow-y: auto; }
+        .modal-safe-actions {
+            position: sticky;
+            bottom: 0;
+        }
+
+        .controls-hint {
+            text-shadow: 0 0 12px rgba(76, 247, 255, 0.28);
+        }
+
+        @media (min-width: 640px) {
+            #channel-sidebar { transform: none !important; position: static !important; }
+            #mobile-backdrop { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="absolute inset-0 z-50 flex flex-col justify-center items-center bg-gradient-to-br from-slate-950 via-sky-950 to-slate-900">
+        <div class="absolute inset-0 bg-black/55 backdrop-blur-sm"></div>
+        <div class="relative info-card p-8 rounded-[28px] shadow-panel text-center max-w-md w-full mx-4 border border-cyan-300/15">
+            <div class="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/60 to-transparent"></div>
+            <div class="w-20 h-20 mx-auto mb-5 rounded-[28px] flex items-center justify-center text-4xl bg-gradient-to-br from-cyan-300/20 via-cyan-400/10 to-emerald-300/20 border border-cyan-200/30 shadow-neon">🏎️</div>
+            <div class="inline-flex items-center gap-2 status-pill rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-cyan-200 mb-3">
+                <span class="signal-dot"></span>
+                Event channel online
+            </div>
+            <h1 class="display-font text-[30px] sm:text-[32px] mb-2 text-white">Boost Run</h1>
+            <p class="text-slate-300 text-[15px] mb-6">Dive into the live feed and snatch every spark core before the lane collapses.</p>
+
+            <div class="space-y-4">
+                <div>
+                    <input id="username-input" type="text" placeholder="Pilot tag" class="w-full bg-slate-950/70 p-3 rounded-2xl text-white border border-slate-600/70 focus:border-cyan-300 focus:shadow-neon outline-none transition text-[17px]">
+                    <p id="login-error" class="text-rose-400 text-xs mt-2 hidden text-left font-semibold">⚠️ Pilot tag contains restricted words.</p>
+                </div>
+                <button id="login-btn" class="launch-btn w-full bg-gradient-to-r from-cyan-400 to-sky-500 hover:from-cyan-300 hover:to-sky-400 text-slate-950 font-bold py-3 px-4 rounded-2xl transition shadow-neon text-[17px]">
+                    Enter Event Feed
+                </button>
+            </div>
+            <div class="mt-4 text-xs text-slate-400 tracking-[0.16em] uppercase">Sign in to chase the live boost drop.</div>
+        </div>
+    </div>
+
+    <!-- MAIN APP INTERFACE -->
+    <div id="app-interface" class="hidden absolute inset-0 flex w-full h-full overflow-hidden">
+        <span class="hidden material-symbols-rounded">play_arrow</span>
+        <!-- Server Sidebar (Desktop/Tablet) -->
+        <div class="w-[72px] bg-slate-950/95 border-r border-cyan-300/10 flex flex-col items-center py-3 space-y-2 overflow-y-auto hidden md:flex shrink-0 z-20">
+            <div class="w-12 h-12 bg-gradient-to-br from-cyan-400 to-sky-600 rounded-[15px] flex items-center justify-center text-slate-950 text-base font-bold cursor-pointer transition hover:scale-105 shadow-neon">BR</div>
+            <div class="w-8 h-[2px] bg-slate-700 rounded-full"></div>
+            <div class="server-icon w-12 h-12 bg-slate-800 rounded-[50%] flex items-center justify-center text-gray-200">🦖</div>
+            <div class="server-icon w-12 h-12 bg-slate-800 rounded-[50%] flex items-center justify-center text-gray-200">🚧</div>
+            <div class="w-12 h-12 bg-emerald-400/20 border border-emerald-300/30 rounded-[50%] flex items-center justify-center text-emerald-200 cursor-pointer hover:text-white">+</div>
+        </div>
+
+        <!-- Mobile Backdrop -->
+        <div id="mobile-backdrop" class="fixed inset-0 bg-black/60 z-30 hidden"></div>
+
+        <!-- Channel Sidebar -->
+        <div id="channel-sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-950/96 border-r border-cyan-300/10 flex flex-col z-40 sidebar-closed sm:translate-x-0 sm:static sm:flex shrink-0 shadow-2xl sm:shadow-none">
+            <div class="h-12 border-b border-slate-800 flex items-center px-4 font-bold shadow-sm justify-between">
+                <span class="display-font text-sm text-cyan-100">Boost Squad ⚡</span>
+                <button id="close-sidebar-btn" class="sm:hidden text-slate-400" aria-label="Close channels"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            <div class="p-2 space-y-1 overflow-y-auto flex-1">
+                <div class="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 mt-4 mb-2">Channels</div>
+
+                <!-- Channels -->
+                <div class="channel-item flex items-center px-2 py-2 bg-cyan-400/10 rounded-xl text-gray-100 cursor-pointer transition hover:bg-cyan-300/10 border border-cyan-200/10" data-channel="boost-run">
+                     <span class="text-cyan-300 mr-2 text-lg">#</span> boost-run
+                </div>
+                <div class="channel-item flex items-center px-2 py-2 hover:bg-slate-800/80 rounded-xl text-slate-400 cursor-pointer transition" data-channel="pit-chat">
+                     <span class="text-slate-500 mr-2 text-lg">#</span> pit-chat
+                </div>
+                <div class="channel-item flex items-center px-2 py-2 hover:bg-slate-800/80 rounded-xl text-slate-400 cursor-pointer transition" data-channel="race-briefs">
+                     <span class="text-slate-500 mr-2 text-lg">📢</span> race-briefs
+                </div>
+            </div>
+            <!-- User Bar -->
+            <div class="h-14 bg-slate-950 border-t border-slate-800 flex items-center px-2">
+                <div class="w-8 h-8 bg-gradient-to-tr from-emerald-400 to-cyan-400 rounded-full mr-2 shadow-neon"></div>
+                <div class="flex-1 overflow-hidden">
+                    <div id="display-username" class="text-sm font-bold truncate text-white">Runner</div>
+                    <div class="text-xs text-slate-400">#8888</div>
+                </div>
+                <div class="flex space-x-2 text-slate-400">
+                    <span>🎤</span>
+                    <span>🎧</span>
+                    <span>⚙️</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="flex-1 bg-slate-900/90 flex flex-col relative w-full">
+            <!-- Header -->
+            <div class="h-12 border-b border-slate-800 flex items-center px-4 shadow-sm justify-between shrink-0 bg-slate-950/50 backdrop-blur-md">
+                <div class="flex items-center">
+                    <button id="mobile-menu-btn" class="text-2xl text-slate-400 mr-3 sm:hidden" aria-label="Open channels"><span class="material-symbols-rounded">menu</span></button>
+                    <span class="text-cyan-300 mr-2 text-xl">#</span>
+                    <span id="header-title" class="font-bold text-white">boost-run</span>
+                </div>
+                <div class="flex space-x-4 text-slate-400 text-xl">
+                    <span>🔔</span>
+                    <span class="hidden sm:inline">📌</span>
+                    <span>👥</span>
+                </div>
+            </div>
+
+            <!-- Chat Log -->
+            <div id="chat-scroller" class="flex-1 overflow-y-auto p-4 space-y-4 scroller relative bg-gradient-to-b from-slate-900/80 to-slate-950/95">
+                <!-- Dynamic Content Injected Here -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 pt-0 shrink-0">
+                <div class="bg-slate-900/90 border border-cyan-300/10 p-3 rounded-2xl flex items-center shadow-panel">
+                    <button class="text-slate-400 mr-3 hover:text-white transition">+</button>
+                    <input id="chat-input" type="text" placeholder="Message #boost-run" class="bg-transparent flex-1 outline-none text-white placeholder-slate-500 text-[16px]">
+                    <div class="flex space-x-2 text-slate-400 ml-2">
+                        <span class="cursor-pointer hover:text-white">🎁</span>
+                        <span class="cursor-pointer hover:text-white">😊</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVERLAY (CANVAS) -->
+    <div id="game-container" class="hidden fixed inset-0 z-50 glass-overlay flex flex-col items-center justify-center">
+        <div id="game-wrapper" class="arcade-frame relative w-full max-w-md h-[85vh] bg-roadGray rounded-[28px] overflow-hidden shadow-2xl border-2 border-cyan-300/20">
+            <canvas id="gameCanvas"></canvas>
+            <!-- [agent-note][stage3] resolved-gif: crash + reward feedback -> catalogs/gifs.json -->
+            <img id="crash-gif" class="feedback-gif" src="https://i.giphy.com/wY1So1mO4gaNbntT0r.webp" alt="Crash feedback animation">
+            <img id="win-gif" class="feedback-gif" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="Win feedback animation">
+
+            <!-- HUD -->
+            <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe -->
+            <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none z-10">
+                <div class="hud-chip px-3 py-1 rounded-full text-white font-bold border flex items-center text-[13px] sm:text-sm">
+                    <span class="text-xl mr-2">⚡</span> <span id="game-dinos">0</span>/10
+                </div>
+                <div class="hud-chip px-3 py-1 rounded-full text-rose-300 font-bold border flex items-center text-[13px] sm:text-sm">
+                    <span class="mr-1">❤️</span> <span id="game-health">3</span>
+                </div>
+            </div>
+
+            <!-- Start/Game Over Screen -->
+            <div id="game-menu" class="modal-safe absolute inset-0 items-center justify-center bg-slate-950/85 text-center p-6 z-20">
+                <div class="modal-safe-content w-full flex flex-col items-center justify-center">
+                    <div class="inline-flex items-center gap-2 status-pill rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-cyan-200 mb-4">
+                        <span class="signal-dot"></span>
+                        Boost lane briefing
+                    </div>
+                    <h2 class="display-font text-[30px] sm:text-[34px] text-white mb-2 drop-shadow-lg">BOOST RUN</h2>
+                    <p class="text-slate-300 mb-8 max-w-[260px] text-[15px]">Collect 10 energy boosts before your hull runs dry.</p>
+
+                    <div class="grid grid-cols-2 gap-4 text-sm text-slate-300 mb-8 w-full max-w-xs">
+                        <div class="info-card p-3 rounded-2xl flex flex-col items-center">
+                            <span class="text-2xl mb-1">🏎️</span>
+                            <span>Runner</span>
+                        </div>
+                        <div class="info-card p-3 rounded-2xl flex flex-col items-center">
+                            <span class="text-2xl mb-1">⚡</span>
+                            <span>Collect</span>
+                        </div>
+                        <div class="info-card p-3 rounded-2xl flex flex-col items-center">
+                            <span class="text-2xl mb-1">🚧</span>
+                            <span>Avoid</span>
+                        </div>
+                        <div class="info-card p-3 rounded-2xl flex flex-col items-center">
+                            <span class="text-2xl mb-1">❤️</span>
+                            <span>3 Lives</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-safe-actions w-full flex flex-col items-center pb-1">
+                    <button id="start-game-btn" class="menu-btn bg-gradient-to-r from-emerald-300 to-cyan-400 hover:from-emerald-200 hover:to-cyan-300 text-slate-950 font-bold py-4 px-10 rounded-full transition shadow-neon text-lg w-full max-w-xs">
+                        START RUN
+                    </button>
+                    <button id="close-game-btn" class="mt-6 text-slate-400 hover:text-white text-sm">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Win Screen -->
+            <div id="win-screen" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-sky-950 via-indigo-950 to-slate-950 text-center p-6 z-30">
+                <h2 class="display-font text-[28px] sm:text-[32px] text-amber-300 mb-2 animate-bounce">RUN COMPLETE!</h2>
+                <div class="text-6xl mb-4">🏆</div>
+                <p class="text-white text-xl mb-2">You banked every boost core!</p>
+                <p class="text-cyan-200 text-sm mb-8">Reward channel ready to unlock.</p>
+                <button id="claim-reward-btn" class="menu-btn bg-white text-sky-700 font-bold py-3 px-8 rounded-full hover:bg-slate-100 transition shadow-lg">OPEN REWARD</button>
+            </div>
+
+            <!-- Controls Hint -->
+            <div class="controls-hint absolute bottom-8 w-full text-center pointer-events-none opacity-60 text-white text-sm animate-pulse">
+                Tap left / right to steer
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. CONFIG & ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+            sfx: {
+                collect: "https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3",
+                crash: "https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3",
+                win: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+                ui: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3"
+            }
+        };
+
+        const BAD_WORDS = ['admin', 'mod', 'staff', 'discord', 'fuck', 'shit', 'bitch', 'ass', 'crap', 'hell', 'damn'];
+
+        let currentUser = "Runner";
+        let currentChannel = "boost-run";
+        let hasWon = false;
+
+        class AudioController {
+            constructor() {
+                this.ready = false;
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.18;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                this.lastPlayed = {};
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const audio = new Audio(v);
+                    audio.preload = 'auto';
+                    audio.volume = { collect: 0.55, crash: 0.58, win: 0.6, ui: 0.4, fail: 0.48, start: 0.52 }[k] ?? 0.5;
+                    this.sfx[k] = audio;
+                }
+            }
+            unlock() {
+                this.ready = true;
+            }
+            playBGM() {
+                if (!this.ready) return;
+                this.bgm.play().catch(() => {});
+            }
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+            playSFX(key, minInterval = 90) {
+                if (!this.ready || !this.sfx[key]) return;
+                const now = performance.now();
+                if (this.lastPlayed[key] && now - this.lastPlayed[key] < minInterval) return;
+                this.lastPlayed[key] = now;
+                const sound = this.sfx[key];
+                sound.currentTime = 0;
+                sound.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+        const crashGif = document.getElementById('crash-gif');
+        const winGif = document.getElementById('win-gif');
+        let gifTimers = {};
+        function triggerGif(el, duration = 1300) {
+            if (!el) return;
+            clearTimeout(gifTimers[el.id]);
+            el.classList.add('show');
+            gifTimers[el.id] = setTimeout(() => el.classList.remove('show'), duration);
+        }
+        function primeMedia() {
+            audio.unlock();
+            audio.playBGM();
+        }
+
+        /** 2. LOGIN & VALIDATION LOGIC */
+        const loginScreen = document.getElementById('login-screen');
+        const appInterface = document.getElementById('app-interface');
+        const usernameInput = document.getElementById('username-input');
+        const loginError = document.getElementById('login-error');
+        const displayUsername = document.getElementById('display-username');
+
+        document.getElementById('login-btn').addEventListener('click', () => {
+            const val = usernameInput.value.trim();
+
+            if (!val) {
+                usernameInput.classList.add('border-red-500');
+                return;
+            }
+
+            const lowerVal = val.toLowerCase();
+            const containsBadWord = BAD_WORDS.some(word => lowerVal.includes(word));
+
+            if (containsBadWord) {
+                loginError.classList.remove('hidden');
+                usernameInput.classList.add('border-red-500');
+                usernameInput.classList.add('animate-pulse');
+                setTimeout(() => usernameInput.classList.remove('animate-pulse'), 500);
+            } else {
+                currentUser = val;
+                displayUsername.innerText = currentUser;
+                primeMedia();
+                audio.playSFX('ui');
+                loginScreen.classList.add('hidden');
+                appInterface.classList.remove('hidden');
+                appInterface.classList.add('flex');
+                renderChannel('boost-run');
+            }
+        });
+
+        usernameInput.addEventListener('input', () => {
+            loginError.classList.add('hidden');
+            usernameInput.classList.remove('border-red-500');
+        });
+
+        /** 3. CHANNEL NAVIGATION */
+        const channels = document.querySelectorAll('.channel-item');
+        const headerTitle = document.getElementById('header-title');
+        const chatScroller = document.getElementById('chat-scroller');
+        const chatInput = document.getElementById('chat-input');
+
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        const sidebar = document.getElementById('channel-sidebar');
+        const backdrop = document.getElementById('mobile-backdrop');
+        const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+
+        function toggleSidebar(show) {
+            if (show) {
+                sidebar.classList.remove('sidebar-closed');
+                sidebar.classList.add('sidebar-open');
+                backdrop.classList.remove('hidden');
+            } else {
+                sidebar.classList.add('sidebar-closed');
+                sidebar.classList.remove('sidebar-open');
+                backdrop.classList.add('hidden');
+            }
+        }
+
+        mobileMenuBtn.addEventListener('click', () => {
+            primeMedia();
+            audio.playSFX('ui', 120);
+            toggleSidebar(true);
+        });
+        backdrop.addEventListener('click', () => {
+            audio.playSFX('ui', 120);
+            toggleSidebar(false);
+        });
+        closeSidebarBtn.addEventListener('click', () => {
+            audio.playSFX('ui', 120);
+            toggleSidebar(false);
+        });
+
+        channels.forEach(ch => {
+            ch.addEventListener('click', () => {
+                const channelId = ch.getAttribute('data-channel');
+                switchChannel(channelId);
+                if (window.innerWidth < 640) toggleSidebar(false);
+            });
+        });
+
+        function switchChannel(channelId) {
+            currentChannel = channelId;
+
+            channels.forEach(ch => {
+                if (ch.getAttribute('data-channel') === channelId) {
+                    ch.classList.remove('hover:bg-slate-800/80', 'text-slate-400');
+                    ch.classList.add('bg-cyan-400/10', 'text-gray-100', 'border', 'border-cyan-200/10');
+                } else {
+                    ch.classList.add('hover:bg-slate-800/80', 'text-slate-400');
+                    ch.classList.remove('bg-cyan-400/10', 'text-gray-100', 'border', 'border-cyan-200/10');
+                }
+            });
+
+            headerTitle.innerText = channelId;
+            chatInput.placeholder = `Message #${channelId}`;
+            renderChannel(channelId);
+        }
+
+        function renderChannel(channelId) {
+            chatScroller.innerHTML = '';
+
+            if (channelId === 'boost-run') {
+                addMessage('Race Control', 'Today at 9:00 AM', 'Welcome! The Boost Run is live. Steer clean and collect energy cores.', '🛰️', 'bg-cyan-400/20 border border-cyan-300/25', 'text-cyan-100');
+
+                const banner = document.createElement('div');
+                banner.className = "p-4 bg-slate-900/90 rounded-[24px] border border-cyan-300/15 flex flex-col sm:flex-row items-center justify-between shadow-panel mt-4 message-anim";
+                banner.innerHTML = `
+                    <div class="mb-4 sm:mb-0 sm:mr-4 flex-1">
+                        <div class="inline-flex items-center gap-2 status-pill rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-cyan-200 mb-3">
+                            <span class="signal-dot"></span>
+                            Core chase
+                        </div>
+                        <h3 class="display-font text-white text-[20px] flex items-center">
+                            <span class="text-2xl mr-2">⚡</span> Boost Run Live
+                        </h3>
+                        <p class="text-slate-300 text-[14px] mt-1">Collect <span class="text-emerald-300 font-bold">10 energy cores</span> to unlock the drop.</p>
+                        <div class="w-full bg-slate-800 h-3 rounded-full mt-3 overflow-hidden border border-cyan-300/10">
+                            <div id="nitro-progress-bar" class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-sky-500 h-full w-0 transition-all duration-500" style="width: ${hasWon ? '100%' : '0%'}"></div>
+                        </div>
+                        <div class="text-xs text-right mt-1 text-slate-400"><span id="nitro-percent">${hasWon ? '10' : '0'}</span>/10 cores</div>
+                    </div>
+                    <button id="play-game-btn" class="launch-btn ${hasWon ? 'bg-slate-700 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-400 to-sky-500 hover:from-cyan-300 hover:to-sky-400 animate-pulse'} text-slate-950 font-bold py-3 px-8 rounded-2xl transition shadow-neon whitespace-nowrap">
+                        ${hasWon ? 'DROP OPENED' : 'LAUNCH RUN'}
+                    </button>
+                `;
+                chatScroller.appendChild(banner);
+
+                const playBtn = banner.querySelector('#play-game-btn');
+                if (!hasWon) {
+                    playBtn.addEventListener('click', () => {
+                        primeMedia();
+                        audio.playSFX('start');
+                        document.getElementById('game-container').classList.remove('hidden');
+                        document.getElementById('game-menu').classList.remove('hidden');
+                        document.getElementById('win-screen').classList.add('hidden');
+                        resizeGame();
+                    });
+                }
+
+                if (hasWon) {
+                    addMessage('Race Control', 'Just now', '🎉 Boost cache secured. Reward access is now open.', '🎁', 'bg-emerald-400/20 border border-emerald-300/25', 'text-emerald-200 font-bold');
+                }
+
+            } else if (channelId === 'pit-chat') {
+                addMessage('Moderator', 'Yesterday', 'Please keep the feed clean and respectful.', '🛡️', 'bg-rose-500/20 border border-rose-300/25');
+                addMessage('LaneScout99', 'Today at 10:30 AM', 'Has anyone cleared the new run yet? It gets so fast!', '⚡', 'bg-slate-700 border border-slate-500/20');
+                addMessage('SpeedRacer', 'Today at 10:32 AM', 'Yeah, stay centered when the barriers stack up.', '🏎️', 'bg-sky-500/20 border border-sky-300/25');
+            } else if (channelId === 'race-briefs') {
+                addMessage('Race Control', 'Monday', 'Maintenance sweep scheduled for tonight at 3 AM.', '📢', 'bg-amber-500/20 border border-amber-300/25');
+            }
+        }
+
+        function addMessage(name, time, text, icon, iconColor, textClasses = 'text-slate-200') {
+            const div = document.createElement('div');
+            div.className = "flex items-start message-anim";
+            div.innerHTML = `
+                <div class="w-10 h-10 rounded-full ${iconColor} mr-3 flex-shrink-0 flex items-center justify-center text-xl shadow-sm">${icon}</div>
+                <div>
+                    <div class="flex items-baseline">
+                        <span class="font-bold mr-2 text-white">${name}</span>
+                        <span class="text-xs text-slate-400">${time}</span>
+                    </div>
+                    <div class="${textClasses}">${text}</div>
+                </div>
+            `;
+            chatScroller.appendChild(div);
+        }
+
+        /** 4. GAME LOGIC (DRIVING) */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameWrapper = document.getElementById('game-wrapper');
+        let gameActive = false;
+        let animationId;
+
+        let player = { x: 0, y: 0, w: 40, h: 60, speed: 6, health: 3, invuln: 0 };
+        let roadOffset = 0;
+        let roadSpeed = 5;
+        let entities = [];
+        let dinosCollected = 0;
+        const TARGET_DINOS = 10;
+        let input = { left: false, right: false };
+
+        function resizeGame() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            player.y = canvas.height - 120;
+            player.x = canvas.width / 2 - player.w / 2;
+        }
+         window.addEventListener('resize', resizeGame);
+
+        // [agent-note][stage4] repaired: mobile-tap-path | element: canvas gameplay surface | action: scoped touch suppression away from document/body
+        function handleInputStart(x) {
+            const mid = canvas.width / 2;
+            if (x < mid) input.left = true;
+            else input.right = true;
+        }
+        function handleInputEnd() {
+            input.left = false;
+            input.right = false;
+        }
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            handleInputStart(e.touches[0].clientX - rect.left);
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleInputEnd();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') input.left = true;
+            if (e.key === 'ArrowRight') input.right = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') input.left = false;
+            if (e.key === 'ArrowRight') input.right = false;
+        });
+
+        function spawnEntity() {
+            const type = Math.random() > 0.6 ? 'dino' : 'obstacle';
+            const laneCount = 4;
+            const laneWidth = canvas.width / laneCount;
+            const lane = Math.floor(Math.random() * laneCount);
+
+            entities.push({
+                type: type,
+                x: (lane * laneWidth) + (laneWidth / 2) - 20,
+                y: -60,
+                w: 40,
+                h: 40,
+                active: true
+            });
+        }
+
+        function drawRoad() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#132440');
+            gradient.addColorStop(1, '#08111f');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'rgba(126, 255, 138, 0.05)';
+            ctx.fillRect(0, 0, 12, canvas.height);
+            ctx.fillRect(canvas.width - 12, 0, 12, canvas.height);
+
+            ctx.strokeStyle = 'rgba(140, 230, 255, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([26, 26]);
+            ctx.lineDashOffset = -roadOffset;
+
+            const lanes = 4;
+            for (let i = 1; i < lanes; i++) {
+                const x = (canvas.width / lanes) * i;
+                ctx.beginPath();
+                ctx.moveTo(x, -50);
+                ctx.lineTo(x, canvas.height + 50);
+                ctx.stroke();
+            }
+
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#050a14';
+            ctx.fillRect(0, 0, 8, canvas.height);
+            ctx.fillRect(canvas.width - 8, 0, 8, canvas.height);
+
+            for (let i = 0; i < 14; i++) {
+                const glowY = (i * 68 + roadOffset * 1.8) % (canvas.height + 80) - 40;
+                ctx.fillStyle = 'rgba(76, 247, 255, 0.11)';
+                ctx.fillRect(16, glowY, 6, 24);
+                ctx.fillRect(canvas.width - 22, glowY, 6, 24);
+            }
+        }
+
+        function drawPlayerCar() {
+            const cx = player.x + player.w / 2;
+            const cy = player.y + player.h / 2;
+
+            ctx.save();
+            ctx.translate(cx, cy);
+
+            const sway = input.left ? -0.08 : input.right ? 0.08 : 0;
+            ctx.rotate(sway);
+
+            ctx.fillStyle = 'rgba(76, 247, 255, 0.12)';
+            ctx.beginPath();
+            ctx.ellipse(0, 20, 24, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#0a1425';
+            ctx.beginPath();
+            ctx.roundRect(-18, -26, 36, 52, 14);
+            ctx.fill();
+
+            const bodyGradient = ctx.createLinearGradient(0, -26, 0, 26);
+            bodyGradient.addColorStop(0, '#8effff');
+            bodyGradient.addColorStop(0.55, '#3dcfff');
+            bodyGradient.addColorStop(1, '#1b5fa4');
+            ctx.fillStyle = bodyGradient;
+            ctx.beginPath();
+            ctx.roundRect(-15, -24, 30, 48, 12);
+            ctx.fill();
+
+            ctx.fillStyle = '#071120';
+            ctx.beginPath();
+            ctx.roundRect(-9, -16, 18, 18, 6);
+            ctx.fill();
+
+            ctx.fillStyle = '#d9fbff';
+            ctx.beginPath();
+            ctx.roundRect(-10, 8, 20, 10, 5);
+            ctx.fill();
+
+            ctx.fillStyle = '#032844';
+            ctx.beginPath();
+            ctx.roundRect(-6, -10, 12, 18, 5);
+            ctx.fill();
+
+            ctx.fillStyle = '#7eff8a';
+            ctx.fillRect(-9, 12, 5, 4);
+            ctx.fillRect(4, 12, 5, 4);
+
+            ctx.fillStyle = '#ff8b61';
+            ctx.fillRect(-11, 19, 6, 4);
+            ctx.fillRect(5, 19, 6, 4);
+
+            ctx.fillStyle = '#0b0f18';
+            ctx.fillRect(-18, -16, 4, 12);
+            ctx.fillRect(14, -16, 4, 12);
+            ctx.fillRect(-18, 8, 4, 12);
+            ctx.fillRect(14, 8, 4, 12);
+
+            if (player.invuln > 0) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(-19, -28, 38, 56, 16);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function drawCollectible(entity) {
+            const cx = entity.x + entity.w / 2;
+            const cy = entity.y + entity.h / 2;
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            const pulse = 1 + Math.sin(Date.now() / 180) * 0.08;
+            ctx.scale(pulse, pulse);
+
+            ctx.fillStyle = 'rgba(126, 255, 138, 0.2)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 24, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#baffcf';
+            ctx.beginPath();
+            ctx.moveTo(0, -18);
+            ctx.lineTo(10, -2);
+            ctx.lineTo(3, -2);
+            ctx.lineTo(12, 16);
+            ctx.lineTo(-8, 2);
+            ctx.lineTo(-1, 2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#7eff8a';
+            ctx.beginPath();
+            ctx.moveTo(-2, -16);
+            ctx.lineTo(6, -3);
+            ctx.lineTo(0, -3);
+            ctx.lineTo(8, 11);
+            ctx.lineTo(-9, 1);
+            ctx.lineTo(-3, 1);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawObstacle(entity) {
+            const x = entity.x;
+            const y = entity.y;
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.fillStyle = '#2f3b4a';
+            ctx.beginPath();
+            ctx.roundRect(4, 8, 32, 24, 8);
+            ctx.fill();
+
+            ctx.fillStyle = '#ff7a5c';
+            ctx.beginPath();
+            ctx.moveTo(20, 0);
+            ctx.lineTo(38, 32);
+            ctx.lineTo(2, 32);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#fff4b0';
+            ctx.fillRect(17, 11, 6, 9);
+
+            ctx.strokeStyle = '#1b2634';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(9, 24);
+            ctx.lineTo(31, 24);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function updateGame() {
+            if (!gameActive) return;
+
+            roadOffset += roadSpeed;
+            if (roadOffset > 60) roadOffset = 0;
+            roadSpeed += 0.001;
+
+            drawRoad();
+
+            if (input.left && player.x > 15) player.x -= player.speed;
+            if (input.right && player.x < canvas.width - player.w - 15) player.x += player.speed;
+
+            if (player.invuln > 0) {
+                player.invuln--;
+                if (Math.floor(Date.now() / 50) % 2 === 0) ctx.globalAlpha = 0.65;
+            }
+
+            drawPlayerCar();
+            ctx.globalAlpha = 1.0;
+
+            if (Math.random() < 0.02) spawnEntity();
+
+            for (let i = entities.length - 1; i >= 0; i--) {
+                let e = entities[i];
+                e.y += roadSpeed;
+
+                if (e.type === 'dino') drawCollectible(e);
+                else drawObstacle(e);
+
+                if (
+                    e.active &&
+                    player.x < e.x + e.w - 10 &&
+                    player.x + player.w > e.x + 10 &&
+                    player.y < e.y + e.h - 10 &&
+                    player.y + player.h > e.y + 10
+                ) {
+                    if (e.type === 'dino') {
+                        audio.playSFX('collect', 70);
+                        dinosCollected++;
+                        e.active = false;
+                        updateHUD();
+                        if (dinosCollected >= TARGET_DINOS) {
+                            endGame(true);
+                            return;
+                        }
+                    } else if (player.invuln <= 0) {
+                        audio.playSFX('crash', 160);
+                        triggerGif(crashGif, 1100);
+                        player.health--;
+                        player.invuln = 60;
+                        gameWrapper.classList.add('damage-flash');
+                        setTimeout(() => gameWrapper.classList.remove('damage-flash'), 200);
+                        updateHUD();
+
+                        if (player.health <= 0) {
+                            endGame(false);
+                            return;
+                        }
+                    }
+                }
+                if (e.y > canvas.height + 50) entities.splice(i, 1);
+            }
+            animationId = requestAnimationFrame(updateGame);
+        }
+
+        function updateHUD() {
+            document.getElementById('game-dinos').innerText = dinosCollected;
+            document.getElementById('game-health').innerText = player.health;
+        }
+
+        function initGame() {
+            resizeGame();
+            dinosCollected = 0;
+            player.health = 3;
+            player.invuln = 0;
+            roadSpeed = 5;
+            entities = [];
+            input = { left: false, right: false };
+            updateHUD();
+            gameActive = true;
+            updateGame();
+        }
+
+        function endGame(win) {
+            gameActive = false;
+            cancelAnimationFrame(animationId);
+            if (win) {
+                audio.playSFX('win', 220);
+                triggerGif(winGif, 1800);
+                document.getElementById('win-screen').classList.remove('hidden');
+            } else {
+                audio.playSFX('fail', 220);
+                triggerGif(crashGif, 1300);
+                document.getElementById('game-menu').classList.remove('hidden');
+                document.querySelector('#game-menu h2').innerText = "RUN FAILED";
+                document.querySelector('#game-menu p').innerText = "Your hull gave out before the cache was full. Try again!";
+                document.getElementById('start-game-btn').innerText = "RETRY RUN";
+            }
+        }
+
+        document.getElementById('start-game-btn').addEventListener('click', () => {
+            primeMedia();
+            audio.playSFX('start', 140);
+            document.getElementById('game-menu').classList.add('hidden');
+            initGame();
+        });
+
+        document.getElementById('close-game-btn').addEventListener('click', () => {
+            audio.playSFX('ui', 120);
+            document.getElementById('game-container').classList.add('hidden');
+            gameActive = false;
+        });
+
+        document.getElementById('claim-reward-btn').addEventListener('click', () => {
+            audio.playSFX('ui', 120);
+            document.getElementById('game-container').classList.add('hidden');
+            hasWon = true;
+            renderChannel('boost-run');
+        });
+    });
+    </script>
+</body>
+</html>

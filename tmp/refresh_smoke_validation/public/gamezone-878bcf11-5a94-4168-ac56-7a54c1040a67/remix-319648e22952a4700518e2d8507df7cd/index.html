@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>NEON BASTION TACTICS</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root {
+            --c-player: #06b6d4; /* Cyan 500 */
+            --c-player-dim: #164e63;
+            --c-enemy: #f43f5e; /* Rose 500 */
+            --c-accent: #d946ef; /* Fuchsia 500 */
+            --c-witch: #a855f7; /* Purple 500 */
+            --bg-dark: #09090b;
+            --bg-panel: rgba(9, 9, 11, 0.95);
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-dark);
+            color: #e5e5e5;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #app-root {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Layers */
+        #hud-top {
+            flex: 0 0 auto;
+            z-index: 20;
+            padding-top: max(env(safe-area-inset-top), 1rem);
+            background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%);
+        }
+
+        #game-wrapper {
+            flex: 1 1 auto;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #18181b 0%, #000000 100%);
+            border-top: 1px solid #27272a;
+            border-bottom: 1px solid #27272a;
+            touch-action: manipulation;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 50px rgba(6, 182, 212, 0.05);
+            touch-action: none;
+        }
+
+        #hud-bottom {
+            flex: 0 0 auto;
+            z-index: 20;
+            padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+            background: linear-gradient(0deg, #09090b 0%, rgba(9,9,11,0.95) 80%, rgba(0,0,0,0) 100%);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        /* Components */
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        .bar-container {
+            background: #27272a;
+            border: 1px solid #3f3f46;
+            overflow: hidden;
+            position: relative;
+        }
+        .bar-fill {
+            height: 100%;
+            transition: width 0.3s ease-out;
+        }
+
+        /* Cards */
+        .card {
+            background: linear-gradient(160deg, #18181b, #09090b);
+            border: 1px solid #3f3f46;
+            transition: transform 0.1s, border-color 0.1s;
+            position: relative;
+        }
+        .card.active {
+            border-color: var(--c-player);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+            transform: translateY(-4px);
+            background: linear-gradient(160deg, #164e63, #083344);
+        }
+        .card.disabled {
+            opacity: 0.5;
+            filter: grayscale(0.8);
+        }
+
+        /* Shop/Lobby */
+        .shop-card {
+            background: #18181b;
+            border: 1px solid #3f3f46;
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .shop-card.owned { border-color: #52525b; background: #27272a; }
+        .shop-card.equipped {
+            border-color: var(--c-player);
+            background: linear-gradient(180deg, #164e63 0%, #083344 100%);
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+        }
+
+        /* Buttons */
+        .btn-action {
+            background: linear-gradient(90deg, #d946ef, #be185d);
+            border: 1px solid #f0abfc;
+            color: white;
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            text-shadow: 0 1px 2px black;
+            box-shadow: 0 4px 12px rgba(217, 70, 239, 0.3);
+        }
+        .btn-action:active { transform: scale(0.96); filter: brightness(0.9); }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #06b6d4, #0284c7);
+            border: 1px solid #67e8f9;
+            color: white;
+            font-weight: 800;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        .btn-primary:active { transform: scale(0.96); }
+
+        /* Overlays */
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            background: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+            transition: opacity 0.3s;
+            overflow-y: auto;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .hidden { display: none !important; opacity: 0; pointer-events: none; }
+
+        /* Effects */
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0.4;
+        }
+        
+        .font-mono { font-family: 'Press Start 2P', 'Courier New', monospace; }
+        .text-neon-cyan { color: var(--c-player); text-shadow: 0 0 8px var(--c-player); }
+        .text-neon-red { color: var(--c-enemy); text-shadow: 0 0 8px var(--c-enemy); }
+        .text-neon-purple { color: var(--c-witch); text-shadow: 0 0 8px var(--c-witch); }
+
+        .title-font { font-family: 'Orbitron', system-ui, sans-serif; }
+        .body-font { font-family: 'Orbitron', system-ui, sans-serif; }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.12), transparent 30%),
+                radial-gradient(circle at 80% 18%, rgba(168, 85, 247, 0.18), transparent 24%),
+                radial-gradient(circle at 50% 82%, rgba(244, 63, 94, 0.12), transparent 28%);
+            z-index: 0;
+        }
+
+        #app-root { z-index: 1; }
+
+        #hud-top, #hud-bottom {
+            position: relative;
+        }
+
+        #hud-top::after, #hud-bottom::before {
+            content: '';
+            position: absolute;
+            left: 1rem;
+            right: 1rem;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.7), transparent);
+            opacity: 0.55;
+        }
+
+        #hud-top::after { bottom: 0; }
+        #hud-bottom::before { top: 0; }
+
+        #game-wrapper::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(6, 182, 212, 0.08), transparent 22%, transparent 78%, rgba(244, 63, 94, 0.08)),
+                radial-gradient(circle at center, rgba(14, 165, 233, 0.08), transparent 55%);
+            z-index: 0;
+        }
+
+        canvas {
+            position: relative;
+            z-index: 1;
+            border: 1px solid rgba(103, 232, 249, 0.18);
+            border-radius: 18px;
+            background:
+                linear-gradient(180deg, rgba(8, 15, 28, 0.94), rgba(3, 7, 18, 0.98));
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03),
+                0 0 35px rgba(34, 211, 238, 0.12),
+                inset 0 0 28px rgba(14, 116, 144, 0.16);
+        }
+
+        .glass-panel,
+        .shop-card,
+        .card,
+        .overlay-card {
+            border-radius: 16px;
+            border: 1px solid rgba(125, 211, 252, 0.14);
+            background:
+                linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 8, 23, 0.96));
+            box-shadow:
+                0 10px 30px rgba(2, 8, 23, 0.5),
+                inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .bar-container {
+            border-radius: 999px;
+            background: rgba(24, 24, 27, 0.9);
+            border-color: rgba(161, 161, 170, 0.28);
+            box-shadow: inset 0 0 12px rgba(0,0,0,0.45);
+        }
+
+        .bar-fill {
+            border-radius: 999px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bar-fill::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+            opacity: 0.5;
+        }
+
+        .card {
+            min-width: 4.25rem;
+            overflow: hidden;
+        }
+
+        .card::before,
+        .shop-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.09), transparent 45%, rgba(217, 70, 239, 0.08));
+            pointer-events: none;
+        }
+
+        .shop-card {
+            position: relative;
+            gap: 0.2rem;
+            min-height: 10rem;
+        }
+
+        .shop-card.owned {
+            border-color: rgba(148, 163, 184, 0.38);
+            background: linear-gradient(180deg, rgba(39, 39, 42, 0.95), rgba(9, 9, 11, 0.96));
+        }
+
+        .shop-card.equipped {
+            border-color: rgba(34, 211, 238, 0.7);
+            box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2), 0 0 24px rgba(6, 182, 212, 0.18);
+        }
+
+        .btn-action,
+        .btn-primary {
+            transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+        }
+
+        .btn-primary {
+            font-family: 'Orbitron', system-ui, sans-serif;
+            border-radius: 14px;
+        }
+
+        .btn-action {
+            border-radius: 14px;
+        }
+
+        .btn-primary:hover,
+        .btn-action:hover {
+            filter: brightness(1.08);
+        }
+
+        .overlay-screen {
+            background:
+                radial-gradient(circle at top, rgba(8, 145, 178, 0.18), transparent 25%),
+                linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(0, 0, 0, 0.98));
+        }
+
+        .start-screen {
+            align-items: center;
+            justify-content: center;
+        }
+
+        .start-title {
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(3rem, 12vw, 4.75rem);
+            line-height: 0.9;
+            margin: 0;
+            letter-spacing: 0.04em;
+            color: transparent;
+            background: linear-gradient(180deg, #a5f3fc 0%, #38bdf8 52%, #2563eb 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            text-shadow: 0 0 24px rgba(56, 189, 248, 0.25);
+        }
+
+        .title-divider {
+            height: 0.3rem;
+            width: 8rem;
+            margin: 0.75rem auto 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #22d3ee, #60a5fa);
+            box-shadow: 0 0 24px rgba(34, 211, 238, 0.8);
+        }
+
+        .intro-panel {
+            max-width: 20rem;
+            width: calc(100% - 2rem);
+            margin-bottom: 2rem;
+            padding: 1.25rem;
+        }
+
+        .lobby-header,
+        .lobby-footer {
+            backdrop-filter: blur(14px);
+        }
+
+        .lobby-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+            padding-bottom: 6rem;
+        }
+
+        .turn-banner {
+            background: rgba(2, 6, 23, 0.72);
+            backdrop-filter: blur(8px);
+            padding: 1rem 2rem;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .turn-text {
+            margin: 0;
+            font-family: 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(1.5rem, 6vw, 2.25rem);
+            letter-spacing: 0.2em;
+            color: #e0f2fe;
+        }
+
+        .gameover-screen {
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem 1rem;
+        }
+
+        .reward-chip {
+            border-radius: 14px;
+        }
+
+        .shop-button,
+        .card-cost,
+        .card-name {
+            position: relative;
+            z-index: 1;
+        }
+
+        .shop-button {
+            width: 100%;
+            margin-top: 0.5rem;
+            padding: 0.55rem 0.5rem;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            font-family: 'Orbitron', system-ui, sans-serif;
+        }
+
+        .shop-button.buy {
+            background: linear-gradient(90deg, #ca8a04, #f59e0b);
+            color: #fff8db;
+        }
+
+        .shop-button.buy.disabled {
+            background: #27272a;
+            color: #71717a;
+        }
+
+        .shop-button.equip {
+            background: rgba(8, 145, 178, 0.25);
+            color: #cffafe;
+            border-color: rgba(8, 145, 178, 0.45);
+        }
+
+        .shop-button.unequip {
+            background: rgba(159, 18, 57, 0.28);
+            color: #fecdd3;
+            border-color: rgba(190, 24, 93, 0.38);
+        }
+
+        .hud-shell {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        .top-hud, .bottom-hud {
+            width: 100%;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 0.75rem;
+            gap: 0.75rem;
+        }
+
+        .integrity-wrap {
+            flex: 1 1 auto;
+            margin-right: 1rem;
+        }
+
+        .energy-card {
+            border-left: 2px solid #eab308;
+            border-radius: 16px;
+        }
+
+        .card-rack {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(34,211,238,0.45) transparent;
+        }
+
+        .card-rack::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .card-rack::-webkit-scrollbar-thumb {
+            background: rgba(34,211,238,0.45);
+            border-radius: 999px;
+        }
+
+        .reward-chip,
+        .gameover-title,
+        .lobby-title {
+            font-family: 'Orbitron', system-ui, sans-serif;
+        }
+
+        .gameover-copy,
+        .hud-label,
+        .body-copy {
+            font-family: 'Orbitron', system-ui, sans-serif;
+        }
+
+        .text-cyan-soft { color: rgba(165, 243, 252, 0.7); }
+        .text-rose-soft { color: rgba(251, 113, 133, 0.92); }
+        .text-yellow-soft { color: rgba(250, 204, 21, 0.82); }
+
+        #feedback-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 18;
+            pointer-events: none;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            width: min(26vw, 110px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 14px;
+            border: 1px solid rgba(125, 211, 252, 0.35);
+            box-shadow: 0 8px 28px rgba(2, 8, 23, 0.45);
+            opacity: 0;
+            transform: scale(0.92);
+            transition: opacity 180ms ease, transform 180ms ease;
+            background: rgba(2, 6, 23, 0.6);
+        }
+
+        .feedback-gif.active {
+            opacity: 0.92;
+            transform: scale(1);
+        }
+
+        .feedback-gif.hit {
+            top: 0.75rem;
+            right: 0.75rem;
+        }
+
+        .feedback-gif.victory {
+            bottom: 0.75rem;
+            left: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-root">
+    
+    <!-- TOP HUD -->
+    <div id="hud-top" class="w-full px-4 py-2 flex items-center justify-between pointer-events-none">
+        <div class="flex-1">
+            <div class="flex justify-between items-end mb-1">
+                <span class="text-xs font-bold text-rose-500 tracking-widest font-mono">BREACH LEVEL</span>
+                <span id="boss-hp-txt" class="text-xl font-mono text-neon-red font-bold">100%</span>
+            </div>
+            <div class="bar-container h-2 rounded-sm w-full bg-rose-950/50">
+                <div id="boss-hp-bar" class="bar-fill bg-rose-600 shadow-[0_0_10px_#f43f5e]" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME AREA -->
+    <div id="game-wrapper">
+        <div class="scanlines"></div>
+        <div id="feedback-layer" aria-hidden="true">
+            <!-- [agent-note][stage3] resolved-gif: hit/victory overlays -> catalogs/gifs.json | compact corners to protect controls -->
+            <img id="gif-hit" class="feedback-gif hit" src="https://i.giphy.com/1AjEBGWggGXh9onllB.webp" alt="">
+            <img id="gif-victory" class="feedback-gif victory" src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp" alt="">
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Turn Notification -->
+        <div id="turn-msg" class="absolute pointer-events-none opacity-0 transition-opacity duration-300 flex items-center justify-center inset-0 z-30">
+            <div class="turn-banner">
+                <h2 id="turn-txt" class="turn-text">COMMAND PHASE</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM HUD -->
+    <div id="hud-bottom" class="w-full px-3 py-3">
+        
+        <!-- Stats & End Turn -->
+        <div class="flex justify-between items-end mb-3">
+            <div class="flex-1 mr-4">
+                <div class="flex justify-between items-end mb-1">
+                    <span class="text-xs font-bold text-cyan-400 tracking-widest font-mono">BASTION INTEGRITY</span>
+                    <span id="player-hp-txt" class="text-lg font-mono text-neon-cyan font-bold">100</span>
+                </div>
+                <div class="bar-container h-2 rounded-sm w-full bg-cyan-950/50">
+                    <div id="player-hp-bar" class="bar-fill bg-cyan-500 shadow-[0_0_10px_#06b6d4]" style="width: 100%"></div>
+                </div>
+            </div>
+            <button id="btn-end-turn" class="btn-action px-6 py-3 rounded-sm font-bold text-lg font-mono tracking-wider uppercase">
+                END TURN
+            </button>
+        </div>
+
+        <!-- Deck -->
+        <div class="flex items-center gap-2 h-24">
+            <!-- Energy -->
+            <div class="glass-panel w-16 h-full rounded flex flex-col items-center justify-center shrink-0 border-l-2 border-yellow-500">
+                <span class="text-[10px] text-yellow-500/80 uppercase tracking-wider font-bold">PWR</span>
+                <span id="energy-val" class="text-3xl font-mono font-bold text-yellow-400">5</span>
+            </div>
+
+            <!-- Cards -->
+            <div id="card-rack" class="flex-1 h-full flex gap-2 overflow-x-auto overflow-y-hidden pb-1 px-1" style="-webkit-overflow-scrolling: touch;">
+                <!-- Cards injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="screen-start" class="overlay-screen start-screen">
+        <div class="text-center mb-10">
+            <h1 class="start-title">
+                NEON<br>BASTION
+            </h1>
+            <div class="title-divider"></div>
+            <p class="text-cyan-200/50 tracking-[0.5em] mt-2 text-xs font-bold">GRID DEFENSE COMMAND</p>
+        </div>
+        
+        <div class="glass-panel intro-panel">
+            <p class="text-gray-300 text-center text-sm leading-relaxed font-mono">
+                <span class="text-cyan-400 font-bold">> DEPLOY</span> defenders.<br>
+                <span class="text-rose-400 font-bold">> CLEAR</span> breach units.<br>
+                <span class="text-yellow-400 font-bold">> HOLD</span> the bastion cores.
+            </p>
+        </div>
+
+        <button id="btn-to-lobby" class="btn-primary py-4 px-16 rounded-sm text-xl tracking-widest shadow-[0_0_30px_rgba(6,182,212,0.4)]">
+            ENTER GRID
+        </button>
+    </div>
+
+    <!-- LOBBY SCREEN -->
+    <div id="screen-lobby" class="overlay-screen hidden">
+        <div class="w-full p-6 flex justify-between items-center sticky top-0 z-10 lobby-header">
+            <div>
+                <h2 class="text-2xl font-bold text-cyan-500 tracking-widest">LOADOUT BAY</h2>
+                <p class="text-xs text-gray-400 font-mono">WAVE: <span id="lobby-level-txt" class="text-white">1</span></p>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-yellow-600 font-bold tracking-widest">CREDITS</div>
+                <div id="lobby-credits" class="text-3xl font-mono text-yellow-500">0</div>
+            </div>
+        </div>
+
+        <div class="flex-1 w-full p-4 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm font-bold text-gray-500 tracking-widest">DEFENDER ROSTER</h3>
+                <span class="text-xs text-cyan-600 font-mono font-bold" id="deck-count">0/4 READY</span>
+            </div>
+            
+            <div id="lobby-grid" class="lobby-grid">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+
+        <div class="w-full p-4 flex justify-center sticky bottom-0 z-10 pb-8 lobby-footer">
+            <button id="btn-deploy" class="btn-primary w-full py-4 text-xl tracking-widest rounded-sm shadow-[0_0_20px_rgba(6,182,212,0.2)]">
+                START DEFENSE
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="screen-gameover" class="overlay-screen hidden gameover-screen">
+        <h2 id="go-title" class="text-6xl font-black mb-4 tracking-widest text-center gameover-title">BASTION HELD</h2>
+        <p id="go-msg" class="text-xl text-gray-400 mb-6 text-center gameover-copy">The breach wave has been contained.</p>
+        <div id="go-reward" class="text-2xl text-yellow-400 font-mono mb-12 text-center border border-yellow-500/30 bg-yellow-900/20 px-6 py-2 rounded reward-chip">+100 CR</div>
+        <button id="btn-return" class="btn-primary py-4 px-12 rounded-sm text-lg tracking-wider uppercase">
+            Back to Loadout
+        </button>
+    </div>
+
+</div>
+
+<script>
+/**
+ * NEON BASTION TACTICS
+ * Mobile-first lane defense framing over the existing tactics loop.
+ */
+
+// --- CONFIGURATION ---
+const CONFIG = {
+    cols: 6,
+    rows: 10,
+    colors: {
+        player: '#06b6d4', // Cyan
+        enemy: '#f43f5e',  // Rose
+        witch: '#a855f7',  // Purple
+        grid: '#18181b',   // Zinc 900
+        gridHighlight: 'rgba(6, 182, 212, 0.15)',
+        attack: 'rgba(244, 63, 94, 0.3)',
+        move: 'rgba(16, 185, 129, 0.2)', // Emerald
+        robot: '#a855f7', // Purple
+        heal: 'rgba(34, 197, 94, 0.3)'
+    },
+    assets: {
+        bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+        sfx: {
+            spawn: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+            move: "https://gamezone-virid.vercel.app/assets/audios/sfx/projectile_01.mp3",
+            attack: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3",
+            win: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3",
+            lose: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3",
+            buy: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3",
+            curse: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3",
+            blocked: "https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3",
+            deploy: "https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_02.mp3",
+            heal: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3",
+            defeat: "https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3"
+        }
+    }
+};
+
+// --- DATA: CARDS & LEVELS ---
+const CARDS = [
+    { id: 'scout', name: 'SCOUT', cost: 2, price: 0, hp: 12, dmg: 4, range: 1, move: 3, icon: '⚡', desc: 'Fast flanker' },
+    { id: 'witch', name: 'HEXER', cost: 4, price: 300, hp: 20, dmg: 5, range: 2, move: 2, icon: '🧙‍♀️', desc: 'Marks nearby raiders' },
+    { id: 'tank', name: 'BULWARK', cost: 4, price: 150, hp: 50, dmg: 6, range: 1, move: 1, icon: '🛡️', desc: 'Heavy guard frame' },
+    { id: 'sniper', name: 'LANCER', cost: 3, price: 250, hp: 10, dmg: 14, range: 3, move: 2, icon: '🎯', desc: 'Long sightline fire' },
+    { id: 'medic', name: 'PATCHER', cost: 3, price: 200, hp: 18, dmg: -8, range: 2, move: 2, icon: '✚', desc: 'Repairs defenders' },
+    { id: 'robot', name: 'SENTRY', cost: 5, price: 120, hp: 35, dmg: 8, range: 1, move: 2, icon: '🤖', desc: 'Auto-response unit' },
+    { id: 'blast', name: 'ARC BURST', cost: 4, price: 150, type: 'spell', dmg: 15, icon: '💥', desc: '15 breach damage' },
+    { id: 'shield', name: 'AEGIS', cost: 5, price: 350, type: 'spell', icon: '🔰', desc: 'Ward for 2 turns' },
+    { id: 'beam', name: 'SKY LANCE', cost: 7, price: 500, type: 'spell', dmg: 35, icon: '🛰️', desc: 'Massive strike' }
+];
+
+const LEVELS = [
+    // L1: Basic
+    { bossHp: 100, bossDmg: 8, spawns: ['blocker', 'blocker'] },
+    // L2: Witch Intro
+    { bossHp: 150, bossDmg: 10, spawns: ['blocker', 'witch', 'blocker'] },
+    // L3: Heavy
+    { bossHp: 250, bossDmg: 12, spawns: ['tank', 'tank'] },
+    // L4: Swarm
+    { bossHp: 350, bossDmg: 14, spawns: ['tank', 'sniper', 'scout'] },
+    // L5+: Scaling
+    { bossHp: 500, bossDmg: 18, spawns: ['tank', 'witch', 'sniper'] }
+];
+
+// --- STATE ---
+const playerData = {
+    credits: 200,
+    level: 1,
+    owned: ['scout'],
+    deck: ['scout']
+};
+
+const state = {
+    active: false,
+    turn: 'player',
+    energy: 5,
+    maxEnergy: 10,
+    grid: [],    // Stores units
+    units: [],
+    particles: [],
+    floaters: [],
+    selectedUnit: null,
+    selectedCard: null,
+    validMoves: [],
+    validAttacks: [],
+    shake: 0,
+    
+    // Canvas
+    tileSize: 0,
+    gridW: 0,
+    gridH: 0,
+    offsetX: 0,
+    offsetY: 0,
+    
+    // Input
+    pointerR: -1,
+    pointerC: -1
+};
+
+// --- AUDIO ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const sounds = {};
+const sfxCooldowns = {};
+const feedbackTimers = {};
+const bgm = new Audio(CONFIG.assets.bgm);
+bgm.loop = true;
+bgm.volume = 0.2;
+bgm.preload = 'auto';
+
+async function initAudio() {
+    Object.entries(CONFIG.assets.sfx).forEach(([k, v]) => {
+        const audio = new Audio(v);
+        audio.preload = 'auto';
+        sounds[k] = audio;
+    });
+}
+function playSfx(key, options = {}) {
+    const now = performance.now();
+    const cooldown = options.cooldown ?? 0;
+    if (cooldown && sfxCooldowns[key] && now - sfxCooldowns[key] < cooldown) return;
+    sfxCooldowns[key] = now;
+
+    const sound = sounds[key];
+    if (!sound) return;
+
+    const audio = sound.cloneNode();
+    audio.volume = options.volume ?? 0.55;
+    audio.play().catch(() => {});
+}
+
+function syncBgmPlayback(shouldPlay) {
+    if (shouldPlay) {
+        bgm.play().catch(() => {});
+    } else {
+        bgm.pause();
+        bgm.currentTime = 0;
+    }
+}
+
+function showFeedbackGif(kind, duration = 1200) {
+    const el = document.getElementById(kind === 'victory' ? 'gif-victory' : 'gif-hit');
+    if (!el) return;
+    el.classList.add('active');
+    clearTimeout(feedbackTimers[kind]);
+    feedbackTimers[kind] = setTimeout(() => el.classList.remove('active'), duration);
+}
+
+// --- ENGINE ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+function init() {
+    window.addEventListener('resize', resize);
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerup', handlePointerUp);
+    
+    document.getElementById('btn-to-lobby').onclick = goToLobby;
+    document.getElementById('btn-deploy').onclick = startGame;
+    document.getElementById('btn-return').onclick = returnToLobby;
+    document.getElementById('btn-end-turn').onclick = endTurn;
+    
+    initAudio();
+    resize();
+    requestAnimationFrame(loop);
+}
+
+function resize() {
+    const wrapper = document.getElementById('game-wrapper');
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+    
+    const pad = 16;
+    const availW = canvas.width - (pad * 2);
+    const availH = canvas.height - (pad * 2);
+    
+    const tileW = availW / CONFIG.cols;
+    const tileH = availH / CONFIG.rows;
+    
+    state.tileSize = Math.floor(Math.min(tileW, tileH));
+    state.gridW = state.tileSize * CONFIG.cols;
+    state.gridH = state.tileSize * CONFIG.rows;
+    
+    state.offsetX = Math.floor((canvas.width - state.gridW) / 2);
+    state.offsetY = Math.floor((canvas.height - state.gridH) / 2);
+}
+
+// --- SCREEN FLOW ---
+function goToLobby() {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    playSfx('spawn', { volume: 0.4, cooldown: 120 });
+    
+    document.getElementById('screen-start').classList.add('hidden');
+    document.getElementById('screen-gameover').classList.add('hidden');
+    document.getElementById('screen-lobby').classList.remove('hidden');
+    renderLobby();
+}
+
+function returnToLobby() {
+    playSfx('spawn', { volume: 0.36, cooldown: 120 });
+    syncBgmPlayback(true);
+    document.getElementById('screen-gameover').classList.add('hidden');
+    document.getElementById('screen-lobby').classList.remove('hidden');
+    renderLobby();
+}
+
+function startGame() {
+    if (playerData.deck.length === 0) {
+        alert("Equip at least one defender!");
+        return;
+    }
+    playSfx('deploy', { volume: 0.5, cooldown: 180 });
+    syncBgmPlayback(true);
+    document.getElementById('screen-lobby').classList.add('hidden');
+    startLevel();
+}
+
+// --- LOBBY LOGIC ---
+function renderLobby() {
+    document.getElementById('lobby-credits').innerText = playerData.credits;
+    document.getElementById('lobby-level-txt').innerText = playerData.level;
+    document.getElementById('deck-count').innerText = `${playerData.deck.length}/4 READY`;
+    
+    const grid = document.getElementById('lobby-grid');
+    grid.innerHTML = '';
+    
+    CARDS.forEach(card => {
+        const owned = playerData.owned.includes(card.id);
+        const equipped = playerData.deck.includes(card.id);
+        const canBuy = playerData.credits >= card.price;
+        
+        const el = document.createElement('div');
+        el.className = `shop-card ${equipped ? 'equipped' : owned ? 'owned' : 'locked'}`;
+        
+        let btnHtml = '';
+        if (equipped) {
+            btnHtml = `<button class="shop-button unequip" onclick="toggleEquip('${card.id}')">Unequip</button>`;
+        } else if (owned) {
+            btnHtml = `<button class="shop-button equip" onclick="toggleEquip('${card.id}')">Equip</button>`;
+        } else {
+            btnHtml = `<button class="shop-button buy ${canBuy ? '' : 'disabled'}" onclick="buyCard('${card.id}')">Buy ${card.price}</button>`;
+        }
+
+        el.innerHTML = `
+            <div class="text-3xl mb-2">${card.icon}</div>
+            <div class="text-sm font-bold text-white mb-1">${card.name}</div>
+            <div class="text-xs text-gray-400 text-center mb-2 min-h-[2em]">${card.desc}</div>
+            <div class="text-xs font-mono text-yellow-500 font-bold body-copy">COST: ${card.cost}</div>
+            ${btnHtml}
+        `;
+        grid.appendChild(el);
+    });
+}
+
+window.buyCard = function(id) {
+    const card = CARDS.find(c => c.id === id);
+    if (playerData.credits >= card.price) {
+        playerData.credits -= card.price;
+        playerData.owned.push(id);
+        playSfx('buy', { volume: 0.45, cooldown: 120 });
+        renderLobby();
+    }
+};
+
+window.toggleEquip = function(id) {
+    if (playerData.deck.includes(id)) {
+        playerData.deck = playerData.deck.filter(x => x !== id);
+    } else {
+        if (playerData.deck.length >= 4) return;
+        playerData.deck.push(id);
+    }
+    playSfx('spawn', { volume: 0.35, cooldown: 90 });
+    renderLobby();
+};
+
+// --- GAME LOGIC ---
+
+function startLevel() {
+    state.active = true;
+    state.turn = 'player';
+    state.energy = 5;
+    state.units = [];
+    state.particles = [];
+    state.floaters = [];
+    state.grid = Array(CONFIG.rows).fill(null).map(() => Array(CONFIG.cols).fill(null));
+    state.selectedUnit = null;
+    state.selectedCard = null;
+    
+    // Configure Level
+    const lvlIdx = Math.min(playerData.level - 1, LEVELS.length - 1);
+    const lvlConfig = LEVELS[lvlIdx];
+    
+    // Scaling for infinite play
+    const scaleMult = Math.max(1, (playerData.level - LEVELS.length) * 0.2 + 1);
+    const bossHp = Math.floor(lvlConfig.bossHp * scaleMult);
+    const bossDmg = Math.floor(lvlConfig.bossDmg * scaleMult);
+
+    // Spawn Boss
+    spawnUnit('boss', 1, 0, 2, { hp: bossHp, maxHp: bossHp, dmg: bossDmg });
+    
+    // Spawn Minions
+    lvlConfig.spawns.forEach((type, i) => {
+        // Try random positions in top 3 rows
+        for(let attempt=0; attempt<10; attempt++){
+            const r = 1 + Math.floor(Math.random()*3);
+            const c = Math.floor(Math.random()*CONFIG.cols);
+            if(!state.grid[r][c] && state.grid[r][c] !== 'boss') {
+                spawnUnit(type, 1, r, c);
+                break;
+            }
+        }
+    });
+    
+    // Player Cores
+    spawnUnit('core', 0, CONFIG.rows-1, 2);
+    spawnUnit('core', 0, CONFIG.rows-1, 3);
+    
+    updateHUD();
+    renderDeck();
+    showTurnMsg("COMMAND PHASE");
+}
+
+function spawnUnit(type, team, r, c, overrides = {}) {
+    let stats = {};
+    if (type === 'boss') stats = { hp: 100, maxHp: 100, dmg: 10, range: 4, move: 0, name: 'BREACH LORD', icon: '💀' }; 
+    else if (type === 'core') stats = { hp: 50, maxHp: 50, dmg: 0, range: 0, move: 0, name: 'BASTION CORE', icon: '💠' };
+    else if (type === 'blocker') stats = { hp: 25, maxHp: 25, dmg: 4, range: 1, move: 1, name: 'RAIDER', icon: '👾' };
+    else {
+        const card = CARDS.find(x => x.id === type);
+        if (card) stats = { ...card, maxHp: card.hp };
+    }
+    
+    Object.assign(stats, overrides);
+    
+    const unit = {
+        id: Math.random().toString(36).substr(2),
+        type, team, r, c,
+        ...stats,
+        hasMoved: false,
+        hasAttacked: false,
+        immortalTurns: 0,
+        witchTimer: type === 'witch' ? 4 : 0,
+        status: [] // { type: 'curse', duration: 2, dmg: 1 }
+    };
+    
+    state.grid[r][c] = unit;
+    state.units.push(unit);
+    
+    // Spawn FX
+    for(let i=0; i<12; i++) spawnParticle(c, r, team === 0 ? CONFIG.colors.player : CONFIG.colors.enemy);
+    playSfx('spawn', { volume: 0.32, cooldown: 90 });
+    
+    return unit;
+}
+
+// --- TURN LOGIC ---
+
+async function endTurn() {
+    if (state.turn !== 'player' || !state.active) return;
+    
+    state.selectedUnit = null;
+    state.selectedCard = null;
+    state.validMoves = [];
+    state.validAttacks = [];
+    
+    // 0. Process Passive Abilities (Witch)
+    await processPassives(0);
+
+    // 1. Robots
+    const robots = state.units.filter(u => u.team === 0 && u.type === 'robot');
+    if (robots.length > 0) {
+        showTurnMsg("SENTRY PHASE");
+        await runRobotAI(robots);
+    }
+
+    // 2. Enemy
+    state.turn = 'enemy';
+    showTurnMsg("BREACH PHASE");
+    await processStatusEffects(1); // Enemy takes DoT at start of their turn
+    setTimeout(runEnemyAI, 1000);
+}
+
+async function processPassives(team) {
+    const witches = state.units.filter(u => u.team === team && u.type === 'witch');
+    for (const witch of witches) {
+        witch.witchTimer--;
+        if (witch.witchTimer <= 0) {
+            witch.witchTimer = 4;
+            // Pulse
+            addFloater("HEX!", witch.c, witch.r, CONFIG.colors.witch);
+            playSfx('curse');
+            
+            // Find enemies in range 2
+            const enemies = state.units.filter(u => u.team !== team && getAttackDist(witch, u) <= 2);
+            for (const e of enemies) {
+                e.status.push({ type: 'curse', duration: 2, dmg: 1 });
+                for(let i=0; i<5; i++) spawnParticle(e.c, e.r, CONFIG.colors.witch);
+                addFloater("MARKED", e.c, e.r, CONFIG.colors.witch);
+            }
+            await wait(300);
+        }
+    }
+}
+
+async function processStatusEffects(team) {
+    const units = state.units.filter(u => u.team === team);
+    for (const u of units) {
+        // Process Curse
+        const curses = u.status.filter(s => s.type === 'curse');
+        if (curses.length > 0) {
+            const totalDmg = curses.reduce((a,b) => a + b.dmg, 0);
+            u.hp -= totalDmg;
+            addFloater(`-${totalDmg}`, u.c, u.r, CONFIG.colors.witch);
+            if (u.hp <= 0) {
+                killUnit(u);
+                continue; // Unit dead
+            }
+            // Decrement duration
+            u.status.forEach(s => s.duration--);
+            u.status = u.status.filter(s => s.duration > 0);
+        }
+    }
+    updateHUD();
+}
+
+async function runRobotAI(robots) {
+    robots.sort((a,b) => a.r - b.r); // Bottom to top
+    for (const unit of robots) {
+        if (!state.active) break;
+        unit.hasMoved = true; 
+        
+        // Simple AI: Attack if possible, else move towards nearest enemy
+        const targets = state.units.filter(u => u.team === 1);
+        if (targets.length === 0) break;
+        
+        targets.sort((a,b) => getAttackDist(unit, a) - getAttackDist(unit, b));
+        const target = targets[0];
+        
+        if (getAttackDist(unit, target) <= unit.range) {
+            await performAttack(unit, target);
+        } else {
+            const moves = getValidMoves(unit);
+            if (moves.length > 0) {
+                moves.sort((a,b) => getManhattanDist({r:a.r, c:a.c}, target) - getManhattanDist({r:b.r, c:b.c}, target));
+                await moveUnit(unit, moves[0].r, moves[0].c);
+                if (getAttackDist(unit, target) <= unit.range) await performAttack(unit, target);
+            }
+        }
+    }
+    await wait(400);
+}
+
+async function runEnemyAI() {
+    // 1. Reset Enemy State
+    for (const u of state.units.filter(u => u.team === 1)) {
+        u.hasMoved = false;
+        u.hasAttacked = false;
+        if (u.immortalTurns > 0) u.immortalTurns--;
+    }
+    
+    // Process Enemy Passives (Witch enemies)
+    await processPassives(1);
+
+    // 2. Move/Attack
+    const enemies = state.units.filter(u => u.team === 1).sort((a,b) => b.r - a.r); // Top to bottom
+    for (const unit of enemies) {
+        if (!state.active) break;
+        if (unit.type === 'core') continue;
+        
+        const targets = state.units.filter(u => u.team === 0);
+        if (targets.length === 0) break;
+        
+        targets.sort((a,b) => getAttackDist(unit, a) - getAttackDist(unit, b));
+        const target = targets[0];
+        
+        if (getAttackDist(unit, target) <= unit.range) {
+            await performAttack(unit, target);
+        } else {
+            if (unit.move > 0) {
+                const moves = getValidMoves(unit);
+                // Move closer to target
+                moves.sort((a,b) => getManhattanDist({r:a.r, c:a.c}, target) - getManhattanDist({r:b.r, c:b.c}, target));
+                
+                if (moves.length > 0) {
+                    await moveUnit(unit, moves[0].r, moves[0].c);
+                    if (getAttackDist(unit, target) <= unit.range) await performAttack(unit, target);
+                }
+            }
+        }
+    }
+    
+    // 3. Reinforcements
+    if (state.active && Math.random() > 0.7) {
+        const r = 1; 
+        const c = Math.floor(Math.random() * CONFIG.cols);
+        if (!state.grid[r][c]) {
+            spawnUnit(Math.random() > 0.5 ? 'blocker' : 'scout', 1, r, c);
+            addFloater("BREACH!", c, r, '#f43f5e');
+        }
+    }
+    
+    if (state.active) startPlayerTurn();
+}
+
+async function startPlayerTurn() {
+    state.turn = 'player';
+    state.energy = Math.min(state.energy + 3, state.maxEnergy);
+    
+    // Process Status Effects
+    await processStatusEffects(0);
+
+    // Reset
+    state.units.filter(u => u.team === 0).forEach(u => {
+        u.hasMoved = false; 
+        u.hasAttacked = false;
+        if (u.immortalTurns > 0) u.immortalTurns--;
+    });
+    
+    showTurnMsg("COMMAND PHASE");
+    updateHUD();
+    renderDeck();
+}
+
+// --- ACTIONS ---
+
+// Movement uses Manhattan (Cardinal)
+function getManhattanDist(p1, p2) {
+    return Math.abs(p1.r - p2.r) + Math.abs(p1.c - p2.c);
+}
+
+// Attack uses Chebyshev (Diagonal allowed)
+function getAttackDist(p1, p2) {
+    return Math.max(Math.abs(p1.r - p2.r), Math.abs(p1.c - p2.c));
+}
+
+function getValidMoves(unit) {
+    const moves = [];
+    const range = unit.move;
+    if (range === 0) return [];
+
+    // Simple range check for grid movement (Cardinal only)
+    for (let r = unit.r - range; r <= unit.r + range; r++) {
+        for (let c = unit.c - range; c <= unit.c + range; c++) {
+            if (r < 0 || r >= CONFIG.rows || c < 0 || c >= CONFIG.cols) continue;
+            const d = Math.abs(r - unit.r) + Math.abs(c - unit.c);
+            if (d > 0 && d <= range && !state.grid[r][c]) {
+                moves.push({r,c});
+            }
+        }
+    }
+    return moves;
+}
+
+async function moveUnit(unit, r, c) {
+    state.grid[unit.r][unit.c] = null;
+    unit.r = r;
+    unit.c = c;
+    state.grid[r][c] = unit;
+    unit.hasMoved = true;
+    playSfx('move', { volume: 0.28, cooldown: 100 });
+    await wait(150);
+}
+
+async function performAttack(attacker, defender) {
+    attacker.hasAttacked = true;
+    let dmg = attacker.dmg;
+    
+    // Heal Logic
+    if (attacker.id === 'medic' && defender.team === attacker.team) {
+        dmg = -8; 
+    }
+    
+    // Shield Logic
+    if (dmg > 0 && defender.immortalTurns > 0) {
+        addFloater("BLOCKED", defender.c, defender.r, '#fff');
+        playSfx('blocked', { volume: 0.34, cooldown: 120 });
+        return;
+    }
+    
+    defender.hp -= dmg;
+    if (defender.hp > defender.maxHp) defender.hp = defender.maxHp;
+    
+    state.shake = 5;
+    playSfx(dmg > 0 ? 'attack' : 'heal', { volume: dmg > 0 ? 0.42 : 0.35, cooldown: 110 });
+    if (dmg > 0) showFeedbackGif('hit', 700);
+    
+    const color = dmg > 0 ? '#f43f5e' : '#22c55e';
+    addFloater(dmg > 0 ? `-${dmg}` : `+${Math.abs(dmg)}`, defender.c, defender.r, color);
+    
+    for(let i=0; i<8; i++) spawnParticle(defender.c, defender.r, '#ffffff');
+    
+    if (defender.hp <= 0) {
+        killUnit(defender);
+    }
+    updateHUD();
+    await wait(250);
+}
+
+function killUnit(unit) {
+    if (!state.units.includes(unit)) return; // Already dead
+    state.grid[unit.r][unit.c] = null;
+    state.units = state.units.filter(u => u !== unit);
+    for(let i=0; i<20; i++) spawnParticle(unit.c, unit.r, unit.team===0 ? CONFIG.colors.player : CONFIG.colors.enemy);
+    playSfx('defeat', { volume: 0.38, cooldown: 80 });
+
+    if (unit.type === 'boss') gameOver(true);
+    if (unit.type === 'core') gameOver(false);
+}
+
+function gameOver(win) {
+    state.active = false;
+    const screen = document.getElementById('screen-gameover');
+    const title = document.getElementById('go-title');
+    const msg = document.getElementById('go-msg');
+    const reward = document.getElementById('go-reward');
+
+    syncBgmPlayback(false);
+    screen.classList.remove('hidden');
+    if (win) {
+        title.innerText = "BASTION HELD";
+        title.className = "text-6xl font-black mb-4 tracking-widest text-center text-neon-cyan gameover-title";
+        msg.innerText = "The breach wave has been contained.";
+        
+        const creditsEarned = 100 + (playerData.level * 20);
+        playerData.credits += creditsEarned;
+        playerData.level++;
+        
+        reward.innerText = `+${creditsEarned} CREDITS`;
+        reward.classList.remove('hidden');
+        playSfx('win', { volume: 0.5, cooldown: 200 });
+        showFeedbackGif('victory', 1800);
+    } else {
+        title.innerText = "BASTION LOST";
+        title.className = "text-5xl font-black mb-4 tracking-widest text-center text-neon-red gameover-title";
+        msg.innerText = "The breach broke through the bastion.";
+        reward.classList.add('hidden');
+        playSfx('lose', { volume: 0.5, cooldown: 200 });
+        showFeedbackGif('hit', 1400);
+    }
+}
+
+// --- INPUT HANDLERS ---
+let activePointer = null;
+
+function handlePointerDown(e) {
+    if (!state.active) return;
+    activePointer = e.pointerId;
+    updatePointer(e);
+}
+
+function handlePointerMove(e) {
+    if (!state.active || e.pointerId !== activePointer) return;
+    updatePointer(e);
+}
+
+function handlePointerUp(e) {
+    if (!state.active || e.pointerId !== activePointer) return;
+    updatePointer(e);
+    if (state.turn === 'player') onGridTap(state.pointerR, state.pointerC);
+    activePointer = null;
+}
+
+function updatePointer(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left - state.offsetX;
+    const y = e.clientY - rect.top - state.offsetY;
+    state.pointerC = Math.floor(x / state.tileSize);
+    state.pointerR = Math.floor(y / state.tileSize);
+}
+
+function onGridTap(r, c) {
+    // Bounds check
+    if (r < 0 || r >= CONFIG.rows || c < 0 || c >= CONFIG.cols) {
+        deselect();
+        return;
+    }
+
+    const cell = state.grid[r][c];
+
+    // 1. Card Deployment
+    if (state.selectedCard) {
+        const card = state.selectedCard;
+        
+        // Spells
+        if (card.type === 'spell') {
+            handleSpell(card, r, c, cell);
+            return;
+        }
+
+        // Unit Spawn (Bottom 3 rows)
+        const isSpawnZone = r >= CONFIG.rows - 3;
+        if (isSpawnZone && !cell) {
+            spawnUnit(card.id, 0, r, c);
+            consumeCard(card);
+        } else if (!isSpawnZone) {
+            addFloater("INVALID ZONE", c, r, '#888');
+            playSfx('blocked', { volume: 0.32, cooldown: 140 });
+        }
+        return;
+    }
+
+    // 2. Unit Action (Move/Attack)
+    if (state.selectedUnit) {
+        // Move?
+        const move = state.validMoves.find(m => m.r === r && m.c === c);
+        if (move) {
+            moveUnit(state.selectedUnit, r, c);
+            // After move, re-select to show attacks
+            selectUnit(state.selectedUnit); 
+            return;
+        }
+        // Attack?
+        const attack = state.validAttacks.find(a => a.r === r && a.c === c);
+        if (attack && cell) {
+            performAttack(state.selectedUnit, cell);
+            deselect();
+            return;
+        }
+    }
+
+    // 3. Selection
+    if (cell && cell.team === 0) {
+        selectUnit(cell);
+    } else {
+        deselect();
+    }
+}
+
+function handleSpell(card, r, c, cell) {
+    if (card.id === 'beam') {
+        // AOE Damage
+        if (cell && cell.team === 1) {
+            performAttack({dmg: card.dmg, team: 0, id:'spell'}, cell);
+            consumeCard(card);
+        } else {
+            addFloater("NEED TARGET", c, r, '#888');
+            playSfx('blocked', { volume: 0.32, cooldown: 140 });
+        }
+    } else if (card.id === 'blast') {
+        if (cell && cell.team === 1) {
+            performAttack({dmg: card.dmg, team: 0, id:'spell'}, cell);
+            consumeCard(card);
+        }
+    } else if (card.id === 'shield') {
+        if (cell && cell.team === 0) {
+            cell.immortalTurns = 2;
+            addFloater("SHIELD UP", c, r, '#fff');
+            playSfx('heal', { volume: 0.36, cooldown: 120 });
+            consumeCard(card);
+        }
+    }
+}
+
+function consumeCard(card) {
+    state.energy -= card.cost;
+    deselect();
+    updateHUD();
+}
+
+function selectUnit(unit) {
+    if (unit.type === 'robot') {
+        addFloater("AUTO-PILOT", unit.c, unit.r, CONFIG.colors.robot);
+        playSfx('blocked', { volume: 0.25, cooldown: 140 });
+        return;
+    }
+    if (unit.hasMoved && unit.hasAttacked) {
+        addFloater("EXHAUSTED", unit.c, unit.r, '#666');
+        playSfx('blocked', { volume: 0.25, cooldown: 140 });
+        return;
+    }
+    
+    state.selectedUnit = unit;
+    state.validMoves = [];
+    state.validAttacks = [];
+    
+    if (!unit.hasMoved) state.validMoves = getValidMoves(unit);
+    
+    // Check attacks even if moved
+    if (!unit.hasAttacked) {
+        state.units.forEach(t => {
+            // Use getAttackDist (Chebyshev) for attacks
+            if (t.team !== unit.team && getAttackDist(unit, t) <= unit.range) {
+                state.validAttacks.push({r: t.r, c: t.c});
+            }
+            if (unit.id === 'medic' && t.team === unit.team && t !== unit && getAttackDist(unit, t) <= unit.range) {
+                state.validAttacks.push({r: t.r, c: t.c});
+            }
+        });
+    }
+}
+
+function deselect() {
+    state.selectedUnit = null;
+    state.selectedCard = null;
+    state.validMoves = [];
+    state.validAttacks = [];
+    renderDeck();
+}
+
+// --- RENDER LOOP ---
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function update() {
+    // Particles
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) state.particles.splice(i, 1);
+    }
+    // Floaters
+    for (let i = state.floaters.length - 1; i >= 0; i--) {
+        const f = state.floaters[i];
+        f.y -= 0.02;
+        f.life--;
+        if (f.life <= 0) state.floaters.splice(i, 1);
+    }
+    // Shake
+    if (state.shake > 0) {
+        state.shake *= 0.9;
+        if (state.shake < 0.5) state.shake = 0;
+    }
+}
+
+function draw() {
+    // Clear
+    ctx.fillStyle = CONFIG.colors.grid;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    const sx = (Math.random() - 0.5) * state.shake;
+    const sy = (Math.random() - 0.5) * state.shake;
+    
+    ctx.save();
+    ctx.translate(state.offsetX + sx, state.offsetY + sy);
+    
+    // Grid Lines
+    ctx.strokeStyle = '#3f3f46';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let c = 0; c <= CONFIG.cols; c++) {
+        ctx.moveTo(c * state.tileSize, 0);
+        ctx.lineTo(c * state.tileSize, state.gridH);
+    }
+    for (let r = 0; r <= CONFIG.rows; r++) {
+        ctx.moveTo(0, r * state.tileSize);
+        ctx.lineTo(state.gridW, r * state.tileSize);
+    }
+    ctx.stroke();
+    
+    // Highlights
+    if (state.selectedCard && state.turn === 'player') {
+        // Spawn Zone
+        if (state.selectedCard.type !== 'spell') {
+            ctx.fillStyle = 'rgba(6, 182, 212, 0.1)';
+            const y = (CONFIG.rows-3)*state.tileSize;
+            ctx.fillRect(0, y, state.gridW, 3*state.tileSize);
+            ctx.strokeStyle = CONFIG.colors.player;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(0, y, state.gridW, 3*state.tileSize);
+            ctx.setLineDash([]);
+        }
+    }
+    
+    if (state.selectedUnit) {
+        // Selection Box
+        const u = state.selectedUnit;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(u.c * state.tileSize, u.r * state.tileSize, state.tileSize, state.tileSize);
+        
+        // Moves
+        ctx.fillStyle = CONFIG.colors.move;
+        state.validMoves.forEach(m => {
+            ctx.fillRect(m.c * state.tileSize + 4, m.r * state.tileSize + 4, state.tileSize - 8, state.tileSize - 8);
+        });
+        
+        // Attacks
+        ctx.strokeStyle = CONFIG.colors.enemy;
+        ctx.lineWidth = 2;
+        state.validAttacks.forEach(a => {
+            ctx.strokeRect(a.c * state.tileSize + 6, a.r * state.tileSize + 6, state.tileSize - 12, state.tileSize - 12);
+        });
+    }
+    
+    // Units
+    state.units.forEach(u => drawUnit(u));
+    
+    // Particles
+    state.particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life / 30;
+        ctx.fillRect(p.x, p.y, 4, 4);
+    });
+    ctx.globalAlpha = 1;
+    
+    // Floaters
+    ctx.font = 'bold 16px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    state.floaters.forEach(f => {
+        ctx.fillStyle = 'black';
+        ctx.fillText(f.text, f.x * state.tileSize + state.tileSize/2 + 2, f.y * state.tileSize + 2);
+        ctx.fillStyle = f.color;
+        ctx.fillText(f.text, f.x * state.tileSize + state.tileSize/2, f.y * state.tileSize);
+    });
+    
+    ctx.restore();
+}
+
+function drawUnit(unit) {
+    const x = unit.c * state.tileSize;
+    const y = unit.r * state.tileSize;
+    const s = state.tileSize;
+    const cx = x + s/2;
+    const cy = y + s/2;
+    
+    let color = unit.team === 0 ? CONFIG.colors.player : CONFIG.colors.enemy;
+    if (unit.type === 'robot') color = CONFIG.colors.robot;
+    if (unit.type === 'witch') color = CONFIG.colors.witch;
+
+    // Shadow/Glow
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 15;
+    
+    // Shape
+    ctx.fillStyle = '#18181b'; // Dark body
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    
+    ctx.beginPath();
+    if (unit.type === 'core') {
+        ctx.arc(cx, cy, s*0.35, 0, Math.PI*2);
+    } else if (unit.type === 'boss') {
+        // Hexagon-ish
+        ctx.moveTo(cx, y + 5);
+        ctx.lineTo(x + s - 5, cy);
+        ctx.lineTo(cx, y + s - 5);
+        ctx.lineTo(x + 5, cy);
+        ctx.closePath();
+    } else {
+        // Box
+        const p = 10;
+        ctx.rect(x+p, y+p, s-p*2, s-p*2);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // Shield
+    if (unit.immortalTurns > 0) {
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(cx, cy, s*0.45, 0, Math.PI*2);
+        ctx.stroke();
+    }
+
+    // Status (Curse)
+    if (unit.status.some(s => s.type === 'curse')) {
+        ctx.fillStyle = CONFIG.colors.witch;
+        ctx.beginPath();
+        ctx.arc(x + 8, y + 8, 4, 0, Math.PI*2);
+        ctx.fill();
+    }
+    
+    // Icon
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.floor(s*0.4)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(unit.icon, cx, cy);
+    
+    // HP Bar
+    const hpPct = unit.hp / unit.maxHp;
+    const barW = s - 12;
+    const barH = 4;
+    ctx.fillStyle = '#444';
+    ctx.fillRect(cx - barW/2, y + s - 10, barW, barH);
+    ctx.fillStyle = hpPct > 0.5 ? '#22c55e' : '#f43f5e';
+    ctx.fillRect(cx - barW/2, y + s - 10, barW * hpPct, barH);
+    
+    // Action Indicator
+    if (unit.team === 0 && !unit.hasMoved && state.turn === 'player') {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x + s - 8, y + 8, 3, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+// --- UI HELPERS ---
+
+function renderDeck() {
+    const rack = document.getElementById('card-rack');
+    rack.innerHTML = '';
+    
+    playerData.deck.forEach(cardId => {
+        const card = CARDS.find(c => c.id === cardId);
+        if (!card) return;
+
+        const el = document.createElement('div');
+        const canAfford = state.energy >= card.cost;
+        const isSelected = state.selectedCard === card;
+        
+        el.className = `card flex-shrink-0 w-16 h-full rounded flex flex-col items-center justify-center cursor-pointer border ${isSelected ? 'active' : canAfford ? 'border-gray-600' : 'disabled border-gray-800'}`;
+        
+        el.innerHTML = `
+            <div class="absolute top-1 right-1 text-[10px] font-bold text-yellow-400 font-mono">${card.cost}</div>
+            <div class="text-xl mb-1">${card.icon}</div>
+            <div class="text-[8px] uppercase font-bold text-gray-300 text-center leading-none tracking-tighter">${card.name}</div>
+        `;
+        
+        el.onclick = (e) => {
+            e.stopPropagation();
+            if (!canAfford || state.turn !== 'player') return;
+            
+            if (state.selectedCard === card) {
+                deselect();
+            } else {
+                state.selectedCard = card;
+                state.selectedUnit = null;
+                state.validMoves = [];
+                state.validAttacks = [];
+            }
+            renderDeck();
+        };
+        
+        rack.appendChild(el);
+    });
+}
+
+function updateHUD() {
+    document.getElementById('energy-val').innerText = state.energy;
+    
+    // Player HP
+    const cores = state.units.filter(u => u.type === 'core');
+    const totalCoreHp = cores.reduce((a,b) => a + b.hp, 0);
+    const maxCoreHp = cores.reduce((a,b) => a + b.maxHp, 0) || 100;
+    
+    document.getElementById('player-hp-txt').innerText = totalCoreHp;
+    document.getElementById('player-hp-bar').style.width = (totalCoreHp / maxCoreHp * 100) + '%';
+    
+    // Boss HP
+    const boss = state.units.find(u => u.type === 'boss');
+    const bossHp = boss ? boss.hp : 0;
+    const bossMax = boss ? boss.maxHp : 100;
+    
+    document.getElementById('boss-hp-txt').innerText = Math.floor(bossHp/bossMax*100) + '%';
+    document.getElementById('boss-hp-bar').style.width = (bossHp / bossMax * 100) + '%';
+}
+
+function showTurnMsg(txt) {
+    const el = document.getElementById('turn-msg');
+    const t = document.getElementById('turn-txt');
+    t.innerText = txt;
+    
+    if (txt.includes("BREACH")) {
+        t.className = "turn-text text-rose-soft";
+    } else {
+        t.className = "turn-text text-cyan-soft";
+    }
+    
+    el.style.opacity = 1;
+    setTimeout(() => el.style.opacity = 0, 1500);
+}
+
+function spawnParticle(c, r, color) {
+    state.particles.push({
+        x: c * state.tileSize + state.tileSize/2,
+        y: r * state.tileSize + state.tileSize/2,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6,
+        life: 20 + Math.random() * 20,
+        color
+    });
+}
+
+function addFloater(text, c, r, color) {
+    state.floaters.push({ text, x: c, y: r, color, life: 60 });
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Start
+init();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Zombie Cam: Run & Gun</title>
+    <script src="assets/cdn.tailwindcss.com/3.4.17.js"></script>
+    <!-- [agent-note][stage4] preserved-font-map: title/horror -> Creepster, HUD/UI -> Orbitron, body -> Rajdhani -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap">
+    <style>
+        :root {
+            --bg: #020611;
+            --panel: rgba(8, 16, 27, 0.82);
+            --panel-strong: rgba(10, 22, 38, 0.94);
+            --line: rgba(122, 239, 255, 0.28);
+            --line-strong: rgba(122, 239, 255, 0.65);
+            --text: #eefaff;
+            --muted: #8da5b7;
+            --threat: #ff5d7a;
+            --threat-deep: #b0102d;
+            --safe: #55fca2;
+            --glow: rgba(122, 239, 255, 0.25);
+            --warning: rgba(255, 93, 122, 0.25);
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overscroll-behavior: none;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            touch-action: manipulation; 
+            background:
+                radial-gradient(circle at top, rgba(21, 55, 92, 0.45), transparent 38%),
+                linear-gradient(180deg, #020611 0%, #06101b 58%, #020611 100%);
+            color: var(--text);
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        canvas { 
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+        }
+
+        .creep-font { font-family: 'Creepster', fantasy, cursive; }
+        .military-font { font-family: 'Orbitron', 'Rajdhani', sans-serif; }
+        .body-font { font-family: 'Rajdhani', system-ui, sans-serif; }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(12, 24, 41, 0.96), rgba(5, 10, 17, 0.92));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--line);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+                0 14px 32px rgba(0, 0, 0, 0.52),
+                0 0 20px var(--glow);
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #game-container::before {
+            background:
+                linear-gradient(180deg, rgba(122, 239, 255, 0.06), transparent 18%, transparent 82%, rgba(255, 93, 122, 0.08)),
+                repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0 2px, transparent 2px 6px);
+            mix-blend-mode: screen;
+            opacity: 0.75;
+        }
+
+        #game-container::after {
+            background:
+                radial-gradient(circle at center, transparent 50%, rgba(0, 0, 0, 0.55) 100%);
+            z-index: 3;
+        }
+
+        #ui-layer {
+            position: relative;
+            z-index: 4;
+        }
+
+        .hud-card {
+            background: linear-gradient(180deg, rgba(10, 21, 36, 0.86), rgba(3, 9, 17, 0.94));
+            border: 1px solid var(--line);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+                0 10px 24px rgba(0, 0, 0, 0.32),
+                0 0 18px rgba(122, 239, 255, 0.12);
+        }
+
+        .neo-frame {
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: inset 0 0 0 1px rgba(122, 239, 255, 0.06);
+        }
+
+        .glitch-badge {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glitch-badge::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.1) 44%, transparent 60%);
+            transform: translateX(-110%);
+            animation: sweep 3.8s linear infinite;
+        }
+
+        .pulse-ring {
+            position: relative;
+        }
+
+        .pulse-ring::before {
+            content: "";
+            position: absolute;
+            inset: -6px;
+            border-radius: inherit;
+            border: 1px solid rgba(85, 252, 162, 0.32);
+            opacity: 0.45;
+            animation: ringPulse 1.6s ease-out infinite;
+        }
+
+        .status-dot {
+            width: 0.55rem;
+            height: 0.55rem;
+            border-radius: 999px;
+            display: inline-block;
+            background: currentColor;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        @keyframes sweep {
+            to { transform: translateX(115%); }
+        }
+
+        @keyframes ringPulse {
+            0% { transform: scale(0.92); opacity: 0.7; }
+            100% { transform: scale(1.08); opacity: 0; }
+        }
+
+        /* Blood splatter animation */
+        @keyframes splat {
+            0% { transform: scale(0.5); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.9; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .blood-effect {
+            position: absolute;
+            pointer-events: none;
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, rgba(255, 93, 122, 0.82) 0%, rgba(176, 16, 45, 0.45) 42%, transparent 72%);
+            border-radius: 50%;
+            animation: splat 0.4s ease-out forwards;
+            z-index: 20;
+        }
+
+        /* Gun Muzzle Flash */
+        @keyframes flash {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(2); }
+        }
+        .muzzle-flash {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(122, 239, 255, 0.88) 28%, rgba(255, 205, 94, 0.72) 52%, transparent 72%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: flash 0.1s linear forwards;
+            z-index: 30;
+            display: none;
+        }
+
+        /* Run feedback */
+        .run-feedback {
+            animation: pulse-green 0.5s infinite alternate;
+        }
+        @keyframes pulse-green {
+            from { box-shadow: inset 0 0 26px rgba(85, 252, 162, 0.15); }
+            to { box-shadow: inset 0 0 52px rgba(85, 252, 162, 0.4); }
+        }
+
+        .reaction-gif {
+            position: absolute;
+            right: 0.75rem;
+            width: clamp(88px, 18vw, 140px);
+            height: clamp(88px, 18vw, 140px);
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(122, 239, 255, 0.35);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 18px rgba(122, 239, 255, 0.15);
+            background: rgba(3, 9, 17, 0.72);
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(16px) scale(0.96);
+            transition: opacity 180ms ease, transform 180ms ease;
+            z-index: 12;
+        }
+
+        .reaction-gif.visible {
+            opacity: 0.95;
+            transform: translateY(0) scale(1);
+        }
+
+        #hit-gif {
+            bottom: 8.25rem;
+        }
+
+        #danger-gif {
+            top: 6.5rem;
+        }
+
+        @media (max-width: 640px) {
+            #hit-gif {
+                bottom: 7.5rem;
+            }
+
+            #danger-gif {
+                top: 5.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Video Feed -->
+    <video id="webcam" autoplay playsinline muted style="display:none;"></video>
+
+    <div id="game-container" class="relative w-full h-screen overflow-hidden">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Muzzle Flash Element -->
+        <div id="flash-overlay" class="muzzle-flash"></div>
+
+        <!-- [agent-note][stage3] resolved-gif: hit/danger feedback -> catalogs/gifs.json -->
+        <img id="hit-gif" class="reaction-gif" alt="hit feedback">
+        <img id="danger-gif" class="reaction-gif" alt="danger feedback">
+
+        <!-- UI Layer -->
+        <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col justify-between">
+            
+            <!-- HUD Top -->
+            <div id="hud" class="w-full p-3 sm:p-4 flex justify-between items-start gap-3 hidden">
+                <div class="flex flex-col hud-card neo-frame rounded-2xl px-3 py-2">
+                    <div class="text-[1.7rem] sm:text-4xl text-red-400 military-font drop-shadow-md leading-none glitch-badge">
+                        <span id="score">0</span> THREATS
+                    </div>
+                    <div class="text-[11px] text-cyan-100/70 mt-1 tracking-[0.35em] uppercase">Signal Sweep</div>
+                </div>
+                
+                <div class="flex flex-col items-end w-[52%] max-w-[15rem] hud-card neo-frame rounded-2xl px-3 py-2">
+                    <div class="text-sm sm:text-xl font-bold text-cyan-50 mb-1 military-font tracking-[0.18em]">VITALS</div>
+                    <div class="w-full h-4 bg-slate-950/80 rounded-full border border-cyan-200/10 overflow-hidden">
+                        <div id="health-bar" class="h-full bg-gradient-to-r from-red-700 via-rose-500 to-orange-300 w-full transition-all duration-200"></div>
+                    </div>
+                    <div id="motion-indicator" class="mt-2 text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-[0.24em] transition-colors flex items-center gap-2">
+                        <span class="status-dot"></span> Motion <span id="motion-val">STILL</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HUD Bottom (Controls) -->
+            <div id="controls-hud" class="w-full px-4 pt-4 pb-10 sm:pb-12 flex justify-between items-end gap-3 hidden pointer-events-auto">
+                <!-- [agent-note][stage2] preserve: control-zone | reason: avoid thumb obstruction -->
+                <button id="sprint-btn" class="pulse-ring bg-slate-900/90 active:bg-emerald-600/80 border border-cyan-300/30 text-white font-bold rounded-full w-24 h-24 flex items-center justify-center shadow-[0_0_24px_rgba(85,252,162,0.18)] transition-transform active:scale-95 neo-frame">
+                    <span class="military-font text-sm tracking-[0.24em]">RUN</span>
+                </button>
+                
+                <div class="hud-card neo-frame rounded-2xl px-3 py-2 text-slate-300 text-[11px] sm:text-xs text-center mb-2 leading-snug">
+                    <span class="text-cyan-200/85 tracking-[0.28em] uppercase block mb-1">Field Guide</span>
+                    TAP TO TAG GLITCHS<br>RUN OR HOLD TO PUSH THEM BACK
+                </div>
+            </div>
+
+            <!-- Start Screen -->
+            <div id="start-screen" class="absolute inset-0 flex items-center justify-center bg-black/80 z-50 pointer-events-auto">
+                <div class="glass-panel p-6 sm:p-8 rounded-[1.75rem] text-center max-w-sm mx-4 border border-cyan-300/15 relative overflow-hidden">
+                    <div class="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
+                    <div class="text-[11px] uppercase tracking-[0.45em] text-cyan-100/60 mb-3 military-font">Containment Alert</div>
+                    <h1 class="text-5xl sm:text-6xl text-red-400 mb-2 creep-font drop-shadow-[0_0_15px_rgba(255,78,116,0.5)]">GLITCH RUN</h1>
+                    <p class="text-cyan-50/80 text-base sm:text-lg mb-6 font-bold tracking-[0.2em] uppercase">Camera Panic Drill</p>
+                    
+                    <div class="bg-slate-950/55 p-4 rounded-2xl text-left text-sm text-slate-300 mb-6 space-y-3 border border-cyan-200/10 neo-frame">
+                        <p class="flex items-center"><span class="text-red-400 mr-2">✦</span> <strong class="text-cyan-50">TAG:</strong>&nbsp;Tap the screen to clear a glitch.</p>
+                        <p class="flex items-center"><span class="text-emerald-300 mr-2">✦</span> <strong class="text-cyan-50">RETREAT:</strong>&nbsp;Run, shake the device, or hold RUN to push threats back.</p>
+                        <p class="text-[11px] italic text-slate-400 mt-2 text-center tracking-[0.12em]">Camera and motion access improve the effect.</p>
+                    </div>
+
+                    <button id="start-btn" class="w-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-300 text-slate-950 font-bold py-4 px-8 rounded-2xl shadow-[0_0_24px_rgba(122,239,255,0.28)] uppercase tracking-[0.28em] military-font text-lg sm:text-xl transition transform hover:scale-[1.02]">
+                        START DRILL
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-screen" class="absolute inset-0 flex items-center justify-center bg-black/90 z-50 hidden pointer-events-auto">
+                <div class="text-center">
+                    <div class="glass-panel rounded-[1.75rem] px-6 py-8 mx-4 border border-rose-400/15">
+                        <h2 class="text-5xl sm:text-6xl text-red-400 mb-4 creep-font animate-pulse">SIGNAL LOST</h2>
+                        <div class="text-2xl sm:text-3xl text-cyan-50 mb-8 military-font">THREATS CLEARED: <span id="final-score" class="text-red-400">0</span></div>
+                        <button id="restart-btn" class="bg-cyan-300 text-slate-950 font-bold py-3 px-8 rounded-2xl hover:bg-cyan-200 transition military-font text-lg sm:text-xl tracking-[0.2em]">
+                            RETRY DRILL
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Error Toast -->
+            <div id="error-toast" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-rose-950/90 text-white px-6 py-4 rounded-2xl shadow-xl text-center hidden z-50 border border-rose-300/20">
+                <p id="error-msg">Error</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    /* 
+       GAME ENGINE & LOGIC 
+       -------------------
+       1. Setup & Assets
+       2. Input (Touch & Motion)
+       3. Entities (Zombie, Gun)
+       4. Game Loop
+    */
+
+    // --- 1. ASSETS & CONFIG ---
+    const ASSETS = {
+        bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3",
+        sfx: {
+            start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3",
+            shoot: "https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3",
+            hit: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3",
+            defeat: "https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_defeat_02.mp3",
+            damage: "https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3",
+            warning: "https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3",
+            gameOver: "https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3",
+            uiClick: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3"
+        },
+        gifs: {
+            hit: "https://i.giphy.com/1AjEBGWggGXh9onllB.webp",
+            danger: "https://i.giphy.com/3bzB1rHg6g9Cp06acA.webp"
+        }
+    };
+
+    const CONFIG = {
+        spawnInterval: 2000,
+        gravity: 0.5,
+        runThreshold: 15, // Acceleration magnitude to count as "running"
+        runSpeed: 3.5,    // Speed at which player retreats when running
+        zombieSpeedBase: 0.3,
+        fov: 600
+    };
+
+    // --- 2. AUDIO SYSTEM ---
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = AudioContextClass ? new AudioContextClass() : null;
+    const sounds = {};
+    let audioInitialized = false;
+    let lowHealthWarned = false;
+    const gifTimers = {};
+
+    async function loadSound(url) {
+        if (!audioCtx) return null;
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            return await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.warn("Audio load error", e);
+            return null;
+        }
+    }
+
+    function configureGif(id, src) {
+        const gif = document.getElementById(id);
+        if (gif) gif.src = src;
+    }
+
+    function showReactionGif(id, duration = 900) {
+        const gif = document.getElementById(id);
+        if (!gif) return;
+        gif.classList.add('visible');
+        clearTimeout(gifTimers[id]);
+        gifTimers[id] = setTimeout(() => gif.classList.remove('visible'), duration);
+    }
+
+    async function initAudio() {
+        if (audioInitialized) {
+            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+            return;
+        }
+
+        if (audioCtx && audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+        }
+
+        const soundEntries = Object.entries(ASSETS.sfx);
+        for (const [name, url] of soundEntries) {
+            sounds[name] = await loadSound(url);
+        }
+
+        const bgm = new Audio(ASSETS.bgm);
+        bgm.loop = true;
+        bgm.volume = 0.22;
+        bgm.preload = 'auto';
+        sounds.bgm = bgm;
+
+        configureGif('hit-gif', ASSETS.gifs.hit);
+        configureGif('danger-gif', ASSETS.gifs.danger);
+        audioInitialized = true;
+    }
+
+    function playSound(name, options = {}) {
+        if (!audioCtx || !sounds[name]) return;
+        try {
+            const src = audioCtx.createBufferSource();
+            const gain = audioCtx.createGain();
+            gain.gain.value = options.volume ?? 0.5;
+            src.buffer = sounds[name];
+            src.connect(gain);
+            gain.connect(audioCtx.destination);
+            if (options.playbackRate) src.playbackRate.value = options.playbackRate;
+            src.start(0);
+        } catch (e) {
+            console.warn("Audio playback error", e);
+        }
+    }
+
+    // --- 3. GAME STATE ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const video = document.getElementById('webcam');
+    
+    let state = {
+        active: false,
+        width: 0,
+        height: 0,
+        score: 0,
+        health: 100,
+        zombies: [],
+        lastTime: 0,
+        spawnTimer: 0,
+        isRunning: false,
+        runEnergy: 0,
+        cameraReady: false,
+        gunRecoil: 0,
+        damageFlash: 0
+    };
+
+    // --- 4. INPUT HANDLING ---
+    // Motion
+    let lastAcc = { x:0, y:0, z:0 };
+    function handleMotion(e) {
+        if (!state.active) return;
+        
+        const acc = e.accelerationIncludingGravity || e.acceleration;
+        if (!acc) return;
+
+        // Calculate delta (shake intensity)
+        const dx = acc.x - lastAcc.x;
+        const dy = acc.y - lastAcc.y;
+        const dz = acc.z - lastAcc.z;
+        const speed = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        
+        lastAcc = { x: acc.x, y: acc.y, z: acc.z };
+
+        // If shaking hard enough, add to run energy
+        if (speed > 8) { 
+            state.runEnergy = Math.min(state.runEnergy + 20, 100);
+        }
+    }
+
+    // Touch (Shoot)
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // prevent zoom only on gameplay surface
+        if (!state.active) return;
+        
+        // Handle multiple touches
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            fireGun(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+        }
+    }, { passive: false });
+    
+    canvas.addEventListener('mousedown', (e) => {
+        if (!state.active) return;
+        fireGun(e.clientX, e.clientY);
+    });
+
+    // Sprint Button
+    const sprintBtn = document.getElementById('sprint-btn');
+    sprintBtn.style.touchAction = 'manipulation';
+    sprintBtn.addEventListener('touchstart', (e) => { e.preventDefault(); state.isRunning = true; }, { passive: false });
+    sprintBtn.addEventListener('touchend', (e) => { e.preventDefault(); state.isRunning = false; }, { passive: false });
+    sprintBtn.addEventListener('touchcancel', () => { state.isRunning = false; });
+    sprintBtn.addEventListener('mousedown', () => { state.isRunning = true; });
+    sprintBtn.addEventListener('mouseup', () => { state.isRunning = false; });
+    sprintBtn.addEventListener('mouseleave', () => { state.isRunning = false; });
+
+    // --- 5. ENTITIES ---
+    class Zombie {
+        constructor() {
+            // Position in 3D space
+            // x: -1 to 1 (screen width normalized), z: depth (starts high, moves to 0)
+            // [agent-note][stage1] role: future-illustration | element: approaching-threats | intent: sell the camera-glitch theme without changing enemy logic
+            this.x = (Math.random() - 0.5) * 1.5; 
+            this.y = 0.2; // Floor level roughly
+            this.z = 10 + Math.random() * 5; // Start far away
+            this.speed = CONFIG.zombieSpeedBase + (Math.random() * 0.1);
+            
+            // Animation
+            this.animOffset = Math.random() * 100;
+            this.walkFrame = 0;
+            
+            // Visuals
+            this.color = '#3a4a3a'; 
+            this.hp = 1;
+            this.maxHp = 1;
+        }
+
+        update(dt, playerRetreatSpeed) {
+            // Move closer
+            // If player is running, effective speed decreases (or goes negative/backwards)
+            const effectiveSpeed = this.speed - playerRetreatSpeed;
+            this.z -= effectiveSpeed * dt;
+
+            // Cap distance (don't let them go too far back)
+            if (this.z > 25) this.z = 25;
+
+            // Animation
+            this.walkFrame += dt * 5;
+        }
+
+        draw(ctx, w, h) {
+            if (this.z <= 0.1) return; // Clipped
+
+            // Perspective projection
+            const scale = CONFIG.fov / this.z;
+            const sx = (w / 2) + (this.x * w * 0.5) * (10 / this.z); // Perspective X
+            const sy = (h / 2) + (this.y * h * 0.1) * (10 / this.z); // Perspective Y adjustment
+            
+            // Size
+            const size = scale * 0.15; // Base size factor
+            
+            ctx.save();
+            ctx.translate(sx, sy);
+            
+            // Bobbing
+            const bob = Math.sin(this.walkFrame + this.animOffset) * (size * 5);
+            ctx.translate(0, bob);
+
+            // Draw Humanoid (Procedural)
+            ctx.fillStyle = '#1a221a'; // Shadowy dark green
+            ctx.strokeStyle = '#2d3d2d';
+            ctx.lineWidth = size * 2;
+
+            // Legs
+            const legLen = size * 60;
+            const lAngle = Math.sin(this.walkFrame) * 0.3;
+            const rAngle = Math.sin(this.walkFrame + Math.PI) * 0.3;
+
+            // Left Leg
+            ctx.beginPath();
+            ctx.moveTo(-size*10, 0);
+            ctx.lineTo(-size*10 + Math.sin(lAngle)*legLen*0.5, legLen);
+            ctx.stroke();
+
+            // Right Leg
+            ctx.beginPath();
+            ctx.moveTo(size*10, 0);
+            ctx.lineTo(size*10 + Math.sin(rAngle)*legLen*0.5, legLen);
+            ctx.stroke();
+
+            // Torso
+            ctx.fillStyle = this.color;
+            ctx.fillRect(-size*15, -size*70, size*30, size*70);
+
+            // Head
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.arc(0, -size*90, size*12, 0, Math.PI*2);
+            ctx.fill();
+
+            // Glowing Eyes
+            ctx.fillStyle = '#ff0000';
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = size * 10;
+            ctx.beginPath();
+            ctx.arc(-size*4, -size*90, size*2, 0, Math.PI*2);
+            ctx.arc(size*4, -size*90, size*2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Arms (Reaching out)
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = size * 8;
+            ctx.beginPath();
+            ctx.moveTo(-size*15, -size*65);
+            ctx.lineTo(-size*25, -size*40 + Math.sin(this.walkFrame*2)*size*10);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(size*15, -size*65);
+            ctx.lineTo(size*25, -size*40 + Math.cos(this.walkFrame*2)*size*10);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        getHitBox(w, h) {
+            const scale = CONFIG.fov / this.z;
+            const sx = (w / 2) + (this.x * w * 0.5) * (10 / this.z);
+            const sy = (h / 2) + (this.y * h * 0.1) * (10 / this.z);
+            const size = scale * 0.15;
+            
+            // Approximate rect for hit testing
+            return {
+                x: sx - size*20,
+                y: sy - size*100,
+                w: size*40,
+                h: size*160,
+                z: this.z // Return Z for sorting clicks
+            };
+        }
+    }
+
+    // --- 6. GAME FUNCTIONS ---
+
+    function fireGun(x, y) {
+        // Visuals
+        state.gunRecoil = 1.0;
+        playSound('shoot', { volume: 0.34, playbackRate: 0.92 + Math.random() * 0.18 });
+        
+        // Muzzle flash DOM
+        const flash = document.getElementById('flash-overlay');
+        // Position flash near gun barrel (bottom right usually)
+        flash.style.right = '20%';
+        flash.style.bottom = '20%';
+        flash.style.display = 'block';
+        flash.style.animation = 'none';
+        flash.offsetHeight; /* trigger reflow */
+        flash.style.animation = 'flash 0.1s linear forwards';
+
+        // Hit Detection
+        // Sort zombies by Z (closest first) to hit the front ones
+        const targets = state.zombies.slice().sort((a,b) => a.z - b.z);
+        
+        for (let i = 0; i < targets.length; i++) {
+            const z = targets[i];
+            const box = z.getHitBox(state.width, state.height);
+            
+            // Simple point in rect check
+            if (x >= box.x && x <= box.x + box.w &&
+                y >= box.y && y <= box.y + box.h) {
+                
+                // Hit!
+                createBlood(x, y);
+                // Remove from original array
+                const idx = state.zombies.indexOf(z);
+                if (idx > -1) {
+                    state.zombies.splice(idx, 1);
+                    state.score++;
+                    playSound('hit', { volume: 0.28, playbackRate: 1.02 + Math.random() * 0.12 });
+                    playSound('defeat', { volume: 0.24, playbackRate: 0.98 + Math.random() * 0.08 });
+                    showReactionGif('hit-gif', 700);
+                    updateHUD();
+                }
+                break; // Only hit one at a time
+            }
+        }
+    }
+
+    function createBlood(x, y) {
+        const el = document.createElement('div');
+        el.className = 'blood-effect';
+        el.style.left = (x - 40) + 'px';
+        el.style.top = (y - 40) + 'px';
+        document.getElementById('game-container').appendChild(el);
+        setTimeout(() => el.remove(), 400);
+    }
+
+    function drawGun(ctx, w, h) {
+        ctx.save();
+        // Gun Position: Bottom Right, moves with recoil
+        const gunX = w * 0.7;
+        const gunY = h - (state.gunRecoil * 50); // Recoil kicks gun up
+        
+        // Decay recoil
+        state.gunRecoil *= 0.8;
+
+        ctx.translate(gunX, gunY);
+        
+        // Gun Body (Simple Vector Art)
+        ctx.fillStyle = '#0f0f0f';
+        ctx.fillRect(-40, -100, 80, 200); // Handle/Receiver
+        
+        // Slide
+        ctx.fillStyle = '#222';
+        ctx.fillRect(-45, -120 + (state.gunRecoil * 20), 90, 160); 
+        
+        // Barrel hole
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(0, -130 + (state.gunRecoil * 20), 15, 0, Math.PI*2);
+        ctx.fill();
+
+        // Sights
+        ctx.fillStyle = '#0f0'; // Night sights
+        ctx.fillRect(-5, -135 + (state.gunRecoil * 20), 10, 10);
+
+        ctx.restore();
+    }
+
+    function updateHUD() {
+        document.getElementById('score').innerText = state.score;
+        const hp = document.getElementById('health-bar');
+        hp.style.width = state.health + '%';
+        
+        if (state.health <= 40 && state.active) {
+            showReactionGif('danger-gif', 1200);
+            if (!lowHealthWarned) {
+                playSound('warning', { volume: 0.2 });
+                lowHealthWarned = true;
+            }
+        } else {
+            lowHealthWarned = false;
+        }
+        
+        const motionTxt = document.getElementById('motion-val');
+        const motionInd = document.getElementById('motion-indicator');
+        
+        if (state.runEnergy > 10 || state.isRunning) {
+            motionTxt.innerText = "RUNNING";
+            motionTxt.className = "text-green-500 font-bold";
+            document.getElementById('game-container').classList.add('run-feedback');
+        } else {
+            motionTxt.innerText = "STILL";
+            motionTxt.className = "text-gray-500";
+            document.getElementById('game-container').classList.remove('run-feedback');
+        }
+    }
+
+    function resize() {
+        state.width = window.innerWidth;
+        state.height = window.innerHeight;
+        canvas.width = state.width;
+        canvas.height = state.height;
+    }
+    window.addEventListener('resize', resize);
+
+    // --- 7. MAIN LOOP ---
+    function loop(timestamp) {
+        if (!state.active) return;
+        const dt = (timestamp - state.lastTime) / 1000;
+        state.lastTime = timestamp;
+
+        // 1. Clear / Background
+        ctx.clearRect(0, 0, state.width, state.height);
+        
+        // Draw Camera Feed
+        if (state.cameraReady && video.readyState === video.HAVE_ENOUGH_DATA) {
+            const vRatio = video.videoWidth / video.videoHeight;
+            const cRatio = canvas.width / canvas.height;
+            let dw, dh, dx, dy;
+            if (cRatio > vRatio) {
+                dw = canvas.width; dh = canvas.width / vRatio;
+                dx = 0; dy = (canvas.height - dh) / 2;
+            } else {
+                dh = canvas.height; dw = canvas.height * vRatio;
+                dx = (canvas.width - dw) / 2; dy = 0;
+            }
+            ctx.drawImage(video, dx, dy, dw, dh);
+            
+            // Dark Overlay for atmosphere
+            ctx.fillStyle = 'rgba(0, 10, 0, 0.4)';
+            ctx.fillRect(0,0,state.width, state.height);
+            
+            // Vignette
+            const grad = ctx.createRadialGradient(state.width/2, state.height/2, state.height/3, state.width/2, state.height/2, state.height);
+            grad.addColorStop(0, 'transparent');
+            grad.addColorStop(1, 'rgba(0,0,0,0.9)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0,0,state.width, state.height);
+        } else {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0,0,state.width, state.height);
+        }
+
+        if (state.damageFlash > 0) {
+            ctx.fillStyle = `rgba(255, 0, 64, ${Math.min(state.damageFlash, 0.45)})`;
+            ctx.fillRect(0, 0, state.width, state.height);
+            state.damageFlash = Math.max(0, state.damageFlash - dt * 1.8);
+        }
+
+        // 2. Logic: Running & Spawning
+        // Decay run energy
+        if (state.runEnergy > 0) state.runEnergy -= dt * 30;
+        
+        // Determine player retreat speed
+        let retreatSpeed = 0;
+        if (state.isRunning || state.runEnergy > CONFIG.runThreshold) {
+            retreatSpeed = CONFIG.runSpeed;
+        }
+
+        // Spawn
+        state.spawnTimer += dt * 1000;
+        // Spawn faster as score goes up
+        const currentInterval = Math.max(500, CONFIG.spawnInterval - (state.score * 50));
+        if (state.spawnTimer > currentInterval) {
+            state.zombies.push(new Zombie());
+            state.spawnTimer = 0;
+        }
+
+        // 3. Update & Draw Zombies
+        // Sort: Farthest first (painters algorithm)
+        state.zombies.sort((a,b) => b.z - a.z);
+
+        for (let i = state.zombies.length - 1; i >= 0; i--) {
+            const z = state.zombies[i];
+            z.update(dt, retreatSpeed);
+            z.draw(ctx, state.width, state.height);
+
+            // Bite Check
+            if (z.z <= 1.5) { // Too close!
+                state.health -= 20;
+                state.damageFlash = 0.45;
+                playSound('damage', { volume: 0.36, playbackRate: 0.95 + Math.random() * 0.1 });
+                showReactionGif('danger-gif', 1200);
+                
+                state.zombies.splice(i, 1);
+                updateHUD();
+
+                if (state.health <= 0) {
+                    gameOver();
+                }
+            }
+        }
+
+        // 4. Draw Gun
+        drawGun(ctx, state.width, state.height);
+        
+        // UI Update
+        updateHUD();
+
+        requestAnimationFrame(loop);
+    }
+
+    // --- 8. INIT & PERMISSIONS ---
+    async function initCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, 
+                audio: false 
+            });
+            video.srcObject = stream;
+            await video.play();
+            state.cameraReady = true;
+        } catch (e) {
+            console.error(e);
+             document.getElementById('error-msg').innerText = "Camera access denied. Running in fallback mode.";
+            document.getElementById('error-toast').classList.remove('hidden');
+            setTimeout(() => document.getElementById('error-toast').classList.add('hidden'), 3000);
+        }
+    }
+
+    async function requestMotion() {
+        // iOS 13+ requires permission
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            try {
+                const response = await DeviceMotionEvent.requestPermission();
+                if (response === 'granted') {
+                    window.addEventListener('devicemotion', handleMotion);
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        } else {
+            // Non-iOS or older devices
+            window.addEventListener('devicemotion', handleMotion);
+        }
+    }
+
+    function startGame() {
+        state.score = 0;
+        state.health = 100;
+        state.zombies = [];
+        state.active = true;
+        state.lastTime = performance.now();
+        state.isRunning = false;
+        state.runEnergy = 0;
+        state.damageFlash = 0;
+        lowHealthWarned = false;
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('controls-hud').classList.remove('hidden');
+        
+        resize();
+        updateHUD();
+        
+        if (sounds.bgm) {
+            sounds.bgm.currentTime = 0;
+            sounds.bgm.play().catch(() => {});
+        }
+        requestAnimationFrame(loop);
+    }
+
+    function gameOver() {
+        state.active = false;
+        playSound('gameOver', { volume: 0.32 });
+        showReactionGif('danger-gif', 1800);
+        if (sounds.bgm) { sounds.bgm.pause(); sounds.bgm.currentTime = 0; }
+        
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('controls-hud').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('final-score').innerText = state.score;
+        document.getElementById('game-container').classList.remove('run-feedback');
+    }
+
+    // Event Bindings
+    document.getElementById('start-btn').addEventListener('click', async () => {
+        await initAudio();
+        playSound('start', { volume: 0.28 });
+        await initCamera();
+        await requestMotion();
+        startGame();
+    });
+
+    document.getElementById('restart-btn').addEventListener('click', async () => {
+        await initAudio();
+        playSound('uiClick', { volume: 0.22 });
+        startGame();
+    });
+
+    // Initial resize
+    resize();
+
+    </script>
+</body>
+</html>

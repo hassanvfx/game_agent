@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pulse Drift</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #03050f;
+      --bg-deep: #080d22;
+      --panel: rgba(10, 18, 42, 0.72);
+      --panel-line: rgba(126, 235, 255, 0.38);
+      --text: #e8f7ff;
+      --text-soft: rgba(205, 233, 255, 0.88);
+      --hero-core: #8ffff8;
+      --hero-glow: #4ed8ff;
+      --danger: #ff578c;
+      --danger-soft: #ff8d76;
+      --accent: #6cf1ff;
+      --accent-2: #8f7cff;
+      --safe-top: max(10px, env(safe-area-inset-top));
+      --safe-right: max(10px, env(safe-area-inset-right));
+      --safe-bottom: max(12px, env(safe-area-inset-bottom));
+      --safe-left: max(10px, env(safe-area-inset-left));
+      --font-display: 'Orbitron', sans-serif;
+      --font-ui: 'Rajdhani', sans-serif;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(88, 109, 255, 0.18), transparent 34%),
+        radial-gradient(circle at 50% 100%, rgba(11, 201, 255, 0.1), transparent 36%),
+        linear-gradient(180deg, var(--bg) 0%, #040814 50%, #010207 100%);
+      color: var(--text);
+      font-family: var(--font-ui);
+      overflow: hidden;
+    }
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      background:
+        linear-gradient(90deg, transparent 0 12%, rgba(125, 241, 255, 0.06) 12% 12.4%, transparent 12.4% 100%),
+        linear-gradient(180deg, rgba(255,255,255,0.035), transparent 16%, transparent 84%, rgba(255,255,255,0.03));
+      mix-blend-mode: screen;
+      opacity: 0.45;
+    }
+    body::after {
+      background:
+        repeating-linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.025) 0 2px,
+          transparent 2px 6px
+        );
+      opacity: 0.2;
+    }
+    canvas {
+      position: relative;
+      z-index: 1;
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at center, #0d1639 0%, #050816 68%, #020308 100%);
+    }
+    .hud {
+      position: fixed;
+      top: var(--safe-top);
+      left: var(--safe-left);
+      z-index: 2;
+      min-width: min(220px, calc(100vw - 20px));
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1px solid var(--panel-line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(12, 21, 48, 0.88), rgba(6, 11, 28, 0.72));
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.03) inset,
+        0 8px 24px rgba(0, 0, 0, 0.28),
+        0 0 18px rgba(78, 216, 255, 0.16);
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.35;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-soft);
+      text-shadow: 0 0 8px rgba(80, 180, 255, 0.42);
+      pointer-events: none;
+      white-space: pre-line;
+      backdrop-filter: blur(8px);
+    }
+    .hud::before {
+      content: "Pulse Drift // Neon Relay";
+      display: block;
+      margin-bottom: 8px;
+      font-family: var(--font-display);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: var(--hero-core);
+      text-shadow: 0 0 12px rgba(108, 241, 255, 0.45);
+    }
+    .hint {
+      position: fixed;
+      bottom: var(--safe-bottom);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+      max-width: min(92vw, 560px);
+      padding: 8px 12px;
+      border: 1px solid rgba(143, 124, 255, 0.34);
+      border-radius: 999px;
+      background: rgba(7, 11, 27, 0.68);
+      box-shadow: 0 0 14px rgba(143, 124, 255, 0.16);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: 0.04em;
+      opacity: 0.96;
+      color: var(--text-soft);
+      text-shadow: 0 0 8px rgba(80, 180, 255, 0.45);
+      pointer-events: none;
+      text-align: center;
+      box-sizing: border-box;
+      backdrop-filter: blur(8px);
+    }
+    .feedback-gif {
+      position: fixed;
+      right: var(--safe-right);
+      width: min(26vw, 120px);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(5, 8, 18, 0.55);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26), 0 0 18px rgba(108, 241, 255, 0.2);
+      object-fit: cover;
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+      transition: opacity 180ms ease, transform 180ms ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .feedback-gif.is-visible {
+      opacity: 0.88;
+      transform: translateY(0) scale(1);
+    }
+    .feedback-gif.success {
+      top: 12px;
+    }
+    .feedback-gif.fail {
+      bottom: 64px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26), 0 0 18px rgba(255, 87, 140, 0.22);
+    }
+    @media (max-width: 640px) {
+      .hud {
+        font-size: 13px;
+        min-width: min(210px, calc(100vw - 20px));
+        padding: 9px 10px;
+      }
+      .hud::before {
+        font-size: 11px;
+      }
+      .hint {
+        bottom: var(--safe-bottom);
+        font-size: 12px;
+        padding: 7px 10px;
+        max-width: min(94vw, 520px);
+      }
+      .feedback-gif {
+        width: min(28vw, 92px);
+        right: var(--safe-right);
+      }
+      .feedback-gif.fail {
+        bottom: 54px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="hud" id="hud"></div>
+  <img
+    id="successGif"
+    class="feedback-gif success"
+    alt="Combo surge reaction"
+    src="https://i.giphy.com/1zmG8avB83Uvm.webp"
+    decoding="async"
+    loading="eager"
+  />
+  <img
+    id="failGif"
+    class="feedback-gif fail"
+    alt="Signal damage reaction"
+    src="https://i.giphy.com/wY1So1mO4gaNbntT0r.webp"
+    decoding="async"
+    loading="eager"
+  />
+  <div class="hint">Steer the pulse: ← → or A D • Phase through hazards: Space/Touch • Audio starts on first input</div>
+  <canvas id="game"></canvas>
+
+  <!-- [agent-note][stage4] repaired: mobile-safe-spacing | element: .hud,.hint,.feedback-gif | action: applied safe-area insets without changing layout flow -->
+  <!-- [agent-note][stage4] repaired: font-remap | element: :root | action: removed non-catalog fallback refs from font vars -->
+  <!-- [agent-note][stage3] resolved-font: display/ui -> Orbitron + Rajdhani from catalogs/fonts.json -->
+  <!-- [agent-note][stage3] resolved-audio: bgm + ui/phase/success/damage/game-over from catalogs/audios.json -->
+  <!-- [agent-note][stage3] resolved-gif: combo-surge + damage-flare from catalogs/gifs.json -->
+  <audio id="bgm" preload="auto" loop src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3"></audio>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const hud = document.getElementById('hud');
+    const bgm = document.getElementById('bgm');
+    const successGif = document.getElementById('successGif');
+    const failGif = document.getElementById('failGif');
+
+    let w = 0;
+    let h = 0;
+    const lanes = 5;
+    let lane = Math.floor(lanes / 2);
+    let targetLane = lane;
+
+    let score = 0;
+    let combo = 0;
+    let best = Number(localStorage.getItem('sound-wave-best') || 0);
+    let speed = 280;
+    let spawnTimer = 0;
+    let shield = 100;
+    let phase = 0;
+    let gameOver = false;
+
+    const obstacles = [];
+    const stars = [];
+
+    let audioCtx = null;
+    let analyser = null;
+    let data = null;
+    let startedAudio = false;
+    let bgmSource = null;
+    let bgmConnected = false;
+    let lowShieldWarningActive = false;
+    let lastWarningTime = 0;
+    let lastDamageTime = 0;
+    let gameOverHandled = false;
+    let successGifTimer = 0;
+    let failGifTimer = 0;
+
+    const soundUrls = {
+      move: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3',
+      phase: 'https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3',
+      dodge: 'https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3',
+      damage: 'https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3',
+      gameOver: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3',
+      warning: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3',
+      restart: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3'
+    };
+
+    const soundPool = Object.fromEntries(
+      Object.entries(soundUrls).map(([name, url]) => {
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        audio.volume = {
+          move: 0.22,
+          phase: 0.35,
+          dodge: 0.32,
+          damage: 0.42,
+          gameOver: 0.45,
+          warning: 0.24,
+          restart: 0.3
+        }[name] || 0.3;
+        return [name, audio];
+      })
+    );
+
+    function resize() {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    for (let i = 0; i < 220; i++) {
+      stars.push({ x: Math.random() * w, y: Math.random() * h, z: Math.random() * 1 + 0.2 });
+    }
+
+    function triggerGif(element, duration = 700) {
+      if (!element) return;
+      element.classList.add('is-visible');
+      if (element === successGif) {
+        clearTimeout(successGifTimer);
+        successGifTimer = setTimeout(() => element.classList.remove('is-visible'), duration);
+      } else if (element === failGif) {
+        clearTimeout(failGifTimer);
+        failGifTimer = setTimeout(() => element.classList.remove('is-visible'), duration);
+      }
+    }
+
+    function playSound(name, reset = true) {
+      const sound = soundPool[name];
+      if (!sound) return;
+      try {
+        if (reset) sound.currentTime = 0;
+        sound.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      if (!bgmSource) {
+        bgmSource = audioCtx.createMediaElementSource(bgm);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+      }
+      if (!bgmConnected) {
+        bgmSource.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        bgmConnected = true;
+        data = new Uint8Array(analyser.frequencyBinCount);
+      }
+      if (!startedAudio) {
+        startedAudio = true;
+        bgm.volume = 0.2;
+        bgm.play().catch(() => {});
+      }
+    }
+
+    function inputMove(dir) {
+      ensureAudio();
+      if (gameOver) {
+        restart();
+        return;
+      }
+      const nextLane = Math.max(0, Math.min(lanes - 1, targetLane + dir));
+      if (nextLane !== targetLane) {
+        targetLane = nextLane;
+        playSound('move');
+      }
+    }
+
+    function inputPhase() {
+      ensureAudio();
+      if (gameOver) {
+        restart();
+        return;
+      }
+      if (phase <= 0) {
+        phase = 0.28;
+        playSound('phase');
+        triggerGif(successGif, 520);
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') inputMove(-1);
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') inputMove(1);
+      if (e.code === 'Space') { e.preventDefault(); inputPhase(); }
+    });
+
+    window.addEventListener('pointerdown', (e) => {
+      if (e.clientX < w * 0.35) inputMove(-1);
+      else if (e.clientX > w * 0.65) inputMove(1);
+      else inputPhase();
+    });
+
+    function restart() {
+      playSound('restart');
+      successGif.classList.remove('is-visible');
+      failGif.classList.remove('is-visible');
+      score = 0;
+      combo = 0;
+      shield = 100;
+      speed = 280;
+      spawnTimer = 0;
+      phase = 0;
+      lane = Math.floor(lanes / 2);
+      targetLane = lane;
+      obstacles.length = 0;
+      gameOver = false;
+      gameOverHandled = false;
+      lowShieldWarningActive = false;
+      lastWarningTime = 0;
+      lastDamageTime = 0;
+      if (startedAudio && bgm.paused) {
+        bgm.play().catch(() => {});
+      }
+    }
+
+    function spawnObstacle(amp) {
+      const t = Math.random();
+      const kind = t < 0.75 ? 'spike' : 'wall';
+      obstacles.push({
+        lane: Math.floor(Math.random() * lanes),
+        y: -40,
+        w: kind === 'wall' ? 110 : 66,
+        h: kind === 'wall' ? 24 : 52,
+        kind,
+        pulse: amp
+      });
+    }
+
+    function laneX(i) {
+      const spacing = w / (lanes + 1);
+      return spacing * (i + 1);
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+
+      let amp = 0.2;
+      if (analyser && data) {
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        amp = (sum / data.length) / 255;
+      }
+
+      if (!gameOver) {
+        lane += (targetLane - lane) * Math.min(1, dt * 16);
+        speed += dt * (5 + amp * 12);
+
+        spawnTimer -= dt;
+        if (spawnTimer <= 0) {
+          spawnObstacle(amp);
+          spawnTimer = Math.max(0.2, 0.75 - amp * 0.38 - score * 0.0004);
+        }
+
+        phase = Math.max(0, phase - dt);
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+          const o = obstacles[i];
+          o.y += speed * dt;
+          if (o.y > h + 80) {
+            obstacles.splice(i, 1);
+            score += 10;
+            combo += 1;
+            shield = Math.min(100, shield + 1.2);
+            if (combo > 0 && combo % 5 === 0) {
+              playSound('dodge');
+              triggerGif(successGif, 820);
+            }
+            continue;
+          }
+
+          const px = laneX(lane);
+          const py = h * 0.82;
+          const ox = laneX(o.lane);
+          const collideX = Math.abs(px - ox) < (o.w * 0.45);
+          const collideY = Math.abs(py - o.y) < (o.h * 0.6 + 18);
+
+          if (collideX && collideY) {
+            if (phase > 0.02) {
+              score += 16;
+              combo += 2;
+              obstacles.splice(i, 1);
+              playSound('dodge');
+              triggerGif(successGif, 720);
+            } else {
+              obstacles.splice(i, 1);
+              combo = 0;
+              shield -= o.kind === 'wall' ? 34 : 20;
+              if (now - lastDamageTime > 180) {
+                playSound('damage');
+                triggerGif(failGif, 900);
+                lastDamageTime = now;
+              }
+              if (shield <= 0) {
+                shield = 0;
+                gameOver = true;
+                best = Math.max(best, Math.floor(score));
+                localStorage.setItem('sound-wave-best', String(best));
+              }
+            }
+          }
+        }
+
+        score += dt * (7 + combo * 0.35);
+
+        if (shield <= 35 && !lowShieldWarningActive && now - lastWarningTime > 2500) {
+          lowShieldWarningActive = true;
+          lastWarningTime = now;
+          playSound('warning');
+          triggerGif(failGif, 760);
+        } else if (shield > 35) {
+          lowShieldWarningActive = false;
+        }
+      } else if (!gameOverHandled) {
+        gameOverHandled = true;
+        playSound('gameOver');
+        triggerGif(failGif, 1400);
+        bgm.pause();
+      }
+
+      draw(amp);
+      requestAnimationFrame(loop);
+    }
+
+    function draw(amp) {
+      ctx.clearRect(0, 0, w, h);
+
+      const pulse = 0.5 + amp * 1.2;
+      const time = performance.now() * 0.0012;
+
+      const bgGradient = ctx.createRadialGradient(w * 0.5, h * 0.18, 0, w * 0.5, h * 0.56, Math.max(w, h) * 0.72);
+      bgGradient.addColorStop(0, `rgba(36, 72, 168, ${0.22 + amp * 0.1})`);
+      bgGradient.addColorStop(0.45, 'rgba(10, 20, 52, 0.18)');
+      bgGradient.addColorStop(1, 'rgba(1, 3, 10, 0)');
+      ctx.fillStyle = bgGradient;
+      ctx.fillRect(0, 0, w, h);
+
+      for (const s of stars) {
+        s.y += (40 + s.z * 80 + speed * 0.05) * 0.016;
+        if (s.y > h) {
+          s.y = -2;
+          s.x = Math.random() * w;
+        }
+        const twinkle = 0.2 + s.z * 0.45 + Math.sin(time * 3 + s.x * 0.01) * 0.08;
+        ctx.fillStyle = `rgba(138,225,255,${twinkle})`;
+        ctx.fillRect(s.x, s.y, s.z * 2.2, s.z * 2.2);
+      }
+
+      for (let i = 0; i < lanes; i++) {
+        const x = laneX(i);
+        ctx.strokeStyle = `rgba(108, 205, 255, ${0.16 + amp * 0.28})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let y = 0; y <= h; y += 24) {
+          const sway = Math.sin(y * 0.018 + performance.now() * 0.005 + i) * (10 + amp * 24);
+          if (y === 0) ctx.moveTo(x + sway, y);
+          else ctx.lineTo(x + sway, y);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(143, 124, 255, ${0.06 + amp * 0.12})`;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        for (let y = 0; y <= h; y += 36) {
+          const sway = Math.sin(y * 0.018 + performance.now() * 0.005 + i) * (10 + amp * 24);
+          if (y === 0) ctx.moveTo(x + sway, y);
+          else ctx.lineTo(x + sway, y);
+        }
+        ctx.stroke();
+      }
+
+      for (const o of obstacles) {
+        const x = laneX(o.lane);
+        if (o.kind === 'wall') {
+          const wallGlow = ctx.createLinearGradient(x, o.y - o.h / 2, x, o.y + o.h / 2);
+          wallGlow.addColorStop(0, `rgba(255, 106, 185, ${0.72 + o.pulse * 0.18})`);
+          wallGlow.addColorStop(1, `rgba(255, 84, 132, ${0.5 + o.pulse * 0.28})`);
+          ctx.fillStyle = wallGlow;
+          ctx.shadowBlur = 18;
+          ctx.shadowColor = 'rgba(255, 95, 150, 0.35)';
+          ctx.fillRect(x - o.w / 2, o.y - o.h / 2, o.w, o.h);
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = 'rgba(255, 220, 235, 0.4)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x - o.w / 2, o.y - o.h / 2, o.w, o.h);
+        } else {
+          ctx.fillStyle = `rgba(255, 141, 118, ${0.68 + o.pulse * 0.24})`;
+          ctx.shadowBlur = 16;
+          ctx.shadowColor = 'rgba(255, 133, 107, 0.28)';
+          ctx.beginPath();
+          ctx.moveTo(x, o.y - o.h / 2);
+          ctx.lineTo(x - o.w / 2, o.y + o.h / 2);
+          ctx.lineTo(x + o.w / 2, o.y + o.h / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = 'rgba(255, 233, 225, 0.35)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      const px = laneX(lane);
+      const py = h * 0.82;
+      const r = 16 + amp * 8;
+
+      ctx.strokeStyle = `rgba(105, 222, 255, ${0.2 + amp * 0.16})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 42);
+      ctx.lineTo(px, py + 10);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.fillStyle = phase > 0.02 ? 'rgba(143,255,250,0.98)' : 'rgba(127,220,255,0.96)';
+      ctx.shadowBlur = 22 + amp * 26;
+      ctx.shadowColor = phase > 0.02 ? '#89ffff' : '#55c9ff';
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      const coreGradient = ctx.createRadialGradient(px - r * 0.25, py - r * 0.3, r * 0.2, px, py, r);
+      coreGradient.addColorStop(0, 'rgba(255,255,255,0.95)');
+      coreGradient.addColorStop(0.45, phase > 0.02 ? 'rgba(190,255,250,0.9)' : 'rgba(152,238,255,0.88)');
+      coreGradient.addColorStop(1, 'rgba(38,111,255,0.16)');
+      ctx.fillStyle = coreGradient;
+      ctx.beginPath();
+      ctx.arc(px, py, r * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = `rgba(217, 255, 255, ${0.4 + amp * 0.24})`;
+      ctx.beginPath();
+      ctx.arc(px, py, r + 8 + Math.sin(time * 8) * 2.5, -Math.PI * 0.2, Math.PI * 1.12);
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+
+      if (phase > 0.02) {
+        ctx.strokeStyle = 'rgba(150,255,255,0.82)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(px, py, r + 12 + Math.sin(performance.now() * 0.02) * 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(110, 239, 255, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(px, py, r + 20 + Math.cos(performance.now() * 0.018) * 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      hud.textContent =
+        `Drift Score: ${Math.floor(score)}\nSync Chain: x${combo}\nSignal: ${Math.floor(shield)}\nBest Run: ${best}` +
+        (gameOver ? '\nSIGNAL LOST — press any control to relaunch' : '');
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

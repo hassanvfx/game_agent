@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Airport Commander 3D</title>
+    <!-- [agent-note][stage3] resolved-font: title/ui -> catalogs/fonts.json (Audiowide + Exo 2) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@400;600;700&display=swap">
+    <style>
+        :root {
+            --font-display: 'Audiowide', 'Orbitron', system-ui, sans-serif;
+            --font-body: 'Exo 2', system-ui, sans-serif;
+            --bg-page: #050816;
+            --bg-overlay: rgba(4, 9, 25, 0.7);
+            --panel-bg: linear-gradient(180deg, rgba(7, 18, 44, 0.82), rgba(9, 31, 62, 0.72));
+            --panel-border: rgba(134, 220, 255, 0.3);
+            --panel-shadow: 0 16px 36px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.08);
+            --text-main: #f4fbff;
+            --text-muted: #b9d5ef;
+            --accent-cyan: #7ee7ff;
+            --accent-blue: #4b9dff;
+            --accent-teal: #36d9c8;
+            --accent-amber: #ffcb67;
+            --accent-red: #ff5b73;
+            --accent-red-soft: #ffd2d8;
+            --runway-dark: #1a2541;
+            --runway-mid: #2c4169;
+            --runway-glow: rgba(126, 231, 255, 0.16);
+            --ground-dark: #0d402d;
+            --ground-mid: #1f6b49;
+            --ground-light: #57af7c;
+            --slate-900: #0b1120;
+            --slate-950: #020617;
+            --green-500: #4fffb3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: var(--font-body);
+            background:
+                radial-gradient(circle at top, rgba(95, 166, 255, 0.16), transparent 35%),
+                radial-gradient(circle at bottom, rgba(54, 217, 200, 0.12), transparent 30%),
+                var(--bg-page);
+            color: var(--text-main);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        button {
+            font: inherit;
+            border: 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+            pointer-events: auto;
+        }
+
+        .overlay-start {
+            background:
+                radial-gradient(circle at 50% 15%, rgba(126, 231, 255, 0.16), transparent 25%),
+                radial-gradient(circle at 50% 80%, rgba(75, 157, 255, 0.14), transparent 30%),
+                var(--bg-overlay);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .overlay-danger {
+            background:
+                radial-gradient(circle at 50% 20%, rgba(255, 91, 115, 0.22), transparent 30%),
+                rgba(55, 10, 22, 0.84);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: var(--slate-900);
+        }
+
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            background:
+                linear-gradient(to bottom, rgba(255,255,255,0.03), rgba(255,255,255,0) 40%),
+                linear-gradient(
+                    to bottom,
+                    rgba(255,255,255,0),
+                    rgba(255,255,255,0) 50%,
+                    rgba(0,0,0,0.1) 50%,
+                    rgba(0,0,0,0.1)
+                );
+            background-size: 100% 100%, 100% 4px;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .sky-grid {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            background:
+                linear-gradient(transparent 0 78%, rgba(126, 231, 255, 0.08) 100%),
+                repeating-linear-gradient(90deg, rgba(126, 231, 255, 0.05) 0 1px, transparent 1px 72px),
+                repeating-linear-gradient(0deg, rgba(126, 231, 255, 0.04) 0 1px, transparent 1px 64px);
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0.75), transparent 85%);
+        }
+
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--panel-shadow);
+        }
+
+        .hud {
+            position: absolute;
+            top: max(1rem, env(safe-area-inset-top));
+            left: max(1rem, env(safe-area-inset-left));
+            display: flex;
+            gap: 0.8rem;
+        }
+
+        .hud-chip {
+            padding: 0.72rem 0.95rem;
+            border-radius: 1rem;
+            color: var(--text-main);
+            font-weight: 700;
+            font-size: 0.98rem;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .status-dot {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 999px;
+            background: var(--green-500);
+            box-shadow: 0 0 14px rgba(79, 255, 179, 0.7);
+            animation: pulse 1.2s infinite;
+            flex: 0 0 auto;
+        }
+
+        .modal-card {
+            width: min(92vw, 31rem);
+            max-height: min(90vh, 42rem);
+            padding: 2rem 1.35rem 1.4rem;
+            border-radius: 1.75rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .modal-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            height: 0.28rem;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue), transparent);
+            opacity: 0.9;
+        }
+
+        .modal-card.start::after,
+        .modal-card.danger::after {
+            content: "";
+            position: absolute;
+            inset: auto -2rem -2rem auto;
+            width: 8rem;
+            height: 8rem;
+            border-radius: 50%;
+            filter: blur(10px);
+            opacity: 0.18;
+            pointer-events: none;
+        }
+
+        .modal-card.start::after {
+            background: var(--accent-cyan);
+        }
+
+        .modal-card.danger::after {
+            background: var(--accent-red);
+        }
+
+        .modal-content {
+            overflow-y: auto;
+            padding-bottom: 0.6rem;
+        }
+
+        .modal-actions {
+            position: sticky;
+            bottom: 0;
+            padding-top: 0.35rem;
+            background: linear-gradient(to top, rgba(5, 8, 22, 0.88), rgba(5, 8, 22, 0));
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            align-self: center;
+            margin-bottom: 0.85rem;
+            padding: 0.42rem 0.8rem;
+            border-radius: 999px;
+            border: 1px solid rgba(126, 231, 255, 0.32);
+            background: rgba(126, 231, 255, 0.08);
+            color: var(--accent-cyan);
+            font-family: var(--font-display);
+            font-size: 0.8rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .hero-plane {
+            position: relative;
+            align-self: center;
+            width: 6rem;
+            height: 6rem;
+            margin: 0 auto 0.95rem;
+            border-radius: 1.75rem;
+            background:
+                radial-gradient(circle at 50% 38%, rgba(255,255,255,0.9), rgba(255,255,255,0.1) 26%, transparent 28%),
+                radial-gradient(circle at 50% 50%, rgba(126, 231, 255, 0.24), transparent 62%),
+                linear-gradient(160deg, rgba(126, 231, 255, 0.22), rgba(75, 157, 255, 0.12));
+            border: 1px solid rgba(126, 231, 255, 0.3);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 0 24px rgba(126, 231, 255, 0.2);
+        }
+
+        .hero-plane::before,
+        .hero-plane::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(180deg, #f8fdff, #c5efff);
+            box-shadow: 0 0 16px rgba(126, 231, 255, 0.35);
+        }
+
+        .hero-plane::before {
+            top: 0.85rem;
+            width: 1rem;
+            height: 4.3rem;
+            border-radius: 999px;
+        }
+
+        .hero-plane::after {
+            top: 2.3rem;
+            width: 4.2rem;
+            height: 0.9rem;
+            border-radius: 999px;
+        }
+
+        .hero-spark {
+            position: absolute;
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 50%;
+            background: var(--accent-amber);
+            box-shadow: 0 0 10px rgba(255, 203, 103, 0.9);
+            animation: drift 2.2s ease-in-out infinite;
+        }
+
+        .hero-spark.spark-a { top: 0.85rem; right: 0.65rem; }
+        .hero-spark.spark-b { bottom: 1rem; left: 0.85rem; animation-delay: 0.65s; }
+
+        .title {
+            margin: 0 0 0.45rem;
+            font-family: var(--font-display);
+            font-size: clamp(2.35rem, 7vw, 4.1rem);
+            line-height: 0.94;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.05em;
+            text-transform: uppercase;
+        }
+
+        .title-accent {
+            color: var(--accent-cyan);
+            text-shadow: 0 0 20px rgba(126, 231, 255, 0.35);
+        }
+
+        .subtitle {
+            margin: 0 auto 1.15rem;
+            max-width: 24rem;
+            color: var(--text-muted);
+            font-size: 1rem;
+            line-height: 1.38;
+            font-weight: 600;
+        }
+
+        .mission-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.55rem;
+            margin: 0 0 1.15rem;
+        }
+
+        .mission-pill {
+            padding: 0.68rem 0.45rem;
+            border-radius: 0.95rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(126, 231, 255, 0.16);
+        }
+
+        .mission-label {
+            display: block;
+            color: var(--accent-cyan);
+            font-family: var(--font-display);
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 0.15rem;
+        }
+
+        .mission-value {
+            display: block;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .result-title {
+            margin: 0 0 0.8rem;
+            font-family: var(--font-display);
+            font-size: clamp(1.9rem, 6vw, 3rem);
+            color: var(--text-main);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: -0.04em;
+        }
+
+        .result-copy {
+            margin: 0 0 1.1rem;
+            color: var(--accent-red-soft);
+            font-size: 1rem;
+            line-height: 1.45;
+            font-weight: 600;
+        }
+
+        .result-score {
+            margin: 0 0 1.15rem;
+            color: var(--text-main);
+            font-family: var(--font-display);
+            font-size: 1.45rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .primary-btn,
+        .secondary-btn,
+        .fab-btn,
+        .action-btn {
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: transform 0.2s ease, filter 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .primary-btn,
+        .secondary-btn {
+            width: 100%;
+            padding: 0.95rem 1.15rem;
+            border-radius: 999px;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .primary-btn {
+            color: #05111f;
+            background: linear-gradient(135deg, var(--accent-cyan), #d6f7ff);
+            box-shadow: 0 12px 28px rgba(126, 231, 255, 0.28);
+        }
+
+        .primary-btn:hover {
+            filter: brightness(1.06);
+            box-shadow: 0 14px 32px rgba(126, 231, 255, 0.36);
+        }
+
+        .secondary-btn {
+            color: var(--text-main);
+            background: linear-gradient(135deg, rgba(255, 91, 115, 0.9), rgba(255, 146, 104, 0.95));
+            box-shadow: 0 12px 28px rgba(255, 91, 115, 0.22);
+        }
+
+        .secondary-btn:hover {
+            filter: brightness(1.06);
+        }
+
+        .controls-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: max(1.2rem, env(safe-area-inset-bottom));
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 1rem;
+            padding: 0 1rem;
+        }
+
+        .plane-actions {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.8rem;
+            border-radius: 1.1rem;
+            pointer-events: auto;
+            transform: translateY(8rem);
+            opacity: 0;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .plane-actions.is-visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .action-btn {
+            min-width: 5rem;
+            padding: 0.76rem 0.78rem;
+            border-radius: 0.95rem;
+            color: var(--text-main);
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.16rem;
+            pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+        }
+
+        .action-btn:active,
+        .fab-btn:active,
+        .primary-btn:active,
+        .secondary-btn:active {
+            transform: scale(0.97);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            filter: grayscale(0.8);
+        }
+
+        .action-code {
+            font-family: var(--font-display);
+            font-size: 0.68rem;
+            opacity: 0.74;
+            letter-spacing: 0.12em;
+        }
+
+        .action-push { background: linear-gradient(180deg, #c18d20, #9f6b0f); }
+        .action-push:hover { filter: brightness(1.08); }
+        .action-taxi { background: linear-gradient(180deg, #2f89ff, #1c5ddd); }
+        .action-taxi:hover { filter: brightness(1.08); }
+        .action-takeoff { background: linear-gradient(180deg, #21c77a, #128f56); }
+        .action-takeoff:hover { filter: brightness(1.08); }
+        .action-land { background: linear-gradient(180deg, #9e5aff, #6f31dc); }
+        .action-land:hover { filter: brightness(1.08); }
+
+        .spawn-wrap {
+            position: absolute;
+            right: max(1rem, env(safe-area-inset-right));
+            bottom: 0;
+            pointer-events: auto;
+        }
+
+        .fab-btn {
+            width: 4rem;
+            height: 4rem;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #ffffff, #d6f8ff);
+            color: var(--slate-900);
+            display: grid;
+            place-items: center;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35), 0 0 18px rgba(126, 231, 255, 0.18);
+            border: 1px solid rgba(126, 231, 255, 0.34);
+        }
+
+        .fab-btn:hover {
+            transform: scale(1.08);
+        }
+
+        .fab-icon {
+            font-family: var(--font-display);
+            font-size: 1.85rem;
+            line-height: 1;
+            transition: transform 0.2s ease;
+        }
+
+        .fab-btn:hover .fab-icon {
+            transform: rotate(90deg);
+        }
+
+        .selection-banner {
+            position: absolute;
+            top: max(4.6rem, calc(env(safe-area-inset-top) + 4.6rem));
+            left: max(1rem, env(safe-area-inset-left));
+            max-width: min(70vw, 18rem);
+            padding: 0.62rem 0.8rem;
+            border-radius: 0.95rem;
+            pointer-events: none;
+            color: var(--text-main);
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            opacity: 0;
+            transform: translateY(-0.5rem);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .selection-banner.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .selection-label {
+            display: block;
+            font-family: var(--font-display);
+            font-size: 0.68rem;
+            letter-spacing: 0.14em;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            margin-bottom: 0.08rem;
+        }
+
+        .selection-value {
+            display: block;
+            color: var(--text-main);
+        }
+
+        .feedback-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 12;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .gif-toast {
+            position: absolute;
+            width: min(34vw, 9rem);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 1rem;
+            border: 1px solid rgba(126, 231, 255, 0.3);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+            background: rgba(5, 8, 22, 0.76);
+            opacity: 0;
+            transform: scale(0.92);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .gif-toast.is-visible {
+            opacity: 0.94;
+            transform: scale(1);
+        }
+
+        .gif-toast-success {
+            top: max(1rem, calc(env(safe-area-inset-top) + 5.8rem));
+            right: max(1rem, env(safe-area-inset-right));
+        }
+
+        .gif-toast-alert {
+            left: max(1rem, env(safe-area-inset-left));
+            bottom: max(6.2rem, calc(env(safe-area-inset-bottom) + 6.2rem));
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.45; transform: scale(0.9); }
+        }
+
+        @keyframes drift {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.45; }
+            50% { transform: translateY(-0.45rem) scale(1.14); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .controls-panel {
+                justify-content: center;
+                align-items: center;
+                padding: 0 0.8rem 0;
+            }
+
+            .plane-actions {
+                max-width: calc(100vw - 6rem);
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 0.45rem;
+                padding: 0.7rem;
+            }
+
+            .action-btn {
+                min-width: 4.45rem;
+                flex: 1 1 calc(50% - 0.45rem);
+                font-size: 0.95rem;
+            }
+
+            .spawn-wrap {
+                right: max(0.8rem, env(safe-area-inset-right));
+            }
+
+            .modal-card {
+                padding: 1.7rem 1rem 1.1rem;
+            }
+
+            .hero-plane {
+                width: 5.2rem;
+                height: 5.2rem;
+            }
+
+            .title {
+                font-size: clamp(2rem, 11vw, 3rem);
+            }
+
+            .subtitle,
+            .result-copy {
+                font-size: 0.96rem;
+            }
+
+            .result-score {
+                font-size: 1.22rem;
+            }
+
+            .mission-strip {
+                gap: 0.42rem;
+            }
+
+            .mission-pill {
+                padding: 0.58rem 0.35rem;
+            }
+
+            .hud-chip {
+                padding: 0.62rem 0.8rem;
+                font-size: 0.88rem;
+            }
+
+            .selection-banner {
+                top: max(4.2rem, calc(env(safe-area-inset-top) + 4.2rem));
+                max-width: calc(100vw - 2rem);
+                font-size: 0.86rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .mission-strip {
+                grid-template-columns: 1fr;
+            }
+
+            .primary-btn,
+            .secondary-btn {
+                font-size: 0.92rem;
+            }
+
+            .fab-btn {
+                width: 3.65rem;
+                height: 3.65rem;
+            }
+
+            .fab-icon {
+                font-size: 1.6rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="sky-grid"></div>
+        <div class="scanlines"></div>
+
+        <div id="ui-layer" class="ui-layer">
+            <div id="hud" class="hud hidden">
+                <div class="glass-panel hud-chip">
+                    <div class="status-dot"></div>
+                    Flights Cleared: <span id="score">0</span>
+                </div>
+            </div>
+
+            <div id="selection-banner" class="glass-panel selection-banner hidden">
+                <span class="selection-label">Selected Flight</span>
+                <span id="selection-text" class="selection-value">Awaiting tower input</span>
+            </div>
+
+            <div id="feedback-layer" class="feedback-layer" aria-hidden="true">
+                <!-- [agent-note][stage3] resolved-gif: feedback overlays -> catalogs/gifs.json -->
+                <img id="success-gif" class="gif-toast gif-toast-success" src="https://i.giphy.com/ye080RbECtcCnkrSyD.webp" alt="">
+                <img id="alert-gif" class="gif-toast gif-toast-alert" src="https://i.giphy.com/wY1So1mO4gaNbntT0r.webp" alt="">
+            </div>
+
+            <div id="start-screen" class="overlay overlay-start">
+                <div class="glass-panel modal-card start">
+                    <div class="modal-content">
+                        <div class="hero-badge">Sky Marshal</div>
+                        <div class="hero-plane" aria-hidden="true">
+                            <span class="hero-spark spark-a"></span>
+                            <span class="hero-spark spark-b"></span>
+                        </div>
+                        <h1 class="title">Jetway<br><span class="title-accent">Commander</span></h1>
+                        <p class="subtitle">Guide each aircraft from the gate to the runway. Keep every taxi lane clear and every departure clean.</p>
+                        <div class="mission-strip" aria-hidden="true">
+                            <div class="mission-pill">
+                                <span class="mission-label">Push</span>
+                                <span class="mission-value">Gate Exit</span>
+                            </div>
+                            <div class="mission-pill">
+                                <span class="mission-label">Taxi</span>
+                                <span class="mission-value">Hold Short</span>
+                            </div>
+                            <div class="mission-pill">
+                                <span class="mission-label">Launch</span>
+                                <span class="mission-value">Clear Skies</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="start-btn" class="primary-btn">Open Tower</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="game-over-screen" class="overlay overlay-danger hidden">
+                <div class="glass-panel modal-card danger">
+                    <div class="modal-content">
+                        <div class="hero-badge">Alert</div>
+                        <h2 class="result-title">Runway Incident</h2>
+                        <p class="result-copy">Ground traffic overlapped and the control window was suspended.</p>
+                        <div class="result-score">Flights Cleared: <span id="finalScore">0</span></div>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="restart-btn" class="secondary-btn">Reset Shift</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="controls-panel" class="controls-panel hidden">
+                <div id="plane-actions" class="glass-panel plane-actions">
+                    <button id="btn-pushback" class="action-btn action-push">
+                        <span class="action-code">01</span>
+                        <span>PUSH</span>
+                    </button>
+                    <button id="btn-taxi" class="action-btn action-taxi">
+                        <span class="action-code">02</span>
+                        <span>TAXI</span>
+                    </button>
+                    <button id="btn-takeoff" class="action-btn action-takeoff">
+                        <span class="action-code">03</span>
+                        <span>TAKEOFF</span>
+                    </button>
+                    <button id="btn-landing" class="action-btn action-land">
+                        <span class="action-code">EMG</span>
+                        <span>LAND</span>
+                    </button>
+                </div>
+
+                <div class="spawn-wrap">
+                    <!-- [agent-note][stage1] role: future-illustration | element: spawn-button | intent: tower dispatch cue could reinforce aircraft release -->
+                    <!-- [agent-note][stage2] preserve: control-zone | reason: right-corner spawn is already thumb-safe on mobile -->
+                    <!-- [agent-note][stage4] repaired: mobile tap-path | element: body/canvas buttons | action: scoped touch suppression back to canvas so menu and CTA taps keep native activation -->
+                    <button id="btn-spawn" class="fab-btn" aria-label="Spawn aircraft">
+                        <span class="fab-icon">+</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_02.mp3",
+            sfx: {
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3",
+                select: "https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3",
+                command: "https://gamezone-virid.vercel.app/assets/audios/sfx/projectile_02.mp3",
+                success: "https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3",
+                takeoff: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3",
+                crash: "https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3"
+            },
+            gifs: {
+                success: "https://i.giphy.com/ye080RbECtcCnkrSyD.webp",
+                alert: "https://i.giphy.com/wY1So1mO4gaNbntT0r.webp"
+            }
+        };
+
+        const PALETTE = {
+            skyTop: '#0f1d45',
+            skyBottom: '#6dc1ff',
+            horizonGlow: 'rgba(126, 231, 255, 0.22)',
+            runway: '#1d2947',
+            runwayEdge: '#3f5a8f',
+            taxiway: '#2c4a59',
+            taxiGlow: '#6ef2ff',
+            apron: '#677892',
+            grassDark: '#1f5b40',
+            grassLight: '#3f9b68',
+            gateRoof: '#2f4f8e',
+            gateBody: '#17386d',
+            terminal: '#8cc8ff',
+            lineWhite: '#eaf8ff',
+            warning: '#ffd86e',
+            beaconBlue: '#81ebff',
+            beaconRed: '#ff6d81'
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.enabled = false;
+                this.lastPlayedAt = new Map();
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.22;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const audio = new Audio(v);
+                    audio.preload = 'auto';
+                    this.sfx[k] = audio;
+                }
+            }
+            unlock() {
+                this.enabled = true;
+            }
+            playBGM() {
+                if (!this.enabled) return;
+                this.bgm.play().catch(() => {});
+            }
+            stopBGM() {
+                this.bgm.pause();
+                this.bgm.currentTime = 0;
+            }
+            playSFX(key, { volume = 0.58, debounceMs = 90, reset = true } = {}) {
+                if (!this.enabled || !this.sfx[key]) return;
+                const now = performance.now();
+                const last = this.lastPlayedAt.get(key) ?? 0;
+                if (now - last < debounceMs) return;
+                this.lastPlayedAt.set(key, now);
+                const sound = this.sfx[key];
+                if (reset) sound.currentTime = 0;
+                sound.volume = volume;
+                sound.play().catch(() => {});
+            }
+        }
+        const audio = new AudioController();
+
+        class FeedbackController {
+            constructor() {
+                this.successEl = document.getElementById('success-gif');
+                this.alertEl = document.getElementById('alert-gif');
+                this.timers = new Map();
+                this.successEl.src = ASSETS.gifs.success;
+                this.alertEl.src = ASSETS.gifs.alert;
+            }
+            pulse(type, duration = 1700) {
+                const el = type === 'success' ? this.successEl : this.alertEl;
+                if (!el) return;
+                el.classList.add('is-visible');
+                if (this.timers.has(type)) clearTimeout(this.timers.get(type));
+                const timer = setTimeout(() => {
+                    el.classList.remove('is-visible');
+                    this.timers.delete(type);
+                }, duration);
+                this.timers.set(type, timer);
+            }
+        }
+        const feedback = new FeedbackController();
+
+        /** 3. GAME CONSTANTS & STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const selectionBanner = document.getElementById('selection-banner');
+        const selectionText = document.getElementById('selection-text');
+        let width, height;
+        let gameActive = false;
+        let score = 0;
+        let lastTime = 0;
+
+        let planes = [];
+        let particles = [];
+        let clouds = [];
+        let selectedPlane = null;
+
+        const airport = {
+            runwayY: 0,
+            taxiwayY: 0,
+            gatesY: 0,
+            gates: []
+        };
+
+        const STATE = {
+            PARKED: 0,
+            PUSHBACK: 1,
+            READY_TAXI: 2,
+            TAXIING: 3,
+            HOLD_SHORT: 4,
+            TAKEOFF: 5,
+            FLYING: 6,
+            CRASHED: 99
+        };
+
+        function getStateLabel(state) {
+            switch (state) {
+                case STATE.PARKED: return 'Parked at gate';
+                case STATE.PUSHBACK: return 'Pushback in progress';
+                case STATE.READY_TAXI: return 'Ready to taxi';
+                case STATE.TAXIING: return 'Taxiing';
+                case STATE.HOLD_SHORT: return 'Holding short';
+                case STATE.TAKEOFF: return 'Takeoff roll';
+                case STATE.FLYING: return 'Airborne';
+                case STATE.CRASHED: return 'Incident';
+                default: return 'Awaiting';
+            }
+        }
+
+        /** 4. CLASSES */
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 5;
+                this.vy = (Math.random() - 0.5) * 5;
+                this.life = 1.0;
+                this.color = color;
+                this.size = Math.random() * 5 + 2;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.02;
+                this.size *= 0.95;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        class Cloud {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height * 0.38;
+                this.speed = Math.random() * 0.5 + 0.1;
+                this.size = Math.random() * 100 + 50;
+                this.alpha = Math.random() * 0.16 + 0.05;
+            }
+            update() {
+                this.x += this.speed;
+                if (this.x > width + 200) this.x = -200;
+            }
+            draw(ctx) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.arc(this.x + this.size * 0.5, this.y - this.size * 0.2, this.size * 0.8, 0, Math.PI * 2);
+                ctx.arc(this.x - this.size * 0.5, this.y - this.size * 0.2, this.size * 0.8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Plane {
+            constructor(gateIndex) {
+                const gate = airport.gates[gateIndex];
+                this.gateIndex = gateIndex;
+                this.x = gate.x;
+                this.y = gate.y;
+                this.angle = Math.PI;
+                this.targetAngle = Math.PI;
+                this.state = STATE.PARKED;
+                this.color = `hsl(${Math.random() * 360}, 80%, 58%)`;
+                this.speed = 0;
+                this.radius = 25;
+                this.id = Math.random().toString(36).substr(2, 4).toUpperCase();
+                this.smokeTimer = 0;
+                this.windowGlow = `hsla(${Math.random() * 360}, 90%, 74%, 0.95)`;
+            }
+
+            update(dt) {
+                if (this.state === STATE.CRASHED) return;
+
+                if (this.state === STATE.PUSHBACK) {
+                    if (this.y < airport.taxiwayY) {
+                        this.y += 1;
+                    } else {
+                        this.state = STATE.READY_TAXI;
+                        this.angle = 0;
+                        updateUI();
+                    }
+                } else if (this.state === STATE.TAXIING) {
+                    const runwayStartX = 100;
+                    const dx = runwayStartX - this.x;
+                    const dy = airport.taxiwayY - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist > 5) {
+                        this.angle = Math.atan2(dy, dx);
+                        this.x += Math.cos(this.angle) * 2;
+                        this.y += Math.sin(this.angle) * 2;
+                    } else {
+                        this.state = STATE.HOLD_SHORT;
+                        this.angle = 0;
+                        updateUI();
+                    }
+                } else if (this.state === STATE.TAKEOFF) {
+                    if (Math.abs(this.y - airport.runwayY) > 5) {
+                        this.y -= 2;
+                        this.angle = -Math.PI / 2;
+                    } else {
+                        this.y = airport.runwayY;
+                        this.angle = 0;
+                        this.speed += 0.1;
+                        this.x += this.speed;
+
+                        if (this.speed > 5) {
+                            particles.push(new Particle(this.x - 30, this.y + 5, '#d9f8ff'));
+                        }
+
+                        if (this.x > width + 100) {
+                            this.state = STATE.FLYING;
+                            score += 100;
+                            document.getElementById('score').innerText = score;
+                            audio.playSFX('takeoff', { volume: 0.5, debounceMs: 120 });
+                            audio.playSFX('success', { volume: 0.62, debounceMs: 120 });
+                            feedback.pulse('success');
+                            planes = planes.filter(p => p !== this);
+                            if (selectedPlane === this) {
+                                selectedPlane = null;
+                                updateUI();
+                            }
+                        }
+                    }
+                } else if (this.state === STATE.FLYING) {
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                const shadowOffset = (this.state === STATE.TAKEOFF && this.speed > 8) ? 20 : 5;
+                const scale = (this.state === STATE.TAKEOFF && this.speed > 8) ? 1.2 : 1.0;
+
+                ctx.save();
+                ctx.translate(shadowOffset, shadowOffset);
+                ctx.rotate(this.angle);
+                this.drawShape(ctx, '#000', true);
+                ctx.restore();
+
+                ctx.scale(scale, scale);
+                ctx.rotate(this.angle);
+
+                if (selectedPlane === this) {
+                    ctx.strokeStyle = '#7ee7ff';
+                    ctx.lineWidth = 3;
+                    ctx.shadowBlur = 18;
+                    ctx.shadowColor = '#7ee7ff';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 42, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(126, 231, 255, 0.1)';
+                    ctx.fill();
+                }
+
+                if (this.state === STATE.CRASHED) {
+                    ctx.fillStyle = '#333';
+                } else {
+                    ctx.fillStyle = '#fff';
+                }
+
+                this.drawShape(ctx, this.color, false);
+
+                ctx.restore();
+            }
+
+            drawShape(ctx, accentColor, isShadow = false) {
+                if (isShadow) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+                } else {
+                    const bodyGradient = ctx.createLinearGradient(-25, -25, 38, 22);
+                    bodyGradient.addColorStop(0, '#ffffff');
+                    bodyGradient.addColorStop(0.55, '#d7efff');
+                    bodyGradient.addColorStop(1, '#8bb0d5');
+                    ctx.fillStyle = bodyGradient;
+                }
+
+                ctx.beginPath();
+                ctx.ellipse(10, 0, 35, 8.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = isShadow ? 'rgba(0,0,0,0.28)' : '#c1daef';
+                ctx.beginPath();
+                ctx.moveTo(-10, 0);
+                ctx.lineTo(-20, -35);
+                ctx.lineTo(10, -35);
+                ctx.lineTo(20, 0);
+                ctx.lineTo(10, 35);
+                ctx.lineTo(-20, 35);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = isShadow ? 'rgba(0,0,0,0.28)' : accentColor;
+                ctx.beginPath();
+                ctx.moveTo(-25, 0);
+                ctx.lineTo(-35, -12);
+                ctx.lineTo(-30, 12);
+                ctx.closePath();
+                ctx.fill();
+
+                if (!isShadow) {
+                    ctx.fillStyle = '#142033';
+                    ctx.beginPath();
+                    ctx.ellipse(35, 0, 4, 3, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = this.windowGlow;
+                    ctx.beginPath();
+                    ctx.ellipse(20, 0, 8, 2.2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                    ctx.lineWidth = 1.2;
+                    ctx.beginPath();
+                    ctx.moveTo(-2, -18);
+                    ctx.lineTo(8, -18);
+                    ctx.moveTo(-2, 18);
+                    ctx.lineTo(8, 18);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#0b1430';
+                    ctx.font = '700 8px Audiowide';
+                    ctx.fillText(this.id, -8, 2);
+                }
+            }
+        }
+
+        /** 5. GAME LOGIC */
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+
+            airport.runwayY = height * 0.25;
+            airport.taxiwayY = height * 0.5;
+            airport.gatesY = height * 0.75;
+
+            airport.gates = [];
+            const gateCount = Math.floor(width / 120);
+            for (let i = 0; i < gateCount; i++) {
+                airport.gates.push({
+                    x: 100 + i * 120,
+                    y: airport.gatesY,
+                    occupied: false
+                });
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        for (let i = 0; i < 5; i++) clouds.push(new Cloud());
+
+        function spawnPlane() {
+            const freeGateIndices = airport.gates
+                .map((g, i) => planes.some(p => p.gateIndex === i && p.state === STATE.PARKED) ? -1 : i)
+                .filter(i => i !== -1);
+
+            if (freeGateIndices.length > 0) {
+                const idx = freeGateIndices[Math.floor(Math.random() * freeGateIndices.length)];
+                const p = new Plane(idx);
+                planes.push(p);
+                audio.playSFX('command', { volume: 0.48, debounceMs: 70 });
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = 0; i < planes.length; i++) {
+                for (let j = i + 1; j < planes.length; j++) {
+                    const p1 = planes[i];
+                    const p2 = planes[j];
+                    if (p1.state === STATE.CRASHED || p2.state === STATE.CRASHED) continue;
+                    if (p1.state === STATE.FLYING || p2.state === STATE.FLYING) continue;
+
+                    const dx = p1.x - p2.x;
+                    const dy = p1.y - p2.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 40) {
+                        p1.state = STATE.CRASHED;
+                        p2.state = STATE.CRASHED;
+                        audio.playSFX('crash', { volume: 0.6, debounceMs: 250 });
+                        audio.playSFX('fail', { volume: 0.45, debounceMs: 250 });
+                        feedback.pulse('alert', 2400);
+
+                        for (let k = 0; k < 20; k++) {
+                            particles.push(new Particle(p1.x, p1.y, '#ff4400'));
+                            particles.push(new Particle(p2.x, p2.y, '#ffaa00'));
+                        }
+
+                        gameOver();
+                    }
+                }
+            }
+        }
+
+        function drawEnvironment() {
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, height);
+            skyGradient.addColorStop(0, PALETTE.skyTop);
+            skyGradient.addColorStop(0.38, '#26569a');
+            skyGradient.addColorStop(0.64, '#74cbff');
+            skyGradient.addColorStop(1, '#baf0ff');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const horizonGradient = ctx.createLinearGradient(0, height * 0.12, 0, height * 0.48);
+            horizonGradient.addColorStop(0, 'rgba(255,255,255,0)');
+            horizonGradient.addColorStop(1, PALETTE.horizonGlow);
+            ctx.fillStyle = horizonGradient;
+            ctx.fillRect(0, 0, width, height * 0.48);
+
+            const grassGradient = ctx.createLinearGradient(0, 0, 0, height);
+            grassGradient.addColorStop(0, PALETTE.ground-mid);
+            grassGradient.addColorStop(1, PALETTE.ground-dark);
+            ctx.fillStyle = grassGradient;
+            ctx.fillRect(0, airport.runwayY + 64, width, height - (airport.runwayY + 64));
+
+            for (let i = 0; i < 18; i++) {
+                const stripeY = airport.runwayY + 64 + i * 48;
+                ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.01)';
+                ctx.fillRect(0, stripeY, width, 20);
+            }
+
+            const runwayGradient = ctx.createLinearGradient(0, airport.runwayY - 64, 0, airport.runwayY + 64);
+            runwayGradient.addColorStop(0, PALETTE.runwayEdge);
+            runwayGradient.addColorStop(0.15, PALETTE.runway);
+            runwayGradient.addColorStop(0.85, PALETTE.runway);
+            runwayGradient.addColorStop(1, PALETTE.runwayEdge);
+            ctx.fillStyle = runwayGradient;
+            ctx.fillRect(0, airport.runwayY - 60, width, 120);
+
+            ctx.fillStyle = PALETTE.runwayGlow;
+            ctx.fillRect(0, airport.runwayY - 66, width, 132);
+
+            ctx.strokeStyle = PALETTE.lineWhite;
+            ctx.lineWidth = 4;
+            ctx.setLineDash([40, 40]);
+            ctx.beginPath();
+            ctx.moveTo(0, airport.runwayY);
+            ctx.lineTo(width, airport.runwayY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            for (let x = 42; x < width; x += 120) {
+                ctx.fillStyle = 'rgba(255,255,255,0.16)';
+                ctx.fillRect(x, airport.runwayY - 46, 26, 8);
+                ctx.fillRect(x + 40, airport.runwayY + 38, 26, 8);
+            }
+
+            const taxiGradient = ctx.createLinearGradient(0, airport.taxiwayY - 40, 0, airport.taxiwayY + 40);
+            taxiGradient.addColorStop(0, '#1e3646');
+            taxiGradient.addColorStop(1, PALETTE.taxiway);
+            ctx.fillStyle = taxiGradient;
+            ctx.fillRect(0, airport.taxiwayY - 40, width, 80);
+
+            ctx.strokeStyle = PALETTE.warning;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, airport.taxiwayY);
+            ctx.lineTo(width, airport.taxiwayY);
+            ctx.stroke();
+
+            for (let x = 0; x < width; x += 72) {
+                ctx.fillStyle = x % 144 === 0 ? 'rgba(255,216,110,0.15)' : 'rgba(255,216,110,0.06)';
+                ctx.fillRect(x, airport.taxiwayY - 3, 36, 6);
+            }
+
+            const apronGradient = ctx.createLinearGradient(0, airport.gatesY - 60, 0, height);
+            apronGradient.addColorStop(0, '#6d8095');
+            apronGradient.addColorStop(1, '#47586e');
+            ctx.fillStyle = apronGradient;
+            ctx.fillRect(0, airport.gatesY - 60, width, height - (airport.gatesY - 60));
+
+            ctx.fillStyle = 'rgba(255,255,255,0.07)';
+            ctx.fillRect(0, airport.gatesY - 8, width, 3);
+
+            airport.gates.forEach((gate, i) => {
+                ctx.strokeStyle = PALETTE.warning;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(gate.x, airport.gatesY);
+                ctx.lineTo(gate.x, airport.taxiwayY + 40);
+                ctx.stroke();
+
+                ctx.fillStyle = PALETTE.gateBody;
+                ctx.fillRect(gate.x - 40, airport.gatesY + 40, 80, 60);
+                ctx.fillStyle = PALETTE.gateRoof;
+                ctx.fillRect(gate.x - 40, airport.gatesY + 40, 80, 10);
+
+                ctx.fillStyle = 'rgba(140, 200, 255, 0.22)';
+                ctx.fillRect(gate.x - 34, airport.gatesY + 54, 68, 18);
+
+                ctx.fillStyle = PALETTE.lineWhite;
+                ctx.font = '700 12px Audiowide';
+                ctx.fillText(`G${i + 1}`, gate.x - 11, airport.gatesY + 30);
+
+                ctx.fillStyle = i % 2 === 0 ? PALETTE.beaconBlue : PALETTE.beaconRed;
+                ctx.beginPath();
+                ctx.arc(gate.x - 28, airport.gatesY + 48, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function updateUI() {
+            const panel = document.getElementById('plane-actions');
+            const btnPush = document.getElementById('btn-pushback');
+            const btnTaxi = document.getElementById('btn-taxi');
+            const btnTakeoff = document.getElementById('btn-takeoff');
+            const btnLand = document.getElementById('btn-landing');
+
+            if (!selectedPlane || selectedPlane.state === STATE.CRASHED) {
+                panel.classList.remove('is-visible');
+                selectionBanner.classList.add('hidden');
+                selectionBanner.classList.remove('is-visible');
+                return;
+            }
+
+            panel.classList.add('is-visible');
+            selectionText.innerText = `${selectedPlane.id} · ${getStateLabel(selectedPlane.state)}`;
+            selectionBanner.classList.remove('hidden');
+            requestAnimationFrame(() => selectionBanner.classList.add('is-visible'));
+
+            [btnPush, btnTaxi, btnTakeoff, btnLand].forEach(b => b.disabled = true);
+
+            if (selectedPlane.state === STATE.PARKED) {
+                btnPush.disabled = false;
+            } else if (selectedPlane.state === STATE.READY_TAXI) {
+                btnTaxi.disabled = false;
+            } else if (selectedPlane.state === STATE.HOLD_SHORT) {
+                btnTakeoff.disabled = false;
+            } else if (selectedPlane.state === STATE.FLYING) {
+                btnLand.disabled = false;
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            ctx.clearRect(0, 0, width, height);
+
+            drawEnvironment();
+
+            clouds.forEach(c => {
+                c.update();
+                c.draw(ctx);
+            });
+
+            planes.forEach(p => {
+                p.update(dt);
+                p.draw(ctx);
+            });
+
+            particles.forEach((p, i) => {
+                p.update();
+                p.draw(ctx);
+                if (p.life <= 0) particles.splice(i, 1);
+            });
+
+            checkCollisions();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            audio.stopBGM();
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('controls-panel').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            selectionBanner.classList.add('hidden');
+            selectionBanner.classList.remove('is-visible');
+            document.getElementById('finalScore').innerText = score;
+        }
+
+        document.getElementById('btn-spawn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            spawnPlane();
+        });
+
+        document.getElementById('btn-pushback').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (selectedPlane && selectedPlane.state === STATE.PARKED) {
+                selectedPlane.state = STATE.PUSHBACK;
+                audio.playSFX('command', { volume: 0.54, debounceMs: 90 });
+                updateUI();
+            }
+        });
+
+        document.getElementById('btn-taxi').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (selectedPlane && selectedPlane.state === STATE.READY_TAXI) {
+                selectedPlane.state = STATE.TAXIING;
+                audio.playSFX('command', { volume: 0.54, debounceMs: 90 });
+                updateUI();
+            }
+        });
+
+        document.getElementById('btn-takeoff').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (selectedPlane && selectedPlane.state === STATE.HOLD_SHORT) {
+                selectedPlane.state = STATE.TAKEOFF;
+                audio.playSFX('takeoff', { volume: 0.5, debounceMs: 100 });
+                updateUI();
+            }
+        });
+
+        document.getElementById('btn-landing').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (selectedPlane && selectedPlane.state === STATE.FLYING) {
+                selectedPlane.state = STATE.TAXIING;
+                selectedPlane.x = 100;
+                selectedPlane.y = airport.taxiwayY;
+                updateUI();
+            }
+        });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (!gameActive) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            let clicked = false;
+            for (let i = planes.length - 1; i >= 0; i--) {
+                const p = planes[i];
+                const dist = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+                if (dist < 40) {
+                    selectedPlane = p;
+                    clicked = true;
+                    audio.playSFX('select', { volume: 0.42, debounceMs: 70 });
+                    updateUI();
+                    break;
+                }
+            }
+
+            if (!clicked) {
+                selectedPlane = null;
+                updateUI();
+            }
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', { volume: 0.56, debounceMs: 180, reset: true });
+            audio.playBGM();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls-panel').classList.remove('hidden');
+            gameActive = true;
+            score = 0;
+            document.getElementById('score').innerText = 0;
+            planes = [];
+            particles = [];
+            selectedPlane = null;
+            selectionBanner.classList.add('hidden');
+            selectionBanner.classList.remove('is-visible');
+            spawnPlane();
+            spawnPlane();
+            requestAnimationFrame(gameLoop);
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', { volume: 0.56, debounceMs: 180, reset: true });
+            audio.playBGM();
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('controls-panel').classList.remove('hidden');
+            gameActive = true;
+            score = 0;
+            document.getElementById('score').innerText = 0;
+            planes = [];
+            particles = [];
+            selectedPlane = null;
+            selectionBanner.classList.add('hidden');
+            selectionBanner.classList.remove('is-visible');
+            spawnPlane();
+            spawnPlane();
+            requestAnimationFrame(gameLoop);
+        });
+    });
+    </script>
+</body>
+</html>

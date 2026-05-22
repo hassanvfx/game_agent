@@ -1,0 +1,141 @@
+{
+  "game_id": "gamezone-89024627-dd93-4b92-b942-e8f6436bf15a",
+  "run_id": null,
+  "remix_id": "remix-587cc0a82980d3ea7d4b57b192fb86ee",
+  "remix_parent_id": null,
+  "root_game_id": "gamezone-89024627-dd93-4b92-b942-e8f6436bf15a",
+  "lineage_depth": 0,
+  "aggregated_at": "2026-05-17T04:58:20Z",
+  "recreation_prompt_markdown": "Create a polished, mobile-friendly browser game called **\u201cZombie Zero: Quarantine Shift\u201d** as a single-screen top-down survival shooter with drag-to-move controls and automatic firing. The player is a lone quarantine responder in a neon sci-fi containment zone, presented as a glowing stylized hero in a dark futuristic arena with cyan, toxic-green, gold, and hazard-red accents. The experience should feel fast, readable, and arcade-driven rather than realistic horror.\n\nThe core gameplay loop should be endless survival. Zombies spawn continuously from random edges of the screen and move directly toward the player. The player drags or swipes anywhere on the playfield to set movement direction and position, and the character should smoothly follow that target. Shooting should be automatic: whenever a zombie is within range, the player auto-targets the nearest infected and fires projectiles without requiring manual aim buttons. This makes the game about movement, spacing, kiting, and pickup routing instead of twin-stick precision.\n\nDefeated zombies should drop scrap pickups that contribute to both score growth and a shop currency. Those pickups should be slightly magnetized so that moving near them pulls them inward, encouraging risky collection routes through danger. The player\u2019s main objective is to survive as long as possible, increase the threat score, and use the scrap economy wisely to stabilize or power up the run.\n\nInclude a compact in-run shop or field cache that pauses gameplay when opened. It should contain exactly two signature purchases: a **heal item** that restores a meaningful amount of health for a small scrap cost, and a **one-time elite upgrade** that transforms the player into a stronger responder with much higher survivability and firepower. The elite upgrade should feel like a major turning point in the session by increasing max health, fully healing the player, firing faster, enlarging the avatar slightly, and making shots more powerful. The shop should be simple, readable, and designed for quick mobile taps.\n\nPresentation should include a start screen, active HUD, shop modal, and game-over screen. The HUD should clearly show a threat or score value, scrap or currency count, and a health bar. The opening screen should explain the interaction style in plain language, such as drag to move and auto-fire at the infected. The game-over screen should display the final score and offer an immediate restart. The visual identity should use a dark background with subtle grid lines or futuristic lab-floor cues, glowing interface panels, and clean sci-fi typography.\n\nPrioritize strong action feedback. Add muzzle or bullet flashes, particles on hit and enemy defeat, coin or scrap pickup feedback, occasional screen shake when firing or taking damage, and obvious low-health warnings. Use energetic combat audio, pickup sounds, menu sounds, and a looping battle track if possible. The zombies can be simple stylized enemies rather than detailed monsters, and the player can be an abstract neon avatar as long as the silhouettes and states remain readable.\n\nKeep the progression structure endless and score-based rather than level-based. There do not need to be explicit campaign stages; instead, the run becomes harder because enemies keep coming and positional pressure increases over time. The overall feel should sit somewhere between **Survivor.io**, **Crimsonland**, and a lightweight arcade zombie containment game: easy to understand instantly, satisfying to move around in, and centered on surviving a growing horde while choosing whether to spend scrap on emergency healing or save for the dramatic elite power spike.",
+  "blueprint_markdown": "# Blueprint\n\n## High-level code structure\nThe game is a single-file browser game implemented entirely in `index.html`, with:\n- inline CSS for the full visual identity, HUD, menus, modal shop, and mobile responsiveness\n- HTML for layered UI screens and audio elements\n- inline JavaScript for config bridging, audio management, gameplay state, update/render loop, input, and shop logic\n\nThe runtime is split conceptually into these layers:\n1. **Presentation layer**  \n   Start screen, HUD, shop modal, game-over overlay, animated feedback GIFs, and neon sci-fi styling.\n2. **Canvas gameplay layer**  \n   A single `<canvas>` used for all active play rendering: player, zombies, bullets, particles, coins, background grid, and screen shake.\n3. **System layer**  \n   - `AudioManager` for BGM/SFX playback and synthesized fallback sounds\n   - stateful gameplay objects and arrays (`player`, `zombies`, `bullets`, `particles`, `coins`)\n   - update/draw loop driven by `requestAnimationFrame`\n4. **Tuning/config layer**  \n   A small embedded JSON config block exposes editable values for hero speed, zombie speed, spawn rate, and accent color.\n\n## Game loop / state model\nThe game uses a classic real-time update/render loop:\n- `loop(timestamp)` computes `dt`\n- `update(dt)` advances simulation if the game is in `playing`\n- `draw()` renders the current world every frame\n- `requestAnimationFrame(loop)` keeps the cycle running continuously\n\n### Inferred game states\n- `start`  \n  Intro card is visible; the player has not begun the run.\n- `playing`  \n  Main survival session with drag movement, auto-fire, zombie spawning, pickups, damage, and scoring.\n- `shop`  \n  Gameplay is paused while the shop modal is open.\n- `gameover`  \n  Player HP has dropped to zero; final score is shown and restart becomes available.\n\n### State reset behavior\n`startGame()` resets the run:\n- centers the player\n- restores health and baseline stats\n- clears enemies, bullets, particles, and coins\n- hides intro/game-over overlays\n- shows HUD\n- resumes audio\n\n## Player goals\nPrimary goal:\n- survive as long as possible against continuously spawning zombies\n\nSecondary goals:\n- eliminate zombies to raise the threat/score counter\n- collect scrap dropped by defeated enemies\n- spend scrap in the field cache to heal or buy the elite upgrade\n- extend survival by improving durability and firepower\n\nImplicit success model:\n- there is no finite level completion; progression is endurance-based and score-chasing\n\n## Interaction pattern\nCore interaction is **drag-to-move with auto-attack**:\n- pointer/touch drag sets a target position\n- the player smoothly moves toward the drag target\n- when zombies enter range, the character automatically fires at the nearest one\n- the user does not manually aim or tap to shoot repeatedly\n\nMenu interactions:\n- tap/click `START PATROL` to begin\n- tap/click `CACHE` to open the shop\n- tap/click shop buttons to buy healing or the elite upgrade\n- tap/click restart after defeat\n\nThis creates a mobile-friendly one-thumb control pattern.\n\n## Core systems\n### 1. Player controller\nThe player has:\n- position and movement target\n- radius / collision size\n- HP and max HP\n- scrap currency (`cash`)\n- score\n- class/form (`rookie` or `legend`)\n- auto-fire cadence (`fireRate`)\n\nMovement is eased by stepping toward the current pointer target using a speed scalar.\n\n### 2. Enemy spawning and pursuit\nZombies:\n- spawn from random screen edges\n- move directly toward the player\n- have HP, radius, and slight speed variance\n- deal continuous contact damage on collision\n\nSpawn pacing is controlled by a timer using the configurable `spawnRate`.\n\n### 3. Auto-combat\nWhen the fire cooldown expires:\n- the nearest zombie within a fixed detection radius is found\n- a bullet is spawned toward that target\n- bullet damage depends on whether the player is upgraded\n\nThis makes combat largely positional: survival depends on movement and spacing rather than precise aiming.\n\n### 4. Damage, defeat, and pressure escalation\nThreat increases because:\n- zombies spawn forever\n- enemies apply constant contact damage\n- low health triggers warning feedback\n- game ends immediately when HP reaches zero\n\nThe design creates accumulating pressure instead of discrete level beats.\n\n### 5. Reward and pickup economy\nKilling a zombie:\n- removes the zombie\n- increases score\n- spawns a scrap/coin pickup\n\nNearby scrap magnetizes toward the player and grants:\n- +1 cash\n- +5 score\n\nThis introduces a risk/reward loop: move into danger to collect the resources needed for healing or upgrades.\n\n### 6. Shop / meta-within-run upgrade layer\nThe shop offers two purchases:\n- **Med Patch** for 5 scrap: restores 50 HP\n- **Last Stand Kit** for 10 scrap: permanently upgrades the current run to an elite form\n\nLegend upgrade effects:\n- faster fire rate\n- more max HP\n- full heal to the new max HP\n- larger avatar radius\n- stronger bullets\n- stronger visual feedback\n\nThis is a lightweight mid-run progression layer rather than a persistent meta-progression system.\n\n### 7. Feedback and juice systems\nThe game strongly emphasizes readable arcade feedback:\n- hit GIF flashes on attacks landing\n- danger GIF flashes at low HP and death\n- particles on hits and kills\n- coin magnet motion\n- health bar and counters\n- audio for start, shooting, damage, pickups, upgrades, menu actions, and failure\n- screen shake on firing, taking damage, and upgrading\n\n## Inferred genre / gameplay shape\nStrongest inferred genre:\n- **top-down survival shooter / arena survival game**\n\nMore specifically, it plays like:\n- a lightweight mobile **waveless horde survival** game\n- a **drag-move auto-shooter**\n- a **single-session score attack survival game** with a tiny in-run shop\n\nThe game is not structured like a mission shooter or level-based campaign. It is an arcade survival loop focused on:\n- kiting enemies\n- surviving continuous pursuit\n- gathering dropped currency\n- timing upgrades and heals\n- chasing a higher threat score\n\n## Presentation and tone\nThe presentation suggests:\n- neon sci-fi quarantine response theme\n- stylized, almost toy-like zombie silhouettes rather than horror realism\n- arcade pressure with readable HUD labels like \u201cThreat Level\u201d and \u201cSalvaged Scrap\u201d\n- a tense but accessible tone: more action-arcade than terrifying survival horror\n\n## Gameplay heuristic summary\nA player survives by circling the arena, keeping zombies at medium range, letting auto-fire thin the horde, and dipping into danger to vacuum up scrap. Scrap becomes a tactical resource: spend early on healing to stay alive, or save for the elite \u201cLast Stand Kit\u201d power spike that dramatically improves survival odds. The game loop is built around sustained movement, spatial threat management, and opportunistic pickup routing rather than precision shooting.",
+  "semantic_tags": {
+    "theme": [
+      "zombie outbreak",
+      "quarantine response",
+      "neon sci-fi",
+      "arcade survival",
+      "containment breach"
+    ],
+    "setting": [
+      "single-screen containment arena",
+      "futuristic quarantine zone",
+      "dark digital battlefield",
+      "grid-lined sci-fi backdrop"
+    ],
+    "characters": [
+      "rookie responder",
+      "elite responder upgrade",
+      "infected zombies",
+      "lone survivor protagonist"
+    ],
+    "mechanics": [
+      "drag to move",
+      "auto-fire",
+      "nearest-target shooting",
+      "endless enemy spawning",
+      "arena kiting",
+      "health management",
+      "currency pickups",
+      "mid-run shop",
+      "upgrade purchase",
+      "screen shake feedback",
+      "particle hit effects",
+      "score chase"
+    ],
+    "mood": [
+      "tense",
+      "energetic",
+      "arcade-readable",
+      "pressured",
+      "stylized rather than horrific"
+    ],
+    "similar_games": [
+      "Vampire Survivors",
+      "Brotato",
+      "Survivor.io",
+      "Crimsonland"
+    ],
+    "similar_franchises": [
+      "Boxhead",
+      "Geometry Wars",
+      "The Last Stand"
+    ]
+  },
+  "semantic_tags_source_mode": "split-json-legacy",
+  "identity": {
+    "title": "Zombie Zero: Quarantine Shift",
+    "premise": "A lone quarantine responder in a neon sci-fi containment zone drags around the arena while auto-firing at incoming zombies, collecting scrap from defeated infected to heal or unlock an elite last-stand upgrade.",
+    "interaction_model": "Top-down drag-to-move mobile-friendly action game with automatic targeting and firing, plus tap/click UI for start, restart, and a mid-run shop.",
+    "objective": "Survive as long as possible, defeat zombies, collect scrap, and use the shop strategically to extend the run and raise the threat score.",
+    "progression": "An endless single-session survival loop with rising pressure from constant enemy spawning, score accumulation from kills and pickups, and a two-item in-run economy that enables healing or a major elite-form power spike.",
+    "theme": "Neon quarantine sci-fi mixed with arcade zombie outbreak action.",
+    "mood": "Tense, energetic, readable, and arcade-forward rather than grim survival horror.",
+    "likely_audience": [
+      "mobile action players",
+      "casual survival shooter fans",
+      "arcade score-chasing players",
+      "players who like simple one-thumb control schemes"
+    ],
+    "confidence_notes": [
+      "High confidence that the game is an endless top-down survival auto-shooter because the code shows edge spawning enemies, auto-targeting bullets, score gain, and game-over on HP depletion.",
+      "High confidence that shop progression is limited to an in-run heal and a single elite upgrade because only two shop purchases exist in the code.",
+      "Moderate confidence on the exact experiential framing of 'waves' because enemies spawn continuously rather than in explicit round structures.",
+      "High confidence on the presentation tone because the visual language, HUD labels, and text consistently reinforce neon quarantine action."
+    ],
+    "recreation_prompt": "Create a mobile-friendly single-screen top-down zombie survival game called \"Zombie Zero: Quarantine Shift\" where the player controls a lone quarantine responder in a neon sci-fi containment zone by dragging anywhere on the screen to move, while the character automatically aims and fires at the nearest zombie within range. The core loop should be endless survival: zombies spawn continuously from the edges of the arena, chase the player directly, damage the player on contact, and drop scrap pickups when defeated. The player should collect those pickups for currency and extra score, then spend currency in a pause-style shop on either a heal item or a one-time elite upgrade that dramatically improves fire rate, health, and combat power. Use a readable arcade presentation with a dark futuristic background, glowing cyan and toxic-green accents, simple cartoon-like circular/square characters, a visible health bar, score and scrap counters, a start screen, a game-over screen, and a compact shop modal. Include strong feedback such as particles, screen shake, hit flashes, low-health warning cues, and energetic action audio. The experience should feel fast, accessible, and score-driven, built around kiting the horde, managing spacing, grabbing risky pickups, and deciding when to spend scrap for survival versus saving for the major power spike."
+  },
+  "identity_source_mode": "split-json-legacy",
+  "mechanics_classification": {
+    "selected_top_5": [
+      {
+        "category": "Zombie survival",
+        "score": 0.97,
+        "reasoning": "The enemies are explicitly zombies, the player survives against nonstop infected pressure, and the whole loop centers on enduring a zombie outbreak as long as possible."
+      },
+      {
+        "category": "Alien shooter",
+        "score": 0.72,
+        "reasoning": "Mechanically it resembles a lightweight top-down horde shooter with constant target acquisition, projectile combat, and circular arena movement, even though the theme is zombies rather than aliens."
+      },
+      {
+        "category": "Wave defense game",
+        "score": 0.61,
+        "reasoning": "The player holds out against escalating enemy pressure in a fixed arena and buys survival-oriented upgrades, but the game lacks explicit discrete waves and is closer to continuous spawning."
+      },
+      {
+        "category": "Third person shooter",
+        "score": 0.38,
+        "reasoning": "There is a player character moving and shooting enemies in real time, but the view is top-down and auto-fire driven rather than an over-the-shoulder manual aiming shooter."
+      },
+      {
+        "category": "Arena fighting game",
+        "score": 0.3,
+        "reasoning": "The session takes place in a bounded combat space with immediate enemy pressure and survival through movement, but there is no duel structure or melee-centric fighting system."
+      }
+    ],
+    "uncertainty_notes": [
+      "The category universe does not include a precise label such as 'top-down survival shooter' or 'arena survival auto-shooter', so some lower-ranked matches are only approximate mechanical fits.",
+      "The game has continuous spawning rather than clearly segmented waves, which reduces confidence in 'Wave defense game' as a direct classification.",
+      "Shooter-related categories in the list skew toward perspective-specific genres, while this game is closer to a casual mobile auto-shooter with drag movement."
+    ]
+  },
+  "mechanics_classification_source_mode": "split-json-legacy",
+  "screenshots_png": [],
+  "screenshots_jpg": [
+    "screenshots/01.jpg",
+    "screenshots/02.jpg",
+    "screenshots/03.jpg",
+    "screenshots/04.jpg"
+  ],
+  "deploy": {
+    "remix_uuid": "remix-587cc0a82980d3ea7d4b57b192fb86ee",
+    "source_output_dir": "games/raw/gamezone-89024627-dd93-4b92-b942-e8f6436bf15a",
+    "format_version": "1.0.0",
+    "normalized_screenshot_sources": [
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-89024627-dd93-4b92-b942-e8f6436bf15a/playwright_after_start.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-89024627-dd93-4b92-b942-e8f6436bf15a/playwright_initial.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-89024627-dd93-4b92-b942-e8f6436bf15a/playwright_post_shop.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-89024627-dd93-4b92-b942-e8f6436bf15a/playwright_shop_open.png"
+    ]
+  }
+}

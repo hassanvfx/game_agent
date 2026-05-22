@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Organ Grinder: Triage</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg: #080312;
+        --bg-grid: rgba(43, 213, 255, 0.08);
+        --panel: rgba(17, 17, 39, 0.84);
+        --panel-border: #4cc9f0;
+        --accent: #7af6b4;
+        --accent-strong: #2bd5ff;
+        --danger: #ff5d73;
+        --danger-dark: #8c1231;
+        --warning: #ffd166;
+        --muted: #1a2147;
+        --muted-2: #2d3568;
+        --text: #f7fbff;
+        --text-soft: #c6d7f5;
+        --shadow: 0 0 24px rgba(43, 213, 255, 0.22);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(76, 201, 240, 0.22), transparent 32%),
+            radial-gradient(circle at bottom, rgba(255, 93, 115, 0.16), transparent 28%),
+            linear-gradient(180deg, #12041f 0%, var(--bg) 48%, #05020d 100%);
+    }
+    body {
+        color: var(--text);
+        user-select: none;
+        font-family: 'Orbitron', system-ui, sans-serif;
+    }
+    canvas {
+        display: block;
+        touch-action: none;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+    }
+    .pixel-font {
+        font-family: 'Press Start 2P', cursive;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .scanlines {
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%),
+            linear-gradient(90deg, rgba(43, 213, 255, 0.05), rgba(255, 255, 255, 0.015), rgba(255, 93, 115, 0.05));
+        background-size: 100% 4px, 6px 100%;
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0.65;
+        mix-blend-mode: screen;
+    }
+    #game-container::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(90deg, transparent 0 49%, rgba(43, 213, 255, 0.15) 49.2%, rgba(43, 213, 255, 0.15) 50.8%, transparent 51%),
+            linear-gradient(rgba(43, 213, 255, 0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(43, 213, 255, 0.06) 1px, transparent 1px);
+        background-size: 100% 100%, 32px 32px, 32px 32px;
+        opacity: 0.45;
+        pointer-events: none;
+        z-index: 1;
+    }
+    .tool-btn:active,
+    .tool-btn.is-pressed {
+        transform: scale(0.95);
+        filter: brightness(1.2);
+    }
+    .hidden { display: none !important; }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+    #ui-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    #hud {
+        width: 100%;
+        padding: 14px 14px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 12px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+    }
+    #hud-left {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .score-label,
+    #lives-display {
+        background: linear-gradient(180deg, rgba(12, 17, 39, 0.94), rgba(8, 11, 27, 0.88));
+        border: 2px solid rgba(76, 201, 240, 0.8);
+        box-shadow: 0 0 18px rgba(43, 213, 255, 0.16), inset 0 0 18px rgba(122, 246, 180, 0.08);
+        border-radius: 14px;
+        backdrop-filter: blur(6px);
+    }
+    .score-label {
+        color: var(--accent);
+        padding: 10px 12px;
+    }
+    .status-copy {
+        max-width: 360px;
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.4;
+        font-family: 'Orbitron', system-ui, sans-serif;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        padding-left: 2px;
+    }
+
+    #lives-display {
+        display: flex;
+        gap: 6px;
+        padding: 10px 12px;
+    }
+    .life-dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+    }
+    .life-dot.live {
+        background: radial-gradient(circle at 35% 35%, #ffd6dc, var(--danger) 55%, var(--danger-dark) 100%);
+        border: 2px solid #ffd1d8;
+        box-shadow: 0 0 10px rgba(255, 93, 115, 0.6);
+    }
+    .life-dot.lost {
+        background: #1f2937;
+        border: 2px solid #111827;
+        opacity: 0.45;
+    }
+
+    #tools {
+        width: 100%;
+        padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        pointer-events: auto;
+    }
+    .tool-btn {
+        width: 96px;
+        min-height: 96px;
+        background:
+            radial-gradient(circle at top, rgba(122, 246, 180, 0.2), transparent 55%),
+            linear-gradient(180deg, rgba(20, 28, 64, 0.97), rgba(9, 14, 37, 0.98));
+        border: 3px solid rgba(76, 201, 240, 0.9);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #fff;
+        box-shadow: 0 8px 0 #203061, 0 0 18px rgba(43, 213, 255, 0.25);
+        cursor: pointer;
+        transition: transform 0.08s ease, filter 0.08s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+        padding: 10px 8px;
+        position: relative;
+        overflow: hidden;
+    }
+    .tool-btn::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 40%);
+        pointer-events: none;
+    }
+    .tool-btn span {
+        font-size: 10px;
+        color: var(--text);
+        text-shadow: 0 0 10px rgba(43, 213, 255, 0.35);
+    }
+    .tool-icon {
+        width: 40px;
+        height: 40px;
+    }
+    .bone-icon,
+    .heart-icon,
+    .lung-icon {
+        border: 2px solid rgba(255, 255, 255, 0.75);
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.16);
+    }
+    .bone-icon {
+        background: linear-gradient(180deg, #fff8d6, #f8fafc 45%, #cbd5e1);
+        clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+    }
+    .heart-icon {
+        background: linear-gradient(180deg, #ff97a6, #ef4444 55%, #8c1231);
+        clip-path: polygon(50% 20%, 80% 0, 100% 30%, 50% 100%, 0 30%, 20% 0);
+    }
+    .lung-icon {
+        background: linear-gradient(180deg, #ffb9ea, #f472b6 55%, #8a2be2);
+        clip-path: polygon(20% 10%, 45% 0, 55% 0, 80% 10%, 90% 50%, 70% 90%, 50% 100%, 30% 90%, 10% 50%);
+    }
+    .text-red { color: #f87171; }
+    .text-pink { color: #f9a8d4; }
+
+    #game-over-screen {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+    #game-over-panel {
+        background:
+            radial-gradient(circle at top, rgba(255, 93, 115, 0.2), transparent 35%),
+            linear-gradient(180deg, rgba(20, 10, 32, 0.98), rgba(8, 4, 20, 0.96));
+        border: 3px solid var(--danger);
+        padding: 32px 24px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        box-shadow: 0 0 28px rgba(255, 93, 115, 0.36), inset 0 0 24px rgba(43, 213, 255, 0.08);
+        max-width: 420px;
+        width: min(100%, 420px);
+        border-radius: 18px;
+    }
+    #fail-gif {
+        width: min(200px, 62vw);
+        border-radius: 14px;
+        border: 2px solid rgba(255,255,255,0.6);
+        box-shadow: 0 0 20px rgba(255, 93, 115, 0.35);
+        object-fit: cover;
+    }
+    #feedback-gif-shell {
+        position: absolute;
+        top: 88px;
+        right: 12px;
+        width: min(26vw, 112px);
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(-10px) scale(0.92);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+        z-index: 55;
+    }
+    #feedback-gif-shell.show {
+        opacity: 0.92;
+        transform: translateY(0) scale(1);
+    }
+    #feedback-gif {
+        width: 100%;
+        display: block;
+        border-radius: 12px;
+        border: 2px solid rgba(122, 246, 180, 0.75);
+        box-shadow: 0 0 18px rgba(122, 246, 180, 0.28);
+    }
+    #game-over-title {
+        margin: 0;
+        font-size: clamp(24px, 5vw, 40px);
+        color: var(--danger);
+        animation: pulse 1.2s infinite;
+    }
+    #game-over-panel p {
+        margin: 0;
+    }
+    .results-copy {
+        color: var(--text-soft);
+        font-size: 15px;
+        line-height: 1.45;
+        font-family: 'Orbitron', system-ui, sans-serif;
+        font-weight: 400;
+    }
+    #restart-btn {
+        margin-top: 8px;
+        padding: 16px 24px;
+        background: linear-gradient(180deg, #ff6b81, #dc2626);
+        color: #fff;
+        border: 2px solid #fff;
+        border-radius: 14px;
+        box-shadow: 0 6px 0 #7f1d1d, 0 0 16px rgba(255, 93, 115, 0.3);
+        font: inherit;
+        cursor: pointer;
+        transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
+    }
+    #restart-btn:hover { background: linear-gradient(180deg, #ff8597, #ef4444); }
+    #restart-btn:active {
+        transform: translateY(4px);
+        box-shadow: 0 2px 0 #7f1d1d;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.65; }
+    }
+
+    @media (max-width: 640px) {
+        #hud {
+            padding: 10px 10px 0;
+            font-size: 11px;
+        }
+        .status-copy {
+            max-width: 220px;
+            font-size: 11px;
+        }
+        #tools {
+            gap: 10px;
+            padding-inline: 10px;
+        }
+        .tool-btn {
+            width: 29vw;
+            min-height: 84px;
+            padding: 8px 6px;
+        }
+        .tool-btn span {
+            font-size: 9px;
+        }
+        .tool-icon {
+            width: 34px;
+            height: 34px;
+        }
+    }
+</style>
+<script id="game-config" type="application/x-game-config">
+{
+  "heroSpeed": { "type": "number", "label": "Conveyor Speed", "value": 3, "min": 1, "max": 12 },
+  "themeColor": { "type": "color", "label": "Theme Color", "value": "#4ade80" }
+}
+</script>
+</head>
+<body>
+
+<audio id="bgm_main" data-editable="audio" data-label="Background Music" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" preload="none" loop crossorigin="anonymous"></audio>
+<audio id="sfx_fix" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="none" crossorigin="anonymous"></audio>
+<audio id="sfx_bonus" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3" preload="none" crossorigin="anonymous"></audio>
+<audio id="sfx_error" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="none" crossorigin="anonymous"></audio>
+<audio id="sfx_warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3" preload="none" crossorigin="anonymous"></audio>
+<audio id="sfx_gameover" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3" preload="none" crossorigin="anonymous"></audio>
+<!-- [agent-note][stage3] resolved-audio: bgm + triage sfx -> catalogs/audios.json -->
+<!-- [agent-note][stage3] resolved-font: title/ui -> catalogs/fonts.json -->
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div class="scanlines"></div>
+
+    <div id="ui-layer">
+        <div id="hud" class="pixel-font">
+            <div id="hud-left">
+                <div class="score-label">SCORE: <span id="score-display">0</span></div>
+                <div class="status-copy">Tap the matching graft while each patient crosses the green triage lane.</div>
+            </div>
+            <div id="lives-display">
+                <div class="life-dot live"></div>
+                <div class="life-dot live"></div>
+                <div class="life-dot live"></div>
+            </div>
+        </div>
+
+        <div id="tools">
+            <button class="tool-btn" data-type="0" aria-label="Bone graft">
+                <div class="tool-icon bone-icon"></div>
+                <span class="pixel-font">BONE</span>
+            </button>
+            <button class="tool-btn" data-type="1" aria-label="Heart graft">
+                <div class="tool-icon heart-icon"></div>
+                <span class="pixel-font text-red">HEART</span>
+            </button>
+            <button class="tool-btn" data-type="2" aria-label="Lung graft">
+                <div class="tool-icon lung-icon"></div>
+                <span class="pixel-font text-pink">LUNG</span>
+            </button>
+        </div>
+
+        <div id="game-over-screen" class="hidden pixel-font">
+            <div id="game-over-panel">
+                <img id="fail-gif" alt="Critical failure reaction" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp">
+                <h1 id="game-over-title">FLATLINE</h1>
+                <p>SCORE: <span id="final-score">0</span></p>
+                <p class="results-copy">Your shift ends when too many patients leave the lane untreated.</p>
+                <button id="restart-btn">RESTART SHIFT</button>
+            </div>
+        </div>
+        <div id="feedback-gif-shell" aria-live="polite">
+            <img id="feedback-gif" alt="Triage streak celebration" src="https://i.giphy.com/B2sgQeOCaBDnMfMgXy.webp">
+        </div>
+    </div>
+</div>
+
+<script>
+// --- Configuration System ---
+window.gameConfigDefs = JSON.parse(document.getElementById('game-config').textContent);
+window.gameConfig = Object.fromEntries(Object.entries(window.gameConfigDefs).map(([k, v]) => [k, v.value]));
+window.updateGameConfig = (key, val) => { if(key in window.gameConfig) window.gameConfig[key] = val; };
+
+// --- System Variables ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let cw = 0, ch = 0;
+let initialized = false;
+let lastTime = 0;
+let audioCtx = null;
+
+// --- Game State ---
+let gameState = 'START'; // START, PLAYING, GAMEOVER
+let score = 0;
+let lives = 3;
+let speedMult = 1;
+let patients = [];
+let particles = [];
+let spawnTimer = 0;
+let screenShake = 0;
+let flashRed = 0;
+let beltOffset = 0;
+
+// --- DOM Elements ---
+const scoreDisplay = document.getElementById('score-display');
+const livesDisplay = document.getElementById('lives-display');
+const gameOverScreen = document.getElementById('game-over-screen');
+ const finalScore = document.getElementById('final-score');
+ const hud = document.getElementById('hud');
+ const tools = document.getElementById('tools');
+ const bgm = document.getElementById('bgm_main');
+ const feedbackGifShell = document.getElementById('feedback-gif-shell');
+ const mediaAudioIds = ['sfx_fix', 'sfx_bonus', 'sfx_error', 'sfx_warning', 'sfx_gameover'];
+ const feedbackTimers = { overlay: 0, warning: 0 };
+
+ // --- Audio & Vibration ---
+ function initAudio() {
+     if (!audioCtx) {
+         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+     }
+     if (audioCtx.state === 'suspended') {
+         audioCtx.resume();
+     }
+     if (bgm && bgm.volume !== 0.2) {
+         bgm.volume = 0.2;
+     }
+ }
+ 
+ function playMediaAudio(id, volume = 0.55) {
+     const el = document.getElementById(id);
+     if (!el) return false;
+     try {
+         el.pause();
+         el.currentTime = 0;
+         el.volume = volume;
+         el.play().catch(() => {});
+         return true;
+     } catch (e) {
+         return false;
+     }
+ }
+ 
+ function playSfx(type) {
+     const mapped = {
+         fix: () => {
+             playMediaAudio('sfx_fix', 0.5);
+             playMediaAudio('sfx_bonus', 0.42);
+         },
+         error: () => {
+             playMediaAudio('sfx_error', 0.58);
+         },
+         warning: () => {
+             playMediaAudio('sfx_warning', 0.5);
+         },
+         death: () => {
+             playMediaAudio('sfx_gameover', 0.62);
+         },
+         ui: () => {
+             playMediaAudio('sfx_fix', 0.35);
+         }
+     };
+ 
+     if (mapped[type]) {
+         mapped[type]();
+     }
+ 
+     if (!audioCtx) return;
+     try {
+         const osc = audioCtx.createOscillator();
+         const gain = audioCtx.createGain();
+         osc.connect(gain);
+         gain.connect(audioCtx.destination);
+ 
+         const now = audioCtx.currentTime;
+         if (type === 'fix') {
+             osc.type = 'square';
+             osc.frequency.setValueAtTime(440, now);
+             osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+             gain.gain.setValueAtTime(0.06, now);
+             gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+             osc.start(now);
+             osc.stop(now + 0.1);
+         } else if (type === 'error' || type === 'warning') {
+             osc.type = 'sawtooth';
+             osc.frequency.setValueAtTime(type === 'warning' ? 220 : 150, now);
+             osc.frequency.exponentialRampToValueAtTime(50, now + 0.25);
+             gain.gain.setValueAtTime(type === 'warning' ? 0.08 : 0.12, now);
+             gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+             osc.start(now);
+             osc.stop(now + 0.25);
+         } else if (type === 'death') {
+             osc.type = 'square';
+             osc.frequency.setValueAtTime(300, now);
+             osc.frequency.exponentialRampToValueAtTime(50, now + 0.8);
+             gain.gain.setValueAtTime(0.15, now);
+             gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+             osc.start(now);
+             osc.stop(now + 0.8);
+         } else if (type === 'ui') {
+             osc.type = 'triangle';
+             osc.frequency.setValueAtTime(660, now);
+             osc.frequency.exponentialRampToValueAtTime(780, now + 0.06);
+             gain.gain.setValueAtTime(0.05, now);
+             gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
+             osc.start(now);
+             osc.stop(now + 0.06);
+         }
+     } catch (e) { console.warn("SFX error", e); }
+ }
+ 
+ function syncLoopAudio(shouldPlay) {
+     if (!bgm) return;
+     try {
+         if (shouldPlay) {
+             bgm.play().catch(() => {});
+         } else {
+             bgm.pause();
+         }
+     } catch (e) {}
+ }
+ 
+ function flashFeedbackGif(duration = 650) {
+     if (!feedbackGifShell) return;
+     feedbackGifShell.classList.add('show');
+     clearTimeout(feedbackTimers.overlay);
+     feedbackTimers.overlay = setTimeout(() => {
+         feedbackGifShell.classList.remove('show');
+     }, duration);
+ }
+
+function vibrate(style) {
+    try {
+        window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+            action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+            params: { style: style }
+        });
+    } catch(e){}
+}
+
+// --- Entities ---
+class Patient {
+    constructor() {
+        this.w = 120;
+        this.h = 180;
+        this.x = cw / 2;
+        this.y = -this.h;
+        // 0: Needs Bone, 1: Needs Heart, 2: Needs Lung
+        this.type = Math.floor(Math.random() * 3);
+        this.fixed = false;
+        this.passed = false;
+    }
+
+    update(dt) {
+        if (!isFinite(this.y)) this.y = -this.h;
+        this.y += gameConfig.heroSpeed * speedMult * dt * 60;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Body (Gown)
+        ctx.fillStyle = this.fixed ? '#c7d2fe' : '#dbeafe';
+        ctx.fillRect(-50, -60, 100, 120);
+        ctx.fillStyle = this.fixed ? '#2bd5ff' : '#4f46e5';
+        ctx.fillRect(-50, -60, 100, 18);
+        ctx.fillStyle = this.fixed ? '#7af6b4' : '#1f2937';
+        ctx.fillRect(-18, -52, 36, 8);
+
+        // Head
+        ctx.fillStyle = '#fcd34d';
+        ctx.fillRect(-30, -110, 60, 50);
+
+        // Helmet band
+        ctx.fillStyle = this.fixed ? '#7af6b4' : '#ff5d73';
+        ctx.fillRect(-34, -116, 68, 12);
+
+        // Eyes (Dead)
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-20, -90, 10, 10);
+        ctx.fillRect(10, -90, 10, 10);
+        if (!this.fixed) {
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-20,-90); ctx.lineTo(-10,-80); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-10,-90); ctx.lineTo(-20,-80); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(10,-90); ctx.lineTo(20,-80); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(20,-90); ctx.lineTo(10,-80); ctx.stroke();
+        } else {
+            // Alive eyes
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-18, -88, 4, 4);
+            ctx.fillRect(12, -88, 4, 4);
+            ctx.fillStyle = '#2bd5ff';
+            ctx.fillRect(-16, -86, 2, 2);
+            ctx.fillRect(14, -86, 2, 2);
+        }
+
+        // Patient badge silhouette
+        ctx.fillStyle = this.fixed ? '#7af6b4' : '#ff5d73';
+        ctx.fillRect(28, -48, 12, 12);
+
+        // Defect / Organ
+        if (this.type === 0) { // Bone
+            if (!this.fixed) {
+                ctx.fillStyle = '#22c55e'; // Moldy green
+                ctx.fillRect(-10, -30, 20, 60);
+                ctx.fillRect(-20, -30, 40, 15);
+                ctx.fillRect(-20, 15, 40, 15);
+            } else {
+                ctx.fillStyle = '#ffffff'; // Clean white
+                ctx.fillRect(-10, -30, 20, 60);
+                ctx.fillRect(-20, -30, 40, 15);
+                ctx.fillRect(-20, 15, 40, 15);
+            }
+        } else if (this.type === 1) { // Heart
+            if (!this.fixed) {
+                ctx.fillStyle = '#450a0a'; // Empty hole
+                ctx.fillRect(-20, -40, 40, 40);
+            } else {
+                ctx.fillStyle = '#ef4444'; // Fresh heart
+                ctx.fillRect(-20, -40, 40, 40);
+            }
+        } else if (this.type === 2) { // Lung
+            if (!this.fixed) {
+                ctx.fillStyle = '#4a044e'; // Empty hole
+                ctx.fillRect(-35, -40, 30, 50);
+                ctx.fillRect(5, -40, 30, 50);
+            } else {
+                ctx.fillStyle = '#f472b6'; // Fresh lung
+                ctx.fillRect(-35, -40, 30, 50);
+                ctx.fillRect(5, -40, 30, 50);
+            }
+        }
+
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 400;
+        this.vy = (Math.random() - 0.5) * 400;
+        this.life = 1.0;
+        this.color = color;
+        this.size = Math.random() * 8 + 4;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt * 2;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --- Core Functions ---
+ function setState(newState) {
+     gameState = newState;
+     if (newState === 'PLAYING') {
+         hud.classList.remove('hidden');
+         tools.classList.remove('hidden');
+         gameOverScreen.classList.add('hidden');
+         syncLoopAudio(true);
+     } else if (newState === 'GAMEOVER') {
+         gameOverScreen.classList.remove('hidden');
+         finalScore.innerText = score;
+         feedbackGifShell?.classList.remove('show');
+         syncLoopAudio(false);
+     }
+ }
+
+function updateHUD() {
+    scoreDisplay.innerText = score;
+    let heartsHTML = '';
+    for(let i=0; i<3; i++) {
+        if (i < lives) heartsHTML += '<div class="life-dot live"></div>';
+        else heartsHTML += '<div class="life-dot lost"></div>';
+    }
+    livesDisplay.innerHTML = heartsHTML;
+}
+
+function spawnParticles(x, y, type) {
+    let color = '#fff';
+    if (type === 0) color = '#22c55e';
+    else if (type === 1) color = '#450a0a';
+    else if (type === 2) color = '#4a044e';
+
+    for(let i=0; i<15; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+ function takeDamage() {
+     lives--;
+     playSfx('error');
+     if (lives === 1) {
+         playSfx('warning');
+     }
+     vibrate('heavy');
+     screenShake = 15;
+     flashRed = 1.0;
+     updateHUD();
+     if (lives <= 0) {
+         playSfx('death');
+         setState('GAMEOVER');
+     }
+ }
+
+function handleTool(type) {
+    if (gameState !== 'PLAYING') return;
+
+    // Operating zone is roughly lower middle of screen
+    const zoneTop = ch * 0.4;
+    const zoneBottom = ch * 0.85;
+
+    let target = patients.find(p => !p.fixed && p.y > zoneTop && p.y < zoneBottom);
+
+    if (target) {
+         if (target.type === type) {
+             target.fixed = true;
+             score += 10;
+             speedMult = Math.min(3.0, speedMult + 0.05);
+             playSfx('fix');
+             flashFeedbackGif();
+             vibrate('light');
+             spawnParticles(target.x, target.y, type);
+             updateHUD();
+        } else {
+            takeDamage();
+        }
+    } else {
+        // Punish random tapping
+        takeDamage();
+    }
+}
+
+function initGame() {
+    score = 0;
+    lives = 3;
+    speedMult = 1.0;
+    patients = [];
+    particles = [];
+    spawnTimer = 0;
+    screenShake = 0;
+    flashRed = 0;
+    updateHUD();
+
+     if (bgm) {
+         bgm.currentTime = 0;
+     }
+     mediaAudioIds.forEach((id) => {
+         const el = document.getElementById(id);
+         if (el) {
+             el.pause();
+             el.currentTime = 0;
+         }
+     });
+     feedbackGifShell?.classList.remove('show');
+     syncLoopAudio(true);
+ }
+
+function restartGame() {
+    initGame();
+    setState('PLAYING');
+}
+
+// --- Input Routing ---
+ function handleGlobalInput(e) {
+     initAudio();
+     syncLoopAudio(true);
+ 
+     const toolBtn = e.target.closest('.tool-btn');
+     if (toolBtn) {
+         toolBtn.classList.add('is-pressed');
+         playSfx('ui');
+         setTimeout(() => toolBtn.classList.remove('is-pressed'), 80);
+     }
+
+    if (gameState === 'GAMEOVER') {
+        if (e.target.closest('#restart-btn')) {
+            restartGame();
+        }
+        return;
+    }
+
+    if (gameState === 'PLAYING') {
+        if (toolBtn) {
+            e.preventDefault();
+            const type = parseInt(toolBtn.dataset.type);
+            handleTool(type);
+        }
+    }
+}
+
+window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+
+// --- Game Loop ---
+function update(dt) {
+    if (gameState !== 'PLAYING') return;
+
+    beltOffset = (beltOffset + gameConfig.heroSpeed * speedMult * dt * 60) % 100;
+
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) {
+        patients.push(new Patient());
+        // Spawn rate increases with speed
+        spawnTimer = Math.max(0.8, 2.5 - (speedMult * 0.5));
+    }
+
+    for (let i = patients.length - 1; i >= 0; i--) {
+        let p = patients[i];
+        p.update(dt);
+
+        // Missed patient
+        if (!p.fixed && !p.passed && p.y > ch * 0.85) {
+            p.passed = true;
+            takeDamage();
+        }
+
+        if (p.y > ch + 200) {
+            patients.splice(i, 1);
+        }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update(dt);
+        if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+
+    if (screenShake > 0) screenShake -= dt * 60;
+    if (flashRed > 0) flashRed -= dt * 2;
+}
+
+function draw() {
+    const bgGradient = ctx.createLinearGradient(0, 0, 0, ch);
+    bgGradient.addColorStop(0, '#12041f');
+    bgGradient.addColorStop(0.52, '#080312');
+    bgGradient.addColorStop(1, '#03020a');
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, cw, ch);
+
+    for (let y = 0; y < ch; y += 32) {
+        ctx.fillStyle = 'rgba(43, 213, 255, 0.05)';
+        ctx.fillRect(0, y, cw, 1);
+    }
+
+    for (let x = 0; x < cw; x += 32) {
+        ctx.fillStyle = 'rgba(43, 213, 255, 0.035)';
+        ctx.fillRect(x, 0, 1, ch);
+    }
+
+    ctx.save();
+    if (screenShake > 0) {
+        const dx = (Math.random() - 0.5) * screenShake;
+        const dy = (Math.random() - 0.5) * screenShake;
+        ctx.translate(dx, dy);
+    }
+
+    // Draw Conveyor Belt
+    const beltW = 160;
+    const beltX = cw / 2 - beltW / 2;
+    const beltGradient = ctx.createLinearGradient(beltX, 0, beltX + beltW, 0);
+    beltGradient.addColorStop(0, '#18213f');
+    beltGradient.addColorStop(0.5, '#22305e');
+    beltGradient.addColorStop(1, '#18213f');
+    ctx.fillStyle = beltGradient;
+    ctx.fillRect(beltX, 0, beltW, ch);
+
+    ctx.strokeStyle = 'rgba(43, 213, 255, 0.35)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(beltX, 0, beltW, ch);
+
+    // Belt lines
+    ctx.fillStyle = '#4b5b8f';
+    for(let y = beltOffset - 100; y < ch; y += 100) {
+        ctx.fillRect(beltX, y, beltW, 10);
+    }
+
+    // Triage lane highlight
+    ctx.fillStyle = 'rgba(122, 246, 180, 0.09)';
+    ctx.fillRect(beltX, ch * 0.4, beltW, ch * 0.45);
+    ctx.strokeStyle = '#7af6b4';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    ctx.strokeRect(beltX, ch * 0.4, beltW, ch * 0.45);
+    ctx.setLineDash([]);
+
+    // Draw Patients
+    patients.forEach(p => p.draw(ctx));
+
+    // Draw Particles
+    particles.forEach(p => p.draw(ctx));
+
+    ctx.restore();
+
+    // Flash Red Overlay
+    if (flashRed > 0) {
+        ctx.fillStyle = `rgba(239, 68, 68, ${Math.min(0.5, flashRed)})`;
+        ctx.fillRect(0, 0, cw, ch);
+    }
+}
+
+function gameLoop(timestamp) {
+    try {
+        if (!lastTime) lastTime = timestamp;
+        let dt = (timestamp - lastTime) / 1000;
+        lastTime = timestamp;
+        dt = Math.min(dt, 0.05);
+
+        update(dt);
+        draw();
+    } catch (e) {
+        console.error("Loop error:", e);
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+// --- Resize & Init ---
+function resize(width, height) {
+    const dpr = window.devicePixelRatio || 1;
+    cw = width;
+    ch = height;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+}
+
+const ro = new ResizeObserver(entries => {
+    const rect = entries[0].contentRect;
+    resize(rect.width, rect.height);
+    if (!initialized) {
+        initGame();
+        setState('PLAYING');
+        initialized = true;
+        requestAnimationFrame(gameLoop);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    ro.observe(canvas);
+});
+</script>
+</body>
+</html>

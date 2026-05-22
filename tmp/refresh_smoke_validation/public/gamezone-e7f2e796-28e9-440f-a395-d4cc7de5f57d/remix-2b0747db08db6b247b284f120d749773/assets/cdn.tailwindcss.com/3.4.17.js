@@ -1,0 +1,1 @@
+/* Stage 4 cleanup: retired unused mirrored Tailwind CDN bundle because the game uses inline styles and the mirrored file contained a disallowed policy URL reference. */

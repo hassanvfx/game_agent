@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Orbit Grid: Signal Director</title>
+    <!-- [agent-note][stage4] preserved approved catalog font mapping: title -> Audiowide | hud/ui -> Orbitron -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #040816;
+            --bg-deep: #02040d;
+            --cyan: #4af7ff;
+            --cyan-soft: #9efcff;
+            --pink: #ff5bd3;
+            --gold: #ffd86b;
+            --text: #f2f7ff;
+            --text-muted: #a8b7d9;
+            --text-dim: #54627f;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            background:
+                radial-gradient(circle at top, rgba(74, 247, 255, 0.14), transparent 36%),
+                radial-gradient(circle at 80% 18%, rgba(255, 91, 211, 0.12), transparent 30%),
+                linear-gradient(180deg, #09112a 0%, var(--bg) 54%, var(--bg-deep) 100%);
+            font-family: 'Orbitron', system-ui, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            color: var(--text);
+        }
+
+        button {
+            font: inherit;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .app {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ui-panel {
+            background: linear-gradient(180deg, rgba(25, 37, 78, 0.92), rgba(10, 15, 33, 0.92));
+            border: 1px solid rgba(120, 214, 255, 0.26);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            padding: max(12px, env(safe-area-inset-top)) 12px 12px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 12px;
+        }
+
+        .title-bar {
+            margin: 0;
+            font-family: 'Audiowide', 'Orbitron', system-ui, sans-serif;
+            font-size: 1.25rem;
+            font-weight: 400;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, var(--cyan-soft), #ffffff 42%, #c8a6ff 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 20px rgba(74, 247, 255, 0.2);
+        }
+
+        .title-bar::after {
+            content: " ✦";
+            color: var(--pink);
+            text-shadow: none;
+        }
+
+        .mode-label {
+            font-size: 10px;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            text-align: right;
+        }
+
+        .transport-row,
+        .settings-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .transport-row {
+            height: 48px;
+        }
+
+        .settings-row {
+            height: 40px;
+        }
+
+        .btn-neon {
+            background: linear-gradient(180deg, rgba(74, 247, 255, 0.18), rgba(74, 247, 255, 0.06));
+            border: 1px solid rgba(93, 225, 255, 0.42);
+            color: var(--cyan-soft);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: transform 0.1s, background 0.1s, box-shadow 0.18s ease, border-color 0.18s ease;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 14px rgba(74, 247, 255, 0.08);
+        }
+
+        .btn-neon:active {
+            transform: scale(0.96);
+            background: rgba(74, 247, 255, 0.24);
+        }
+
+        .btn-neon.active {
+            background: linear-gradient(180deg, var(--pink), #ff89e1);
+            color: #18051f;
+            box-shadow: 0 0 18px rgba(255, 91, 211, 0.55);
+            border-color: rgba(255, 255, 255, 0.78);
+        }
+
+        .btn-secondary {
+            border: 1px solid rgba(255, 91, 211, 0.4);
+            color: #ffc0ef;
+            background: linear-gradient(180deg, rgba(255, 91, 211, 0.16), rgba(255, 91, 211, 0.06));
+        }
+
+        .btn-secondary:active {
+            background: rgba(255, 91, 211, 0.2);
+        }
+
+        .play-btn {
+            flex: 1;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .clear-btn {
+            width: 84px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .bpm-box {
+            flex: 1;
+            display: flex;
+            gap: 4px;
+            background: rgba(6, 10, 24, 0.72);
+            border-radius: 10px;
+            padding: 4px;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid rgba(112, 139, 206, 0.36);
+            box-shadow: inset 0 1px 10px rgba(0,0,0,0.24);
+        }
+
+        .mini-btn {
+            width: 32px;
+            height: 100%;
+            background: linear-gradient(180deg, #25345d, #172340);
+            color: white;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+
+        .mini-btn:active {
+            background: #314978;
+        }
+
+        .bpm-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--cyan-soft);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .wave-btn {
+            flex: 1;
+            font-size: 0.72rem;
+            border-color: rgba(255, 216, 107, 0.5);
+            color: #fff1b3;
+            background: linear-gradient(180deg, rgba(255, 216, 107, 0.16), rgba(255, 216, 107, 0.05));
+        }
+
+        .canvas-wrap {
+            position: relative;
+            flex: 1;
+            background:
+                radial-gradient(circle at 50% 45%, rgba(74, 247, 255, 0.08), transparent 32%),
+                linear-gradient(180deg, #040816 0%, #030613 100%);
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .scanlines {
+            background:
+                linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.14) 50%, rgba(0,0,0,0.14)),
+                linear-gradient(90deg, rgba(74, 247, 255, 0.04), transparent 20%, transparent 80%, rgba(255, 91, 211, 0.04));
+            background-size: 100% 4px, 100% 100%;
+            pointer-events: none;
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            opacity: 0.4;
+        }
+
+        .orbital-glow {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 50%, rgba(74, 247, 255, 0.14), transparent 25%),
+                radial-gradient(circle at 50% 50%, rgba(255, 91, 211, 0.07), transparent 50%);
+            z-index: 1;
+        }
+
+        .footer {
+            padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+            z-index: 10;
+            flex-shrink: 0;
+            text-align: center;
+            position: relative;
+        }
+
+        .lane-key {
+            display: flex;
+            justify-content: space-around;
+            gap: 8px;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: #7f90b2;
+        }
+
+        .lane-key .melody {
+            color: var(--cyan-soft);
+        }
+
+        .lane-key .rhythm {
+            color: #ff9ce7;
+        }
+
+        .start-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            background:
+                radial-gradient(circle at 50% 25%, rgba(74, 247, 255, 0.2), transparent 28%),
+                radial-gradient(circle at 72% 72%, rgba(255, 91, 211, 0.18), transparent 22%),
+                linear-gradient(180deg, rgba(4, 8, 22, 0.96), rgba(2, 4, 13, 0.98));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            transition: opacity 0.5s;
+        }
+
+        .start-card {
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            padding: 24px 20px;
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(16, 25, 58, 0.92), rgba(8, 14, 31, 0.96));
+            border: 1px solid rgba(137, 179, 255, 0.28);
+            box-shadow: 0 24px 54px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255,255,255,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pilot-mark {
+            font-size: 2.2rem;
+            line-height: 1;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 0 14px rgba(74, 247, 255, 0.4));
+        }
+
+        .start-title {
+            margin: 0 0 10px;
+            font-family: 'Audiowide', 'Orbitron', system-ui, sans-serif;
+            font-size: clamp(2.2rem, 8vw, 3.2rem);
+            font-weight: 400;
+            letter-spacing: 0.02em;
+            line-height: 0.95;
+            text-shadow: 0 0 18px rgba(74, 247, 255, 0.18);
+        }
+
+        .start-title span {
+            color: var(--cyan);
+        }
+
+        .start-subtitle {
+            margin: 0 0 12px;
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .start-instructions {
+            margin: 0 0 24px;
+            color: #dfe7ff;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .init-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(180deg, var(--cyan), #7ff6ff);
+            color: #031014;
+            border: none;
+            font-weight: 700;
+            font-size: 1.05rem;
+            border-radius: 14px;
+            box-shadow: 0 0 24px rgba(74, 247, 255, 0.38);
+            transition: transform 0.1s, background 0.1s, box-shadow 0.18s ease;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .init-btn:active {
+            transform: scale(0.95);
+            background: linear-gradient(180deg, #7ff6ff, #b6fcff);
+        }
+
+        .build-note {
+            margin-top: 14px;
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            right: 10px;
+            bottom: 12px;
+            width: min(30vw, 112px);
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+            opacity: 0;
+            transform: translateY(18px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            pointer-events: none;
+            z-index: 6;
+            background: rgba(4, 8, 22, 0.72);
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.88;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.fail {
+            left: 10px;
+            right: auto;
+        }
+
+        .status-pill {
+            position: absolute;
+            left: 50%;
+            bottom: 14px;
+            transform: translateX(-50%);
+            z-index: 7;
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(122, 212, 255, 0.35);
+            background: rgba(6, 10, 24, 0.78);
+            color: var(--cyan-soft);
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .status-pill.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-4px);
+        }
+
+        .status-pill.fail {
+            color: #ffc0ef;
+            border-color: rgba(255, 91, 211, 0.35);
+        }
+
+        .header::before,
+        .footer::before,
+        .start-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(120deg, rgba(255,255,255,0.06), transparent 28%),
+                linear-gradient(0deg, transparent, rgba(74,247,255,0.04), transparent 80%);
+        }
+
+        @media (max-width: 480px) {
+            .header {
+                padding: 10px;
+            }
+
+            .title-bar {
+                font-size: 1rem;
+                letter-spacing: 0.05em;
+            }
+
+            .mode-label {
+                font-size: 9px;
+            }
+
+            .transport-row {
+                height: 44px;
+            }
+
+            .settings-row {
+                height: 38px;
+            }
+
+            .lane-key {
+                letter-spacing: 0.12em;
+                font-size: 9px;
+            }
+
+            .start-card {
+                padding: 20px 16px;
+            }
+
+            .start-subtitle,
+            .start-instructions {
+                max-width: 32ch;
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .feedback-gif {
+                width: 84px;
+                bottom: 8px;
+            }
+
+            .status-pill {
+                bottom: 8px;
+                font-size: 0.58rem;
+                max-width: calc(100% - 24px);
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="app">
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe; styling only -->
+        <div class="ui-panel header">
+            <div class="header-top">
+                <h1 class="title-bar">ORBIT GRID</h1>
+                <div class="mode-label">Nova Conductor</div>
+            </div>
+
+            <div class="transport-row">
+                <button id="play-btn" class="btn-neon play-btn">ROUTE</button>
+                <button id="clear-btn" class="btn-neon btn-secondary clear-btn">RESET</button>
+            </div>
+
+            <div class="settings-row">
+                <div class="bpm-box">
+                    <button id="bpm-down" class="mini-btn">-</button>
+                    <span class="bpm-label">PULSE <span id="bpm-display">120</span></span>
+                    <button id="bpm-up" class="mini-btn">+</button>
+                </div>
+                <button id="wave-btn" class="btn-neon wave-btn">SAW</button>
+            </div>
+        </div>
+
+        <div class="canvas-wrap">
+            <canvas id="gridCanvas"></canvas>
+            <div class="orbital-glow" aria-hidden="true"></div>
+            <div class="scanlines"></div>
+            <!-- [agent-note][stage3] resolved-gif: route-success + clear-fail-safe feedback from catalogs/gifs.json -->
+            <img id="success-gif" class="feedback-gif" alt="Routing celebration visual">
+            <img id="fail-gif" class="feedback-gif fail" alt="Routing reset visual">
+            <div id="status-pill" class="status-pill" aria-live="polite"></div>
+        </div>
+
+        <div class="ui-panel footer">
+            <div class="lane-key">
+                <span class="melody">Signal Tones (Top 5)</span>
+                <span class="rhythm">Beat Triggers (Bottom 3)</span>
+            </div>
+        </div>
+
+        <div id="start-screen" class="start-screen">
+            <div class="start-card">
+                <div class="pilot-mark" aria-hidden="true">🛰️</div>
+                <h1 class="start-title">ORBIT<span>GRID</span></h1>
+                <p class="start-subtitle">Guide a bright relay drone through a pocket-sized synth station.</p>
+                <p class="start-instructions">Tap cells to arm tones and beats. Press Route to launch the loop, then adjust the pulse or waveform in real time.</p>
+                <button id="init-btn" class="init-btn">Tap to Begin Routing</button>
+                <p class="build-note">Nova Relay Interface // Fast Boot</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /*
+           ORBIT GRID - SIGNAL DIRECTOR EDITION
+           Optimizations:
+           1. Global Delay Bus (No per-note Convolver).
+           2. No Canvas Shadows (Flat render).
+           3. Efficient Scheduling.
+        */
+
+        // [agent-note][stage1] role: future-audio | trigger: loop-start | intent: add launch sting when routing begins
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+        const MEDIA = {
+            audio: {
+                uiClick: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3',
+                success: 'https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3',
+                fail: 'https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3',
+                loop: 'https://gamezone-virid.vercel.app/assets/audios/music/music_loop_01.mp3'
+            },
+            gifs: {
+                success: 'https://i.giphy.com/2Pw6NK0XrHTiNnUbPv.webp',
+                fail: 'https://i.giphy.com/9npIiZIdldtWYhGztn.webp'
+            }
+        };
+
+        function createSafeAudio(src, { loop = false, volume = 1 } = {}) {
+            const audio = new Audio(src);
+            audio.preload = 'auto';
+            audio.loop = loop;
+            audio.volume = volume;
+            audio.playsInline = true;
+            return audio;
+        }
+
+        const ENGINE = {
+            ctx: null,
+            master: null,
+            delayInput: null,
+            delayOutput: null,
+            waveform: 'sawtooth',
+
+            init() {
+                if (this.ctx) return;
+                this.ctx = new AudioContext({ latencyHint: 'interactive' });
+
+                this.master = this.ctx.createGain();
+                this.master.gain.value = 0.5;
+
+                const comp = this.ctx.createDynamicsCompressor();
+                comp.threshold.value = -10;
+                comp.ratio.value = 12;
+
+                this.master.connect(comp);
+                comp.connect(this.ctx.destination);
+
+                const delay = this.ctx.createDelay(1.0);
+                delay.delayTime.value = 0.25;
+
+                const feedback = this.ctx.createGain();
+                feedback.gain.value = 0.3;
+
+                const delayFilter = this.ctx.createBiquadFilter();
+                delayFilter.type = 'lowpass';
+                delayFilter.frequency.value = 2000;
+
+                this.delayInput = this.ctx.createGain();
+                this.delayInput.connect(delay);
+                delay.connect(delayFilter);
+                delayFilter.connect(feedback);
+                feedback.connect(delay);
+
+                delayFilter.connect(this.master);
+            },
+
+            resume() {
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+
+            playSynth(freq, time) {
+                const osc = this.ctx.createOscillator();
+                const env = this.ctx.createGain();
+
+                osc.type = this.waveform;
+                osc.frequency.setValueAtTime(freq, time);
+
+                env.gain.setValueAtTime(0, time);
+                env.gain.linearRampToValueAtTime(0.3, time + 0.01);
+                env.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+
+                osc.connect(env);
+                env.connect(this.master);
+
+                const send = this.ctx.createGain();
+                send.gain.value = 0.4;
+                env.connect(send);
+                send.connect(this.delayInput);
+
+                osc.start(time);
+                osc.stop(time + 0.35);
+
+                setTimeout(() => {
+                    osc.disconnect();
+                    env.disconnect();
+                    send.disconnect();
+                }, 400);
+            },
+
+            playKick(time) {
+                const osc = this.ctx.createOscillator();
+                const env = this.ctx.createGain();
+
+                osc.frequency.setValueAtTime(150, time);
+                osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+
+                env.gain.setValueAtTime(1, time);
+                env.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+                osc.connect(env);
+                env.connect(this.master);
+
+                osc.start(time);
+                osc.stop(time + 0.5);
+            },
+
+            playSnare(time) {
+                const osc = this.ctx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, time);
+                const oscEnv = this.ctx.createGain();
+                oscEnv.gain.setValueAtTime(0.5, time);
+                oscEnv.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+                osc.connect(oscEnv);
+                oscEnv.connect(this.master);
+                osc.start(time);
+                osc.stop(time + 0.15);
+
+                const bufferSize = this.ctx.sampleRate * 0.1;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseEnv = this.ctx.createGain();
+                noiseEnv.gain.setValueAtTime(0.5, time);
+                noiseEnv.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 1000;
+
+                noise.connect(filter);
+                filter.connect(noiseEnv);
+                noiseEnv.connect(this.master);
+                noiseEnv.connect(this.delayInput);
+
+                noise.start(time);
+            },
+
+            playHiHat(time) {
+                const bufferSize = this.ctx.sampleRate * 0.05;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 7000;
+
+                const env = this.ctx.createGain();
+                env.gain.setValueAtTime(0.3, time);
+                env.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+                noise.connect(filter);
+                filter.connect(env);
+                env.connect(this.master);
+
+                noise.start(time);
+            }
+        };
+
+        const STATE = {
+            grid: [],
+            cols: 8,
+            rows: 8,
+            isPlaying: false,
+            bpm: 120,
+            currentStep: 0,
+            nextNoteTime: 0,
+            freqs: [466.16, 392.00, 349.23, 311.13, 261.63],
+            bgmStarted: false,
+            uiAudio: {},
+            lastSfxAt: {},
+
+            initGrid() {
+                this.grid = Array(this.cols).fill(0).map(() => Array(this.rows).fill(false));
+                this.grid[0][7] = true;
+                this.grid[4][7] = true;
+                this.grid[2][6] = true;
+                this.grid[6][6] = true;
+                [0, 2, 4, 6].forEach(c => this.grid[c][5] = true);
+                this.grid[0][4] = true;
+                this.grid[3][3] = true;
+                this.grid[6][1] = true;
+            },
+
+            clearGrid() {
+                this.grid = this.grid.map(col => col.map(() => false));
+            },
+
+            flashStatus(message, tone = 'success') {
+                const pill = document.getElementById('status-pill');
+                if (!pill) return;
+                pill.textContent = message;
+                pill.className = `status-pill ${tone === 'fail' ? 'fail' : ''}`.trim();
+                requestAnimationFrame(() => pill.classList.add('visible'));
+                clearTimeout(this.statusTimer);
+                this.statusTimer = setTimeout(() => pill.classList.remove('visible'), 1200);
+            },
+
+            showGif(type) {
+                const successGif = document.getElementById('success-gif');
+                const failGif = document.getElementById('fail-gif');
+                const target = type === 'fail' ? failGif : successGif;
+                const other = type === 'fail' ? successGif : failGif;
+                if (!target || !other) return;
+                other.classList.remove('visible');
+                target.classList.add('visible');
+                clearTimeout(this.gifTimer);
+                this.gifTimer = setTimeout(() => target.classList.remove('visible'), 1400);
+            },
+
+            registerAudio() {
+                this.uiAudio = {
+                    uiClick: createSafeAudio(MEDIA.audio.uiClick, { volume: 0.45 }),
+                    success: createSafeAudio(MEDIA.audio.success, { volume: 0.4 }),
+                    fail: createSafeAudio(MEDIA.audio.fail, { volume: 0.4 }),
+                    loop: createSafeAudio(MEDIA.audio.loop, { loop: true, volume: 0.18 })
+                };
+            },
+
+            triggerSfx(name) {
+                const now = performance.now();
+                const gate = name === 'uiClick' ? 70 : 180;
+                if (this.lastSfxAt[name] && now - this.lastSfxAt[name] < gate) return;
+                this.lastSfxAt[name] = now;
+                const audio = this.uiAudio[name];
+                if (!audio) return;
+                try {
+                    audio.currentTime = 0;
+                    const playPromise = audio.play();
+                    if (playPromise && typeof playPromise.catch === 'function') {
+                        playPromise.catch(() => {});
+                    }
+                } catch (_) {}
+            },
+
+            startLoop() {
+                const audio = this.uiAudio.loop;
+                if (!audio || this.bgmStarted) return;
+                this.bgmStarted = true;
+                try {
+                    audio.currentTime = 0;
+                    const playPromise = audio.play();
+                    if (playPromise && typeof playPromise.catch === 'function') {
+                        playPromise.catch(() => {});
+                    }
+                } catch (_) {}
+            },
+
+            stopLoop() {
+                const audio = this.uiAudio.loop;
+                if (!audio) return;
+                this.bgmStarted = false;
+                try {
+                    audio.pause();
+                    audio.currentTime = 0;
+                } catch (_) {}
+            },
+
+            toggle(c, r) {
+                if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) return;
+                this.grid[c][r] = !this.grid[c][r];
+                this.triggerSfx('uiClick');
+                if (this.grid[c][r]) {
+                    this.flashStatus(r >= 5 ? 'Beat armed' : 'Tone armed');
+                } else {
+                    this.flashStatus('Cell cleared', 'fail');
+                }
+                if (this.grid[c][r] && !this.isPlaying && ENGINE.ctx) {
+                    const now = ENGINE.ctx.currentTime;
+                    if (r === 7) ENGINE.playKick(now);
+                    else if (r === 6) ENGINE.playSnare(now);
+                    else if (r === 5) ENGINE.playHiHat(now);
+                    else ENGINE.playSynth(this.freqs[r], now);
+                }
+            }
+        };
+
+        function getCellPalette(c, r) {
+            const hue = 186 + (r * 18) + (c % 2 === 0 ? 4 : -4);
+            return {
+                idle: `hsla(${hue}, 38%, ${r < 5 ? 17 : 14}%, 0.95)`,
+                active: `hsl(${hue}, 100%, ${54 - r * 2}%)`
+            };
+        }
+
+        function drawRelayDrone(ctx, x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.fillStyle = 'rgba(74,247,255,0.18)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#7ff6ff';
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 16, 0.45, Math.PI - 0.45);
+            ctx.stroke();
+
+            ctx.fillStyle = '#ff9ce7';
+            ctx.beginPath();
+            ctx.arc(0, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        const CANVAS = {
+            el: document.getElementById('gridCanvas'),
+            ctx: document.getElementById('gridCanvas').getContext('2d', { alpha: false }),
+            width: 0,
+            height: 0,
+            cellW: 0,
+            cellH: 0,
+
+            resize() {
+                const parent = this.el.parentElement;
+                this.width = parent.clientWidth;
+                this.height = parent.clientHeight;
+
+                const dpr = Math.min(window.devicePixelRatio, 2);
+                this.el.width = this.width * dpr;
+                this.el.height = this.height * dpr;
+                this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+                this.ctx.scale(dpr, dpr);
+
+                this.cellW = this.width / STATE.cols;
+                this.cellH = this.height / STATE.rows;
+            },
+
+            draw() {
+                const gradient = this.ctx.createLinearGradient(0, 0, 0, this.height);
+                gradient.addColorStop(0, '#08112a');
+                gradient.addColorStop(0.65, '#050b1d');
+                gradient.addColorStop(1, '#02040d');
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                const coreX = this.width * 0.5;
+                const coreY = this.height * 0.48;
+                const coreGlow = this.ctx.createRadialGradient(coreX, coreY, 8, coreX, coreY, Math.max(this.width, this.height) * 0.42);
+                coreGlow.addColorStop(0, 'rgba(74,247,255,0.16)');
+                coreGlow.addColorStop(0.35, 'rgba(74,247,255,0.08)');
+                coreGlow.addColorStop(1, 'rgba(74,247,255,0)');
+                this.ctx.fillStyle = coreGlow;
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                const gap = 2;
+
+                for (let c = 0; c < STATE.cols; c++) {
+                    for (let r = 0; r < STATE.rows; r++) {
+                        const active = STATE.grid[c][r];
+                        const x = c * this.cellW + gap;
+                        const y = r * this.cellH + gap;
+                        const w = this.cellW - gap * 2;
+                        const h = this.cellH - gap * 2;
+
+                        let fill = getCellPalette(c, r).idle;
+
+                        if (active) {
+                            if (r >= 5) {
+                                if (r === 7) fill = '#ff5f8f';
+                                else if (r === 6) fill = '#ffb04d';
+                                else fill = '#ffe66d';
+                            } else {
+                                fill = getCellPalette(c, r).active;
+                            }
+                        } else if ((c % 4) === 0) {
+                            fill = 'rgba(33, 47, 87, 0.95)';
+                        }
+
+                        this.ctx.fillStyle = fill;
+                        this.ctx.fillRect(x, y, w, h);
+
+                        this.ctx.strokeStyle = active ? 'rgba(255,255,255,0.18)' : 'rgba(129, 153, 212, 0.08)';
+                        this.ctx.lineWidth = 1;
+                        this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+
+                        if (active) {
+                            this.ctx.fillStyle = 'rgba(255,255,255,0.22)';
+                            this.ctx.fillRect(x, y, w, h);
+
+                            this.ctx.fillStyle = 'rgba(7,11,24,0.34)';
+                            if (r >= 5) {
+                                this.ctx.beginPath();
+                                this.ctx.arc(x + w / 2, y + h / 2, Math.max(3, Math.min(w, h) * 0.12), 0, Math.PI * 2);
+                                this.ctx.fill();
+                            } else {
+                                this.ctx.fillRect(x + 4, y + h / 2 - 1, w - 8, 2);
+                                this.ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                                this.ctx.fillRect(x + w * 0.18, y + h * 0.28, w * 0.18, h * 0.1);
+                            }
+                        }
+                    }
+                }
+
+                if (STATE.isPlaying) {
+                    const activeCol = (STATE.currentStep - 1 + STATE.cols) % STATE.cols;
+                    const x = activeCol * this.cellW;
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                    this.ctx.fillRect(x, 0, this.cellW, this.height);
+
+                    const beam = this.ctx.createLinearGradient(x, 0, x + this.cellW, 0);
+                    beam.addColorStop(0, 'rgba(74,247,255,0.15)');
+                    beam.addColorStop(0.5, 'rgba(255,255,255,0.3)');
+                    beam.addColorStop(1, 'rgba(255,91,211,0.15)');
+                    this.ctx.fillStyle = beam;
+                    this.ctx.fillRect(x, 0, this.cellW, this.height);
+
+                    this.ctx.fillStyle = '#72f7ff';
+                    this.ctx.fillRect(x, 0, 2, this.height);
+                }
+
+                const divY = 5 * this.cellH;
+                this.ctx.fillStyle = 'rgba(255,91,211,0.34)';
+                this.ctx.fillRect(0, divY - 1, this.width, 2);
+
+                drawRelayDrone(this.ctx, this.width - 38, 28 + ((Math.sin(performance.now() * 0.004) + 1) * 4));
+            }
+        };
+
+        function scheduler() {
+            const lookahead = 0.1;
+            const secondsPerBeat = 60.0 / STATE.bpm;
+            const stepTime = secondsPerBeat / 2;
+
+            while (STATE.nextNoteTime < ENGINE.ctx.currentTime + lookahead) {
+                playStep(STATE.currentStep, STATE.nextNoteTime);
+                STATE.nextNoteTime += stepTime;
+                STATE.currentStep = (STATE.currentStep + 1) % STATE.cols;
+            }
+        }
+
+        function playStep(step, time) {
+            const col = STATE.grid[step];
+
+            if (col[7]) ENGINE.playKick(time);
+            if (col[6]) ENGINE.playSnare(time);
+            if (col[5]) ENGINE.playHiHat(time);
+
+            for (let r = 0; r < 5; r++) {
+                if (col[r]) ENGINE.playSynth(STATE.freqs[r], time);
+            }
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+
+            if (STATE.isPlaying && ENGINE.ctx) {
+                scheduler();
+            }
+
+            CANVAS.draw();
+        }
+
+        function setupInteraction() {
+            const canvas = CANVAS.el;
+
+            // [agent-note][stage4] mobile-action-path: keep touch suppression scoped to canvas so start/control taps still receive native click
+            const handleInput = (e) => {
+                if (e.type === 'touchstart') e.preventDefault();
+
+                const rect = canvas.getBoundingClientRect();
+                let clientX, clientY;
+
+                if (e.changedTouches) {
+                    clientX = e.changedTouches[0].clientX;
+                    clientY = e.changedTouches[0].clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+
+                const x = clientX - rect.left;
+                const y = clientY - rect.top;
+
+                const c = Math.floor(x / CANVAS.cellW);
+                const r = Math.floor(y / CANVAS.cellH);
+
+                STATE.toggle(c, r);
+            };
+
+            canvas.addEventListener('touchstart', handleInput, { passive: false });
+            canvas.addEventListener('mousedown', handleInput);
+
+            document.getElementById('play-btn').addEventListener('click', () => {
+                if (!ENGINE.ctx) return;
+                ENGINE.resume();
+                STATE.triggerSfx('success');
+                STATE.isPlaying = !STATE.isPlaying;
+
+                const btn = document.getElementById('play-btn');
+                if (STATE.isPlaying) {
+                    btn.innerText = 'HOLD';
+                    btn.classList.add('active');
+                    STATE.nextNoteTime = ENGINE.ctx.currentTime + 0.05;
+                    STATE.currentStep = 0;
+                    STATE.startLoop();
+                    STATE.showGif('success');
+                    STATE.flashStatus('Route online');
+                } else {
+                    btn.innerText = 'ROUTE';
+                    btn.classList.remove('active');
+                    STATE.stopLoop();
+                    STATE.flashStatus('Route on standby', 'fail');
+                }
+            });
+
+            document.getElementById('clear-btn').addEventListener('click', () => {
+                STATE.clearGrid();
+                STATE.triggerSfx('fail');
+                STATE.showGif('fail');
+                STATE.flashStatus('Pattern reset', 'fail');
+            });
+
+            document.getElementById('bpm-up').addEventListener('click', () => {
+                STATE.bpm = Math.min(240, STATE.bpm + 10);
+                document.getElementById('bpm-display').innerText = STATE.bpm;
+                STATE.triggerSfx('uiClick');
+            });
+
+            document.getElementById('bpm-down').addEventListener('click', () => {
+                STATE.bpm = Math.max(60, STATE.bpm - 10);
+                document.getElementById('bpm-display').innerText = STATE.bpm;
+                STATE.triggerSfx('uiClick');
+            });
+
+            document.getElementById('wave-btn').addEventListener('click', (e) => {
+                const forms = ['sawtooth', 'square', 'triangle'];
+                let idx = forms.indexOf(ENGINE.waveform);
+                idx = (idx + 1) % forms.length;
+                ENGINE.waveform = forms[idx];
+                e.target.innerText = ENGINE.waveform.substring(0, 3).toUpperCase();
+                STATE.triggerSfx('uiClick');
+                STATE.flashStatus(`Wave ${e.target.innerText}`);
+            });
+
+            document.getElementById('init-btn').addEventListener('click', () => {
+                ENGINE.init();
+                STATE.initGrid();
+                STATE.registerAudio();
+                document.getElementById('success-gif').src = MEDIA.gifs.success;
+                document.getElementById('fail-gif').src = MEDIA.gifs.fail;
+                STATE.triggerSfx('uiClick');
+                STATE.flashStatus('Console synced');
+
+                const overlay = document.getElementById('start-screen');
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 500);
+            });
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    STATE.stopLoop();
+                } else if (STATE.isPlaying) {
+                    STATE.startLoop();
+                }
+            });
+
+            window.addEventListener('resize', () => CANVAS.resize());
+        }
+
+        STATE.initGrid();
+        CANVAS.resize();
+        setupInteraction();
+        loop();
+    </script>
+</body>
+</html>

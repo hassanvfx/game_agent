@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Neon Relay Siege</title>
+    <!-- [agent-note][stage3] resolved-font: primary-display=Audiowide secondary-ui=Rajdhani accent=Press Start 2P via catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-bg: #051024;
+            --color-bg-deep: #020814;
+            --color-panel: rgba(3, 16, 36, 0.82);
+            --color-panel-strong: rgba(5, 20, 45, 0.94);
+            --color-player: #55f6ff;
+            --color-player-hot: #9bf8ff;
+            --color-enemy: #ff5468;
+            --color-enemy-hot: #ff9aaa;
+            --color-gold: #ffe27a;
+            --color-ink: #020611;
+            --color-grid: #173050;
+            --color-text: #d9f7ff;
+            --shadow-panel: 0 0 0 1px rgba(133, 236, 255, 0.18), 0 14px 36px rgba(0, 0, 0, 0.4);
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; margin: 0; padding: 0;
+            background:
+                radial-gradient(circle at 50% 50%, rgba(28, 90, 148, 0.14), transparent 38%),
+                linear-gradient(180deg, #061225 0%, var(--color-bg) 45%, var(--color-bg-deep) 100%);
+            overflow: hidden;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            user-select: none; -webkit-user-select: none;
+            color: var(--color-text);
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 14%, rgba(85, 246, 255, 0.14), transparent 26%),
+                radial-gradient(circle at 50% 86%, rgba(255, 84, 104, 0.16), transparent 24%);
+            z-index: 0;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        button {
+            appearance: none;
+            border: none;
+            background: none;
+            padding: 0;
+            margin: 0;
+        }
+        .relative { position: relative; }
+        .absolute { position: absolute; }
+        .inset-0 { inset: 0; }
+        .w-full { width: 100%; }
+        .h-full { height: 100%; }
+        .bg-black { background: #000; }
+        .hidden { display: none !important; }
+        
+        .ui-layer {
+            position: absolute; inset: 0; pointer-events: none;
+            display: flex; flex-direction: column;
+            justify-content: space-between;
+            z-index: 10;
+        }
+        .interactive { pointer-events: auto; }
+
+        .scanline {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background:
+                linear-gradient(to bottom, transparent 50%, rgba(85, 246, 255, 0.035) 51%),
+                linear-gradient(90deg, transparent, rgba(85, 246, 255, 0.02), transparent);
+            background-size: 100% 4px, 100% 100%;
+            mix-blend-mode: screen;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .scanline::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, transparent 0%, rgba(85, 246, 255, 0.08) 48%, transparent 52%, transparent 100%);
+            animation: scanSweep 5s linear infinite;
+            opacity: 0.4;
+        }
+
+        .hud-top,
+        .hud-bottom {
+            width: 100%;
+            position: relative;
+            z-index: 2;
+        }
+        .hud-top {
+            padding: 14px 14px 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0.82), rgba(0,0,0,0));
+        }
+        .hud-bottom {
+            padding: 0 10px calc(20px + env(safe-area-inset-bottom, 0px));
+            background: linear-gradient(0deg, rgba(0,0,0,0.92), rgba(0,0,0,0));
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .hud-card {
+            border: 1px solid rgba(120, 220, 255, 0.25);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(8, 26, 51, 0.88), rgba(3, 13, 28, 0.92));
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-panel);
+        }
+        .hud-strip {
+            padding: 10px 12px 8px;
+        }
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 10px;
+        }
+        .hud-label {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .hud-label.enemy { color: var(--color-enemy-hot); text-shadow: 0 0 10px rgba(255, 84, 104, 0.45); }
+        .hud-label.player { color: var(--color-player-hot); text-shadow: 0 0 10px rgba(85, 246, 255, 0.45); }
+        .hud-value,
+        .mono-readout {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 10px;
+            line-height: 1.3;
+            letter-spacing: 0.06em;
+        }
+        .hud-value.enemy { color: #ffc1ca; }
+        .hud-value.player { color: #c4faff; }
+
+        .middle-area {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+
+        .neon-text {
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 10px rgba(85, 246, 255, 0.55), 0 0 28px rgba(85, 246, 255, 0.2);
+        }
+
+        .resource-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 16px;
+            border: 1px solid rgba(96, 226, 255, 0.24);
+            background: linear-gradient(180deg, rgba(7, 23, 47, 0.92), rgba(3, 11, 25, 0.95));
+            box-shadow: var(--shadow-panel);
+        }
+        .resource-label {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 10px;
+            line-height: 1.4;
+            color: rgba(190, 245, 255, 0.82);
+        }
+        .resource-value {
+            font-size: clamp(20px, 4.5vw, 28px);
+            color: var(--color-player-hot);
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            height: 92px;
+            transition: opacity 0.3s;
+        }
+        .btn {
+            min-width: 0;
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(19, 49, 80, 0.92), rgba(6, 17, 35, 0.98));
+            border: 1px solid rgba(92, 236, 255, 0.38);
+            color: var(--color-player-hot);
+            font-family: 'Audiowide', 'Rajdhani', sans-serif;
+            text-transform: uppercase;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.34);
+        }
+        .btn::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(155, 248, 255, 0.16), transparent 42%, transparent);
+            pointer-events: none;
+        }
+        .btn:active:not(:disabled) {
+            transform: translateY(1px) scale(0.98);
+            background: linear-gradient(180deg, rgba(95, 232, 255, 0.95), rgba(17, 116, 148, 0.95));
+            color: #03101c;
+            box-shadow: 0 0 20px rgba(85, 246, 255, 0.35);
+        }
+        .btn:disabled {
+            opacity: 0.42;
+            border-color: rgba(94, 120, 138, 0.32);
+            color: #698190;
+            background: linear-gradient(180deg, rgba(10, 19, 30, 0.94), rgba(2, 7, 15, 0.98));
+            box-shadow: none;
+        }
+        .btn-danger {
+            border-color: rgba(255, 120, 150, 0.5);
+            color: #ffc2cb;
+            background: linear-gradient(180deg, rgba(74, 26, 40, 0.96), rgba(28, 8, 14, 0.98));
+        }
+        .btn-main {
+            font-size: clamp(14px, 3.8vw, 18px);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+        .btn-cost {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 10px;
+            opacity: 0.78;
+            margin-top: 6px;
+        }
+
+        .cooldown-overlay {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: linear-gradient(180deg, rgba(1, 4, 11, 0), rgba(1, 4, 11, 0.82));
+            transition: height 0.1s linear;
+        }
+
+        .hp-bar-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.08);
+            margin-top: 6px;
+            border-radius: 999px;
+            overflow: hidden;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+        }
+        .hp-bar-fill { height: 100%; transition: width 0.2s; }
+        .hp-player { background: linear-gradient(90deg, #39dfff, var(--color-player-hot)); box-shadow: 0 0 8px rgba(85, 246, 255, 0.75); }
+        .hp-enemy { background: linear-gradient(90deg, #ff4763, #ff9baa); box-shadow: 0 0 8px rgba(255, 84, 104, 0.7); }
+
+        .title-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .title-kicker,
+        .splash-copy,
+        .end-copy {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+        }
+        .title-kicker {
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            color: rgba(201, 251, 255, 0.8);
+        }
+        .title-bar {
+            width: 128px;
+            height: 6px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(85, 246, 255, 0.25), rgba(85, 246, 255, 1), rgba(255, 84, 104, 0.82));
+            box-shadow: 0 0 14px rgba(85, 246, 255, 0.65);
+        }
+        .screen-panel {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 24px 20px;
+            text-align: center;
+            background:
+                radial-gradient(circle at 50% 35%, rgba(0, 217, 255, 0.12), transparent 25%),
+                rgba(0, 0, 0, 0.9);
+        }
+        .screen-card {
+            width: min(100%, 420px);
+            padding: 22px 18px 20px;
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(6, 21, 43, 0.94), rgba(2, 8, 17, 0.98));
+            border: 1px solid rgba(98, 232, 255, 0.3);
+            box-shadow: 0 18px 42px rgba(0,0,0,0.46), 0 0 0 1px rgba(255,255,255,0.04) inset;
+        }
+        .screen-title {
+            font-size: clamp(36px, 12vw, 62px);
+            line-height: 0.88;
+            margin: 0;
+            color: var(--color-player-hot);
+        }
+        .screen-button {
+            padding: 14px 22px;
+            width: min(100%, 260px);
+            min-height: 60px;
+        }
+        .splash-copy,
+        .end-copy {
+            margin: 0;
+            color: rgba(212, 246, 255, 0.8);
+            font-size: 11px;
+            line-height: 1.7;
+            letter-spacing: 0.06em;
+        }
+
+        .damage-number {
+            position: absolute;
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 16px;
+            line-height: 1;
+            transform: translate(-50%, -50%);
+            text-shadow: 0 0 12px currentColor;
+            will-change: transform, opacity;
+        }
+        .damage-player { color: #ffc0ca; }
+        .damage-enemy { color: #b5fbff; }
+
+        .feedback-gif {
+            position: absolute;
+            width: clamp(96px, 22vw, 160px);
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 1px solid rgba(130, 235, 255, 0.35);
+            background: rgba(4, 12, 26, 0.8);
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35), 0 0 22px rgba(85, 246, 255, 0.18);
+            opacity: 0;
+            transform: translateY(10px) scale(0.92);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            pointer-events: none;
+            z-index: 12;
+        }
+        .feedback-gif.visible {
+            opacity: 0.92;
+            transform: translateY(0) scale(1);
+        }
+        .feedback-gif.hit {
+            top: 22%;
+            right: 10px;
+        }
+        .feedback-gif.end {
+            bottom: calc(130px + env(safe-area-inset-bottom, 0px));
+            left: 10px;
+        }
+        .feedback-caption {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            bottom: 8px;
+            padding: 4px 6px;
+            border-radius: 999px;
+            background: rgba(2, 7, 15, 0.72);
+            color: #dffbff;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-align: center;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(85, 246, 255, 0.3);
+        }
+
+        .opacity-50 { opacity: 0.5; }
+        .pointer-events-none { pointer-events: none; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.82; transform: translateY(0); }
+            50% { opacity: 1; transform: translateY(-1px); text-shadow: 0 0 22px rgba(85, 246, 255, 0.9); }
+        }
+        @keyframes scanSweep {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .animate-glow { animation: pulse 2s infinite; }
+
+        @media (max-width: 480px) {
+            .hud-top { padding: 10px 10px 0; }
+            .hud-bottom { padding-inline: 8px; gap: 7px; }
+            .hud-strip { padding: 9px 10px 7px; }
+            .hud-label { font-size: 10px; }
+            .hud-value,
+            .mono-readout,
+            .resource-label,
+            .splash-copy,
+            .end-copy { font-size: 9px; }
+            .btn-grid { height: 86px; gap: 7px; }
+            .btn-main { font-size: 13px; }
+            .btn-cost { font-size: 9px; }
+            .screen-card { padding: 18px 14px; }
+            .feedback-gif {
+                width: 92px;
+                border-radius: 14px;
+            }
+            .feedback-gif.hit {
+                top: 18%;
+                right: 8px;
+            }
+            .feedback-gif.end {
+                left: 8px;
+                bottom: calc(116px + env(safe-area-inset-bottom, 0px));
+            }
+            .feedback-caption {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Audio Assets -->
+<!-- [agent-note][stage3] resolved-audio: bgm+ui+combat cues from catalogs/audios.json -->
+<audio id="bgm" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3" loop preload="none"></audio>
+<audio id="sfx-spawn" src="https://gamezone-virid.vercel.app/assets/audios/ui/menu_open_01.mp3" preload="none"></audio>
+<audio id="sfx-shoot" src="https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3" preload="none"></audio>
+<audio id="sfx-explode" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_02.mp3" preload="none"></audio>
+<audio id="sfx-error" src="https://gamezone-virid.vercel.app/assets/audios/sfx/blocked_02.mp3" preload="none"></audio>
+<audio id="sfx-hit-player" src="https://gamezone-virid.vercel.app/assets/audios/sfx/damage_02.mp3" preload="none"></audio>
+<audio id="sfx-hit-enemy" src="https://gamezone-virid.vercel.app/assets/audios/sfx/enemy_hit_02.mp3" preload="none"></audio>
+<audio id="sfx-win" src="https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_02.mp3" preload="none"></audio>
+<audio id="sfx-lose" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="none"></audio>
+<audio id="sfx-click" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="none"></audio>
+
+<!-- Game Container -->
+<div id="game-container" class="relative w-full h-full bg-black">
+    <canvas id="gameCanvas"></canvas>
+    <div class="scanline"></div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="ui-layer safe-area-inset-bottom">
+        
+        <!-- Top HUD (Enemy Base) -->
+        <div class="hud-top">
+            <div class="hud-card hud-strip">
+                <div class="hud-row">
+                    <span class="hud-label enemy">Rival Relay</span>
+                    <span id="enemy-hp-text" class="hud-value enemy">1000/1000</span>
+                </div>
+                <div class="hp-bar-container"><div id="enemy-hp-bar" class="hp-bar-fill hp-enemy" style="width: 100%"></div></div>
+            </div>
+        </div>
+
+        <!-- Middle Area (Distance Markers handled by Canvas) -->
+        <div class="middle-area">
+            <!-- Floating Combat Text Container -->
+            <div id="damage-text-container" class="absolute inset-0 pointer-events-none"></div>
+            <!-- [agent-note][stage3] resolved-gif: hit-feedback + end-state reaction via catalogs/gifs.json -->
+            <div id="hit-gif-shell" class="feedback-gif hit" aria-hidden="true">
+                <img
+                    id="hit-gif"
+                    class="w-full h-full"
+                    src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp"
+                    alt="Retro impact feedback animation"
+                >
+                <div class="feedback-caption">impact surge</div>
+            </div>
+            <div id="end-gif-shell" class="feedback-gif end" aria-hidden="true">
+                <img
+                    id="end-gif"
+                    class="w-full h-full"
+                    src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp"
+                    alt="Victory celebration reaction animation"
+                >
+                <div id="end-gif-caption" class="feedback-caption">relay secure</div>
+            </div>
+        </div>
+
+        <!-- Bottom HUD (Player Base + Controls) -->
+        <div class="hud-bottom">
+            <!-- Player Status -->
+            <div class="hud-card hud-strip">
+                <div class="hud-row">
+                    <span class="hud-label player">Home Relay</span>
+                    <span id="player-hp-text" class="hud-value player">1000/1000</span>
+                </div>
+                <div class="hp-bar-container"><div id="player-hp-bar" class="hp-bar-fill hp-player" style="width: 100%"></div></div>
+            </div>
+
+            <!-- Resource Bar -->
+            <div class="resource-card">
+                <span class="resource-label">Signal Charge</span>
+                <span id="energy-display" class="resource-value neon-text">0</span>
+            </div>
+
+            <!-- Unit Controls -->
+            <div id="controls" class="btn-grid interactive opacity-50 pointer-events-none">
+                <button id="btn-soldier" class="btn" onclick="spawnPlayerUnit('soldier')">
+                    <span class="btn-main">Runner</span>
+                    <span class="btn-cost">$15</span>
+                    <div class="cooldown-overlay" id="cd-soldier" style="height:0%"></div>
+                </button>
+                <button id="btn-tank" class="btn" onclick="spawnPlayerUnit('tank')">
+                    <span class="btn-main">Breacher</span>
+                    <span class="btn-cost">$50</span>
+                    <div class="cooldown-overlay" id="cd-tank" style="height:0%"></div>
+                </button>
+                <button id="btn-missile" class="btn btn-danger" onclick="spawnPlayerUnit('missile')">
+                    <span class="btn-main">Burst</span>
+                    <span class="btn-cost">$80</span>
+                    <div class="cooldown-overlay" id="cd-missile" style="height:0%"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screens -->
+    <div id="start-screen" class="screen-panel interactive">
+        <div class="screen-card">
+            <div class="title-stack">
+                <span class="title-kicker">Pulse Vanguard Uplink</span>
+                <h1 class="neon-text screen-title">NEON<br>RELAY</h1>
+                <div class="title-bar"></div>
+                <p class="splash-copy">
+                    DEPLOY SIGNAL TEAMS. CROSS THE 20M GRID.<br>SHUT DOWN THE RIVAL RELAY.
+                </p>
+            </div>
+            <button id="btn-play" class="btn screen-button animate-glow">
+                <span class="btn-main">Start Link</span>
+                <span class="btn-cost">Tap To Deploy</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="gameover-screen" class="screen-panel interactive hidden">
+        <div class="screen-card">
+            <h1 id="end-title" class="neon-text screen-title">Victory</h1>
+            <p id="end-reason" class="end-copy">RIVAL RELAY OFFLINE</p>
+            <button id="btn-restart" class="btn screen-button">
+                <span class="btn-main">Re-Link</span>
+                <span class="btn-cost">Instant Redeploy</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* 
+   NEON RELAY SIEGE - Single File Remake
+   Engine: Vanilla JS + Canvas
+*/
+
+// --- CONFIGURATION ---
+const CONFIG = {
+    fieldHeightMeters: 20, // Thematic distance
+    baseHealth: 1000,
+    energyRate: 5, // Per second
+    startEnergy: 20,
+    maxEnergy: 200,
+    colors: {
+        player: '#00f0ff',
+        playerDark: '#006066',
+        enemy: '#ff3333',
+        enemyDark: '#660000',
+        ground: '#0a1525'
+    }
+};
+
+const UNITS = {
+    soldier: {
+        cost: 15,
+        hp: 40,
+        damage: 5,
+        speed: 40, // px per sec (scaled later)
+        range: 30, // px
+        cooldown: 0.5, // sec
+        width: 10, height: 10,
+        color: '#fff',
+        type: 'unit'
+    },
+    tank: {
+        cost: 50,
+        hp: 250,
+        damage: 20,
+        speed: 20,
+        range: 50,
+        cooldown: 3.0,
+        width: 24, height: 30,
+        color: '#0f0',
+        type: 'unit'
+    },
+    missile: {
+        cost: 80,
+        hp: 10, // Fragile
+        damage: 150, // High burst
+        speed: 150, // Very fast
+        range: 10, // Melee explosion
+        cooldown: 5.0,
+        width: 8, height: 20,
+        color: '#ff0',
+        type: 'projectile' // Explodes on contact
+    }
+};
+
+// --- GAME STATE ---
+let game = {
+    active: false,
+    width: 0,
+    height: 0,
+    lastTime: 0,
+    energy: CONFIG.startEnergy,
+    
+    // Entities
+    playerBase: null,
+    enemyBase: null,
+    entities: [],
+    particles: [],
+    
+    // AI
+    enemyWaveTimer: 0,
+    difficultyMultiplier: 1.0,
+    
+    // Cooldowns
+    cooldowns: { soldier: 0, tank: 0, missile: 0 }
+};
+
+// --- AUDIO SYSTEM ---
+const AudioSys = {
+    ready: false,
+    unlocked: false,
+    bgm: null,
+    sfxMap: {},
+    sfxCooldowns: {},
+    init: function() {
+        if (this.ready) return;
+        this.bgm = document.getElementById('bgm');
+        this.sfxMap = {
+            spawn: document.getElementById('sfx-spawn'),
+            shoot: document.getElementById('sfx-shoot'),
+            explode: document.getElementById('sfx-explode'),
+            error: document.getElementById('sfx-error'),
+            hitPlayer: document.getElementById('sfx-hit-player'),
+            hitEnemy: document.getElementById('sfx-hit-enemy'),
+            win: document.getElementById('sfx-win'),
+            lose: document.getElementById('sfx-lose'),
+            click: document.getElementById('sfx-click')
+        };
+        if (this.bgm) {
+            this.bgm.volume = 0.2;
+            this.bgm.preload = 'auto';
+        }
+        Object.values(this.sfxMap).forEach(audio => {
+            if (!audio) return;
+            audio.volume = 0.4;
+            audio.preload = 'auto';
+        });
+        if (this.sfxMap.explode) this.sfxMap.explode.volume = 0.48;
+        if (this.sfxMap.error) this.sfxMap.error.volume = 0.3;
+
+        const unlock = () => {
+            this.unlocked = true;
+            this.startLoop();
+            window.removeEventListener('pointerdown', unlock);
+            window.removeEventListener('keydown', unlock);
+        };
+        window.addEventListener('pointerdown', unlock, { once: true });
+        window.addEventListener('keydown', unlock, { once: true });
+        this.ready = true;
+    },
+    startLoop: function() {
+        if (!this.unlocked || !this.bgm) return;
+        this.bgm.currentTime = this.bgm.currentTime || 0;
+        this.bgm.play().catch(() => {});
+    },
+    stopLoop: function() {
+        if (!this.bgm) return;
+        this.bgm.pause();
+    },
+    play: function(type) {
+        const audio = this.sfxMap[type];
+        if (!audio) return;
+        const now = performance.now();
+        const minGap = type === 'shoot' ? 90 : type === 'hitEnemy' || type === 'hitPlayer' ? 120 : 180;
+        if (this.sfxCooldowns[type] && now - this.sfxCooldowns[type] < minGap) return;
+        this.sfxCooldowns[type] = now;
+        try {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+        } catch (_) {}
+    }
+};
+
+const FeedbackFX = {
+    timers: {},
+    show(shellId, duration, caption) {
+        const shell = document.getElementById(shellId);
+        if (!shell) return;
+        if (caption) {
+            const label = shell.querySelector('.feedback-caption');
+            if (label) label.textContent = caption;
+        }
+        shell.classList.add('visible');
+        clearTimeout(this.timers[shellId]);
+        this.timers[shellId] = setTimeout(() => {
+            shell.classList.remove('visible');
+        }, duration);
+    },
+    hide(shellId) {
+        const shell = document.getElementById(shellId);
+        if (!shell) return;
+        clearTimeout(this.timers[shellId]);
+        shell.classList.remove('visible');
+    }
+};
+
+// --- ENTITY CLASSES ---
+class Entity {
+    constructor(def, isPlayer, x, y) {
+        this.def = def;
+        this.isPlayer = isPlayer;
+        this.x = x;
+        this.y = y;
+        this.hp = def.hp;
+        this.maxHp = def.hp;
+        this.width = def.width;
+        this.height = def.height;
+        this.dead = false;
+        
+        // Combat
+        this.attackTimer = 0;
+        this.state = 'move'; // move, attack
+        this.target = null;
+        
+        // Visuals
+        this.flash = 0;
+    }
+    
+    update(dt) {
+        if (this.dead) return;
+        
+        // Cooldowns
+        if (this.attackTimer > 0) this.attackTimer -= dt;
+        if (this.flash > 0) this.flash -= dt;
+
+        // 1. Find Target
+        this.target = null;
+        let bestDist = this.def.range;
+        
+        // Check against Base
+        const enemyBase = this.isPlayer ? game.enemyBase : game.playerBase;
+        if (!enemyBase.dead) {
+            const distToBase = this.isPlayer 
+                ? (enemyBase.y + enemyBase.height/2) - this.y 
+                : this.y - (enemyBase.y + enemyBase.height/2);
+            
+            // Simple range check (y-axis only for simplicity in lane)
+            // Note: Player units move UP (y decreases), Enemy moves DOWN (y increases)
+            // Distance is always positive
+            const absDist = Math.abs(this.y - (enemyBase.y + enemyBase.height/2)) - (this.height/2 + enemyBase.height/2);
+            
+            if (absDist <= this.def.range) {
+                this.target = enemyBase;
+                this.state = 'attack';
+            }
+        }
+
+        // Check against Units if no base found or closer unit
+        if (!this.target) {
+            for (let e of game.entities) {
+                if (e.isPlayer === this.isPlayer || e.dead) continue;
+                const dist = Math.abs(this.y - e.y) - (this.height/2 + e.height/2);
+                if (dist <= this.def.range && Math.abs(this.x - e.x) < 40) { // Also check X alignment roughly
+                    this.target = e;
+                    this.state = 'attack';
+                    break;
+                }
+            }
+        }
+        
+        // 2. Act
+        if (this.target) {
+            // Attack
+            if (this.attackTimer <= 0) {
+                this.attack(this.target);
+                this.attackTimer = 1.0; // Standard attack rate 1/sec for simplicity, or modify in def
+                if (this.def.type === 'projectile') {
+                    this.hp = 0; // Missile dies on impact
+                    this.dead = true;
+                    spawnExplosion(this.x, this.y, 20, '#ffaa00');
+                }
+            }
+        } else {
+            // Move
+            this.state = 'move';
+            const dir = this.isPlayer ? -1 : 1;
+            this.y += this.def.speed * dt * dir;
+        }
+        
+        // Bounds check
+        if (this.y < -50 || this.y > game.height + 50) this.dead = true;
+    }
+    
+    attack(target) {
+        target.takeDamage(this.def.damage, this.isPlayer);
+        AudioSys.play(this.def.type === 'projectile' ? 'explode' : 'shoot');
+        // Visual beam
+        game.particles.push({
+            type: 'beam',
+            x1: this.x, y1: this.y,
+            x2: target.x, y2: target.y,
+            life: 0.1,
+            color: this.isPlayer ? CONFIG.colors.player : CONFIG.colors.enemy
+        });
+    }
+    
+    takeDamage(amount, fromPlayer = false) {
+        this.hp -= amount;
+        this.flash = 0.1;
+        if (this.hp <= 0) {
+            this.dead = true;
+            spawnExplosion(this.x, this.y, this.width, this.isPlayer ? CONFIG.colors.player : CONFIG.colors.enemy);
+            AudioSys.play(this.isPlayer ? 'hitPlayer' : 'hitEnemy');
+            if (fromPlayer && !this.isPlayer) {
+                FeedbackFX.show('hit-gif-shell', 700, 'target cracked');
+            }
+        }
+    }
+}
+
+class Base {
+    constructor(isPlayer) {
+        this.isPlayer = isPlayer;
+        this.width = 120;
+        this.height = 60;
+        this.x = game.width / 2;
+        this.y = isPlayer ? game.height - 80 : 80;
+        this.hp = CONFIG.baseHealth;
+        this.maxHp = CONFIG.baseHealth;
+        this.dead = false;
+        this.flash = 0;
+    }
+    
+    takeDamage(amount, fromPlayer = false) {
+        this.hp -= amount;
+        this.flash = 0.1;
+        updateHealthUI();
+
+        AudioSys.play(this.isPlayer ? 'hitPlayer' : 'hitEnemy');
+        if (fromPlayer && !this.isPlayer) {
+            FeedbackFX.show('hit-gif-shell', 900, 'relay breach');
+        }
+        
+        // Floating text
+        spawnDamageText(amount, this.x, this.y, this.isPlayer ? 'damage-player' : 'damage-enemy');
+
+        if (this.hp <= 0 && !this.dead) {
+            this.hp = 0;
+            this.dead = true;
+            endGame(!this.isPlayer);
+        }
+    }
+    
+    update(dt) {
+        if (this.flash > 0) this.flash -= dt;
+    }
+}
+
+// --- CORE FUNCTIONS ---
+
+function init() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    
+    function resize() {
+        game.width = window.innerWidth;
+        game.height = window.innerHeight;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = game.width * dpr;
+        canvas.height = game.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        
+        // Reposition bases if game running
+        if(game.playerBase) {
+            game.playerBase.x = game.width/2;
+            game.playerBase.y = game.height - 80;
+            game.enemyBase.x = game.width/2;
+            game.enemyBase.y = 80;
+        }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+    
+    // Buttons
+    document.getElementById('btn-play').onclick = () => {
+        AudioSys.init();
+        AudioSys.play('click');
+        startGame();
+    };
+    document.getElementById('btn-restart').onclick = () => {
+        AudioSys.init();
+        AudioSys.play('click');
+        startGame();
+    };
+    
+    // Game Loop
+    function loop(timestamp) {
+        const dt = (timestamp - game.lastTime) / 1000;
+        game.lastTime = timestamp;
+        
+        if (game.active && dt < 0.5) { // Prevent huge jumps
+            update(dt);
+            draw(ctx);
+        } else if (!game.active) {
+            draw(ctx); // Keep drawing for background
+        }
+        
+        requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+}
+
+function startGame() {
+    AudioSys.init();
+    AudioSys.startLoop();
+    FeedbackFX.hide('hit-gif-shell');
+    FeedbackFX.hide('end-gif-shell');
+    game.active = true;
+    game.energy = CONFIG.startEnergy;
+    game.entities = [];
+    game.particles = [];
+    game.enemyWaveTimer = 0;
+    game.difficultyMultiplier = 1.0;
+    game.lastTime = performance.now();
+    
+    // Reset Cooldowns
+    game.cooldowns = { soldier: 0, tank: 0, missile: 0 };
+    
+    // Create Bases
+    game.playerBase = new Base(true);
+    game.enemyBase = new Base(false);
+    
+    // UI
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('gameover-screen').classList.add('hidden');
+    document.getElementById('controls').classList.remove('opacity-50', 'pointer-events-none');
+    updateHealthUI();
+    updateEnergyUI();
+    
+    // Clear damage text
+    document.getElementById('damage-text-container').innerHTML = '';
+    AudioSys.play('spawn');
+}
+
+function update(dt) {
+    // Energy
+    if (game.energy < CONFIG.maxEnergy) {
+        game.energy += CONFIG.energyRate * dt;
+        if (game.energy > CONFIG.maxEnergy) game.energy = CONFIG.maxEnergy;
+        updateEnergyUI();
+    }
+    
+    // Cooldowns
+    for(let k in game.cooldowns) {
+        if (game.cooldowns[k] > 0) {
+            game.cooldowns[k] -= dt;
+            updateCooldownUI(k);
+        }
+    }
+    
+    // Bases
+    game.playerBase.update(dt);
+    game.enemyBase.update(dt);
+    
+    // Entities
+    game.entities.forEach(e => e.update(dt));
+    game.entities = game.entities.filter(e => !e.dead);
+    
+    // Sorting for z-index (lower Y on top for top-down, but here side view implies y-sort)
+    // Actually just draw in order, doesn't matter much for neon style
+    
+    // AI Spawner
+    game.enemyWaveTimer -= dt;
+    if (game.enemyWaveTimer <= 0) {
+        spawnEnemyWave();
+        // Ramp up difficulty
+        game.difficultyMultiplier += 0.05;
+        // Next wave time (randomized)
+        game.enemyWaveTimer = (Math.random() * 3 + 2) / Math.sqrt(game.difficultyMultiplier);
+    }
+    
+    // Particles
+    updateParticles(dt);
+}
+
+function spawnPlayerUnit(type) {
+    const def = UNITS[type];
+    if (game.energy >= def.cost && game.cooldowns[type] <= 0) {
+        game.energy -= def.cost;
+        game.cooldowns[type] = def.cooldown;
+        
+        // Spawn offset random X
+        const offsetX = (Math.random() - 0.5) * 100;
+        const u = new Entity(def, true, game.playerBase.x + offsetX, game.playerBase.y - 40);
+        game.entities.push(u);
+        
+        AudioSys.play('spawn');
+        updateEnergyUI();
+    } else {
+        AudioSys.play('error');
+    }
+}
+
+window.spawnPlayerUnit = spawnPlayerUnit; // Global for HTML onclick
+
+function spawnEnemyWave() {
+    // Determine what to spawn based on difficulty
+    const budget = 15 * game.difficultyMultiplier;
+    const roll = Math.random() * budget;
+    
+    const offsetX = (Math.random() - 0.5) * 100;
+    let unitType = 'soldier';
+    
+    if (roll > 80) unitType = 'tank';
+    else if (roll > 10) unitType = 'soldier';
+    
+    // Sometimes spawn multiple soldiers
+    if (unitType === 'soldier' && roll > 40) {
+        const u1 = new Entity(UNITS.soldier, false, game.enemyBase.x - 30, game.enemyBase.y + 40);
+        const u2 = new Entity(UNITS.soldier, false, game.enemyBase.x + 30, game.enemyBase.y + 40);
+        game.entities.push(u1, u2);
+    } else {
+        const u = new Entity(UNITS[unitType], false, game.enemyBase.x + offsetX, game.enemyBase.y + 40);
+        game.entities.push(u);
+    }
+}
+
+function spawnExplosion(x, y, size, color) {
+    for(let i=0; i<8; i++) {
+        game.particles.push({
+            type: 'debris',
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 100,
+            vy: (Math.random() - 0.5) * 100,
+            life: 0.5 + Math.random() * 0.5,
+            size: size * 0.2,
+            color: color
+        });
+    }
+    game.particles.push({
+        type: 'shockwave',
+        x: x, y: y,
+        life: 0.3,
+        size: 1,
+        maxSize: size * 1.5,
+        color: color
+    });
+}
+
+function updateParticles(dt) {
+    for(let i=game.particles.length-1; i>=0; i--) {
+        let p = game.particles[i];
+        p.life -= dt;
+        if (p.life <= 0) {
+            game.particles.splice(i, 1);
+            continue;
+        }
+        
+        if (p.type === 'debris') {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+        } else if (p.type === 'shockwave') {
+            p.size += (p.maxSize - p.size) * 10 * dt;
+        }
+    }
+}
+
+// --- RENDERING ---
+
+function draw(ctx) {
+    // Clear
+    const sky = ctx.createLinearGradient(0, 0, 0, game.height);
+    sky.addColorStop(0, '#071225');
+    sky.addColorStop(0.4, '#09172b');
+    sky.addColorStop(1, '#030812');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, game.width, game.height);
+
+    const laneGlow = ctx.createRadialGradient(game.width / 2, game.height * 0.5, 20, game.width / 2, game.height * 0.5, game.width * 0.45);
+    laneGlow.addColorStop(0, 'rgba(65, 210, 255, 0.12)');
+    laneGlow.addColorStop(1, 'rgba(65, 210, 255, 0)');
+    ctx.fillStyle = laneGlow;
+    ctx.fillRect(0, 0, game.width, game.height);
+    
+    // Draw "20m" Grid Lines
+    ctx.strokeStyle = '#173050';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const meterPx = game.height / CONFIG.fieldHeightMeters;
+    for(let i=0; i<=CONFIG.fieldHeightMeters; i++) {
+        const y = i * meterPx;
+        ctx.moveTo(0, y); ctx.lineTo(game.width, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(85, 246, 255, 0.16)';
+    ctx.beginPath();
+    ctx.moveTo(game.width * 0.5, 0);
+    ctx.lineTo(game.width * 0.5, game.height);
+    ctx.stroke();
+    
+    // Draw Labels
+    ctx.fillStyle = '#5d85ab';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'left';
+    for(let i=0; i<=CONFIG.fieldHeightMeters; i+=5) {
+        ctx.fillText(`${CONFIG.fieldHeightMeters - i}m`, 10, i * meterPx + 14);
+    }
+
+    if (!game.active && !game.playerBase) return; // Wait for start
+
+    // Draw Bases
+    drawBase(ctx, game.enemyBase);
+    drawBase(ctx, game.playerBase);
+    
+    // Draw Entities
+    game.entities.forEach(e => drawEntity(ctx, e));
+    
+    // Draw Particles
+    game.particles.forEach(p => {
+        ctx.save();
+        if (p.type === 'beam') {
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(p.x1, p.y1);
+            ctx.lineTo(p.x2, p.y2);
+            ctx.stroke();
+        } else if (p.type === 'debris') {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life * 2;
+            if(ctx.globalAlpha>1) ctx.globalAlpha=1;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        } else if (p.type === 'shockwave') {
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = p.life * 3;
+            if(ctx.globalAlpha>1) ctx.globalAlpha=1;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    });
+}
+
+function drawBase(ctx, base) {
+    ctx.save();
+    ctx.translate(base.x, base.y);
+    
+    const color = base.isPlayer ? CONFIG.colors.player : CONFIG.colors.enemy;
+    const dark = base.isPlayer ? CONFIG.colors.playerDark : CONFIG.colors.enemyDark;
+    const accent = base.isPlayer ? 'rgba(155, 248, 255, 0.9)' : 'rgba(255, 176, 190, 0.9)';
+    
+    // Flash white on hit
+    if (base.flash > 0) ctx.fillStyle = '#fff';
+    else {
+        const fill = ctx.createLinearGradient(0, base.isPlayer ? -base.height : 0, 0, base.isPlayer ? 0 : base.height);
+        fill.addColorStop(0, dark);
+        fill.addColorStop(1, '#091527');
+        ctx.fillStyle = fill;
+    }
+    
+    // Bunker Shape
+    ctx.beginPath();
+    ctx.moveTo(-base.width/2, 0);
+    ctx.lineTo(base.width/2, 0);
+    ctx.lineTo(base.width/2 - 10, base.isPlayer ? -base.height : base.height);
+    ctx.lineTo(-base.width/2 + 10, base.isPlayer ? -base.height : base.height);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(-base.width * 0.28, base.isPlayer ? -base.height * 0.72 : base.height * 0.18, base.width * 0.56, base.height * 0.16);
+    
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1;
+    for (let i = -1; i <= 1; i++) {
+        const laneX = i * 22;
+        ctx.beginPath();
+        ctx.moveTo(laneX, 0);
+        ctx.lineTo(laneX * 0.6, base.isPlayer ? -base.height * 0.72 : base.height * 0.72);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+function drawEntity(ctx, e) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    
+    const coreColor = e.isPlayer ? '#89fbff' : '#ff9cab';
+    const armorColor = e.isPlayer ? '#36d6ff' : '#ff4f67';
+    const trimColor = e.isPlayer ? '#e8ffff' : '#ffe2e7';
+
+    // Flash
+    if (e.flash > 0) ctx.fillStyle = '#fff';
+    else ctx.fillStyle = armorColor;
+    
+    ctx.shadowColor = armorColor;
+    ctx.shadowBlur = 8;
+    
+    // Rotate if missile
+    if (e.def.type === 'projectile') {
+        if (!e.isPlayer) ctx.rotate(Math.PI);
+        
+        ctx.beginPath();
+        ctx.moveTo(0, -e.height/2);
+        ctx.lineTo(e.width/2, e.height/2 - 4);
+        ctx.lineTo(0, e.height/2);
+        ctx.lineTo(-e.width/2, e.height/2 - 4);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = trimColor;
+        ctx.beginPath();
+        ctx.moveTo(0, -e.height/2 + 3);
+        ctx.lineTo(2, e.height/2 - 6);
+        ctx.lineTo(-2, e.height/2 - 6);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#ffe27a';
+        ctx.fillRect(-1.5, e.height/2 - 4, 3, 5);
+    } else if (e.def.width >= 20) {
+        ctx.fillRect(-e.width/2, -e.height/2 + 4, e.width, e.height - 8);
+        ctx.fillStyle = coreColor;
+        ctx.fillRect(-e.width/2 + 3, -e.height/2 + 7, e.width - 6, 7);
+        ctx.fillStyle = trimColor;
+        ctx.fillRect(-4, -e.height/2 - 6, 8, 12);
+        ctx.fillStyle = armorColor;
+        ctx.fillRect(-2, e.isPlayer ? -e.height/2 - 14 : e.height/2 + 2, 4, 10);
+        ctx.fillStyle = '#09131f';
+        ctx.fillRect(-e.width/2 + 4, -e.height/2 + 10, e.width - 8, 4);
+    } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, e.width * 0.56, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = coreColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, e.width * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = trimColor;
+        ctx.beginPath();
+        ctx.arc(0, -e.height * 0.15, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = armorColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (e.isPlayer) {
+            ctx.moveTo(-4, -2);
+            ctx.lineTo(-7, -8);
+            ctx.moveTo(4, -2);
+            ctx.lineTo(7, -8);
+            ctx.moveTo(-4, 2);
+            ctx.lineTo(-7, 8);
+            ctx.moveTo(4, 2);
+            ctx.lineTo(7, 8);
+        } else {
+            ctx.moveTo(-4, -2);
+            ctx.lineTo(-7, 8);
+            ctx.moveTo(4, -2);
+            ctx.lineTo(7, 8);
+            ctx.moveTo(-4, 2);
+            ctx.lineTo(-7, -8);
+            ctx.moveTo(4, 2);
+            ctx.lineTo(7, -8);
+        }
+        ctx.stroke();
+    }
+    
+    if (e.hp < e.maxHp) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(-12, -e.height/2 - 10, 24, 4);
+        ctx.fillStyle = e.isPlayer ? '#8ef8ff' : '#ff91a3';
+        ctx.fillRect(-12, -e.height/2 - 10, 24 * (e.hp/e.maxHp), 4);
+    }
+    
+    ctx.restore();
+}
+
+// --- UI UPDATES ---
+
+function updateHealthUI() {
+    const php = Math.max(0, game.playerBase.hp);
+    const ehp = Math.max(0, game.enemyBase.hp);
+    
+    document.getElementById('player-hp-text').innerText = `${Math.ceil(php)}/${CONFIG.baseHealth}`;
+    document.getElementById('player-hp-bar').style.width = `${(php/CONFIG.baseHealth)*100}%`;
+    
+    document.getElementById('enemy-hp-text').innerText = `${Math.ceil(ehp)}/${CONFIG.baseHealth}`;
+    document.getElementById('enemy-hp-bar').style.width = `${(ehp/CONFIG.baseHealth)*100}%`;
+}
+
+function updateEnergyUI() {
+    document.getElementById('energy-display').innerText = Math.floor(game.energy);
+    
+    // Update button states
+    ['soldier', 'tank', 'missile'].forEach(type => {
+        const btn = document.getElementById('btn-'+type);
+        const cost = UNITS[type].cost;
+        if (game.energy < cost) btn.disabled = true;
+        else btn.disabled = false;
+    });
+}
+
+function updateCooldownUI(type) {
+    const max = UNITS[type].cooldown;
+    const cur = game.cooldowns[type];
+    const pct = (cur / max) * 100;
+    document.getElementById(`cd-${type}`).style.height = `${pct}%`;
+    
+    // Also disable button if on cooldown
+    if (cur > 0) document.getElementById(`btn-${type}`).disabled = true;
+}
+
+function spawnDamageText(amount, x, y, colorClass) {
+    const div = document.createElement('div');
+    div.className = `damage-number ${colorClass}`;
+    div.style.left = x + 'px';
+    div.style.top = y + 'px';
+    div.innerText = amount;
+    
+    // Simple JS animation to float up and fade
+    let life = 1.0;
+    let posY = y;
+    
+    const container = document.getElementById('damage-text-container');
+    container.appendChild(div);
+    
+    const anim = setInterval(() => {
+        life -= 0.05;
+        posY -= 1;
+        div.style.top = posY + 'px';
+        div.style.opacity = life;
+        if (life <= 0) {
+            clearInterval(anim);
+            div.remove();
+        }
+    }, 50);
+}
+
+function endGame(win) {
+    game.active = false;
+    AudioSys.stopLoop();
+    const screen = document.getElementById('gameover-screen');
+    const title = document.getElementById('end-title');
+    const reason = document.getElementById('end-reason');
+    
+    screen.classList.remove('hidden');
+    document.getElementById('controls').classList.add('opacity-50', 'pointer-events-none');
+    
+    if (win) {
+        title.innerText = "LINK SECURED";
+        title.className = "neon-text screen-title";
+        title.style.color = "var(--color-player-hot)";
+        reason.innerText = "RIVAL RELAY OFFLINE";
+        document.getElementById('end-gif').src = 'https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp';
+        document.getElementById('end-gif').alt = 'Victory dance reaction animation';
+        document.getElementById('end-gif-caption').innerText = 'relay secure';
+        FeedbackFX.show('end-gif-shell', 2600);
+        AudioSys.play('win');
+    } else {
+        title.innerText = "LINK LOST";
+        title.className = "neon-text screen-title";
+        title.style.color = "var(--color-enemy-hot)";
+        reason.innerText = "HOME RELAY OVERRUN";
+        document.getElementById('end-gif').src = 'https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp';
+        document.getElementById('end-gif').alt = 'Defeat reaction animation';
+        document.getElementById('end-gif-caption').innerText = 'signal collapse';
+        FeedbackFX.show('end-gif-shell', 2600);
+        AudioSys.play('lose');
+    }
+}
+
+// Start
+init();
+
+</script>
+</body>
+</html>

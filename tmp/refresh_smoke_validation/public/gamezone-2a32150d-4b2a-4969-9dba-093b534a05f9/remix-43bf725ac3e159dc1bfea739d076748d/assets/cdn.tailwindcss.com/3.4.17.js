@@ -1,0 +1,1 @@
+/* Removed mirrored Tailwind CDN runtime for policy compliance. The game now uses static local styles defined in index.html. */

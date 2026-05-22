@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Stratofortress: Night Raid</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Russo+One&display=swap');
+
+  :root {
+    --font-display: 'Russo One', Impact, sans-serif;
+    --font-ui: 'Orbitron', 'Trebuchet MS', sans-serif;
+    --sky-top: #04070f;
+    --sky-mid: #10214d;
+    --sky-bottom: #2f1458;
+    --hud-panel: rgba(8, 12, 24, 0.78);
+    --hud-edge: rgba(138, 215, 255, 0.72);
+    --hud-glow: rgba(94, 184, 255, 0.24);
+    --hud-text: #f5fbff;
+    --hud-subtle: #9ab4cf;
+    --ember: #ff8d4f;
+    --warning: #ff476f;
+    --mission-gold: #ffbf57;
+  }
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: radial-gradient(circle at top, #091126 0%, #010103 62%); font-family: var(--font-ui); color: var(--hud-text); touch-action: manipulation; }
+  #game-container { position: relative; width: 100%; height: 100%; background: #050505; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  
+  /* UI Layer */
+  #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 50; display: flex; flex-direction: column; }
+  
+  /* HUD */
+  #hud { 
+    padding: 16px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: flex-start;
+    width: 100%;
+    padding-top: max(16px, env(safe-area-inset-top));
+    transition: opacity 0.5s;
+  }
+  
+  .hud-panel {
+    background:
+      linear-gradient(180deg, rgba(16, 27, 54, 0.9), rgba(6, 10, 22, 0.82)),
+      radial-gradient(circle at top left, rgba(115, 220, 255, 0.18), transparent 55%);
+    border: 1px solid rgba(138, 215, 255, 0.28);
+    border-left: 4px solid var(--ember);
+    border-radius: 14px;
+    padding: 7px 14px 8px;
+    color: var(--hud-text);
+    transform: skew(-10deg);
+    backdrop-filter: blur(7px);
+    display: flex; flex-direction: column; align-items: flex-end;
+    box-shadow:
+      0 10px 24px rgba(0,0,0,0.34),
+      inset 0 0 0 1px rgba(255,255,255,0.04),
+      0 0 18px var(--hud-glow);
+  }
+  
+  .hud-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(120deg, rgba(255,255,255,0.1), transparent 38%, transparent 72%, rgba(255,141,79,0.14));
+    opacity: 0.85;
+  }
+  
+  .hud-panel > * {
+    position: relative;
+    z-index: 1;
+  }
+  
+  .hud-label { font-family: var(--font-ui); font-size: 12px; color: var(--hud-subtle); letter-spacing: 1.8px; line-height: 1; text-transform: uppercase; font-weight: 600; }
+  .hud-value { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 0.9; color: var(--hud-text); text-shadow: 0 0 12px rgba(126, 207, 255, 0.2), 0 2px 0 #000; }
+  #ammo-val.critical { color: var(--warning); animation: pulse 0.2s infinite alternate; }
+  
+  @keyframes pulse { from { opacity: 1; transform: scale(1); } to { opacity: 0.7; transform: scale(1.1); } }
+  
+  /* Game Over */
+  #game-over-screen { 
+    position: absolute; inset: 0; 
+    background:
+      linear-gradient(180deg, rgba(2, 5, 12, 0.92), rgba(11, 16, 31, 0.96)),
+      radial-gradient(circle at top, rgba(255, 132, 64, 0.12), transparent 45%);
+    display: flex; flex-direction: column; 
+    align-items: center; justify-content: center; 
+    gap: 10px;
+    opacity: 0; pointer-events: none; 
+    transition: opacity 0.4s ease-out; 
+    z-index: 100; 
+    backdrop-filter: blur(10px);
+    padding: 24px;
+    text-align: center;
+  }
+  #game-over-screen.visible { opacity: 1; pointer-events: auto; }
+  
+  h1 { 
+    font-family: var(--font-display);
+    font-size: clamp(32px, 8vw, 56px); margin: 0; color: #ff6f61; 
+    text-transform: uppercase; letter-spacing: 2px; 
+    text-align: center; line-height: 0.9; 
+    text-shadow: 0 0 30px rgba(255, 93, 93, 0.46);
+    transform: skew(-5deg);
+    margin-bottom: 4px;
+  }
+  
+  p.score-final { font-family: var(--font-ui); font-size: clamp(18px, 4.8vw, 24px); color: #b8c7d9; margin: 0; letter-spacing: 2px; }
+  
+  button { 
+    background: linear-gradient(180deg, #ffbf57, #ff8d4f); color: #091019; 
+    border: 1px solid rgba(255,255,255,0.16); padding: 12px 28px; 
+    font-size: clamp(18px, 5vw, 28px); font-weight: 700; 
+    font-family: var(--font-display); 
+    cursor: pointer; 
+    transform: skew(-10deg); 
+    border-radius: 12px;
+    box-shadow: 0 6px 0 #ad512b, 0 0 18px rgba(255, 162, 87, 0.24);
+    transition: transform 0.1s, box-shadow 0.1s, filter 0.1s;
+  }
+  button:active { transform: skew(-10deg) translateY(4px); box-shadow: 0 2px 0 #ad512b, 0 0 10px rgba(255, 162, 87, 0.2); filter: brightness(1.05); }
+ 
+  #feedback-gifs {
+    position: absolute;
+    right: 12px;
+    bottom: 18px;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: none;
+    max-width: min(40vw, 190px);
+  }
+
+  .feedback-gif {
+    width: min(34vw, 170px);
+    border: 1px solid rgba(138, 215, 255, 0.32);
+    border-radius: 14px;
+    background: rgba(4, 8, 17, 0.72);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.28), 0 0 18px rgba(94, 184, 255, 0.18);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .feedback-gif.visible {
+    opacity: 0.95;
+    transform: translateY(0) scale(1);
+  }
+
+  .feedback-gif img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+  }
+
+  .feedback-caption {
+    padding: 6px 8px 7px;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    color: var(--hud-subtle);
+    text-align: right;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, rgba(12, 19, 35, 0.9), rgba(7, 11, 24, 0.9));
+  }
+
+  .hidden { display: none !important; }
+  
+  @media (max-width: 640px) {
+    #hud { padding: 12px; padding-top: max(12px, env(safe-area-inset-top)); gap: 10px; }
+    .hud-panel { padding: 7px 12px 8px; }
+    .hud-label { font-size: 11px; letter-spacing: 1.4px; }
+    .hud-value { font-size: 26px; }
+    #feedback-gifs {
+      right: 8px;
+      bottom: max(10px, env(safe-area-inset-bottom));
+      gap: 6px;
+      max-width: 34vw;
+    }
+    .feedback-gif {
+      width: min(30vw, 120px);
+      border-radius: 10px;
+    }
+    .feedback-caption {
+      font-size: 9px;
+      letter-spacing: 0.9px;
+      padding: 4px 6px 5px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Assets -->
+<div class="hidden">
+  <!-- Combined Sprite Sheet: B-52, SR-71, B-2 -->
+  <img id="asset_planes_sheet" data-editable="image" data-label="Planes Sprite Sheet" src="https://gamezone-virid.vercel.app/assets/images/backgrounds/runner/city.png" crossorigin="anonymous" hidden>
+  
+  <!-- [agent-note][stage3] resolved-audio: launch/hit/upgrade/warning/gameover/restart -> catalogs/audios.json -->
+  <!-- Audio Assets -->
+  <audio id="bgm_main" data-editable="audio" data-label="BGM Loop" src="https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3" loop preload="auto"></audio>
+  <audio id="sfx_launch" data-editable="audio" data-label="Missile Launch" src="https://gamezone-virid.vercel.app/assets/audios/sfx/projectile_01.mp3" preload="auto"></audio>
+  <audio id="sfx_hit" data-editable="audio" data-label="Impact/Explosion" src="https://gamezone-virid.vercel.app/assets/audios/sfx/explosion_01.mp3" preload="auto"></audio>
+  <audio id="sfx_upgrade" data-editable="audio" data-label="Upgrade/Takeoff" src="https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3" preload="auto"></audio>
+  <audio id="sfx_warning" data-editable="audio" data-label="Low Ammo Warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3" preload="auto"></audio>
+  <audio id="sfx_gameover" data-editable="audio" data-label="Mission Failed" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3" preload="auto"></audio>
+  <audio id="sfx_restart" data-editable="audio" data-label="Redeploy" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+</div>
+
+<!-- Config -->
+<script id="game-config" type="application/x-game-config">
+{
+  "scrollSpeed": { "type": "number", "label": "Flight Speed", "value": 300, "min": 100, "max": 800 },
+  "spawnRate": { "type": "number", "label": "Horde Density", "value": 4.0, "min": 1.0, "max": 10.0 },
+  "startAmmo": { "type": "number", "label": "Start Ammo", "value": 10, "min": 5, "max": 50 }
+}
+</script>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="ui-layer">
+    <div id="hud" style="opacity: 0;">
+      <div class="hud-panel">
+        <div class="hud-label">ORDNANCE</div>
+        <div id="ammo-val" class="hud-value" style="color: #FFAB40">10</div>
+      </div>
+      <div class="hud-panel">
+        <div class="hud-label">TARGETS CLEARED</div>
+        <div id="score-display" class="hud-value">0</div>
+      </div>
+    </div>
+    <!-- [agent-note][stage3] resolved-gif: impact/fail feedback -> catalogs/gifs.json -->
+    <div id="feedback-gifs" aria-hidden="true">
+      <div id="impact-gif-card" class="feedback-gif">
+        <img id="impact-gif" alt="Impact feedback animation" src="https://i.giphy.com/Ijdp1ho01IDHdPVJf0.webp" loading="lazy">
+        <div class="feedback-caption">Blast confirm</div>
+      </div>
+      <div id="fail-gif-card" class="feedback-gif">
+        <img id="fail-gif" alt="Mission failed reaction animation" src="https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp" loading="lazy">
+        <div class="feedback-caption">Raid compromised</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-over-screen">
+    <h1>MISSION FAILED</h1>
+    <p class="score-final" id="fail-reason">ORDNANCE DEPLETED</p>
+    <p class="score-final" id="final-score">TARGETS CLEARED: 0</p>
+    <button id="restart-btn">REDEPLOY</button>
+  </div>
+</div>
+
+<script>
+// --- §2 System Invariants ---
+const configEl = document.getElementById('game-config');
+let gameConfig = JSON.parse(configEl.textContent);
+window.gameConfig = Object.fromEntries(Object.entries(gameConfig).map(([k,v]) => [k, v.value]));
+window.gameConfigDefs = gameConfig;
+window.updateGameConfig = (newCfg) => { 
+  window.gameConfig = { ...window.gameConfig, ...newCfg }; 
+};
+
+// --- Audio System (Web Audio API) ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const sfxBuffers = {};
+const bgmEl = document.getElementById('bgm_main');
+let audioUnlocked = false;
+let engineSource = null;
+let lowAmmoWarningPlayed = false;
+const activeGifTimers = {};
+const lastSfxPlayAt = {};
+const gifCards = {
+  impact: document.getElementById('impact-gif-card'),
+  fail: document.getElementById('fail-gif-card')
+};
+
+async function loadSfx(id, url) {
+  try {
+    const res = await fetch(url);
+    const arr = await res.arrayBuffer();
+    sfxBuffers[id] = await audioCtx.decodeAudioData(arr);
+  } catch (e) { console.warn('SFX Fail:', id); }
+}
+
+function playSfx(id, pitch = 1.0, vol = 1.0, loop = false) {
+  if (!audioUnlocked) return null;
+  const debounceMs = { launch: 120, warning: 900, ui: 140, fail: 800, restart: 180 };
+  const nowMs = performance.now();
+  if (debounceMs[id] && lastSfxPlayAt[id] && nowMs - lastSfxPlayAt[id] < debounceMs[id]) return null;
+  lastSfxPlayAt[id] = nowMs;
+  if (sfxBuffers[id]) {
+    const src = audioCtx.createBufferSource();
+    src.buffer = sfxBuffers[id];
+    src.playbackRate.value = pitch;
+    src.loop = loop;
+    
+    const gain = audioCtx.createGain();
+    gain.gain.value = vol;
+    
+    src.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start(0);
+    return src;
+  } else {
+    // Synth fallback
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.value = id === 'engine' ? 60 : 200;
+    osc.type = id === 'engine' ? 'sawtooth' : 'sine';
+    osc.start(); osc.stop(audioCtx.currentTime + (loop ? 999 : 0.1));
+    return loop ? osc : null;
+  }
+}
+
+function startEngineSound() {
+  if (engineSource) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  
+  osc.type = 'sawtooth';
+  osc.frequency.value = 55; 
+  
+  filter.type = 'lowpass';
+  filter.frequency.value = 120;
+  
+  gain.gain.value = 0.0; // Start silent, fade in
+  
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  osc.start();
+  engineSource = { 
+    node: osc,
+    gain: gain,
+    filter: filter,
+    stop: () => { osc.stop(); engineSource = null; },
+    setMode: (mode) => {
+      // B-52: Deep roar
+      // SR-71: Higher pitch whine
+      // B-2: Silent/Wind
+      const now = audioCtx.currentTime;
+      if (mode === 'B52') {
+        osc.frequency.setTargetAtTime(55, now, 0.5);
+        gain.gain.setTargetAtTime(0.2, now, 0.5);
+        filter.frequency.setTargetAtTime(120, now, 0.5);
+      } else if (mode === 'SR71') {
+        osc.frequency.setTargetAtTime(110, now, 0.5);
+        gain.gain.setTargetAtTime(0.15, now, 0.5);
+        filter.frequency.setTargetAtTime(800, now, 0.5);
+      } else if (mode === 'B2') {
+        osc.frequency.setTargetAtTime(40, now, 1.0);
+        gain.gain.setTargetAtTime(0.05, now, 1.0); // Very quiet
+        filter.frequency.setTargetAtTime(80, now, 1.0);
+      }
+    }
+  };
+}
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  audioCtx.resume().catch(() => {});
+  bgmEl.volume = 0.2;
+  bgmEl.play().catch(() => {});
+  startEngineSound();
+  if (engineSource) engineSource.setMode(currentPlaneType);
+}
+
+function stopLoopedAudio() {
+  bgmEl.pause();
+  bgmEl.currentTime = 0;
+  if (engineSource) engineSource.stop();
+}
+
+function showFeedbackGif(type, duration = 1400) {
+  const card = gifCards[type];
+  if (!card) return;
+  card.classList.add('visible');
+  clearTimeout(activeGifTimers[type]);
+  activeGifTimers[type] = setTimeout(() => card.classList.remove('visible'), duration);
+}
+
+function vibrate(style) {
+  if (window.webkit?.messageHandlers?.gamezoneBridge) {
+    window.webkit.messageHandlers.gamezoneBridge.postMessage({
+      action: 'vibrate', requestId: 'h5-'+Date.now(), version: '1.0', params: { style }
+    });
+  } else if (navigator.vibrate) {
+    navigator.vibrate(style === 'heavy' ? 200 : style === 'medium' ? 100 : 30);
+  }
+}
+
+// --- Image Processing ---
+const imgSheet = document.getElementById('asset_planes_sheet');
+const canvases = { b52: null, sr71: null, b2: null, zombie: null };
+
+function removeBackground(ctx, w, h) {
+  try {
+    const frame = ctx.getImageData(0, 0, w, h);
+    const data = frame.data;
+    
+    // Sample top-left pixel for background color
+    const bgR = data[0], bgG = data[1], bgB = data[2];
+    const tolerance = 40; // Strict tolerance for "Clean Cartoon"
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i+1], b = data[i+2];
+      
+      // Check if pixel matches top-left background color
+      const dist = Math.sqrt((r-bgR)**2 + (g-bgG)**2 + (b-bgB)**2);
+      
+      // Also remove pure white or pure black if they are likely backgrounds
+      const isWhite = r > 240 && g > 240 && b > 240;
+      const isBlack = r < 15 && g < 15 && b < 15;
+      
+      if (dist < tolerance || isWhite || isBlack) {
+        data[i+3] = 0; // Alpha 0
+      }
+    }
+    ctx.putImageData(frame, 0, 0);
+  } catch (e) {
+    console.warn('Sprite background removal skipped:', e.message);
+  }
+}
+
+function processSpriteSheet(img) {
+  if (!img.complete || img.naturalWidth === 0) return;
+  
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const sliceH = Math.floor(h / 3);
+  
+  // Slice 1: Top (B-52)
+  const c1 = document.createElement('canvas');
+  c1.width = w; c1.height = sliceH;
+  const ctx1 = c1.getContext('2d');
+  ctx1.drawImage(img, 0, 0, w, sliceH, 0, 0, w, sliceH);
+  removeBackground(ctx1, w, sliceH);
+  canvases.b52 = c1;
+  
+  // Slice 2: Middle (SR-71)
+  const c2 = document.createElement('canvas');
+  c2.width = w; c2.height = sliceH;
+  const ctx2 = c2.getContext('2d');
+  ctx2.drawImage(img, 0, sliceH, w, sliceH, 0, 0, w, sliceH);
+  removeBackground(ctx2, w, sliceH);
+  canvases.sr71 = c2;
+  
+  // Slice 3: Bottom (B-2)
+  const c3 = document.createElement('canvas');
+  c3.width = w; c3.height = sliceH;
+  const ctx3 = c3.getContext('2d');
+  ctx3.drawImage(img, 0, sliceH*2, w, sliceH, 0, 0, w, sliceH);
+  removeBackground(ctx3, w, sliceH);
+  canvases.b2 = c3;
+}
+
+function prepareAssets() {
+  if (!canvases.b52 && imgSheet.complete) processSpriteSheet(imgSheet);
+  
+  if (!canvases.zombie) {
+    const size = 64;
+    const zc = document.createElement('canvas');
+    zc.width = size; zc.height = size;
+    const zctx = zc.getContext('2d');
+    const r = size/2 - 2;
+    zctx.translate(size/2, size/2);
+    
+    // Countryball Body (White)
+    zctx.fillStyle = '#FFF';
+    zctx.beginPath(); zctx.arc(0, 0, r, 0, Math.PI*2); zctx.fill();
+    zctx.strokeStyle = '#000'; zctx.lineWidth = 2; zctx.stroke();
+    
+    // Stripes (Blue)
+    zctx.fillStyle = '#0038B8';
+    const stripH = r * 0.25;
+    zctx.fillRect(-r+2, -r*0.6, r*2-4, stripH);
+    zctx.fillRect(-r+2, r*0.35, r*2-4, stripH);
+    
+    // Star of David
+    zctx.strokeStyle = '#0038B8';
+    zctx.lineWidth = 3;
+    const s = r * 0.35;
+    zctx.beginPath();
+    zctx.moveTo(0, -s); zctx.lineTo(s*0.866, s*0.5); zctx.lineTo(-s*0.866, s*0.5); zctx.closePath();
+    zctx.moveTo(0, s); zctx.lineTo(s*0.866, -s*0.5); zctx.lineTo(-s*0.866, -s*0.5); zctx.closePath();
+    zctx.stroke();
+    
+    // Eyes
+    zctx.fillStyle = '#000';
+    zctx.beginPath(); zctx.ellipse(-8, -5, 4, 6, 0, 0, Math.PI*2); zctx.fill();
+    zctx.beginPath(); zctx.ellipse(8, -5, 4, 6, 0, 0, Math.PI*2); zctx.fill();
+    
+    canvases.zombie = zc;
+  }
+}
+
+// --- Game State ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let gameState = 'INIT'; // INIT -> INTRO -> PLAYING -> GAMEOVER
+let cw = 0, ch = 0;
+let lastTime = 0;
+let initialized = false;
+
+let score = 0;
+let ammo = 10;
+let lastFireTime = 0;
+let currentPlaneType = 'B52'; // B52, SR71, B2
+let introTimer = 0;
+
+let entities = {
+  plane: { x: 0, y: 0, targetX: 0, tilt: 0 },
+  zombies: [],
+  missiles: [],
+  particles: [],
+  bgOffset: 0,
+  shake: 0,
+  buildings: []
+};
+
+function initGame() {
+  score = 0;
+  ammo = window.gameConfig.startAmmo;
+  currentPlaneType = 'B52';
+  introTimer = 0;
+  lowAmmoWarningPlayed = false;
+  Object.values(gifCards).forEach(card => card.classList.remove('visible'));
+  
+  entities.plane = { x: cw/2, y: ch * 0.2, targetX: cw/2, tilt: 0 };
+  entities.zombies = [];
+  entities.missiles = [];
+  entities.particles = [];
+  entities.shake = 0;
+  entities.bgOffset = 0;
+  
+  entities.buildings = [];
+  for(let i=0; i<120; i++) {
+    entities.buildings.push(generateBuilding(i * 20));
+  }
+  
+  updateUI();
+  gameState = 'INTRO'; // Start with intro
+}
+
+function generateBuilding(xOffset) {
+  const layer = Math.random(); 
+  const h = 50 + Math.random() * 400; 
+  const w = 20 + Math.random() * 60;
+  const shade = Math.floor(10 + layer * 30);
+  return {
+    x: xOffset,
+    w: w,
+    h: h,
+    layer: layer, 
+    color: `rgb(${shade},${shade},${shade+10})`,
+    lights: Math.random() > 0.2
+  };
+}
+
+function spawnHorde() {
+  const count = 3 + Math.floor(Math.random() * 4); 
+  const baseX = cw + 50;
+  const spread = 25;
+  
+  for(let i=0; i<count; i++) {
+    entities.zombies.push({
+      x: baseX + i * spread + Math.random() * 10,
+      y: ch - 25, 
+      vx: -(window.gameConfig.scrollSpeed * (0.8 + Math.random() * 0.4)),
+      bounce: Math.random() * Math.PI * 2,
+      radius: 12,
+      dead: false
+    });
+  }
+}
+
+function createExplosion(x, y) {
+  entities.shake = 12;
+  vibrate('medium');
+  entities.particles.push({ type: 'flash', life: 0.1 });
+  entities.particles.push({ x, y, size: 10, maxSize: 150, type: 'shockwave', life: 0.3, color: '#FFCCBC' });
+  
+  for(let i=0; i<15; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 300;
+    entities.particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 50,
+      life: 0.3 + Math.random() * 0.4,
+      size: 10 + Math.random() * 30,
+      type: 'fire',
+      color: Math.random() > 0.5 ? '#FF5722' : '#FFC107'
+    });
+  }
+}
+
+function update(dt) {
+  prepareAssets();
+  
+  if (gameState === 'INTRO') {
+    introTimer += dt;
+    entities.bgOffset += 100 * dt; // Slow scroll during intro
+    
+    // Parallax City update for intro
+    entities.buildings.forEach(b => {
+      const layerSpeed = 0.1 + b.layer * 0.3;
+      b.x -= 100 * layerSpeed * dt;
+    });
+    // Recycle buildings
+    if (entities.buildings.length > 0 && entities.buildings[0].x < -100) {
+      entities.buildings.shift();
+      const last = entities.buildings[entities.buildings.length-1];
+      entities.buildings.push(generateBuilding(last.x + 20 + Math.random()*40));
+    }
+    entities.buildings.sort((a,b) => a.layer - b.layer);
+    
+    if (introTimer > 4.0) {
+      gameState = 'PLAYING';
+      document.getElementById('hud').style.opacity = 1;
+      if (engineSource) engineSource.setMode('B52');
+    }
+    return;
+  }
+
+  const speed = window.gameConfig.scrollSpeed;
+  entities.bgOffset += speed * dt;
+  entities.shake = Math.max(0, entities.shake - 40 * dt);
+  
+  // Upgrade Logic
+  let newType = 'B52';
+  if (score >= 1000000) newType = 'B2';
+  else if (score >= 500000) newType = 'SR71';
+  
+  if (newType !== currentPlaneType) {
+    currentPlaneType = newType;
+    entities.particles.push({ type: 'text', text: "AIRCRAFT UPGRADED", x: cw/2, y: ch/2, life: 3, color: '#00E676' });
+    vibrate('heavy');
+    playSfx('upgrade', 1.0, 0.8);
+    if (engineSource) engineSource.setMode(currentPlaneType);
+  }
+
+  // Plane Physics
+  const p = entities.plane;
+  const isB2 = currentPlaneType === 'B2';
+  const isSR71 = currentPlaneType === 'SR71';
+  
+  const moveLerp = isB2 ? 3 : (isSR71 ? 6 : 4);
+  const tiltLerp = isB2 ? 4 : (isSR71 ? 8 : 5);
+  const tiltMax = isB2 ? 0.15 : 0.35;
+  
+  p.x += (p.targetX - p.x) * moveLerp * dt;
+  const tiltTarget = (p.targetX - p.x) * -0.003;
+  p.tilt += (tiltTarget - p.tilt) * tiltLerp * dt;
+  p.tilt = Math.max(-tiltMax, Math.min(tiltMax, p.tilt));
+  
+  // Engine Exhaust
+  let engineCount = 8; // B52
+  let engineSpread = 50;
+  if (isSR71) { engineCount = 2; engineSpread = 15; }
+  if (isB2) { engineCount = 2; engineSpread = 20; }
+  
+  for(let i=0; i<engineCount; i++) {
+    if (Math.random() > 0.4) continue;
+    const rad = p.tilt;
+    const offsetNorm = engineCount > 1 ? (i / (engineCount-1)) - 0.5 : 0;
+    const offX = offsetNorm * engineSpread * 2;
+    const ex = p.x + Math.cos(rad) * offX - Math.sin(rad) * 10;
+    const ey = p.y + Math.sin(rad) * offX + Math.cos(rad) * 10;
+    
+    let type = 'exhaust';
+    let color = `rgba(255, ${100+Math.random()*100}, 0, 0.5)`;
+    let size = 6 + Math.random() * 6;
+    let life = 0.4;
+    
+    if (isSR71) {
+      color = Math.random() > 0.5 ? '#2979FF' : '#FF9100'; // Shock diamonds
+      size = 10;
+      life = 0.2;
+    } else if (isB2) {
+      type = 'heat';
+      color = 'rgba(100, 200, 255, 0.1)';
+      size = 15;
+      life = 0.2;
+    }
+    
+    entities.particles.push({
+      x: ex, y: ey,
+      vx: -100 + (Math.random()-0.5)*50,
+      vy: 250 + Math.random()*100,
+      life: life,
+      size: size,
+      type: type,
+      color: color
+    });
+  }
+
+  // Spawning
+  if (Math.random() < 0.01 * window.gameConfig.spawnRate) spawnHorde();
+  
+  // Zombies
+  for (let i = entities.zombies.length - 1; i >= 0; i--) {
+    let z = entities.zombies[i];
+    z.x += z.vx * dt;
+    z.bounce += dt * 10;
+    z.y = (ch - 25) - Math.abs(Math.sin(z.bounce)) * 8; 
+    if (z.x < -50) entities.zombies.splice(i, 1);
+  }
+  
+  // Missiles
+  for (let i = entities.missiles.length - 1; i >= 0; i--) {
+    let m = entities.missiles[i];
+    m.vx += m.ax * dt;
+    m.vy += m.ay * dt;
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+    m.angle = Math.atan2(m.vy, m.vx) + Math.PI/2;
+    
+    // Trail
+    entities.particles.push({
+      x: m.x, y: m.y,
+      vx: (Math.random()-0.5)*20, vy: -50,
+      life: 0.2, size: isB2 ? 2 : 4, type: 'smoke', 
+      color: isB2 ? '#00E676' : '#CFD8DC'
+    });
+    
+    if (m.y > ch - 30) { 
+      createExplosion(m.x, m.y);
+      
+      // Find nearest zombies
+      let targets = [];
+      entities.zombies.forEach(z => {
+        if (z.dead) return;
+        const dist = Math.hypot(z.x - m.x, z.y - m.y);
+        if (dist < 150) { // Blast radius
+          targets.push({ z, dist });
+        }
+      });
+      
+      // Sort by distance and take exactly 2
+      targets.sort((a,b) => a.dist - b.dist);
+      const killed = targets.slice(0, 2);
+      
+      killed.forEach(t => {
+        t.z.dead = true;
+        // Gibs
+        for(let k=0; k<6; k++) {
+          entities.particles.push({
+            x: t.z.x, y: t.z.y,
+            vx: (Math.random()-0.5)*400, vy: -200-Math.random()*300,
+            life: 0.6, size: 3, type: 'gib', color: '#0038B8' // Blue gibs for countryball
+          });
+        }
+      });
+      
+      entities.zombies = entities.zombies.filter(z => !z.dead);
+      
+        if (killed.length > 0) {
+          score += killed.length;
+          
+          if (killed.length >= 2) {
+            ammo += 1;
+            entities.particles.push({
+              x: m.x, y: m.y - 120, life: 1.0, type: 'text', text: `+1 MISSILE`, color: '#00E676'
+            });
+            playSfx('upgrade', 1.05, 0.38);
+          }
+          
+          playSfx('hit', 0.8 + Math.random()*0.3, 0.58);
+          showFeedbackGif('impact', 900);
+          updateUI();
+        }
+      
+      entities.missiles.splice(i, 1);
+    }
+  }
+
+  // Particles
+  for (let i = entities.particles.length - 1; i >= 0; i--) {
+    let pt = entities.particles[i];
+    if (pt.type === 'flash') {
+      pt.life -= dt * 5;
+    } else if (pt.type === 'shockwave') {
+      pt.size += (pt.maxSize - pt.size) * 8 * dt;
+      pt.life -= dt;
+    } else if (pt.type === 'text') {
+      pt.y -= 60 * dt;
+      pt.life -= dt;
+    } else if (pt.type === 'exhaust' || pt.type === 'heat') {
+      pt.x -= speed * dt * 0.5;
+      pt.size += 10 * dt;
+      pt.life -= dt;
+    } else {
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.life -= dt;
+      if (pt.type === 'gib') pt.vy += 800 * dt;
+    }
+    if (pt.life <= 0) entities.particles.splice(i, 1);
+  }
+  
+  // Parallax City
+  entities.buildings.forEach(b => {
+    const layerSpeed = 0.1 + b.layer * 0.3;
+    b.x -= speed * layerSpeed * dt;
+  });
+  
+  if (entities.buildings.length > 0) {
+    const first = entities.buildings[0];
+    if (first.x < -100) {
+      entities.buildings.shift();
+      const last = entities.buildings[entities.buildings.length-1];
+      entities.buildings.push(generateBuilding(last.x + 20 + Math.random()*40));
+    }
+  }
+  entities.buildings.sort((a,b) => a.layer - b.layer);
+}
+
+function draw() {
+  const shakeX = (Math.random() - 0.5) * entities.shake;
+  const shakeY = (Math.random() - 0.5) * entities.shake;
+  
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+  
+  // Sky
+      const grad = ctx.createLinearGradient(0, 0, 0, ch);
+      grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--sky-top').trim() || '#04070f');
+      grad.addColorStop(0.52, getComputedStyle(document.documentElement).getPropertyValue('--sky-mid').trim() || '#10214d');
+      grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--sky-bottom').trim() || '#2f1458'); 
+  ctx.fillStyle = grad;
+  ctx.fillRect(-10, -10, cw+20, ch+20);
+  
+  // City
+  entities.buildings.forEach(b => {
+    ctx.fillStyle = b.color;
+    const y = ch - 25 - b.h;
+    ctx.fillRect(b.x, y, b.w, b.h + 50);
+    
+    if (b.lights) {
+      ctx.fillStyle = b.layer > 0.5 ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)';
+      for(let wy = 10; wy < b.h - 10; wy += 20) {
+        for(let wx = 4; wx < b.w - 4; wx += 10) {
+           if (Math.random() > 0.6) ctx.fillRect(b.x + wx, y + wy, 4, 8);
+        }
+      }
+    }
+  });
+  
+  // Ground
+  ctx.fillStyle = '#050505';
+  ctx.fillRect(0, ch - 25, cw, 25);
+
+  if (gameState === 'INTRO') {
+    // Intro Sequence Logic
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(0,0,cw,ch);
+    
+    let label = "";
+    let sprite = null;
+    const t = introTimer;
+    
+    if (t < 1.33) {
+      label = "B-52 NIGHT WATCH";
+      sprite = canvases.b52;
+    } else if (t < 2.66) {
+      label = "SR-71 INTERCEPTOR";
+      sprite = canvases.sr71;
+    } else {
+      label = "B-2 SHADOW WING";
+      sprite = canvases.b2;
+    }
+    
+    // Slide animation
+    const phaseT = (t % 1.33) / 1.33;
+    const slideX = cw/2 + (Math.sin(phaseT * Math.PI) * 20);
+    
+    if (sprite) {
+      const scale = 0.8;
+      const w = sprite.width * scale;
+      const h = sprite.height * scale;
+      ctx.drawImage(sprite, cw/2 - w/2, ch/2 - h/2, w, h);
+    }
+    
+      ctx.fillStyle = '#FFF';
+        ctx.font = '700 40px "Russo One"';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
+    ctx.fillText(label, cw/2, ch/2 + 100);
+    ctx.shadowBlur = 0;
+    
+    ctx.restore();
+    return;
+  }
+  
+  // Zombies
+  entities.zombies.forEach(z => {
+    if (canvases.zombie) {
+      ctx.drawImage(canvases.zombie, z.x - z.radius, z.y - z.radius, z.radius*2, z.radius*2);
+    }
+  });
+
+  // Missiles
+  entities.missiles.forEach(m => {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.angle);
+    if (currentPlaneType === 'B2') {
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(-2, -12, 4, 16);
+      ctx.fillStyle = '#00E676';
+      ctx.fillRect(-2, 4, 4, 4);
+    } else {
+      ctx.fillStyle = '#CFD8DC';
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(4, 8); ctx.lineTo(-4, 8); ctx.fill();
+      ctx.fillStyle = '#FF5722';
+      ctx.beginPath(); ctx.arc(0, 8, 3, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  });
+
+  // Exhaust
+  entities.particles.forEach(pt => {
+    if (pt.type === 'exhaust' || pt.type === 'heat') {
+      ctx.fillStyle = pt.color;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill();
+    }
+  });
+
+  // Plane
+  const p = entities.plane;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.tilt);
+  
+  let sprite = canvases.b52;
+  if (currentPlaneType === 'SR71') sprite = canvases.sr71;
+  if (currentPlaneType === 'B2') sprite = canvases.b2;
+  
+  if (sprite) {
+    const scale = currentPlaneType === 'B52' ? 0.35 : (currentPlaneType === 'B2' ? 0.45 : 0.4);
+    const w = sprite.width * scale;
+    const h = sprite.height * scale;
+    ctx.drawImage(sprite, -w/2, -h/2, w, h);
+  }
+  ctx.restore();
+
+  // Foreground Particles
+  entities.particles.forEach(pt => {
+    if (pt.type === 'exhaust' || pt.type === 'heat') return;
+    
+    ctx.globalAlpha = Math.max(0, pt.life);
+    if (pt.type === 'flash') {
+      ctx.fillStyle = pt.color || '#FFF';
+      ctx.fillRect(-10, -10, cw+20, ch+20);
+    } else if (pt.type === 'shockwave') {
+      ctx.strokeStyle = pt.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.stroke();
+    } else if (pt.type === 'text') {
+      ctx.fillStyle = pt.color;
+      ctx.font = 'bold 32px "Russo One"';
+      ctx.textAlign = 'center';
+      ctx.fillText(pt.text, pt.x, pt.y);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeText(pt.text, pt.x, pt.y);
+    } else if (pt.type === 'fire') {
+      ctx.fillStyle = pt.color;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x, pt.y, pt.size, pt.size);
+    }
+    ctx.globalAlpha = 1.0;
+  });
+  
+  // Vignette
+  const gradV = ctx.createRadialGradient(cw/2, ch/2, ch/3, cw/2, ch/2, ch);
+  gradV.addColorStop(0, 'transparent');
+  gradV.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = gradV;
+  ctx.fillRect(0,0,cw,ch);
+
+  ctx.restore();
+}
+
+function updateUI() {
+  document.getElementById('score-display').innerText = score;
+  const ammoEl = document.getElementById('ammo-val');
+  ammoEl.innerText = ammo;
+  if (ammo <= 3) {
+    ammoEl.classList.add('critical');
+    if (!lowAmmoWarningPlayed && ammo > 0 && gameState === 'PLAYING') {
+      lowAmmoWarningPlayed = true;
+      playSfx('warning', 1.2, 0.28);
+    }
+  } else {
+    ammoEl.classList.remove('critical');
+    lowAmmoWarningPlayed = false;
+  }
+}
+
+function gameOver(reason) {
+  gameState = 'GAMEOVER';
+  document.getElementById('fail-reason').innerText = reason;
+  document.getElementById('final-score').innerText = `TARGETS CLEARED: ${score}`;
+  document.getElementById('game-over-screen').classList.add('visible');
+  showFeedbackGif('fail', 2200);
+  vibrate('heavy');
+  playSfx('fail', 0.7, 0.2);
+  stopLoopedAudio();
+}
+
+function restartGame() {
+  document.getElementById('game-over-screen').classList.remove('visible');
+  playSfx('restart', 1.1, 0.18);
+  if (audioUnlocked) {
+    bgmEl.currentTime = 0;
+    bgmEl.play().catch(() => {});
+    startEngineSound();
+    if (engineSource) engineSource.setMode(currentPlaneType);
+  }
+  initGame();
+}
+
+// --- Input Handling ---
+let isDragging = false;
+
+function handleGlobalInput(e) {
+  unlockAudio();
+  if (gameState === 'GAMEOVER') {
+    if (e.type === 'pointerup' || e.type === 'click') restartGame();
+    return;
+  }
+  
+  // Allow shooting during intro to unlock audio, but don't count it
+  if (gameState === 'INTRO') return;
+  if (gameState !== 'PLAYING') return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+
+  if (e.type === 'pointerdown') {
+    isDragging = true;
+    entities.plane.targetX = x;
+    fireMissile(); 
+  }
+  else if (e.type === 'pointermove' && isDragging) {
+    entities.plane.targetX = Math.max(30, Math.min(cw-30, x));
+  }
+  else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+    isDragging = false;
+  }
+}
+
+function fireMissile() {
+  const now = performance.now();
+  if (now - lastFireTime < 250) return; 
+  
+  if (ammo <= 0) {
+    playSfx('warning', 0.9, 0.28);
+    gameOver("ORDNANCE DEPLETED");
+    return;
+  }
+  
+  lastFireTime = now;
+  ammo--;
+  updateUI();
+  
+  if (ammo === 0) {
+    // Grace period before checking game over, in case last missile hits
+      setTimeout(() => { if(ammo === 0 && gameState === 'PLAYING') gameOver("ORDNANCE DEPLETED"); }, 1500);
+  }
+  
+  // Pitch shift launch for effect
+  playSfx('launch', 1.5 + Math.random()*0.2, 0.4); 
+  vibrate('light');
+  entities.shake = 4;
+  
+  entities.missiles.push({
+    x: entities.plane.x,
+    y: entities.plane.y + 20,
+    vx: entities.plane.tilt * 200,
+    vy: 100,
+    ax: 0,
+    ay: 1200 
+  });
+}
+
+// --- Main Loop ---
+function gameLoop(time) {
+  requestAnimationFrame(gameLoop);
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  try {
+    update(dt);
+    draw();
+  } catch (e) { console.error(e); }
+}
+
+// --- Initialization ---
+window.addEventListener('DOMContentLoaded', () => {
+  loadSfx('launch', document.getElementById('sfx_launch').src);
+  loadSfx('hit', document.getElementById('sfx_hit').src);
+  loadSfx('upgrade', document.getElementById('sfx_upgrade').src);
+  loadSfx('warning', document.getElementById('sfx_warning').src);
+  loadSfx('fail', document.getElementById('sfx_gameover').src);
+  loadSfx('restart', document.getElementById('sfx_restart').src);
+
+  window.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+  window.addEventListener('pointermove', handleGlobalInput, { passive: false });
+  window.addEventListener('pointerup', handleGlobalInput, { passive: false });
+  window.addEventListener('pointercancel', handleGlobalInput, { passive: false });
+  document.getElementById('restart-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleGlobalInput(e);
+  });
+
+  const ro = new ResizeObserver(entries => {
+    const r = entries[0].contentRect;
+    cw = r.width;
+    ch = r.height;
+    canvas.width = cw * window.devicePixelRatio;
+    canvas.height = ch * window.devicePixelRatio;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    
+    if (!initialized) {
+      initialized = true;
+      initGame();
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    }
+  });
+  ro.observe(canvas);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Signal Match</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg-top: #07111f;
+        --bg-mid: #11203d;
+        --bg-bottom: #050814;
+        --panel: rgba(8, 16, 38, 0.7);
+        --panel-border: rgba(122, 226, 255, 0.36);
+        --panel-glow: rgba(82, 234, 255, 0.18);
+        --text-main: #f4f9ff;
+        --text-soft: #c7d7ef;
+        --accent-cyan: #63e7ff;
+        --accent-pink: #ff63bd;
+        --accent-gold: #ffd86b;
+        --danger: #ff4d6d;
+    }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
+        radial-gradient(circle at top, rgba(99, 231, 255, 0.16), transparent 30%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-mid) 55%, var(--bg-bottom)); color: var(--text-main); font-family: 'Rajdhani', system-ui, sans-serif; }
+    body { font-size: 16px; }
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+            linear-gradient(transparent 0, rgba(255,255,255,0.03) 48%, transparent 52%),
+            radial-gradient(circle at 20% 15%, rgba(255,255,255,0.18) 0 1px, transparent 1px),
+            radial-gradient(circle at 80% 32%, rgba(99, 231, 255, 0.25) 0 1px, transparent 1px),
+            radial-gradient(circle at 58% 78%, rgba(255, 99, 189, 0.22) 0 1px, transparent 1px);
+        background-size: 100% 6px, 190px 190px, 240px 240px, 220px 220px;
+        opacity: 0.7;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    button { font: inherit; }
+    .hidden { display: none !important; }
+    .glass {
+        background: linear-gradient(180deg, rgba(12, 24, 54, 0.9), rgba(7, 16, 36, 0.72));
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.05) inset, 0 12px 30px rgba(0, 0, 0, 0.26), 0 0 24px var(--panel-glow);
+    }
+    /* [agent-note][stage3] resolved-font: title -> Audiowide, ui -> Rajdhani from catalogs/fonts.json */
+    .font-display { font-family: 'Audiowide', 'Trebuchet MS', sans-serif; }
+    .font-ui { font-family: 'Rajdhani', system-ui, sans-serif; }
+    .shaking { animation: glitch 0.3s infinite; color: #ffd2de; font-family: 'Audiowide', sans-serif; }
+    .screen-fill { position: absolute; inset: 0; }
+    .layout-root { position: relative; width: 100%; height: 100%; user-select: none; overflow: hidden; }
+    .ui-layer {
+        pointer-events: none;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding:
+            max(16px, calc(env(safe-area-inset-top) + 16px))
+            max(16px, calc(env(safe-area-inset-right) + 16px))
+            max(16px, calc(env(safe-area-inset-bottom) + 16px))
+            max(16px, calc(env(safe-area-inset-left) + 16px));
+    }
+    .interactive { pointer-events: auto; }
+    .hud-row { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; transition: opacity 0.3s; }
+    .pill { padding: 10px 16px; border-radius: 999px; }
+    .score-text { font-size: clamp(13px, 2.8vw, 18px); font-weight: 700; color: var(--accent-cyan); letter-spacing: 0.16em; text-shadow: 0 0 10px rgba(99, 231, 255, 0.35); }
+    .score-value { color: var(--text-main); }
+    .overlay {
+        background:
+            radial-gradient(circle at top, rgba(255, 77, 109, 0.25), transparent 30%),
+            rgba(3, 4, 10, 0.94);
+        z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px;
+    }
+    .end-title { font-size: clamp(48px, 10vw, 92px); color: #ff6b87; font-weight: 700; margin: 0 0 24px; letter-spacing: 0.18em; line-height: 0.95; animation: pulse 1.5s infinite; text-shadow: 0 0 22px rgba(255, 77, 109, 0.45); }
+    .end-subtitle { max-width: 540px; margin: 0 0 24px; color: var(--text-soft); font-size: clamp(18px, 4.8vw, 26px); letter-spacing: 0.05em; line-height: 1.15; }
+    .restart-btn {
+        padding: 12px 26px;
+        font-size: clamp(16px, 4.4vw, 24px);
+        color: white;
+        font-weight: 700;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(255, 99, 189, 0.22), rgba(99, 231, 255, 0.14));
+        border: 1px solid rgba(255,255,255,0.3);
+        letter-spacing: 0.08em;
+        transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+    .restart-btn:hover,
+    .restart-btn:active { background: linear-gradient(180deg, rgba(255, 77, 109, 0.36), rgba(99, 231, 255, 0.22)); box-shadow: 0 0 20px rgba(255, 99, 189, 0.2); }
+    .restart-btn:active { transform: scale(0.97); }
+    .intro-panel {
+        position: absolute;
+        top: max(24px, calc(env(safe-area-inset-top) + 12px));
+        left: max(24px, calc(env(safe-area-inset-left) + 12px));
+        max-width: min(420px, calc(100% - 48px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+        z-index: 60;
+        padding: 14px 18px;
+        border-radius: 18px;
+        color: #fff;
+    }
+    .intro-title { margin: 0 0 8px; font-size: clamp(24px, 6vw, 34px); letter-spacing: 0.14em; color: var(--accent-cyan); text-shadow: 0 0 14px rgba(99, 231, 255, 0.32); }
+    .intro-copy { margin: 0; font-size: clamp(14px, 4.5vw, 18px); line-height: 1.25; color: var(--text-soft); }
+    .feedback-gif {
+        position: absolute;
+        right: 16px;
+        bottom: 18px;
+        width: clamp(88px, 24vw, 130px);
+        aspect-ratio: 1;
+        object-fit: cover;
+        border-radius: 18px;
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+        opacity: 0;
+        transform: translateY(8px) scale(0.94);
+        transition: opacity 180ms ease, transform 180ms ease;
+        pointer-events: none;
+        z-index: 65;
+        background: rgba(5, 8, 20, 0.8);
+    }
+    .feedback-gif.visible {
+        opacity: 0.96;
+        transform: translateY(0) scale(1);
+    }
+    .feedback-gif.fail-state {
+        left: 50%;
+        top: 50%;
+        right: auto;
+        bottom: auto;
+        width: min(42vw, 180px);
+        transform: translate(-50%, -50%) scale(0.92);
+        border-color: rgba(255, 77, 109, 0.45);
+        box-shadow: 0 12px 32px rgba(138, 16, 41, 0.38);
+        z-index: 110;
+    }
+    .feedback-gif.fail-state.visible {
+        transform: translate(-50%, -50%) scale(1);
+    }
+    .status-chip {
+        margin-top: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(5, 12, 28, 0.58);
+        color: var(--text-soft);
+        font-size: clamp(12px, 3.2vw, 15px);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--accent-cyan);
+        box-shadow: 0 0 12px rgba(99, 231, 255, 0.75);
+    }
+    @keyframes glitch {
+        0% { transform: translate(0); }
+        20% { transform: translate(-2px, 2px); }
+        40% { transform: translate(-2px, -2px); }
+        60% { transform: translate(2px, 2px); }
+        80% { transform: translate(2px, -2px); }
+        100% { transform: translate(0); }
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.85; transform: scale(1.02); }
+    }
+    @media (max-width: 640px) {
+        .ui-layer {
+            padding:
+                max(12px, calc(env(safe-area-inset-top) + 12px))
+                max(12px, calc(env(safe-area-inset-right) + 12px))
+                max(12px, calc(env(safe-area-inset-bottom) + 12px))
+                max(12px, calc(env(safe-area-inset-left) + 12px));
+        }
+        .score-text { font-size: 24px; }
+        .intro-panel {
+            top: max(12px, calc(env(safe-area-inset-top) + 8px));
+            left: max(12px, calc(env(safe-area-inset-left) + 8px));
+            max-width: calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right));
+            padding: 12px 14px;
+        }
+        .intro-title { font-size: 28px; }
+        .intro-copy { font-size: clamp(16px, 4.5vw, 22px); }
+        .end-subtitle, .restart-btn { font-size: clamp(18px, 5vw, 26px); }
+        .feedback-gif {
+            right: 10px;
+            bottom: 12px;
+            width: 84px;
+        }
+        .feedback-gif.fail-state {
+            width: min(42vw, 144px);
+        }
+    }
+</style>
+<!-- Configuration -->
+<script id="game-config" type="application/x-game-config">
+{
+    "flipSpeed": { "type": "number", "label": "Flip Speed", "value": 0.15, "min": 0.05, "max": 0.5 },
+    "sanityDecay": { "type": "number", "label": "Sanity Decay", "value": 0.15, "min": 0.05, "max": 0.3 }
+}
+</script>
+<!-- Assets -->
+<img id="asset_card_back" data-editable="image" data-label="Card Back Pattern" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgMGw2NCA2NE02NCAwbC02NCA2NCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiIG9wYWNpdHk9IjAuMiIvPjwvc3ZnPg==" hidden>
+<!-- [agent-note][stage3] resolved-audio: loop/ui/match/fail/end via catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="Background Ambience" src="https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3" preload="auto" loop></audio>
+<audio id="sfx_flip" data-editable="audio" data-label="Card Flip" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3" preload="auto"></audio>
+<audio id="sfx_match" data-editable="audio" data-label="Successful Match" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_01.mp3" preload="auto"></audio>
+<audio id="sfx_collect" data-editable="audio" data-label="Pair Locked" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3" preload="auto"></audio>
+<audio id="sfx_fail" data-editable="audio" data-label="Bad Pair" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3" preload="auto"></audio>
+<audio id="sfx_warning" data-editable="audio" data-label="Low Signal Warning" src="https://gamezone-virid.vercel.app/assets/audios/sfx/warning_02.mp3" preload="auto"></audio>
+<audio id="sfx_scare" data-editable="audio" data-label="Signal Collapse" src="https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3" preload="auto"></audio>
+<audio id="sfx_restart" data-editable="audio" data-label="Feed Reboot" src="https://gamezone-virid.vercel.app/assets/audios/ui/start_game_02.mp3" preload="auto"></audio>
+</head>
+<body>
+
+<div id="game-container" class="layout-root">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="mission-brief" class="intro-panel glass interactive">
+        <h1 class="intro-title font-display">SIGNAL MATCH</h1>
+        <p class="intro-copy font-ui">Tap two cards to pair every clean signal before the feed fully breaks down.</p>
+        <div class="status-chip font-ui"><span class="status-dot"></span> ARCHIVE LINK STABLE</div>
+    </div>
+
+    <!-- [agent-note][stage3] resolved-gif: reward/fail overlays from catalogs/gifs.json; keep compact off-playfield -->
+    <img id="reward-gif" class="feedback-gif" src="https://i.giphy.com/8Adr5r4FEMTqj5tU23.webp" alt="signal reward animation" decoding="async" loading="lazy">
+    <img id="fail-gif" class="feedback-gif fail-state" src="https://i.giphy.com/3bzB1rHg6g9Cp06acA.webp" alt="signal collapse reaction" decoding="async" loading="lazy">
+
+    <div id="ui-layer" class="screen-fill ui-layer">
+        <!-- HUD -->
+        <div id="hud" class="hud-row">
+            <div class="glass pill">
+                <span id="score-label" class="score-text font-display">PAIRS LOCKED: <span id="score-val" class="score-value">0</span></span>
+            </div>
+        </div>
+
+        <!-- Game Over / Signal Collapse Overlay -->
+        <div id="game-over-screen" class="hidden screen-fill overlay">
+            <h1 id="end-title" class="end-title font-display">SIGNAL<br>LOST</h1>
+            <p id="end-subtitle" class="end-subtitle font-ui">The archive is full, but the channel collapsed on the final surge.</p>
+            <button id="restart-btn" class="interactive restart-btn glass font-ui">
+                REBOOT FEED
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * §0 System Invariants & Config
+ */
+const CONFIG_DEFS = JSON.parse(document.getElementById('game-config').textContent);
+window.gameConfig = Object.fromEntries(Object.entries(CONFIG_DEFS).map(([k, v]) => [k, v.value]));
+
+// Global State
+let canvas, ctx;
+let cw = 0, ch = 0;
+let dpr = 1;
+let lastTime = 0;
+let initialized = false;
+let gameState = 'PLAYING'; // PLAYING, LOCKED, GAMEOVER
+let sanity = 1.0; // 1.0 = Cute, 0.0 = Hell
+let shakeIntensity = 0;
+
+// Audio Context
+let audioCtx;
+let audioBuffers = {};
+let warningPlayed = false;
+let lastSfxTimes = {};
+const SFX_DEBOUNCE_MS = 120;
+
+// Game Entities
+let cards = [];
+let particles = [];
+let matches = 0;
+let totalPairs = 8; // 4x4 grid
+let flippedCards = [];
+let isProcessingMatch = false;
+
+const mediaEls = {
+    bgm: document.getElementById('bgm_main'),
+    rewardGif: document.getElementById('reward-gif'),
+    failGif: document.getElementById('fail-gif')
+};
+let gifTimers = {
+    reward: null,
+    fail: null
+};
+
+// Assets
+const SYMBOLS_CUTE = ['📡', '🛰️', '💾', '🔋', '🎛️', '✨', '🧿', '📻'];
+const SYMBOLS_SCARY = ['⚠️', '☠️', '🩸', '🕳️', '🕸️', '🔪', '🌑', '🦷'];
+const GLITCH_TEXTS = ['RUN', 'VOID', 'THEY SEE', 'LOOK AWAY', 'HELP'];
+
+/**
+ * §1 Audio System (Web Audio API)
+ */
+async function initAudio() {
+    if (audioCtx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+    
+    // Preload SFX
+    const loadBuffer = async (id, url) => {
+        try {
+            const sourceUrl = new URL(url, window.location.href);
+            if (sourceUrl.origin !== window.location.origin) {
+                return;
+            }
+            const response = await fetch(sourceUrl.href);
+            const arrayBuffer = await response.arrayBuffer();
+            audioBuffers[id] = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) { console.warn('SFX Load Fail', id); }
+    };
+
+    await Promise.all([
+        loadBuffer('flip', document.getElementById('sfx_flip').src),
+        loadBuffer('match', document.getElementById('sfx_match').src),
+        loadBuffer('collect', document.getElementById('sfx_collect').src),
+        loadBuffer('fail', document.getElementById('sfx_fail').src),
+        loadBuffer('warning', document.getElementById('sfx_warning').src),
+        loadBuffer('scare', document.getElementById('sfx_scare').src),
+        loadBuffer('restart', document.getElementById('sfx_restart').src)
+    ]);
+}
+
+function unlockAudio() {
+    if (!audioCtx) initAudio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const bgm = mediaEls.bgm;
+    if (bgm.paused) {
+        bgm.volume = 0.2;
+        bgm.play().catch(() => {});
+    }
+}
+
+function setBgmState(shouldPlay) {
+    const bgm = mediaEls.bgm;
+    if (shouldPlay) {
+        if (bgm.paused) {
+            bgm.play().catch(() => {});
+        }
+    } else if (!bgm.paused) {
+        bgm.pause();
+    }
+}
+
+function playSfx(id, rate = 1.0, vol = 1.0) {
+    const now = performance.now();
+    if (lastSfxTimes[id] && now - lastSfxTimes[id] < SFX_DEBOUNCE_MS) return;
+    lastSfxTimes[id] = now;
+
+    if (!audioCtx || !audioBuffers[id]) {
+        // Fallback Oscillator
+        if (id === 'flip' || id === 'match' || id === 'collect' || id === 'restart') synthesize('beep');
+        if (id === 'fail' || id === 'warning' || id === 'scare') synthesize('noise');
+        return;
+    }
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffers[id];
+    source.playbackRate.value = rate;
+    const gain = audioCtx.createGain();
+    gain.gain.value = vol;
+    source.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start(0);
+}
+
+function synthesize(type) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    if (type === 'beep') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } else {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(50, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.14, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.35);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+    }
+}
+
+function showGif(kind, duration = 1400) {
+    const el = kind === 'reward' ? mediaEls.rewardGif : mediaEls.failGif;
+    clearTimeout(gifTimers[kind]);
+    el.classList.add('visible');
+    gifTimers[kind] = setTimeout(() => {
+        el.classList.remove('visible');
+    }, duration);
+}
+
+function resetFeedbackMedia() {
+    mediaEls.rewardGif.classList.remove('visible');
+    mediaEls.failGif.classList.remove('visible');
+    clearTimeout(gifTimers.reward);
+    clearTimeout(gifTimers.fail);
+}
+
+function vibrate(style) {
+    window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+        action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+        params: { style: style }
+    });
+}
+
+/**
+ * §2 Graphics & Particles
+ */
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 10;
+        this.vy = (Math.random() - 0.5) * 10;
+        this.life = 1.0;
+        this.color = color;
+        this.size = Math.random() * 5 + 2;
+    }
+    update(dt) {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= dt * 2;
+        this.size *= 0.95;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+function spawnParticles(x, y, count, color) {
+    for(let i=0; i<count; i++) particles.push(new Particle(x, y, color));
+}
+
+/**
+ * §3 Game Logic
+ */
+class Card {
+    constructor(id, gridX, gridY, symbolIndex) {
+        this.id = id;
+        this.gridX = gridX;
+        this.gridY = gridY;
+        this.symbolIndex = symbolIndex;
+        this.state = 'HIDDEN'; // HIDDEN, FLIPPED, MATCHED
+        this.scaleX = 1.0; // For flip animation
+        this.targetScaleX = 1.0;
+        this.glitchOffset = {x:0, y:0};
+        this.idlePhase = Math.random() * Math.PI * 2;
+        
+        // Dimensions calculated in resize
+        this.x = 0;
+        this.y = 0;
+        this.w = 0;
+        this.h = 0;
+    }
+
+    update(dt) {
+        // Flip animation
+        const speed = 10; // fast flip
+        if (Math.abs(this.scaleX - this.targetScaleX) > 0.01) {
+            this.scaleX += (this.targetScaleX - this.scaleX) * speed * dt;
+        } else {
+            this.scaleX = this.targetScaleX;
+        }
+
+        // Glitch effect based on sanity
+        if (sanity < 0.5 && Math.random() < (1 - sanity) * 0.1) {
+            this.glitchOffset.x = (Math.random() - 0.5) * 10;
+            this.glitchOffset.y = (Math.random() - 0.5) * 10;
+        } else {
+            this.glitchOffset.x = 0;
+            this.glitchOffset.y = 0;
+        }
+
+        this.idlePhase += dt * (1.6 + this.symbolIndex * 0.05);
+    }
+
+    draw(ctx) {
+        if (this.state === 'MATCHED' && sanity > 0.3) return; // Hide matched in normal mode, keep in scary mode as "dead"
+        
+        let drawX = this.x + this.w/2 + this.glitchOffset.x;
+        let drawY = this.y + this.h/2 + this.glitchOffset.y;
+        
+        ctx.save();
+        ctx.translate(drawX, drawY);
+        ctx.scale(this.scaleX, 1);
+
+        // Determine appearance
+        const isFaceUp = this.scaleX < 0 || this.state === 'FLIPPED' || (this.state === 'MATCHED' && sanity <= 0.3);
+        const w = this.w;
+        const h = this.h;
+        const r = 16;
+        const pulse = Math.sin(this.idlePhase) * 0.5 + 0.5;
+        const coreColor = sanity > 0.5 ? '#69ecff' : '#ff4d6d';
+        const edgeColor = sanity > 0.5 ? '#ff6fcf' : '#811133';
+
+        // Card Body
+        let fillGradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+        if (isFaceUp) {
+            fillGradient.addColorStop(0, sanity > 0.5 ? '#f4fbff' : '#301019');
+            fillGradient.addColorStop(1, sanity > 0.5 ? '#b8dbff' : '#12050b');
+        } else {
+            fillGradient.addColorStop(0, sanity > 0.5 ? '#132748' : '#20111a');
+            fillGradient.addColorStop(1, sanity > 0.5 ? '#091120' : '#090306');
+        }
+
+        ctx.shadowColor = sanity > 0.5 ? 'rgba(99, 231, 255, 0.28)' : 'rgba(255, 77, 109, 0.24)';
+        ctx.shadowBlur = 18;
+
+        ctx.beginPath();
+        ctx.roundRect(-w/2, -h/2, w, h, r);
+        ctx.fillStyle = fillGradient;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = isFaceUp ? edgeColor : coreColor;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.roundRect(-w/2 + 7, -h/2 + 7, w - 14, h - 14, 12);
+        ctx.strokeStyle = sanity > 0.5 ? `rgba(255,255,255,${0.15 + pulse * 0.25})` : 'rgba(255, 110, 140, 0.18)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Content
+        if (isFaceUp) {
+            ctx.save();
+            ctx.scale(-1, 1); // Correct text mirroring
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const symbolSize = Math.min(w, h) * 0.4;
+            let char = sanity > 0.5 ? SYMBOLS_CUTE[this.symbolIndex] : SYMBOLS_SCARY[this.symbolIndex];
+
+            if (sanity < 0.4 && Math.random() < 0.3) {
+                char = GLITCH_TEXTS[Math.floor(Math.random() * GLITCH_TEXTS.length)].charAt(0);
+                ctx.fillStyle = 'red';
+            } else {
+                ctx.fillStyle = sanity > 0.5 ? '#10324d' : '#ffe3ea';
+            }
+
+            ctx.shadowColor = sanity > 0.5 ? 'rgba(99, 231, 255, 0.35)' : 'rgba(255, 77, 109, 0.32)';
+            ctx.shadowBlur = 10;
+            ctx.font = `${symbolSize}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+            ctx.fillText(char, 0, -8);
+            ctx.shadowBlur = 0;
+
+            const badgeY = h * 0.22;
+            const badgeW = w * 0.56;
+            const badgeH = Math.max(18, h * 0.16);
+            ctx.beginPath();
+            ctx.roundRect(-badgeW / 2, badgeY - badgeH / 2, badgeW, badgeH, 999);
+            ctx.fillStyle = sanity > 0.5 ? 'rgba(16, 50, 77, 0.86)' : 'rgba(91, 15, 38, 0.88)';
+            ctx.fill();
+
+            ctx.font = `${Math.max(11, w * 0.09)}px "Audiowide"`;
+            ctx.fillStyle = sanity > 0.5 ? '#7cf0ff' : '#ffd2de';
+            ctx.fillText(`SIGNAL-${this.symbolIndex + 1}`, 0, badgeY + 1);
+            ctx.restore();
+        } else {
+            const ring = Math.min(w, h) * 0.22;
+            ctx.beginPath();
+            ctx.arc(0, -h * 0.06, ring, 0, Math.PI * 2);
+            ctx.fillStyle = sanity > 0.5 ? 'rgba(99, 231, 255, 0.18)' : 'rgba(255, 77, 109, 0.18)';
+            ctx.fill();
+            ctx.strokeStyle = sanity > 0.5 ? '#69ecff' : '#ff4d6d';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, -h * 0.18);
+            ctx.lineTo(0, h * 0.1);
+            ctx.moveTo(-w * 0.14, -h * 0.06);
+            ctx.lineTo(w * 0.14, -h * 0.06);
+            ctx.strokeStyle = sanity > 0.5 ? '#d7f7ff' : '#ffc0ca';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.font = `${Math.max(12, w * 0.1)}px "Audiowide"`;
+            ctx.fillStyle = sanity > 0.5 ? '#b2eeff' : '#ff9fb2';
+            ctx.textAlign = 'center';
+            ctx.fillText('SCAN', 0, h * 0.24);
+        }
+
+        ctx.restore();
+    }
+}
+
+function initGame() {
+    if (initialized) return;
+    
+    // Grid Setup
+    cards = [];
+    particles = [];
+    flippedCards = [];
+    matches = 0;
+    sanity = 1.0;
+    shakeIntensity = 0;
+    isProcessingMatch = false;
+    warningPlayed = false;
+    resetFeedbackMedia();
+    
+    // Create Pairs
+    let indices = [];
+    for(let i=0; i<totalPairs; i++) {
+        indices.push(i, i);
+    }
+    // Shuffle
+    for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    // Layout
+    const cols = 4;
+    const rows = 4;
+    for(let i=0; i<cols*rows; i++) {
+        cards.push(new Card(i, i % cols, Math.floor(i / cols), indices[i]));
+    }
+
+    recalcLayout();
+    
+    gameState = 'PLAYING';
+    document.getElementById('hud').style.opacity = '1';
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('score-val').innerText = '0';
+    document.getElementById('score-label').innerHTML = 'PAIRS LOCKED: <span id="score-val" class="score-value">0</span>';
+    document.getElementById('score-label').className = "score-text font-display";
+    document.getElementById('end-title').innerHTML = 'SIGNAL<br>LOST';
+    document.getElementById('end-subtitle').innerText = 'The archive is full, but the channel collapsed on the final surge.';
+    document.querySelector('.status-chip').innerHTML = '<span class="status-dot"></span> ARCHIVE LINK STABLE';
+    
+    // BGM Reset
+    const bgm = mediaEls.bgm;
+    bgm.playbackRate = 1.0;
+    bgm.volume = 0.2;
+    setBgmState(true);
+    
+    initialized = true;
+    requestAnimationFrame(loop);
+}
+
+function recalcLayout() {
+    if (!cards.length) return;
+    const cols = 4;
+    const rows = 4;
+    const padding = 20;
+    const availW = cw - padding * 2;
+    const availH = ch - 150; // Space for HUD
+    
+    const cardW = (availW - (cols - 1) * 10) / cols;
+    const cardH = cardW * 1.3;
+    
+    const startX = padding;
+    const startY = 100;
+
+    cards.forEach(c => {
+        c.w = cardW;
+        c.h = cardH;
+        c.x = startX + c.gridX * (cardW + 10);
+        c.y = startY + c.gridY * (cardH + 10);
+    });
+}
+
+function handleInput(e) {
+    unlockAudio();
+    if (gameState === 'GAMEOVER') {
+        restartGame();
+        return;
+    }
+    if (gameState !== 'PLAYING' || isProcessingMatch) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const tx = e.clientX - rect.left;
+    const ty = e.clientY - rect.top;
+
+    // Find clicked card
+    for (let c of cards) {
+        if (tx >= c.x && tx <= c.x + c.w && ty >= c.y && ty <= c.y + c.h) {
+            if (c.state === 'HIDDEN') {
+                flipCard(c);
+            }
+            break;
+        }
+    }
+}
+
+function flipCard(card) {
+    playSfx('flip', sanity < 0.5 ? 0.88 : 1.1, 0.34);
+    card.state = 'FLIPPED';
+    card.targetScaleX = -1.0; // Visual flip
+    flippedCards.push(card);
+
+    if (flippedCards.length === 2) {
+        isProcessingMatch = true;
+        setTimeout(checkMatch, 600);
+    }
+}
+
+function checkMatch() {
+    const [c1, c2] = flippedCards;
+    
+    if (c1.symbolIndex === c2.symbolIndex) {
+        // MATCH
+        c1.state = 'MATCHED';
+        c2.state = 'MATCHED';
+        matches++;
+        
+        // Sanity Decay
+        sanity -= window.gameConfig.sanityDecay || 0.15;
+        if (sanity < 0) sanity = 0;
+        
+        // Effects
+        if (sanity > 0.5) {
+            spawnParticles(c1.x + c1.w/2, c1.y + c1.h/2, 20, '#FFD700');
+            spawnParticles(c2.x + c2.w/2, c2.y + c2.h/2, 20, '#FFD700');
+            vibrate('light');
+            playSfx('match', 1.04, 0.44);
+            playSfx('collect', 1.1, 0.36);
+            showGif('reward', 1150);
+        } else {
+            spawnParticles(c1.x + c1.w/2, c1.y + c1.h/2, 30, '#FF0000');
+            spawnParticles(c2.x + c2.w/2, c2.y + c2.h/2, 30, '#000000');
+            vibrate('medium');
+            playSfx('collect', 0.82, 0.34);
+            playSfx('scare', 0.7, 0.22);
+            showGif('fail', 900);
+            shakeIntensity = 10;
+        }
+
+        updateUI();
+        
+        if (matches === totalPairs) {
+            triggerEnding();
+        }
+    } else {
+        // NO MATCH
+        c1.state = 'HIDDEN';
+        c2.state = 'HIDDEN';
+        c1.targetScaleX = 1.0;
+        c2.targetScaleX = 1.0;
+        playSfx('fail', 0.96, 0.38);
+        showGif('fail', 850);
+    }
+    
+    flippedCards = [];
+    isProcessingMatch = false;
+}
+
+function updateUI() {
+    const scoreVal = document.getElementById('score-val');
+    const scoreLabel = document.getElementById('score-label');
+    const bgm = mediaEls.bgm;
+    const statusChip = document.querySelector('.status-chip');
+
+    scoreVal.innerText = matches;
+    
+    // BGM Pitch Shift
+    bgm.playbackRate = 0.68 + (sanity * 0.32); // 1.0 -> 0.68
+    bgm.volume = Math.min(0.2, 0.12 + sanity * 0.08);
+
+    if (sanity < 0.6) {
+        scoreLabel.className = "score-text font-ui shaking";
+        scoreLabel.innerHTML = `SIGNAL: <span style="color:#ff9db1;">${Math.floor(sanity * 100)}%</span>`;
+        statusChip.innerHTML = '<span class="status-dot" style="background:#ff63bd; box-shadow:0 0 12px rgba(255,99,189,0.75);"></span> FEED STABILITY DROPPING';
+        document.body.style.background = 'linear-gradient(180deg, #14050b, #050814)';
+        if (!warningPlayed) {
+            playSfx('warning', 0.95, 0.3);
+            warningPlayed = true;
+        }
+    }
+    
+    if (sanity < 0.3) {
+        scoreLabel.innerHTML = `HOLD THE FEED`;
+        statusChip.innerHTML = '<span class="status-dot" style="background:#ff4d6d; box-shadow:0 0 12px rgba(255,77,109,0.75);"></span> CORRUPTION SPIKE';
+        document.body.style.background = 'linear-gradient(180deg, #000, #12050b)';
+    }
+}
+
+function triggerEnding() {
+    gameState = 'LOCKED';
+    setTimeout(() => {
+        // JUMPSCARE
+        playSfx('scare', 1.0, 0.78);
+        vibrate('heavy');
+        showGif('fail', 1600);
+        shakeIntensity = 50;
+        document.body.style.backgroundColor = '#8a1029';
+        setBgmState(false);
+        
+        // Flash
+        let flash = 0;
+        const flashInt = setInterval(() => {
+            document.body.style.backgroundColor = flash % 2 === 0 ? 'black' : 'red';
+            flash++;
+            if (flash > 10) {
+                clearInterval(flashInt);
+                gameState = 'GAMEOVER';
+                document.getElementById('game-over-screen').classList.remove('hidden');
+                document.getElementById('hud').style.opacity = '0';
+            }
+        }, 50);
+    }, 500);
+}
+
+function restartGame() {
+    unlockAudio();
+    playSfx('restart', 1, 0.42);
+    initialized = false;
+    document.body.style.background = '';
+    document.body.style.backgroundColor = '';
+    setTimeout(() => initGame(), 80);
+}
+
+/**
+ * §4 Render Loop
+ */
+function loop(timestamp) {
+    if (!initialized) return;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    // Shake Logic
+    let sx = 0, sy = 0;
+    if (shakeIntensity > 0) {
+        sx = (Math.random() - 0.5) * shakeIntensity;
+        sy = (Math.random() - 0.5) * shakeIntensity;
+        shakeIntensity *= 0.9;
+    }
+
+    // Clear & Background
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Reset for clear
+    
+    // Dynamic Background
+    if (sanity > 0.6) {
+        // Cute Gradient
+        const grad = ctx.createLinearGradient(0, 0, cw, ch);
+        grad.addColorStop(0, '#FFF0F5');
+        grad.addColorStop(1, '#E6E6FA');
+        ctx.fillStyle = grad;
+    } else {
+        // Dark/Glitchy
+        ctx.fillStyle = sanity < 0.3 ? '#050000' : '#111';
+    }
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Apply Shake
+    ctx.translate(sx, sy);
+
+    // Draw Russian Text Overlay (Ghost)
+    if (sanity < 0.4 && Math.random() < 0.05) {
+        ctx.save();
+        ctx.font = '100px "Audiowide"';
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+        ctx.translate(cw/2, ch/2);
+        ctx.rotate((Math.random()-0.5));
+        ctx.fillText(GLITCH_TEXTS[Math.floor(Math.random()*GLITCH_TEXTS.length)], -100, 0);
+        ctx.restore();
+    }
+
+    // Update & Draw Cards
+    cards.forEach(c => {
+        c.update(dt);
+        c.draw(ctx);
+    });
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.update(dt);
+        p.draw(ctx);
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // CRT Scanline Effect (Low Sanity)
+    if (sanity < 0.5) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        for(let y=0; y<ch; y+=4) {
+            ctx.fillRect(0, y, cw, 1);
+        }
+    }
+
+    requestAnimationFrame(loop);
+}
+
+/**
+ * §5 Initialization
+ */
+function resize() {
+    const rect = document.getElementById('game-container').getBoundingClientRect();
+    cw = rect.width;
+    ch = rect.height;
+    dpr = window.devicePixelRatio || 1;
+    
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    
+    ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    if (initialized) {
+        recalcLayout();
+    } else {
+        initGame();
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        setBgmState(false);
+    } else if (initialized && gameState === 'PLAYING') {
+        setBgmState(true);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    canvas = document.getElementById('gameCanvas');
+    const ro = new ResizeObserver(() => {
+        resize();
+    });
+    ro.observe(document.getElementById('game-container'));
+    
+    window.addEventListener('pointerdown', handleInput, { passive: false });
+    document.getElementById('restart-btn').addEventListener('click', handleInput);
+});
+</script>
+</body>
+</html>

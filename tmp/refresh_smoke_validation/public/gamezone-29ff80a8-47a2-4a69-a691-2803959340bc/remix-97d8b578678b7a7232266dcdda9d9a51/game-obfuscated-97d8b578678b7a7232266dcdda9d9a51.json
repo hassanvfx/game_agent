@@ -1,0 +1,142 @@
+{
+  "game_id": "gamezone-29ff80a8-47a2-4a69-a691-2803959340bc",
+  "run_id": null,
+  "remix_id": "remix-97d8b578678b7a7232266dcdda9d9a51",
+  "remix_parent_id": null,
+  "root_game_id": "gamezone-29ff80a8-47a2-4a69-a691-2803959340bc",
+  "lineage_depth": 0,
+  "aggregated_at": "2026-05-17T04:58:04Z",
+  "recreation_prompt_markdown": "Create a mobile-friendly first-person 3D browser game called **Sky Salvager Infinite** where the player drifts across a glowing floating voxel wreckfield in the sky and mines nearby blocks for scrap before falling into the storm below. The experience should feel like a compact neon sci-fi arcade scavenging run rather than a complex simulator: bright blue-and-gold sky gradients, soft fog, glowing materials, a clean center crosshair, a visible scrap counter, and short runs that restart instantly after failure.\n\nBuild the core loop around **start run -> traverse floating terrain -> aim and salvage blocks -> raise scrap score -> lose by falling into the void -> retry immediately**. The world should be procedurally generated around the player so the run feels effectively endless, using simple voxel columns shaped by lightweight noise or sinusoidal terrain logic. Include a little environmental variety such as sparse glowing trees, wreck fragments, or stylized structures, but keep the focus on readable traversal and harvesting.\n\nUse a **touch-first control scheme** designed for phones and tablets:\n- left virtual joystick or touch zone for drifting/movement\n- right-side drag area for camera look and scanning\n- one jump or boost button for crossing gaps\n- one salvage button that swings a tool and mines the block at the center reticle if it is within reach\n\nPresent the game from a **first-person perspective** with embodied movement, simple gravity, collision against voxel blocks, and responsive arcade motion. Mining should use a center-screen raycast: when the player targets a nearby block and presses salvage, remove that voxel from the world, increment scrap by one, spawn a few debris particles, and play satisfying pickup feedback. If the player tries to salvage empty space or an unreachable target, play a muted blocked-feedback cue instead. Removed blocks should persist as empty space during the current run.\n\nAdd polished but lightweight presentation:\n- a stylish title screen with the game name and a one-paragraph mission pitch\n- brief on-screen control instructions before the run starts\n- a HUD showing at least scrap count and optionally FPS\n- a game-over overlay that says the hull was lost and displays final scrap recovered\n- looping ambient music plus short SFX for start, jump, land, salvage, blocked hit, UI click, and game over\n- a small hovering companion drone or similar visual flourish near the player to reinforce the salvage fantasy\n- optional reaction media or punchy visual feedback when salvage succeeds or the run ends\n\nThe tone should be **bright, airy, futuristic, and lightly perilous**, not horror or military combat. There should be **no crafting tree, no inventory management screen, no enemies, and no narrative campaign**. The main appeal is a replayable score-attack rhythm: move, scan, mine, collect scrap, maintain footing on unstable floating terrain, eventually fall, and instantly start another better run.",
+  "blueprint_markdown": "# Blueprint\n\n## High-level code structure\nThis game is implemented as a single self-contained `index.html` document with three major layers:\n\n1. **Presentation/UI layer**\n   - CSS defines a neon sky aesthetic, HUD cards, touch controls, overlays, and feedback GIF presentation.\n   - HTML provides the game canvas, HUD, start screen, game-over screen, crosshair, mobile controls, and score/FPS display.\n\n2. **Game systems layer**\n   - `CONFIG` stores core tuning values such as view radius, movement speed, jump force, gravity, mining reach, chunk/block size, and the void fail threshold.\n   - `STATE` stores the run state: whether the game is active, score, player position/velocity, grounded state, input vectors, procedural world data, and render cache data.\n   - `FEEDBACK` handles temporary visual reaction media for successful salvage and losing the run.\n   - `AUDIO` handles one-shot sound effects and looping background ambience.\n\n3. **3D simulation/rendering layer**\n   - Three.js sets up the scene, fog, camera, renderer, lighting, and instanced voxel meshes.\n   - Procedural terrain generation creates floating columns of blocks and occasional stylized trees.\n   - Collision, mining, particles, first-person camera movement, and the animation loop drive play.\n\n## Game loop / state model\nThe game follows a simple run-based arcade loop:\n\n1. **Start screen / idle**\n   - The player sees a branded title screen and control instructions.\n   - Pressing Start initializes audio, hides the overlay, shows the HUD/controls, resets score, resets world state, places the player above terrain, and begins or resumes the render loop.\n\n2. **Active run**\n   - Every frame:\n     - Input is read from touch zones and buttons.\n     - Camera-facing movement determines drift direction.\n     - Gravity is applied.\n     - Axis-separated collision checks resolve motion against voxel blocks.\n     - The visible world around the player is regenerated/rebuilt using instanced meshes.\n     - Pickaxe animation, particles, and a hovering salvage drone are updated.\n     - FPS display is refreshed once per second.\n   - The player mines blocks within reach using a center-screen raycast, which removes the hit voxel, increments score, spawns particles, and plays feedback.\n\n3. **Failure state / game over**\n   - If the player falls below `voidLimit`, the run ends.\n   - The HUD and controls are hidden, looped music stops, game-over audio/visual feedback plays, and the final score is shown.\n   - Restart resets the run while keeping the same overall structure.\n\nThis is effectively a lightweight finite-state model with three practical states: **menu**, **active run**, and **game over**.\n\n## Player goals\nThe immediate player goal is to:\n- move across the floating terrain,\n- aim the center reticle at nearby blocks,\n- salvage as many blocks as possible for scrap,\n- avoid falling into the storm/void.\n\nThe scoring goal is survival-adjacent but primarily **collection-based**: every mined block adds one scrap to the score.\n\n## Interaction pattern\nThe interaction model is a **mobile-first first-person touch controller**:\n\n- **Left touch zone / joystick:** movement/drifting\n- **Right drag:** camera look / scanning\n- **Jump button:** vertical boost when grounded\n- **Mine button:** perform a salvage swing and raycast harvest\n- **Center crosshair:** indicates the mining/aiming point\n\nThe player is always in first person, with direct embodied control rather than abstract cursor play.\n\n## Core systems\n### 1. Procedural voxel terrain\n- Terrain height is derived from layered sine/cosine noise.\n- Nearby columns are generated on demand around the camera.\n- Block types are assigned by depth: surface, subsurface, and deeper stone.\n- Sparse decorative trees add silhouette variety.\n\n### 2. Dynamic visible-world rebuilding\n- The game does not maintain a handcrafted level.\n- It renders a view-radius neighborhood around the player using instanced meshes per material type.\n- Removed blocks persist in `STATE.worldData`, so salvaged spaces stay empty.\n\n### 3. First-person locomotion\n- Camera direction defines forward/right movement basis.\n- Movement is planar, with gravity and jumping layered on top.\n- Collision uses an AABB against nearby blocks.\n- Falling off terrain is the main fail condition.\n\n### 4. Salvage/mining\n- Mining uses a raycast from the center of the screen.\n- A valid hit within reach deletes the target voxel and awards score.\n- A miss or invalid attempt triggers blocked feedback.\n- Pickaxe animation, particles, sound, and GIF feedback reinforce the action.\n\n### 5. Run feedback and pacing\n- HUD shows scrap count and FPS.\n- Start/game-over overlays frame play as short replayable runs.\n- Ambient loop plus action SFX create an arcade presentation.\n- A hovering drone and glowing sky treatment add flavor without changing mechanics.\n\n## Inferred genre / gameplay shape\nThe strongest gameplay shape is:\n- **first-person arcade voxel scavenging**\n- with **light survival/fall-risk pressure**\n- and **endless procedural exploration**\n\nIt feels like a compact hybrid of:\n- a **sandbox mining prototype**,\n- an **infinite survival run without combat**,\n- and a **procedural first-person collection game**.\n\nThere is no crafting, inventory, story progression, or combat escalation. The dominant rhythm is:\n**move -> aim -> mine -> collect score -> keep footing -> eventually fall -> restart**.\n\n## Heuristic summary\nThis codebase appears designed as a concise, replayable 3D browser game where the fantasy is piloting or embodying a neon salvage operator sweeping floating debris fields. The \u201cinfinite\u201d label comes from procedural terrain generation rather than authored stages. The player\u2019s challenge is spatial control, quick harvesting, and avoiding a fall while chasing a higher scrap total. The experience is arcade-like, readable, and mobile-optimized rather than simulation-heavy.",
+  "semantic_tags": {
+    "game": "Sky Salvager Infinite",
+    "tags": {
+      "theme": [
+        "sci-fi salvage",
+        "arcade scavenging",
+        "floating wreckfield",
+        "neon sky frontier"
+      ],
+      "setting": [
+        "sky islands",
+        "floating voxel terrain",
+        "high-altitude storm void",
+        "procedural open sky space"
+      ],
+      "characters": [
+        "player salvage pilot",
+        "hovering support drone"
+      ],
+      "mechanics": [
+        "first-person movement",
+        "touch joystick navigation",
+        "free look camera control",
+        "jumping across gaps",
+        "raycast mining",
+        "voxel block destruction",
+        "score chasing",
+        "procedural terrain traversal",
+        "fall avoidance",
+        "run restart loop"
+      ],
+      "mood": [
+        "bright",
+        "futuristic",
+        "airy",
+        "arcade-like",
+        "lightly tense",
+        "replayable"
+      ],
+      "similar_games": [
+        "Minecraft",
+        "Skyblock-style survival maps",
+        "simple browser FPS mining prototypes"
+      ],
+      "similar_franchises": [
+        "Minecraft",
+        "Roblox obby and mining experiences"
+      ]
+    }
+  },
+  "semantic_tags_source_mode": "split-json",
+  "identity": {
+    "title": "Sky Salvager Infinite",
+    "premise": "A first-person neon salvage run set over a floating wreckfield where the player harvests voxel blocks for scrap while trying not to fall into the storm below.",
+    "interaction_model": "Mobile-first first-person touch controls with left-side movement drift, right-side camera look, a jump/boost button, and a salvage button that mines blocks at the crosshair.",
+    "objective": "Recover as much scrap as possible by mining reachable blocks from floating terrain and structures before falling into the void.",
+    "progression": "The game is an endless score chase with no authored levels; progression comes from staying alive longer, moving across newly generated terrain, and increasing scrap count until a fall ends the run.",
+    "theme": "Sci-fi sky salvage with glowing voxel terrain, drifting wreckfield imagery, and arcade scavenging energy.",
+    "mood": "Bright, airy, arcade-like, slightly perilous, and futuristic rather than oppressive.",
+    "likely_audience": [
+      "players who enjoy lightweight browser arcade games",
+      "fans of simple voxel mining or block-harvesting mechanics",
+      "mobile players looking for quick replayable score-chasing sessions"
+    ],
+    "confidence_notes": [
+      "High confidence that the game is a first-person procedural salvage/mining score chaser.",
+      "Medium confidence on the fiction being literal wreckage salvage versus abstract floating terrain harvesting, because the code theme leans salvage while the generated world is terrain-like.",
+      "High confidence that avoiding falls is the only fail condition and that there is no combat, crafting, or narrative progression."
+    ],
+    "recreation_prompt": "Create a mobile-friendly first-person 3D browser game called \"Sky Salvager Infinite\" where the player drifts across a glowing floating voxel wreckfield in the sky and mines nearby blocks for scrap before falling into the storm below. Present it as a neon sci-fi arcade scavenging run with a bright blue-and-gold sky palette, foggy distance, a center crosshair, a scrap counter, and a simple game loop of start screen -> active run -> hull-lost game over -> instant retry. Use touch-first controls: a left virtual joystick or touch zone for movement, a right drag area for looking around, a jump/boost button for hopping across gaps, and a salvage button that swings a pickaxe and raycasts from the screen center to remove the targeted block if it is within reach. Each removed voxel should increase the scrap score by one, spawn small debris particles, and trigger satisfying audiovisual feedback, while failed salvage attempts play a blocked cue. Build the world as endless procedurally generated floating voxel terrain around the player using simple height noise, with a few decorative structures like sparse glowing trees or wreck fragments for variety. Keep movement readable and arcade-like with gravity, collision against blocks, and a clear lose state when the player drops below the map into the void. Add strong presentation cues such as a stylized title screen, polished HUD cards, looping ambient music, short SFX for start, jump, land, salvage, blocked hits, and game over, plus a hovering companion drone or equivalent flourish that reinforces the salvage fantasy. The overall experience should feel like a compact replayable score-attack mining runner: move, scan, mine, collect scrap, maintain footing, eventually fall, and restart immediately for a better run."
+  },
+  "identity_source_mode": "split-json",
+  "mechanics_classification": {
+    "game": "Sky Salvager Infinite",
+    "selected_top_5": [
+      {
+        "category": "Survival game",
+        "score": 0.77,
+        "reasoning": "The run is sustained by navigating hazardous floating terrain and avoiding a fail state caused by falling into the void. Survival pressure is light, but staying alive long enough to keep scoring is central.",
+        "uncertainty": "There are no health, hunger, enemies, or resource crafting systems, so this only partially matches classic survival structures."
+      },
+      {
+        "category": "Procedural exploration game",
+        "score": 0.76,
+        "reasoning": "The terrain is generated around the player from mathematical height functions, creating an endless navigable space rather than fixed levels. Traversing newly generated terrain is part of the core loop.",
+        "uncertainty": "Exploration exists, but it is compact and score-driven rather than discovery-heavy or narrative."
+      },
+      {
+        "category": "First person shooter",
+        "score": 0.58,
+        "reasoning": "The game uses first-person camera control, center-screen aiming, a reticle, and raycast interaction with reachable targets. The embodied control feel overlaps strongly with FPS conventions.",
+        "uncertainty": "There is no shooting or combat; this is a control-shape match rather than a thematic or combat match."
+      },
+      {
+        "category": "Inventory building game",
+        "score": 0.31,
+        "reasoning": "The player is effectively collecting salvage as a resource through repeated harvesting actions, and score represents accumulated scrap recovery.",
+        "uncertainty": "There is no actual inventory UI, slot management, or retained item economy, so the match is weak and abstract."
+      },
+      {
+        "category": "Sandbox building game",
+        "score": 0.24,
+        "reasoning": "The world is a manipulable voxel space where blocks can be removed, giving a limited sandbox texture.",
+        "uncertainty": "The player cannot place blocks or construct anything, so this is a distant match based only on destructible voxel interaction."
+      }
+    ],
+    "uncertainty_notes": [
+      "The category universe does not include a direct voxel mining, scavenging, or first-person harvesting category, forcing approximate matches.",
+      "A pure score-attack scavenging classification would likely fit better than several available labels.",
+      "Runner categories are a poor fit because movement is free-form rather than lane-based or forced-forward."
+    ]
+  },
+  "mechanics_classification_source_mode": "split-json",
+  "screenshots_png": [],
+  "screenshots_jpg": [
+    "screenshots/01.jpg",
+    "screenshots/02.jpg",
+    "screenshots/03.jpg",
+    "screenshots/04.jpg"
+  ],
+  "deploy": {
+    "remix_uuid": "remix-97d8b578678b7a7232266dcdda9d9a51",
+    "source_output_dir": "games/raw/gamezone-29ff80a8-47a2-4a69-a691-2803959340bc",
+    "format_version": "1.0.0",
+    "normalized_screenshot_sources": [
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-29ff80a8-47a2-4a69-a691-2803959340bc/playwright_after_mine_attempt.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-29ff80a8-47a2-4a69-a691-2803959340bc/playwright_after_move.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-29ff80a8-47a2-4a69-a691-2803959340bc/playwright_after_start.png",
+      "/Users/hassan/repos/game_agent/games/raw/gamezone-29ff80a8-47a2-4a69-a691-2803959340bc/playwright_initial.png"
+    ]
+  }
+}

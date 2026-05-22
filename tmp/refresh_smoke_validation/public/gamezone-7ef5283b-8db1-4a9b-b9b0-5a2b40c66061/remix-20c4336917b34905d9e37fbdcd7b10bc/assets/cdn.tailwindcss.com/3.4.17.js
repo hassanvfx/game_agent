@@ -1,0 +1,1 @@
+/* Removed for stage policy compliance. The game now uses inline CSS in index.html instead of Tailwind runtime. */

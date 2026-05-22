@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover" />
+  <title>Liquid Sort: Hero Vial Audit</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d7b9ff'/%3E%3Cpath d='M12 7h8v5l4 9a7 7 0 0 1-16 0l4-9z' fill='%2354d8ff' stroke='%2332185c' stroke-width='2'/%3E%3C/svg%3E">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap');
+
+    :root {
+      --ink: #292146;
+      --deep: #201245;
+      --night: #32185c;
+      --panel: rgba(255, 248, 255, 0.78);
+      --panel-dark: rgba(39, 25, 78, 0.72);
+      --stroke: rgba(255,255,255,0.46);
+      --ruby: #ff5f95;
+      --azure: #54d8ff;
+      --lime: #7bff9f;
+      --gold: #ffe27b;
+      --lav: #d7b9ff;
+      --pink: #ffb4df;
+      --white: #fffaff;
+      --shadow: rgba(20, 10, 50, 0.38);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      font-family: 'Rajdhani', system-ui, sans-serif;
+      color: var(--white);
+      background: radial-gradient(circle at 50% -10%, #ffb4df 0, transparent 34%), linear-gradient(180deg, #8bd9ff 0%, #d7b9ff 42%, #ffd8f1 100%);
+      touch-action: manipulation;
+    }
+    button { font: inherit; }
+    canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+
+    #game { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    #game::before {
+      content: "";
+      position: fixed; inset: -18vmax;
+      pointer-events: none;
+      background:
+        repeating-conic-gradient(from 0deg, rgba(255,255,255,0.12) 0 10deg, transparent 10deg 20deg),
+        radial-gradient(circle at 25% 15%, rgba(255,255,255,0.42), transparent 18%),
+        radial-gradient(circle at 82% 22%, rgba(255,226,123,0.32), transparent 20%);
+      animation: dreamSpin 34s linear infinite;
+      mix-blend-mode: screen;
+      opacity: 0.6;
+    }
+    @keyframes dreamSpin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+    .ui-layer { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; z-index: 2; padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom)); }
+    .hud { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .pill, .glass {
+      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.38));
+      color: var(--ink);
+      box-shadow: 0 14px 34px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .pill { min-width: 110px; padding: 9px 14px; border-radius: 999px; text-align: center; }
+    .label { display: block; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600; opacity: 0.72; }
+    #score { font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.65rem; color: #7a3cff; line-height: 1; }
+    .timer-shell { width: min(34vw, 150px); height: 12px; border-radius: 999px; overflow: hidden; background: rgba(49, 30, 91, 0.22); margin-top: 5px; border: 1px solid rgba(49,30,91,0.18); }
+    #time-bar { width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--lime), var(--azure), var(--ruby), var(--gold)); box-shadow: 0 0 14px rgba(84,216,255,0.7); transition: width 0.12s linear; }
+
+    .hint-card {
+      align-self: center;
+      margin-top: 56px;
+      max-width: min(92vw, 430px);
+      padding: 10px 14px;
+      border-radius: 20px;
+      text-align: center;
+      color: var(--ink);
+      pointer-events: none;
+      opacity: 0.96;
+    }
+    .hint-card strong { font-family: 'Cinzel', serif; color: #6d37d8; }
+    .hint-card span { display: block; font-size: 0.86rem; font-weight: 600; }
+
+    .controls { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .button-row { display: flex; justify-content: center; gap: 8px; max-width: 100%; flex-wrap: wrap; }
+    .type-btn, .color-btn, #brew-btn, #start-btn, #restart-btn {
+      border: 0; cursor: pointer; user-select: none; transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+    }
+    .type-btn {
+      min-width: 88px;
+      min-height: 46px;
+      border-radius: 18px;
+      padding: 9px 12px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--ink);
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(224,214,255,0.82));
+      border: 2px solid rgba(255,255,255,0.62);
+      box-shadow: 0 10px 20px rgba(61,35,111,0.23);
+    }
+    .type-btn.selected { color: white; background: linear-gradient(135deg, #7a3cff, #ff7bcf); box-shadow: 0 0 0 3px rgba(255,255,255,0.62), 0 16px 28px rgba(122,60,255,0.34); transform: translateY(-2px); }
+    .color-dock { display: flex; gap: 12px; padding: 9px 13px; border-radius: 999px; background: rgba(255,255,255,0.34); border: 1px solid rgba(255,255,255,0.42); backdrop-filter: blur(10px); }
+    .color-btn { width: 50px; height: 50px; border-radius: 50% 50% 48% 48%; border: 3px solid white; box-shadow: inset 0 -10px 18px rgba(20,10,50,0.18), 0 8px 18px rgba(61,35,111,0.22); position: relative; }
+    .color-btn::after { content: ""; position: absolute; inset: 8px 12px auto 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.56); }
+    .color-btn.selected { transform: scale(1.1) translateY(-3px); box-shadow: 0 0 0 4px rgba(255,226,123,0.75), inset 0 -10px 18px rgba(20,10,50,0.18), 0 14px 24px rgba(61,35,111,0.28); }
+    .ruby { background: linear-gradient(180deg, #ffc0d7, var(--ruby) 52%, #b9296e); }
+    .azure { background: linear-gradient(180deg, #b9f5ff, var(--azure) 52%, #2381cc); }
+    .lime { background: linear-gradient(180deg, #ccffd7, var(--lime) 52%, #27a95a); }
+    #brew-btn {
+      min-width: min(78vw, 310px);
+      min-height: 58px;
+      border-radius: 999px;
+      padding: 13px 24px;
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: white;
+      background: linear-gradient(135deg, #7a3cff, #ff5f95 55%, #ffe27b);
+      border: 1px solid rgba(255,255,255,0.56);
+      box-shadow: 0 18px 32px rgba(122,60,255,0.34);
+    }
+    #brew-btn:active, #start-btn:active, #restart-btn:active, .type-btn:active, .color-btn:active { transform: scale(0.96); }
+
+    .overlay { position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 18px; pointer-events: auto; background: radial-gradient(circle at 50% 30%, rgba(255,255,255,0.34), transparent 35%), rgba(40, 21, 80, 0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .start-panel { width: min(92vw, 430px); border-radius: 32px; padding: 28px 24px; text-align: center; }
+    h1, h2 { font-family: 'Cinzel', serif; margin: 0; color: var(--ink); line-height: 0.96; text-shadow: 0 2px 0 rgba(255,255,255,0.36); }
+    h1 { font-size: clamp(2.2rem, 11vw, 4rem); }
+    h2 { font-size: clamp(2rem, 10vw, 3.3rem); }
+    .subtitle { color: #4d3b7e; font-weight: 600; font-size: 1.05rem; margin: 14px auto 20px; max-width: 32ch; }
+    .meme { display: inline-flex; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,0.56); color: #7a3cff; font-weight: 700; letter-spacing: 0.06em; margin-bottom: 18px; }
+    #start-btn, #restart-btn { border-radius: 999px; padding: 15px 28px; min-height: 54px; color: white; background: linear-gradient(135deg, #32185c, #7a3cff); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; box-shadow: 0 16px 28px rgba(50,24,92,0.32); }
+    .final-score { color: #4d3b7e; font-size: 1.25rem; font-weight: 600; margin: 16px 0 20px; }
+    .final-score span { font-family: 'Cinzel', serif; color: #7a3cff; font-size: 2rem; }
+
+    #feedback { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%) scale(0.92); z-index: 4; pointer-events: none; opacity: 0; transition: opacity 0.18s ease, transform 0.18s ease; padding: 10px 15px; border-radius: 999px; color: white; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; background: rgba(49,24,92,0.78); border: 1px solid rgba(255,255,255,0.34); box-shadow: 0 14px 30px var(--shadow); }
+    #feedback.active { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    #game.pulse { animation: badPulse 0.22s ease; }
+    @keyframes badPulse { 50% { filter: saturate(1.5) brightness(1.08); transform: translateX(2px); } }
+
+    @media (max-height: 700px) {
+      .hint-card { display: none; }
+      .type-btn { min-height: 42px; min-width: 80px; padding: 7px 10px; }
+      .color-btn { width: 45px; height: 45px; }
+      #brew-btn { min-height: 52px; font-size: 1.08rem; }
+      .ui-layer { padding-top: 10px; padding-bottom: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="game" aria-label="Liquid Sort Hero Vial Audit game">
+    <canvas id="gameCanvas" aria-hidden="true"></canvas>
+    <div id="feedback">ready</div>
+
+    <section id="ui-layer" class="ui-layer hidden">
+      <div class="hud">
+        <div class="pill"><span class="label">Rupee-ish Score</span><span id="score">0</span></div>
+        <div class="pill"><span class="label">Commute Fuse</span><div class="timer-shell"><div id="time-bar"></div></div></div>
+      </div>
+      <div class="hint-card glass"><strong>Quest Writ</strong><span id="writ-copy">Match vial shape + potion hue, then seal it.</span></div>
+      <div id="controls" class="controls">
+        <div class="button-row" aria-label="Vial shape choices">
+          <button class="type-btn selected" data-type="dress">Bottle</button>
+          <button class="type-btn" data-type="skirt">Flask</button>
+          <button class="type-btn" data-type="pants">Chalice</button>
+        </div>
+        <div class="color-dock" aria-label="Potion color choices">
+          <button class="color-btn ruby selected" data-color="red" aria-label="Ruby potion"></button>
+          <button class="color-btn azure" data-color="blue" aria-label="Azure potion"></button>
+          <button class="color-btn lime" data-color="green" aria-label="Lime potion"></button>
+        </div>
+        <button id="brew-btn">SORT THE SAUCE</button>
+      </div>
+    </section>
+
+    <section id="start-screen" class="overlay">
+      <div class="start-panel glass">
+        <div class="meme">real · no thoughts head empty</div>
+        <h1>Liquid Sort:<br>Hero Vial Audit</h1>
+        <p class="subtitle">A commute-friendly pastel dungeon puzzle: read the fairy clerk’s request, choose the matching vial and liquid, then ship the potion before the fuse melts.</p>
+        <button id="start-btn">Start Sort Quest</button>
+      </div>
+    </section>
+
+    <section id="game-over-screen" class="overlay hidden">
+      <div class="start-panel glass">
+        <div class="meme">the shrine said nope</div>
+        <h2>Audit Over</h2>
+        <div class="final-score">Rupee-ish score: <span id="finalScore">0</span></div>
+        <button id="restart-btn">Run It Back</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const ASSETS = {
+      bgm: 'https://gamezone-virid.vercel.app/assets/audios/bgm/dungeon_bgm_01.mp3',
+      sfx: {
+        score: 'https://gamezone-virid.vercel.app/assets/audios/sfx/dungeon_item_01.mp3',
+        fail: 'https://gamezone-virid.vercel.app/assets/audios/sfx/dungeon_defeat_01.mp3',
+        ui: 'https://gamezone-virid.vercel.app/assets/audios/sfx/dungeon_npc_01.mp3',
+        hurry: 'https://gamezone-virid.vercel.app/assets/audios/sfx/dungeon_wind_01.mp3'
+      }
+    };
+
+    class AudioController {
+      constructor() {
+        this.bgm = new Audio(ASSETS.bgm);
+        this.bgm.loop = true;
+        this.bgm.volume = 0.16;
+        this.bgm.preload = 'auto';
+        this.lastPlayed = new Map();
+        this.sfx = {};
+        Object.entries(ASSETS.sfx).forEach(([key, url]) => {
+          const sound = new Audio(url);
+          sound.preload = 'auto';
+          sound.volume = key === 'ui' ? 0.28 : key === 'hurry' ? 0.34 : 0.52;
+          this.sfx[key] = sound;
+        });
+      }
+      playBGM() { this.bgm.play().catch(() => {}); }
+      stopBGM() { this.bgm.pause(); this.bgm.currentTime = 0; }
+      playSFX(key, cooldown = 90) {
+        const now = performance.now();
+        if (this.lastPlayed.has(key) && now - this.lastPlayed.get(key) < cooldown) return;
+        this.lastPlayed.set(key, now);
+        const src = this.sfx[key];
+        if (!src) return;
+        const clone = src.cloneNode();
+        clone.volume = src.volume;
+        clone.play().catch(() => {});
+      }
+    }
+
+    const audio = new AudioController();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const finalScoreEl = document.getElementById('finalScore');
+    const timeBar = document.getElementById('time-bar');
+    const feedbackEl = document.getElementById('feedback');
+    const gameEl = document.getElementById('game');
+    const uiLayer = document.getElementById('ui-layer');
+    const controls = document.getElementById('controls');
+    const writCopy = document.getElementById('writ-copy');
+
+    let width = 0;
+    let height = 0;
+    let gameActive = false;
+    let score = 0;
+    let timeLeft = 100;
+    let lastTime = 0;
+    let difficultyMultiplier = 1.0;
+    let currentOutfit = { type: 'dress', color: 'red' };
+    let targetOutfit = { type: 'dress', color: 'red' };
+    let particles = [];
+    let customerX = 2000;
+    let customerTargetX = 0;
+    let customerState = 'entering';
+    let hurryTriggered = false;
+    let feedbackTimer = null;
+    let drift = 0;
+
+    const COLORS = {
+      red: '#ff5f95',
+      blue: '#54d8ff',
+      green: '#7bff9f',
+      skin: '#ffe7b0'
+    };
+    const TYPE_LABELS = { dress: 'Bottle', skirt: 'Flask', pants: 'Chalice' };
+    const COLOR_LABELS = { red: 'Ruby', blue: 'Azure', green: 'Lime' };
+    const TYPES = ['dress', 'skirt', 'pants'];
+    const COLOR_KEYS = ['red', 'blue', 'green'];
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      customerTargetX = width * 0.72;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function showFeedback(message, good) {
+      if (feedbackTimer) clearTimeout(feedbackTimer);
+      feedbackEl.textContent = message;
+      feedbackEl.style.background = good ? 'rgba(78, 191, 131, 0.82)' : 'rgba(255, 95, 149, 0.82)';
+      feedbackEl.classList.add('active');
+      feedbackTimer = setTimeout(() => feedbackEl.classList.remove('active'), 1200);
+    }
+
+    function generateRequest() {
+      const type = TYPES[Math.floor(Math.random() * TYPES.length)];
+      const color = COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)];
+      targetOutfit = { type, color };
+      customerX = width + 190;
+      customerState = 'entering';
+      writCopy.textContent = `${COLOR_LABELS[color]} ${TYPE_LABELS[type]} requested. Match both, then seal it.`;
+    }
+
+    function spawnParticles(x, y, color) {
+      for (let i = 0; i < 20; i++) {
+        particles.push({
+          x, y,
+          vx: (Math.random() - 0.5) * 10,
+          vy: (Math.random() - 0.5) * 10,
+          life: 1,
+          color,
+          spin: Math.random() * Math.PI
+        });
+      }
+    }
+
+    function drawBackground() {
+      const g = ctx.createLinearGradient(0, 0, 0, height);
+      g.addColorStop(0, '#9fe6ff');
+      g.addColorStop(0.45, '#d9b8ff');
+      g.addColorStop(1, '#ffd3ed');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, width, height);
+
+      drift += 0.004;
+      ctx.save();
+      ctx.globalAlpha = 0.42;
+      for (let i = 0; i < 9; i++) {
+        const x = ((i * 97 + drift * 50) % (width + 120)) - 60;
+        const y = height * (0.12 + (i % 5) * 0.12) + Math.sin(drift * 2 + i) * 12;
+        drawTriangleRune(x, y, 16 + (i % 3) * 7, i % 2 ? '#fffaff' : '#ffe27b');
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(67, 39, 129, 0.18)';
+      for (let x = -40; x < width + 80; x += 64) {
+        for (let y = height * 0.58; y < height + 80; y += 42) {
+          ctx.beginPath();
+          ctx.roundRect(x + ((Math.floor(y / 42) % 2) * 32), y, 58, 34, 8);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+
+      const floor = ctx.createLinearGradient(0, height * 0.66, 0, height);
+      floor.addColorStop(0, 'rgba(255,250,255,0.15)');
+      floor.addColorStop(1, 'rgba(50,24,92,0.38)');
+      ctx.fillStyle = floor;
+      ctx.fillRect(0, height * 0.68, width, height * 0.32);
+
+      for (let i = 0; i < 5; i++) {
+        const wx = width * (0.08 + i * 0.22);
+        drawRainbowFall(wx, height * 0.05, 20 + (i % 2) * 10, height * 0.62, i);
+      }
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.44)';
+      ctx.font = '700 14px Rajdhani, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('PASTEL SHRINE OF SORTING (legally distinct)', width / 2, height * 0.15);
+      ctx.restore();
+    }
+
+    function drawTriangleRune(x, y, s, color) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = 'rgba(122,60,255,0.28)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const ox = (i - 1) * s * 0.78;
+        const oy = i === 1 ? -s * 0.7 : 0;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy - s * 0.55);
+        ctx.lineTo(ox + s * 0.5, oy + s * 0.38);
+        ctx.lineTo(ox - s * 0.5, oy + s * 0.38);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawRainbowFall(x, y, w, h, phase) {
+      const colors = ['#ff5f95', '#ffe27b', '#7bff9f', '#54d8ff', '#d7b9ff'];
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      colors.forEach((c, i) => {
+        ctx.fillStyle = c;
+        const offset = Math.sin(drift * 3 + phase + i) * 4;
+        ctx.beginPath();
+        ctx.roundRect(x + offset + i * (w / colors.length), y, w / colors.length + 3, h, 999);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    function drawVialShape(type, fillColor, x, y, scale, sleepy) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.shadowColor = fillColor;
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      ctx.strokeStyle = 'rgba(49,24,92,0.52)';
+      ctx.lineWidth = 4;
+
+      ctx.beginPath();
+      if (type === 'dress') {
+        ctx.roundRect(-38, -90, 76, 180, 26);
+        ctx.moveTo(-18, -90); ctx.lineTo(-18, -130); ctx.lineTo(18, -130); ctx.lineTo(18, -90);
+      } else if (type === 'skirt') {
+        ctx.moveTo(-24, -120); ctx.lineTo(24, -120); ctx.lineTo(34, -52); ctx.quadraticCurveTo(86, 4, 54, 88); ctx.quadraticCurveTo(0, 122, -54, 88); ctx.quadraticCurveTo(-86, 4, -34, -52); ctx.closePath();
+      } else {
+        ctx.moveTo(-54, -88); ctx.quadraticCurveTo(0, -124, 54, -88); ctx.lineTo(34, 86); ctx.quadraticCurveTo(0, 112, -34, 86); ctx.closePath();
+        ctx.moveTo(-45, -92); ctx.lineTo(45, -92);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = fillColor;
+      ctx.beginPath();
+      const bob = Math.sin(drift * 6) * 5;
+      if (type === 'dress') ctx.roundRect(-31, -20 + bob, 62, 98 - bob, 20);
+      else if (type === 'skirt') ctx.ellipse(0, 34 + bob, 52, 58 - bob * 0.3, 0, 0, Math.PI * 2);
+      else ctx.roundRect(-31, -5 + bob, 62, 86 - bob, 24);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#3d2c63';
+      ctx.beginPath();
+      if (sleepy) {
+        ctx.arc(-13, -48, 7, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.arc(13, -48, 7, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.strokeStyle = '#3d2c63'; ctx.lineWidth = 3; ctx.stroke();
+      } else {
+        ctx.arc(-13, -48, 4, 0, Math.PI * 2); ctx.arc(13, -48, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = '#3d2c63'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, -31, 10, 0.08 * Math.PI, 0.92 * Math.PI); ctx.stroke();
+      ctx.fillStyle = '#72cf7c';
+      ctx.beginPath(); ctx.moveTo(-30, -130); ctx.lineTo(0, -166); ctx.lineTo(30, -130); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffe27b';
+      ctx.fillRect(-25, -133, 50, 8);
+      ctx.restore();
+    }
+
+    function drawHeroVial() {
+      const x = width * 0.32;
+      const y = height * 0.48 + Math.sin(drift * 4) * 5;
+      const scale = Math.min(0.92, Math.max(0.62, height / 880));
+      ctx.save();
+      ctx.fillStyle = 'rgba(41,33,70,0.18)';
+      ctx.beginPath(); ctx.ellipse(x, y + 118 * scale, 78 * scale, 20 * scale, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      drawVialShape(currentOutfit.type, COLORS[currentOutfit.color], x, y, scale, true);
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.font = '700 13px Rajdhani, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('hero vial: no thoughts', x, y + 150 * scale);
+      ctx.restore();
+    }
+
+    function drawQuestClerk() {
+      const y = height * 0.52;
+      const scale = Math.min(0.86, Math.max(0.58, height / 920));
+      if (customerState === 'entering') {
+        customerX += (customerTargetX - customerX) * 0.05;
+        if (Math.abs(customerX - customerTargetX) < 5) customerState = 'waiting';
+      } else if (customerState === 'leaving_happy' || customerState === 'leaving_sad') {
+        customerX += 15;
+        if (customerX > width + 190) generateRequest();
+      }
+
+      ctx.save();
+      ctx.translate(customerX, y);
+      ctx.scale(scale, scale);
+      const happy = customerState === 'leaving_happy';
+      const sad = customerState === 'leaving_sad';
+      ctx.fillStyle = sad ? 'rgba(111,103,145,0.78)' : happy ? 'rgba(255,226,123,0.9)' : 'rgba(255,250,255,0.9)';
+      ctx.strokeStyle = 'rgba(122,60,255,0.42)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(0, 0, 48, 64, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(84,216,255,0.55)';
+      ctx.beginPath(); ctx.ellipse(-44, -6, 30, 14, -0.6, 0, Math.PI * 2); ctx.ellipse(44, -6, 30, 14, 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3d2c63';
+      ctx.beginPath(); ctx.arc(-13, -12, 4, 0, Math.PI * 2); ctx.arc(13, -12, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#3d2c63'; ctx.lineWidth = 3; ctx.beginPath();
+      if (sad) ctx.arc(0, 13, 10, Math.PI * 1.1, Math.PI * 1.9); else ctx.arc(0, 7, 10, 0.1 * Math.PI, 0.9 * Math.PI);
+      ctx.stroke();
+
+      if (customerState === 'waiting' || customerState === 'entering') {
+        drawSpeechBubble(-116, -154, targetOutfit.type, targetOutfit.color);
+      }
+      ctx.restore();
+    }
+
+    function drawSpeechBubble(x, y, type, color) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = 'rgba(255,250,255,0.96)';
+      ctx.strokeStyle = 'rgba(122,60,255,0.38)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(0, 0, 148, 98, 22); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(104, 91); ctx.lineTo(126, 118); ctx.lineTo(121, 86); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#4d3b7e'; ctx.font = '700 13px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('SORT GAME WRIT', 74, 20);
+      drawVialIcon(type, COLORS[color], 74, 60, 0.42);
+      ctx.restore();
+    }
+
+    function drawVialIcon(type, color, x, y, scale) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = '#3d2c63'; ctx.lineWidth = 5;
+      ctx.beginPath();
+      if (type === 'dress') ctx.roundRect(-28, -50, 56, 92, 18);
+      else if (type === 'skirt') ctx.ellipse(0, 4, 52, 48, 0, 0, Math.PI * 2);
+      else { ctx.moveTo(-44, -38); ctx.lineTo(44, -38); ctx.lineTo(28, 42); ctx.lineTo(-28, 42); ctx.closePath(); }
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        ctx.save();
+        ctx.globalAlpha = p.life;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.spin + p.life * 5);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.moveTo(0, -7); ctx.lineTo(7, 0); ctx.lineTo(0, 7); ctx.lineTo(-7, 0); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        p.x += p.vx; p.y += p.vy; p.vy += 0.5; p.life -= 0.02;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+    }
+
+    function initGame() {
+      score = 0;
+      timeLeft = 100;
+      difficultyMultiplier = 1.0;
+      currentOutfit = { type: 'dress', color: 'red' };
+      scoreEl.innerText = score;
+      timeBar.style.width = '100%';
+      hurryTriggered = false;
+      particles = [];
+      document.querySelectorAll('.type-btn').forEach(btn => btn.classList.toggle('selected', btn.dataset.type === 'dress'));
+      document.querySelectorAll('.color-btn').forEach(btn => btn.classList.toggle('selected', btn.dataset.color === 'red'));
+      generateRequest();
+      showFeedback('match the writ', true);
+    }
+
+    function gameLoop(timestamp) {
+      if (!gameActive) return;
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+      ctx.clearRect(0, 0, width, height);
+      drawBackground();
+      drawHeroVial();
+      drawQuestClerk();
+      drawParticles();
+
+      if (customerState === 'waiting') {
+        timeLeft -= 0.05 * difficultyMultiplier;
+        timeBar.style.width = `${Math.max(0, timeLeft)}%`;
+        if (timeLeft <= 28 && !hurryTriggered) {
+          hurryTriggered = true;
+          audio.playSFX('hurry', 800);
+          showFeedback('clock goblin', false);
+        } else if (timeLeft > 28) {
+          hurryTriggered = false;
+        }
+        if (timeLeft <= 0) gameOver();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    function checkMatch() {
+      if (customerState !== 'waiting') return;
+      if (currentOutfit.type === targetOutfit.type && currentOutfit.color === targetOutfit.color) {
+        score += 100;
+        timeLeft = Math.min(100, timeLeft + 15);
+        difficultyMultiplier += 0.05;
+        audio.playSFX('score');
+        scoreEl.innerText = score;
+        spawnParticles(width * 0.32, height * 0.45, COLORS[currentOutfit.color]);
+        showFeedback('real potion', true);
+        customerState = 'leaving_happy';
+      } else {
+        timeLeft -= 20;
+        audio.playSFX('fail');
+        showFeedback('nope', false);
+        gameEl.classList.add('pulse');
+        setTimeout(() => gameEl.classList.remove('pulse'), 220);
+      }
+    }
+
+    function gameOver() {
+      gameActive = false;
+      audio.stopBGM();
+      audio.playSFX('fail');
+      showFeedback('audit over', false);
+      uiLayer.classList.add('hidden');
+      document.getElementById('game-over-screen').classList.remove('hidden');
+      finalScoreEl.innerText = score;
+    }
+
+    function startGame() {
+      audio.playSFX('ui');
+      audio.playBGM();
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('game-over-screen').classList.add('hidden');
+      uiLayer.classList.remove('hidden');
+      controls.classList.remove('hidden');
+      gameActive = true;
+      initGame();
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+    document.querySelectorAll('.type-btn').forEach(btn => {
+      btn.addEventListener('click', (event) => {
+        audio.playSFX('ui', 60);
+        document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        currentOutfit.type = event.currentTarget.dataset.type;
+      });
+    });
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.addEventListener('click', (event) => {
+        audio.playSFX('ui', 60);
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        currentOutfit.color = event.currentTarget.dataset.color;
+      });
+    });
+    document.getElementById('brew-btn').addEventListener('click', () => {
+      audio.playSFX('ui', 60);
+      checkMatch();
+    });
+
+    drawBackground();
+    drawVialShape('dress', COLORS.red, width * 0.5, height * 0.48, Math.min(0.86, Math.max(0.62, height / 900)), true);
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Punch Simulator Tycoon</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E%F0%9F%A5%8A%3C/text%3E%3C/svg%3E">
+    <!-- [agent-note][stage3] resolved-font: title-display -> Russo One, ui-body -> Rajdhani via catalogs/fonts.json -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@400;600;700&display=swap">
+    <style>
+        :root {
+            --bg-top: #060814;
+            --bg-bottom: #111b37;
+            --panel: rgba(8, 18, 40, 0.8);
+            --panel-strong: rgba(12, 24, 54, 0.92);
+            --border: rgba(112, 223, 255, 0.26);
+            --glow: rgba(77, 224, 255, 0.22);
+            --cyan: #62f3ff;
+            --cyan-strong: #17d9ff;
+            --gold: #ffd86b;
+            --gold-strong: #ffb703;
+            --danger: #ff5d73;
+            --ink: #07111f;
+            --text: #edf7ff;
+            --muted: #9db0c8;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(23, 217, 255, 0.14), transparent 35%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            color: var(--text);
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .flex {
+            display: flex !important;
+        }
+
+        .app-shell {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 12px;
+            gap: 12px;
+        }
+
+        .glass-panel {
+            background:
+                linear-gradient(180deg, rgba(16, 31, 61, 0.92), rgba(8, 17, 36, 0.88));
+            border: 1px solid var(--border);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+                0 12px 30px rgba(0, 0, 0, 0.24),
+                0 0 18px var(--glow);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-cap {
+            background: linear-gradient(90deg, rgba(23, 217, 255, 0.22), rgba(255, 183, 3, 0.18));
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .neon-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.28), rgba(255,255,255,0.08));
+            box-shadow: 0 0 12px rgba(98, 243, 255, 0.22);
+            font-size: 15px;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            pointer-events: auto;
+            flex-wrap: wrap;
+        }
+
+        .stat-pill {
+            min-width: 132px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            color: var(--text);
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: 0.04em;
+        }
+
+        .stat-pill.money .neon-badge { color: var(--gold); }
+        .stat-pill.power .neon-badge { color: var(--danger); }
+
+        .game-ui {
+            flex: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 4px;
+            gap: 12px;
+        }
+
+        .chat-box,
+        .shop-box {
+            width: min(260px, 32vw);
+            pointer-events: auto;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .chat-box {
+            display: flex;
+            flex-direction: column;
+            min-height: 220px;
+            height: min(260px, 34vh);
+            margin-bottom: 72px;
+        }
+
+        .chat-title,
+        .shop-title {
+            padding: 10px 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 12px;
+            font-weight: 700;
+            color: #d8f5ff;
+        }
+
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 12px;
+            font-family: 'Rajdhani', system-ui, sans-serif;
+            font-size: 13px;
+            line-height: 1.35;
+            color: var(--text);
+            word-break: break-word;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.02), transparent),
+                rgba(2, 8, 20, 0.22);
+        }
+
+        .chat-input-wrap {
+            padding: 10px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            background: rgba(0, 0, 0, 0.18);
+        }
+
+        .chat-input {
+            width: 100%;
+            background: rgba(16, 30, 60, 0.78);
+            color: var(--text);
+            border: 1px solid rgba(98, 243, 255, 0.18);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .chat-input:focus {
+            border-color: rgba(98, 243, 255, 0.5);
+            box-shadow: 0 0 0 3px rgba(23, 217, 255, 0.16);
+        }
+
+        .shop-box {
+            max-height: min(60vh, 430px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shop-list {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        .shop-item {
+            width: 100%;
+            border: 1px solid rgba(255,255,255,0.08);
+            background:
+                linear-gradient(180deg, rgba(26, 44, 82, 0.96), rgba(12, 23, 45, 0.96));
+            color: var(--text);
+            padding: 12px;
+            border-radius: 16px;
+            transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+            border-bottom-width: 4px;
+            border-bottom-color: rgba(0, 0, 0, 0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .shop-item:hover,
+        .shop-item:focus-visible {
+            transform: translateY(-1px);
+            border-color: rgba(98, 243, 255, 0.35);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.25), 0 0 16px rgba(23, 217, 255, 0.18);
+            filter: brightness(1.06);
+            outline: none;
+        }
+
+        .shop-item:active {
+            transform: translateY(2px);
+            border-bottom-width: 1px;
+        }
+
+        .shop-item-name {
+            font-family: 'Russo One', sans-serif;
+            font-size: 16px;
+            letter-spacing: 0.04em;
+        }
+
+        .feedback-gif {
+            position: absolute;
+            z-index: 35;
+            right: 12px;
+            bottom: 128px;
+            width: min(132px, 28vw);
+            aspect-ratio: 1;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24), 0 0 16px rgba(98, 243, 255, 0.18);
+            background: rgba(6, 12, 24, 0.72);
+            object-fit: cover;
+            opacity: 0;
+            transform: translateY(12px) scale(0.94);
+            transition: opacity 220ms ease, transform 220ms ease;
+            pointer-events: none;
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.95;
+            transform: translateY(0) scale(1);
+        }
+
+        .feedback-gif.fail {
+            right: auto;
+            left: 12px;
+            bottom: 138px;
+            width: min(124px, 27vw);
+        }
+
+        .feedback-banner {
+            position: absolute;
+            left: 50%;
+            bottom: 92px;
+            transform: translateX(-50%) translateY(12px);
+            z-index: 36;
+            min-width: min(220px, 80vw);
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: rgba(6, 14, 28, 0.84);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.26);
+            text-align: center;
+            font-family: 'Russo One', sans-serif;
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #f5fbff;
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+            pointer-events: none;
+        }
+
+        .feedback-banner.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .feedback-banner.good {
+            border-color: rgba(255, 216, 107, 0.36);
+            color: var(--gold);
+        }
+
+        .feedback-banner.bad {
+            border-color: rgba(255, 93, 115, 0.36);
+            color: #ff9ca9;
+        }
+
+        .shop-item-name.speed { color: var(--gold); }
+        .shop-item-name.power { color: #ff95a3; }
+
+        .shop-item-sub {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 2px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .price-tag {
+            background: linear-gradient(180deg, #12d36b, #0ea85a);
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 10px;
+            border-radius: 999px;
+            white-space: nowrap;
+            box-shadow: 0 0 12px rgba(18, 211, 107, 0.22);
+        }
+
+        .center-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            pointer-events: auto;
+        }
+
+        .loading-screen {
+            background:
+                radial-gradient(circle at center, rgba(23, 217, 255, 0.14), transparent 32%),
+                linear-gradient(180deg, #040812, #0b1325 65%, #111e39);
+            transition: opacity 1000ms ease;
+        }
+
+        .hero-emblem {
+            position: relative;
+            width: 132px;
+            height: 132px;
+            border-radius: 28px;
+            border: 3px solid rgba(255,255,255,0.12);
+            background:
+                linear-gradient(135deg, rgba(14, 24, 56, 0.94), rgba(25, 47, 97, 0.92));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow:
+                0 18px 40px rgba(0, 0, 0, 0.32),
+                0 0 30px rgba(23, 217, 255, 0.2);
+            transform: rotate(-10deg);
+            animation: float 3s ease-in-out infinite;
+            overflow: hidden;
+        }
+
+        .hero-emblem::before {
+            content: "";
+            position: absolute;
+            inset: 10px;
+            border-radius: 24px;
+            border: 1px solid rgba(98, 243, 255, 0.2);
+        }
+
+        .hero-emblem::after {
+            content: "";
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(98,243,255,0.26), transparent 70%);
+            filter: blur(1px);
+        }
+
+        .emoji-core {
+            position: relative;
+            z-index: 1;
+            font-size: 56px;
+            filter: drop-shadow(0 0 14px rgba(98, 243, 255, 0.22));
+        }
+
+        .screen-title {
+            margin: 22px 0 6px;
+            font-family: 'Russo One', sans-serif;
+            font-size: clamp(32px, 6vw, 54px);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: white;
+            text-align: center;
+            text-shadow: 0 0 22px rgba(98, 243, 255, 0.16);
+        }
+
+        .screen-subtitle {
+            color: var(--muted);
+            font-size: 15px;
+            letter-spacing: 0.06em;
+            text-align: center;
+        }
+
+        .tutorial-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 40;
+            background: rgba(1, 5, 12, 0.82);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 18px;
+        }
+
+        .tutorial-card {
+            width: min(100%, 420px);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            border-radius: 24px;
+            overflow: hidden;
+        }
+
+        .tutorial-content {
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .tutorial-title {
+            margin: 0 0 12px;
+            font-family: 'Russo One', sans-serif;
+            font-size: clamp(24px, 6vw, 30px);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            text-align: center;
+        }
+
+        .training-list {
+            list-style: none;
+            margin: 0 0 16px;
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.18);
+            display: grid;
+            gap: 10px;
+        }
+
+        .training-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            color: #dbeafe;
+            font-size: 14px;
+            line-height: 1.35;
+        }
+
+        .training-dot {
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(98, 243, 255, 0.4);
+        }
+
+        .mission-box {
+            padding: 14px;
+            border-radius: 18px;
+            margin-bottom: 18px;
+            background: linear-gradient(180deg, rgba(20, 56, 104, 0.54), rgba(12, 29, 55, 0.7));
+            border: 1px solid rgba(98, 243, 255, 0.2);
+        }
+
+        .mission-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--cyan);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .mission-text {
+            color: white;
+            font-size: 15px;
+            line-height: 1.35;
+        }
+
+        .hud-label,
+        .shop-item-sub,
+        .screen-subtitle,
+        .mission-text,
+        .training-list li,
+        .chat-input,
+        .price-tag,
+        .stat-pill {
+            font-family: 'Rajdhani', system-ui, sans-serif;
+        }
+
+        .modal-actions {
+            position: sticky;
+            bottom: 0;
+            padding: 0 20px 20px;
+            background: linear-gradient(180deg, rgba(8,17,36,0), rgba(8,17,36,0.96) 24%);
+        }
+
+        .start-btn {
+            width: 100%;
+            border: 0;
+            border-radius: 18px;
+            padding: 16px;
+            color: white;
+            cursor: pointer;
+            font-family: 'Russo One', sans-serif;
+            font-size: 18px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, #16d8ff, #0884d8);
+            box-shadow: 0 12px 26px rgba(8, 132, 216, 0.34), 0 0 18px rgba(98, 243, 255, 0.2);
+            transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+        }
+
+        .start-btn:hover,
+        .start-btn:focus-visible {
+            transform: translateY(-1px);
+            filter: brightness(1.06);
+            outline: none;
+        }
+
+        .start-btn:active {
+            transform: scale(0.98);
+        }
+
+        .coach-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 7px 12px;
+            border-radius: 999px;
+            color: #d5ecff;
+            font-size: 12px;
+            letter-spacing: 0.04em;
+            margin-bottom: 14px;
+        }
+
+        .coach-chip .emoji {
+            font-size: 18px;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
+
+        @keyframes float {
+            0%, 100% { transform: rotate(-10deg) translateY(0); }
+            50% { transform: rotate(-10deg) translateY(-10px); }
+        }
+
+        @media (max-width: 900px) {
+            .game-ui {
+                align-items: stretch;
+            }
+
+            .chat-box,
+            .shop-box {
+                width: min(238px, 42vw);
+            }
+        }
+
+        @media (max-width: 700px) {
+            .ui-layer {
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .stats-bar {
+                justify-content: flex-start;
+            }
+
+            .stat-pill {
+                min-width: 118px;
+                padding: 9px 14px;
+                font-size: 14px;
+            }
+
+            .game-ui {
+                gap: 10px;
+            }
+
+            .chat-box,
+            .shop-box {
+                width: calc(50% - 5px);
+            }
+
+            .chat-box {
+                min-height: 180px;
+                height: min(210px, 28vh);
+                margin-bottom: 54px;
+            }
+
+            .shop-box {
+                max-height: min(52vh, 370px);
+            }
+
+            .chat-title,
+            .shop-title {
+                font-size: 11px;
+                padding: 9px 12px;
+            }
+
+            .shop-item {
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .shop-item-name {
+                font-size: 14px;
+            }
+
+            .price-tag {
+                font-size: 11px;
+                padding: 5px 9px;
+            }
+        }
+
+        @media (max-width: 520px) {
+            .screen-subtitle {
+                font-size: 13px;
+            }
+
+            .chat-box,
+            .shop-box {
+                width: calc(50% - 4px);
+            }
+
+            .chat-box {
+                margin-bottom: 34px;
+                border-radius: 18px;
+            }
+
+            .feedback-gif {
+                width: min(100px, 26vw);
+                bottom: 104px;
+            }
+
+            .feedback-gif.fail {
+                bottom: 114px;
+            }
+
+            .feedback-banner {
+                min-width: min(200px, 86vw);
+                bottom: 72px;
+                font-size: 11px;
+                padding: 9px 12px;
+            }
+
+            .shop-box {
+                border-radius: 18px;
+            }
+
+            .chat-history {
+                font-size: 12px;
+            }
+
+            .chat-input {
+                font-size: 12px;
+                padding: 9px 10px;
+            }
+
+            .tutorial-content {
+                padding: 18px 16px;
+            }
+
+            .modal-actions {
+                padding: 0 16px 16px;
+            }
+
+            .start-btn {
+                font-size: 16px;
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="app-shell">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- [agent-note][stage2] preserve: hud-layout | reason: existing top stats and bottom side panels are already mobile-safe -->
+        <div id="ui-layer" class="ui-layer">
+            <div id="stats-bar" class="stats-bar hidden">
+                <div class="glass-panel stat-pill money">
+                    <span class="neon-badge">$</span>
+                    <span id="money-display">0</span>
+                </div>
+                <div class="glass-panel stat-pill power">
+                    <span class="neon-badge">⚡</span>
+                    <span><span id="power-display">1</span> Power</span>
+                </div>
+            </div>
+
+            <div id="game-ui" class="game-ui hidden">
+                <div class="glass-panel chat-box">
+                    <div class="panel-cap chat-title">Coach Feed</div>
+                    <div id="chat-history" class="chat-history"></div>
+                    <div class="chat-input-wrap">
+                        <input id="chat-input" type="text" placeholder="Call out your next combo..." class="chat-input">
+                    </div>
+                </div>
+
+                <div class="glass-panel shop-box">
+                    <div class="panel-cap shop-title">Upgrade Bay</div>
+                    <div class="shop-list">
+                        <button onclick="buyItem(0)" class="shop-item">
+                            <div>
+                                <div class="shop-item-name speed">2x Speed</div>
+                                <div class="shop-item-sub">Auto-Puncher</div>
+                            </div>
+                            <div class="price-tag">$100</div>
+                        </button>
+
+                        <button onclick="buyItem(1)" class="shop-item">
+                            <div>
+                                <div class="shop-item-name power">6x Tap Power</div>
+                                <div class="shop-item-sub">Hit Harder</div>
+                            </div>
+                            <div class="price-tag">$500</div>
+                        </button>
+
+                        <button onclick="buyItem(2)" class="shop-item">
+                            <div>
+                                <div class="shop-item-name speed">100x Speed</div>
+                                <div class="shop-item-sub">Super Auto</div>
+                            </div>
+                            <div class="price-tag">$10k</div>
+                        </button>
+
+                        <button onclick="buyItem(3)" class="shop-item">
+                            <div>
+                                <div class="shop-item-name power">300 Tap Power</div>
+                                <div class="shop-item-sub">Mega Hit</div>
+                            </div>
+                            <div class="price-tag">$50k</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- [agent-note][stage3] resolved-gif: impact/fail overlays -> catalogs/gifs.json | caution: keep-gif-off-playfield -->
+        <img id="impact-gif" class="feedback-gif" alt="Impact reaction overlay">
+        <img id="fail-gif" class="feedback-gif fail" alt="Failure reaction overlay">
+        <div id="feedback-banner" class="feedback-banner" aria-live="polite"></div>
+
+        <div id="loading-screen" class="center-screen loading-screen">
+            <div class="hero-emblem" aria-hidden="true">
+                <div class="emoji-core">🥊</div>
+            </div>
+            <h1 class="screen-title">Punch Grid</h1>
+            <p class="screen-subtitle">Calibrating the neon training rig...</p>
+        </div>
+
+        <div id="tutorial-modal" class="tutorial-overlay hidden">
+            <div class="glass-panel tutorial-card">
+                <div class="tutorial-content">
+                    <div class="coach-chip"><span class="emoji">🤖</span><span>Coach Circuit online</span></div>
+                    <h2 class="tutorial-title">Training Brief</h2>
+                    <ul class="training-list">
+                        <li><span class="training-dot">◉</span><span>Tap the bag to earn credits.</span></li>
+                        <li><span class="training-dot">◉</span><span>Spend credits on faster drills.</span></li>
+                        <li><span class="training-dot">◉</span><span>Boost strike power for bigger payouts.</span></li>
+                        <li><span class="training-dot">◉</span><span>Keep the combo going as long as you want.</span></li>
+                    </ul>
+                    <div class="mission-box">
+                        <div class="mission-label">Mission</div>
+                        <div class="mission-text">Hit the bag to build training credits.</div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="start-btn" class="start-btn">Enter The Gym</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /** 1. ASSETS */
+        const ASSETS = {
+            bgm: "https://gamezone-virid.vercel.app/assets/audios/music/action_loop_01.mp3",
+            sfx: {
+                punch: "https://gamezone-virid.vercel.app/assets/audios/sfx/hit_02.mp3",
+                buy: "https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_01.mp3",
+                fail: "https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3",
+                start: "https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3",
+                bonus: "https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3"
+            },
+            gifs: {
+                impact: "https://i.giphy.com/1AjEBGWggGXh9onllB.webp",
+                fail: "https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp"
+            }
+        };
+
+        /** 2. AUDIO SYSTEM */
+        class AudioController {
+            constructor() {
+                this.started = false;
+                this.lastPlayAt = {};
+                this.bgm = new Audio(ASSETS.bgm);
+                this.bgm.loop = true;
+                this.bgm.volume = 0.2;
+                this.bgm.preload = 'auto';
+                this.sfx = {};
+                for (const [k, v] of Object.entries(ASSETS.sfx)) {
+                    const clip = new Audio(v);
+                    clip.preload = 'auto';
+                    clip.volume = k === 'fail' ? 0.55 : 0.5;
+                    this.sfx[k] = clip;
+                }
+            }
+
+            unlock() {
+                if (this.started) return;
+                this.started = true;
+                this.bgm.load();
+                Object.values(this.sfx).forEach((clip) => clip.load());
+            }
+
+            playBGM() {
+                this.unlock();
+                this.bgm.currentTime = 0;
+                this.bgm.play().catch(() => {});
+            }
+
+            pauseBGM() {
+                this.bgm.pause();
+            }
+
+            playSFX(key, cooldown = 90) {
+                const clip = this.sfx[key];
+                const now = performance.now();
+                if (!clip || (this.lastPlayAt[key] && now - this.lastPlayAt[key] < cooldown)) return;
+                this.lastPlayAt[key] = now;
+                try {
+                    clip.currentTime = 0;
+                    clip.play().catch(() => {});
+                } catch (_) {}
+            }
+        }
+
+        const audio = new AudioController();
+
+        /** 3. GAME STATE */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        let gameState = {
+            money: 0,
+            tapPower: 1,
+            autoRate: 0,
+            lastAutoTime: 0
+        };
+
+        // Visual State
+        let bag = {
+            scale: 1,
+            rotation: 0,
+            color: '#ff6a7d'
+        };
+
+        let particles = [];
+        let ambientSparks = [];
+        let activeBannerTimer = null;
+        let activeGifTimers = {};
+        let chatMessages = [
+            {user: "[Coach]", text: "Welcome to Punch Grid. Every strike earns credits.", color: "#ffd86b"},
+            {user: "Rookie_204", text: "saving up for the auto drill", color: "#9db0c8"},
+            {user: "Trainer", text: "Power upgrades make each hit count more.", color: "#ff9aac"}
+        ];
+
+        const shopItems = [
+            { name: "2x Speed", cost: 100, type: "auto", val: 2 },
+            { name: "6x Tap Power", cost: 500, type: "power", val: 6 },
+            { name: "100x Speed", cost: 10000, type: "auto", val: 100 },
+            { name: "300 Tap Power", cost: 50000, type: "power", val: 300 }
+        ];
+
+        function seedAmbientSparks() {
+            ambientSparks = Array.from({ length: 18 }, () => ({
+                x: Math.random(),
+                y: 0.08 + Math.random() * 0.82,
+                size: 1 + Math.random() * 3,
+                speed: 0.0008 + Math.random() * 0.0016,
+                alpha: 0.15 + Math.random() * 0.3
+            }));
+        }
+
+        /** 4. RESIZE & INIT */
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            seedAmbientSparks();
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        /** 5. GAME LOGIC */
+        function spawnParticle(x, y, text, color = "#62f3ff") {
+            particles.push({
+                x: x + (Math.random() * 40 - 20),
+                y: y,
+                text: text,
+                vy: -2 - Math.random() * 2,
+                life: 1.0,
+                color: color
+            });
+        }
+
+        const impactGif = document.getElementById('impact-gif');
+        const failGif = document.getElementById('fail-gif');
+        const feedbackBanner = document.getElementById('feedback-banner');
+        impactGif.src = ASSETS.gifs.impact;
+        failGif.src = ASSETS.gifs.fail;
+
+        function pulseGif(kind, duration = 900) {
+            const element = kind === 'impact' ? impactGif : failGif;
+            if (!element) return;
+            element.classList.add('visible');
+            clearTimeout(activeGifTimers[kind]);
+            activeGifTimers[kind] = setTimeout(() => {
+                element.classList.remove('visible');
+            }, duration);
+        }
+
+        function showBanner(text, tone = 'good', duration = 1100) {
+            feedbackBanner.textContent = text;
+            feedbackBanner.className = `feedback-banner visible ${tone}`;
+            clearTimeout(activeBannerTimer);
+            activeBannerTimer = setTimeout(() => {
+                feedbackBanner.className = 'feedback-banner';
+            }, duration);
+        }
+
+        function punch(isAuto = false) {
+            gameState.money += gameState.tapPower;
+            updateUI();
+
+            if (!isAuto) {
+                bag.scale = 0.9;
+                bag.rotation = (Math.random() - 0.5) * 0.2;
+                audio.playSFX('punch', 70);
+                pulseGif('impact', 520);
+                if (gameState.tapPower >= 6) {
+                    audio.playSFX('bonus', 220);
+                    showBanner('Power combo!', 'good', 850);
+                }
+            } else {
+                if (Math.random() > 0.7) bag.scale = 0.98;
+            }
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+            spawnParticle(centerX, centerY - 50, `+$${gameState.tapPower}`);
+        }
+
+        window.buyItem = function(index) {
+            const item = shopItems[index];
+            if (gameState.money >= item.cost) {
+                gameState.money -= item.cost;
+                audio.playSFX('buy', 120);
+                showBanner(`${item.name} online`, 'good', 1100);
+
+                if (item.type === 'power') {
+                    if (index === 1) gameState.tapPower *= item.val;
+                    else gameState.tapPower += item.val;
+                } else if (item.type === 'auto') {
+                    gameState.autoRate += item.val;
+                }
+
+                spawnParticle(width / 2, height / 2, "UPGRADED!", "#ffd86b");
+                updateUI();
+                addChatMessage("[System]", `You bought ${item.name}!`, "#ffd86b");
+            } else {
+                audio.playSFX('fail', 180);
+                pulseGif('fail', 1000);
+                showBanner('Need more credits', 'bad', 1000);
+                addChatMessage("[System]", "Not enough money!", "#ff5d73");
+            }
+        };
+
+        function updateUI() {
+            document.getElementById('money-display').innerText = Math.floor(gameState.money).toLocaleString();
+            document.getElementById('power-display').innerText = Math.floor(gameState.tapPower).toLocaleString();
+        }
+
+        /** 6. CHAT SYSTEM */
+        function addChatMessage(user, text, color) {
+            const chatBox = document.getElementById('chat-history');
+            const div = document.createElement('div');
+            div.innerHTML = `<span style="color:${color}; font-weight:bold;">${user}:</span> <span style="opacity:0.9">${text}</span>`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            if (chatBox.children.length > 50) chatBox.removeChild(chatBox.firstChild);
+        }
+
+        function renderChat() {
+            const chatBox = document.getElementById('chat-history');
+            chatBox.innerHTML = '';
+            chatMessages.forEach(m => addChatMessage(m.user, m.text, m.color));
+        }
+
+        document.getElementById('chat-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const input = e.target;
+                if (input.value.trim() !== "") {
+                    addChatMessage("You", input.value, "#ffffff");
+                    input.value = "";
+                    if (Math.random() > 0.7) {
+                        setTimeout(() => {
+                            const replies = ["lol", "nice", "can i have money?", "cool game"];
+                            const randomReply = replies[Math.floor(Math.random() * replies.length)];
+                            addChatMessage("Guest_" + Math.floor(Math.random() * 1000), randomReply, "#9db0c8");
+                        }, 1000);
+                    }
+                }
+            }
+        });
+
+        /** 7. RENDER LOOP */
+        function drawBackground(timestamp) {
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#050814');
+            gradient.addColorStop(0.52, '#101b35');
+            gradient.addColorStop(1, '#18284f');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const spotlight = ctx.createRadialGradient(width / 2, height * 0.22, 30, width / 2, height * 0.22, width * 0.55);
+            spotlight.addColorStop(0, 'rgba(98, 243, 255, 0.16)');
+            spotlight.addColorStop(1, 'rgba(98, 243, 255, 0)');
+            ctx.fillStyle = spotlight;
+            ctx.fillRect(0, 0, width, height);
+
+            ambientSparks.forEach((spark) => {
+                spark.y += spark.speed;
+                if (spark.y > 1) {
+                    spark.y = 0.06;
+                    spark.x = Math.random();
+                }
+                ctx.fillStyle = `rgba(98, 243, 255, ${spark.alpha})`;
+                ctx.beginPath();
+                ctx.arc(spark.x * width, spark.y * height, spark.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            const horizon = height * 0.6;
+            ctx.fillStyle = '#0c1530';
+            ctx.fillRect(0, horizon, width, height - horizon);
+
+            ctx.strokeStyle = 'rgba(43, 131, 206, 0.42)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = -width; i < width * 2; i += 90) {
+                ctx.moveTo(i, horizon);
+                ctx.lineTo((i - width / 2) * 4 + width / 2, height);
+            }
+            for (let i = horizon; i < height; i += 38) {
+                ctx.moveTo(0, i);
+                ctx.lineTo(width, i);
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255, 183, 3, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, horizon);
+            ctx.lineTo(width, horizon);
+            ctx.stroke();
+        }
+
+        function drawBag() {
+            const centerX = width / 2;
+            const centerY = height * 0.6;
+            const bagWidth = 120 * bag.scale;
+            const bagHeight = 200 * bag.scale;
+
+            ctx.save();
+            ctx.translate(centerX, centerY - 150);
+            ctx.rotate(bag.rotation);
+
+            const chainGradient = ctx.createLinearGradient(0, -500, 0, 0);
+            chainGradient.addColorStop(0, '#6b7c94');
+            chainGradient.addColorStop(1, '#d6e6ff');
+            ctx.strokeStyle = chainGradient;
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.moveTo(0, -500);
+            ctx.lineTo(0, 0);
+            ctx.stroke();
+
+            const bagGradient = ctx.createLinearGradient(-bagWidth / 2, 0, bagWidth / 2, bagHeight);
+            bagGradient.addColorStop(0, '#ff5d73');
+            bagGradient.addColorStop(0.55, '#ff7d5d');
+            bagGradient.addColorStop(1, '#ffb703');
+            ctx.fillStyle = bagGradient;
+            ctx.beginPath();
+            ctx.roundRect(-bagWidth / 2, 0, bagWidth, bagHeight, 24);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(0,0,0,0.18)';
+            ctx.beginPath();
+            ctx.roundRect(-bagWidth / 2 + 10, 10, bagWidth / 2, bagHeight - 20, 16);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.88)';
+            ctx.fillRect(-bagWidth / 2, bagHeight * 0.58, bagWidth, 18);
+
+            ctx.fillStyle = '#09111d';
+            ctx.font = "400 42px Russo One";
+            ctx.textAlign = 'center';
+            ctx.fillText('🥊', 0, bagHeight * 0.34);
+
+            ctx.fillStyle = 'rgba(9,17,29,0.82)';
+            ctx.font = "700 16px Rajdhani";
+            ctx.fillText('CORE', 0, bagHeight * 0.8);
+
+            ctx.restore();
+
+            const floorShadow = ctx.createRadialGradient(centerX, centerY + 64, 20, centerX, centerY + 64, 120);
+            floorShadow.addColorStop(0, 'rgba(0,0,0,0.34)');
+            floorShadow.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = floorShadow;
+            ctx.fillRect(centerX - 140, centerY, 280, 120);
+
+            bag.scale += (1 - bag.scale) * 0.1;
+            bag.rotation += (0 - bag.rotation) * 0.1;
+        }
+
+        function drawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                ctx.fillStyle = p.color;
+                ctx.font = "400 24px Russo One";
+                ctx.textAlign = 'left';
+                ctx.globalAlpha = p.life;
+                ctx.fillText(p.text, p.x, p.y);
+                ctx.globalAlpha = 1;
+
+                p.y += p.vy;
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function gameLoop(timestamp) {
+            ctx.clearRect(0, 0, width, height);
+
+            if (gameState.autoRate > 0) {
+                const interval = 1000 / gameState.autoRate;
+                if (timestamp - gameState.lastAutoTime > interval) {
+                    punch(true);
+                    gameState.lastAutoTime = timestamp;
+                }
+            }
+
+            drawBackground(timestamp);
+            drawBag();
+            drawParticles();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        /** 8. INPUTS */
+        canvas.addEventListener('pointerdown', () => {
+            punch(false);
+        });
+
+        const startBtn = document.getElementById('start-btn');
+        const loadingScreen = document.getElementById('loading-screen');
+        const tutorialModal = document.getElementById('tutorial-modal');
+        const gameUI = document.getElementById('game-ui');
+        const statsBar = document.getElementById('stats-bar');
+
+        setTimeout(() => {
+            loadingScreen.style.opacity = '0';
+            setTimeout(() => {
+                loadingScreen.classList.add('hidden');
+                tutorialModal.classList.remove('hidden');
+                tutorialModal.classList.add('flex');
+            }, 1000);
+        }, 2500);
+
+        startBtn.addEventListener('click', () => {
+            audio.unlock();
+            audio.playSFX('start', 0);
+            audio.playBGM();
+            showBanner('Gym online', 'good', 1200);
+            tutorialModal.classList.add('hidden');
+            tutorialModal.classList.remove('flex');
+
+            gameUI.classList.remove('hidden');
+            statsBar.classList.remove('hidden');
+
+            renderChat();
+            gameLoop(0);
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                audio.pauseBGM();
+            } else if (tutorialModal.classList.contains('hidden')) {
+                audio.playBGM();
+            }
+        });
+    });
+    </script>
+</body>
+</html>

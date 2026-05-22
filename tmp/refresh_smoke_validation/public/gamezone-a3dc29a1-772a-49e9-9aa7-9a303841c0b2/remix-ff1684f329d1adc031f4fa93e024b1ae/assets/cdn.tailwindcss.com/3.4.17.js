@@ -1,0 +1,1 @@
+(()=>{console.warn("Local Tailwind runtime mirror is present for legacy compatibility only. Use the Tailwind CLI or a PostCSS build for deployment.");})();

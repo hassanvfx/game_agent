@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NeonBeat: Rhythm Swipe</title>
+    <!-- [agent-note][stage4] remapped-font: title/hud -> Orbitron, ui/body -> Exo 2 | source: catalogs/fonts.json -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Reset & Layout */
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        :root {
+            --bg-deep: #060816;
+            --bg-panel: #0f1730;
+            --bg-panel-2: #16254c;
+            --ink: #f4fbff;
+            --muted: #8ea6cf;
+            --cyan: #63f2ff;
+            --magenta: #ff58cf;
+            --gold: #ffd86b;
+            --danger: #ff5f87;
+            --paddle: #7cfff2;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background:
+                radial-gradient(circle at top, rgba(99, 242, 255, 0.1), transparent 35%),
+                linear-gradient(180deg, #040611 0%, #070b18 55%, #030409 100%);
+            color: var(--ink);
+            font-family: 'Exo 2', Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* Game Container */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 600px;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(255, 88, 207, 0.12), transparent 34%),
+                radial-gradient(circle at center, #17234a 0%, #08101f 58%, #02040a 100%);
+            box-shadow: 0 0 50px rgba(99, 242, 255, 0.16);
+            overflow: hidden;
+        }
+
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #game-container::before {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.04), transparent 24%),
+                repeating-linear-gradient(
+                    90deg,
+                    rgba(99, 242, 255, 0.07) 0,
+                    rgba(99, 242, 255, 0.07) 1px,
+                    transparent 1px,
+                    transparent 48px
+                );
+            opacity: 0.45;
+        }
+
+        #game-container::after {
+            background: linear-gradient(180deg, transparent 0%, rgba(3, 7, 18, 0.24) 100%);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* [agent-note][stage4] scope gesture suppression to gameplay surface so mobile UI taps still click */
+        }
+
+        /* UI Overlays */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+            background:
+                radial-gradient(circle at top, rgba(99, 242, 255, 0.12), transparent 34%),
+                rgba(4, 8, 18, 0.82);
+            backdrop-filter: blur(8px);
+            transition: opacity 0.3s;
+            padding: 28px 20px;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: env(safe-area-inset-top, 20px);
+            left: 0;
+            width: 100%;
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .hud-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 104px;
+            padding: 8px 12px 9px;
+            border: 1px solid rgba(99, 242, 255, 0.35);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(18, 29, 60, 0.88), rgba(8, 13, 28, 0.72));
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03) inset,
+                0 10px 24px rgba(0, 0, 0, 0.28),
+                0 0 18px rgba(99, 242, 255, 0.12);
+            backdrop-filter: blur(6px);
+        }
+
+        .hud-label {
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 4px;
+            letter-spacing: 2px;
+        }
+
+        .hud-value {
+            font-size: 20px;
+            color: var(--ink);
+            font-family: 'Orbitron', 'Trebuchet MS', sans-serif;
+            line-height: 1;
+        }
+
+        #streak-display { color: var(--magenta); }
+        #score-display { color: var(--gold); }
+
+        /* Typography */
+        h1 {
+            font-size: clamp(32px, 10vw, 58px);
+            margin: 0 0 12px 0;
+            color: var(--ink);
+            text-transform: uppercase;
+            font-family: 'Orbitron', 'Trebuchet MS', sans-serif;
+            text-shadow:
+                0 0 24px rgba(99, 242, 255, 0.34),
+                0 0 8px rgba(255, 88, 207, 0.45);
+            line-height: 0.9;
+            letter-spacing: 2px;
+        }
+        
+        h1 span {
+            display: block;
+            font-size: clamp(14px, 4vw, 24px);
+            color: var(--cyan);
+            text-shadow: none;
+            margin-top: 12px;
+            font-style: normal;
+            letter-spacing: 5px;
+        }
+        
+        p {
+            font-size: clamp(14px, 3.6vw, 16px);
+            color: #d7e1f5;
+            margin-bottom: 26px;
+            max-width: 82%;
+            line-height: 1.5;
+        }
+
+        .headline-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(99, 242, 255, 0.34);
+            background: rgba(10, 18, 38, 0.68);
+            color: var(--cyan);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            box-shadow: 0 0 18px rgba(99, 242, 255, 0.12);
+        }
+
+        .headline-badge .badge-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: radial-gradient(circle, #fff 0%, var(--cyan) 40%, rgba(99, 242, 255, 0.1) 100%);
+            box-shadow: 0 0 10px var(--cyan);
+        }
+
+        .feedback-gif {
+            position: absolute;
+            left: 50%;
+            width: min(42vw, 220px);
+            border-radius: 22px;
+            border: 1px solid rgba(99, 242, 255, 0.36);
+            background: rgba(7, 11, 24, 0.72);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34), 0 0 28px rgba(99, 242, 255, 0.18);
+            opacity: 0;
+            transform: translateX(-50%) scale(0.9);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: none;
+            z-index: 9;
+            object-fit: cover;
+            backdrop-filter: blur(4px);
+        }
+
+        .feedback-gif.visible {
+            opacity: 0.94;
+            transform: translateX(-50%) scale(1);
+        }
+
+        #combo-gif {
+            top: calc(env(safe-area-inset-top, 20px) + 88px);
+        }
+
+        #miss-gif {
+            bottom: calc(env(safe-area-inset-bottom, 20px) + 76px);
+        }
+
+        /* Buttons */
+        button {
+            pointer-events: auto;
+            background: linear-gradient(135deg, var(--magenta), #8b74ff 52%, var(--cyan));
+            color: #04101d;
+            border: 1px solid rgba(255,255,255,0.14);
+            padding: 16px 34px;
+            min-width: 200px;
+            font-size: 17px;
+            font-weight: 700;
+            font-family: 'Exo 2', Arial, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            border-radius: 999px;
+            box-shadow:
+                0 12px 26px rgba(0, 0, 0, 0.34),
+                0 0 20px rgba(99, 242, 255, 0.24);
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+        }
+
+        button:active {
+            transform: scale(0.96);
+            filter: brightness(1.06);
+        }
+
+        /* Mute Button */
+        #mute-btn {
+            position: absolute;
+            bottom: calc(env(safe-area-inset-bottom, 20px) + 8px);
+            right: 16px;
+            width: 46px;
+            height: 46px;
+            border: 1px solid rgba(99, 242, 255, 0.28);
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(11, 19, 40, 0.92), rgba(5, 9, 20, 0.78));
+            color: var(--ink);
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 20;
+            cursor: pointer;
+            box-shadow: 0 0 18px rgba(99, 242, 255, 0.18);
+        }
+
+        /* Health Bar */
+        #health-bar-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            z-index: 5;
+            box-shadow: 0 -1px 0 rgba(255,255,255,0.08);
+        }
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--magenta), var(--danger));
+            box-shadow: 0 0 12px rgba(255, 88, 207, 0.68);
+            transition: width 0.2s;
+        }
+
+        .title-character {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: clamp(84px, 22vw, 124px);
+            height: clamp(84px, 22vw, 124px);
+            margin-bottom: 16px;
+            border-radius: 30px;
+            border: 2px solid rgba(99, 242, 255, 0.38);
+            background:
+                radial-gradient(circle at 35% 30%, #fff 0%, #ffe87e 10%, #ff9d6d 22%, #ff58cf 42%, #1d2e57 68%, #0a1020 100%);
+            box-shadow:
+                0 0 26px rgba(99, 242, 255, 0.28),
+                inset 0 0 18px rgba(255,255,255,0.18);
+            position: relative;
+        }
+
+        .title-character::before,
+        .title-character::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            background: #071021;
+        }
+
+        .title-character::before {
+            width: 16%;
+            height: 16%;
+            top: 34%;
+            left: 28%;
+            box-shadow: 34px 0 0 #071021;
+        }
+
+        .title-character::after {
+            width: 40%;
+            height: 10%;
+            bottom: 24%;
+            left: 30%;
+            background: linear-gradient(90deg, #071021, #0f1d3e);
+            border-radius: 999px 999px 70% 70%;
+        }
+
+        @media (max-width: 480px) {
+            #hud {
+                padding: 12px 12px;
+            }
+
+            .hud-item {
+                min-width: 88px;
+                padding: 7px 10px 8px;
+            }
+
+            .hud-value {
+                font-size: 18px;
+            }
+
+            p {
+                max-width: 88%;
+            }
+
+            button {
+                min-width: 180px;
+                padding: 15px 26px;
+                font-size: 16px;
+            }
+
+            .feedback-gif {
+                width: min(38vw, 156px);
+                border-radius: 18px;
+            }
+
+            #combo-gif {
+                top: calc(env(safe-area-inset-top, 20px) + 94px);
+            }
+
+            #miss-gif {
+                bottom: calc(env(safe-area-inset-bottom, 20px) + 72px);
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- HUD -->
+    <div id="hud">
+        <div class="hud-item">
+            <span class="hud-label">SCORE</span>
+            <span id="score-display" class="hud-value">0</span>
+        </div>
+        <div class="hud-item">
+            <span class="hud-label">STREAK</span>
+            <span id="streak-display" class="hud-value">0</span>
+        </div>
+    </div>
+
+    <!-- [agent-note][stage3] resolved-gif: combo-feedback and miss-feedback overlays | source: catalogs/gifs.json | caution: keep-gif-off-playfield -->
+    <img
+        id="combo-gif"
+        class="feedback-gif"
+        src="https://i.giphy.com/dNLrXbRlB5wKNB3z57.webp"
+        alt="Celebration reaction"
+        loading="lazy"
+        decoding="async"
+        aria-hidden="true"
+    >
+    <img
+        id="miss-gif"
+        class="feedback-gif"
+        src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp"
+        alt="Miss reaction"
+        loading="lazy"
+        decoding="async"
+        aria-hidden="true"
+    >
+
+    <!-- Health Bar -->
+    <div id="health-bar-container">
+        <div id="health-bar"></div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="ui-layer">
+        <div class="headline-badge"><span class="badge-dot" aria-hidden="true"></span> Pulse Pilot Online</div>
+        <div class="title-character" aria-hidden="true"></div>
+        <h1>NEON<br>BEAT<span>RHYTHM CATCH</span></h1>
+        <p>Guide the pulse runner across the lane to catch each falling beat. Every clean catch powers the vibe. Every miss drains the flow.</p>
+        <button id="start-btn">START SET</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="ui-layer hidden">
+        <h1>SET OVER</h1>
+        <p>You locked in <span id="final-score" style="color:#fff; font-weight:bold;">0</span> beats.</p>
+        <button id="restart-btn">PLAY AGAIN</button>
+    </div>
+
+    <!-- Mute Toggle -->
+    <div id="mute-btn">🔊</div>
+</div>
+
+<script>
+/**
+ * NEON BEAT: RHYTHM CATCH
+ * Core Logic: Falling Notes + Paddle Catch = Music
+ */
+
+// --- Configuration ---
+const CONFIG = {
+    paddleWidthRatio: 0.25,
+    paddleHeight: 15,
+    paddleYOffset: 80, // Higher up to give thumb space
+    baseNoteSpeed: 400, // Pixels per second
+    spawnRateMs: 600, // Base spawn rate
+    maxHealth: 5,
+    colors: ['#ff6bd6', '#63f2ff', '#ffd86b', '#7dff8a', '#ff7f9c']
+};
+
+// --- State ---
+const state = {
+    playing: false,
+    score: 0,
+    streak: 0,
+    health: CONFIG.maxHealth,
+    lastTime: 0,
+    spawnTimer: 0,
+    muted: false,
+    width: 0,
+    height: 0,
+    speedMultiplier: 1.0,
+    melodyIndex: 0,
+    lowHealthWarningPlayed: false
+};
+
+// --- Entities ---
+const paddle = { x: 0, y: 0, width: 0, height: 0, color: '#7cfff2' };
+let notes = []; // Falling beats
+let particles = [];
+let pulseBands = [];
+
+// --- Musical Scale (Pentatonic) ---
+// C4, D4, E4, G4, A4, C5, D5, E5...
+const MELODY_SCALE = [
+    261.63, 293.66, 329.63, 392.00, 440.00,
+    523.25, 587.33, 659.25, 783.99, 880.00
+];
+
+// Procedural Melody Sequence (indices of scale)
+const SEQUENCE = [
+    0, 2, 3, 4,
+    0, 2, 3, 4,
+    5, 7, 8, 9,
+    5, 7, 5, 4,
+    3, 2, 0, 0,
+    3, 2, 0, 4
+];
+
+// --- DOM Elements ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+const scoreEl = document.getElementById('score-display');
+const streakEl = document.getElementById('streak-display');
+const finalScoreEl = document.getElementById('final-score');
+const healthBar = document.getElementById('health-bar');
+const startScreen = document.getElementById('start-screen');
+const gameOverScreen = document.getElementById('game-over-screen');
+const startBtn = document.getElementById('start-btn');
+const restartBtn = document.getElementById('restart-btn');
+const muteBtn = document.getElementById('mute-btn');
+const comboGif = document.getElementById('combo-gif');
+const missGif = document.getElementById('miss-gif');
+
+// --- Audio System ---
+// [agent-note][stage3] resolved-audio: start/ui click, collect, streak bonus, miss/warning, game over, gameplay loop | source: catalogs/audios.json
+const AUDIO_MAP = {
+    uiClick: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_01.mp3',
+    start: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3',
+    collect: 'https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_01.mp3',
+    bonus: 'https://gamezone-virid.vercel.app/assets/audios/sfx/bonus_01.mp3',
+    miss: 'https://gamezone-virid.vercel.app/assets/audios/ui/fail_01.mp3',
+    warning: 'https://gamezone-virid.vercel.app/assets/audios/sfx/warning_01.mp3',
+    gameOver: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_01.mp3',
+    bgm: 'https://gamezone-virid.vercel.app/assets/audios/ambience/arcade_loop_01.mp3'
+};
+
+const audioState = {
+    initialized: false,
+    bgm: null,
+    pools: {},
+    lastPlayAt: {},
+    pendingResume: false
+};
+
+function initAudio() {
+    if (audioState.initialized) {
+        if (audioState.pendingResume) {
+            resumeBgm();
+        }
+        return;
+    }
+
+    try {
+        const entries = [
+            ['uiClick', AUDIO_MAP.uiClick, 1],
+            ['start', AUDIO_MAP.start, 1],
+            ['collect', AUDIO_MAP.collect, 4],
+            ['bonus', AUDIO_MAP.bonus, 2],
+            ['miss', AUDIO_MAP.miss, 2],
+            ['warning', AUDIO_MAP.warning, 1],
+            ['gameOver', AUDIO_MAP.gameOver, 1]
+        ];
+
+        for (const [key, src, size] of entries) {
+            audioState.pools[key] = Array.from({ length: size }, () => {
+                const audio = new Audio(src);
+                audio.preload = 'auto';
+                audio.crossOrigin = 'anonymous';
+                return audio;
+            });
+        }
+
+        audioState.bgm = new Audio(AUDIO_MAP.bgm);
+        audioState.bgm.loop = true;
+        audioState.bgm.preload = 'auto';
+        audioState.bgm.crossOrigin = 'anonymous';
+        audioState.bgm.volume = 0.2;
+
+        audioState.initialized = true;
+    } catch (err) {
+        console.warn('Audio init skipped:', err);
+    }
+}
+
+function playSfx(name, { volume = 0.6, minInterval = 90 } = {}) {
+    if (state.muted || !audioState.initialized) return;
+
+    const now = performance.now();
+    if (audioState.lastPlayAt[name] && now - audioState.lastPlayAt[name] < minInterval) return;
+    audioState.lastPlayAt[name] = now;
+
+    const pool = audioState.pools[name];
+    if (!pool || !pool.length) return;
+
+    const audio = pool.find((item) => item.paused || item.ended) || pool[0];
+    try {
+        audio.currentTime = 0;
+        audio.volume = volume;
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+    } catch (err) {
+        // Silent fail to preserve controls.
+    }
+}
+
+function startBgm() {
+    if (state.muted || !audioState.initialized || !audioState.bgm) return;
+
+    try {
+        audioState.bgm.currentTime = 0;
+        const playPromise = audioState.bgm.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {
+                audioState.pendingResume = true;
+            });
+        }
+        audioState.pendingResume = false;
+    } catch (err) {
+        audioState.pendingResume = true;
+    }
+}
+
+function resumeBgm() {
+    if (state.muted || !audioState.initialized || !audioState.bgm) return;
+
+    try {
+        const playPromise = audioState.bgm.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+        audioState.pendingResume = false;
+    } catch (err) {
+        audioState.pendingResume = true;
+    }
+}
+
+function pauseBgm() {
+    if (!audioState.bgm) return;
+    audioState.bgm.pause();
+}
+
+function showFeedbackGif(element, duration = 900) {
+    if (!element) return;
+    clearTimeout(element._hideTimer);
+    element.classList.add('visible');
+    element._hideTimer = setTimeout(() => {
+        element.classList.remove('visible');
+    }, duration);
+}
+
+// --- Game Logic ---
+
+function resize() {
+    const container = document.getElementById('game-container');
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    state.width = canvas.width;
+    state.height = canvas.height;
+
+    // Paddle Sizing
+    paddle.width = state.width * CONFIG.paddleWidthRatio;
+    paddle.height = CONFIG.paddleHeight;
+    paddle.y = state.height - CONFIG.paddleYOffset;
+
+    // Clamp paddle
+    if (paddle.x + paddle.width > state.width) {
+        paddle.x = state.width - paddle.width;
+    }
+}
+
+function spawnNote() {
+    // Pick next note in melody
+    const noteIndex = SEQUENCE[state.melodyIndex % SEQUENCE.length];
+    const freq = MELODY_SCALE[noteIndex];
+    state.melodyIndex++;
+
+    // Random X position (within margins)
+    const margin = 20;
+    const x = margin + Math.random() * (state.width - margin * 2);
+
+    notes.push({
+        x: x,
+        y: -30,
+        radius: 10 + Math.random() * 5,
+        freq: freq,
+        color: CONFIG.colors[noteIndex % CONFIG.colors.length],
+        caught: false
+    });
+}
+
+function createParticles(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+function createPulseBand(color) {
+    pulseBands.push({
+        radius: Math.max(state.width, state.height) * 0.08,
+        life: 1,
+        color
+    });
+}
+
+function update(dt) {
+    if (!state.playing) return;
+
+    // Spawning Logic
+    state.spawnTimer += dt;
+    // Speed up slightly as score increases
+    const currentSpawnRate = Math.max(200, CONFIG.spawnRateMs - (state.score * 2));
+    if (state.spawnTimer > currentSpawnRate) {
+        spawnNote();
+        state.spawnTimer = 0;
+    }
+
+    // Move Notes
+    const speed = (CONFIG.baseNoteSpeed + (state.score * 5)) * (dt / 1000);
+
+    for (let i = notes.length - 1; i >= 0; i--) {
+        let note = notes[i];
+        note.y += speed;
+
+        // Check Collision with Paddle
+        // Simple AABB (Paddle) vs Point (Note center)
+        // We allow a bit of vertical leeway for "catching"
+        const hitZoneTop = paddle.y - 15;
+        const hitZoneBottom = paddle.y + paddle.height + 15;
+
+        if (!note.caught && note.y >= hitZoneTop && note.y <= hitZoneBottom) {
+            // Check X alignment
+            if (note.x >= paddle.x && note.x <= paddle.x + paddle.width) {
+                // CAUGHT!
+                note.caught = true;
+                state.score++;
+                state.streak++;
+                scoreEl.textContent = state.score;
+                streakEl.textContent = state.streak;
+
+                playSfx('collect', { volume: 0.5, minInterval: 55 });
+                if (state.streak > 0 && state.streak % 5 === 0) {
+                    playSfx('bonus', { volume: 0.62, minInterval: 120 });
+                    showFeedbackGif(comboGif, 1100);
+                }
+
+                createParticles(note.x, paddle.y, note.color);
+                createPulseBand(note.color);
+
+                // Remove note immediately
+                notes.splice(i, 1);
+                continue;
+            }
+        }
+
+        // Missed Note
+        if (note.y > state.height) {
+            notes.splice(i, 1);
+            handleMiss();
+        }
+    }
+
+    // Update Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.05;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    for (let i = pulseBands.length - 1; i >= 0; i--) {
+        const band = pulseBands[i];
+        band.radius += Math.max(state.width, state.height) * 0.015;
+        band.life -= 0.05;
+        if (band.life <= 0) pulseBands.splice(i, 1);
+    }
+}
+
+function handleMiss() {
+    state.streak = 0;
+    streakEl.textContent = 0;
+    state.health--;
+    playSfx('miss', { volume: 0.58, minInterval: 140 });
+    showFeedbackGif(missGif, 850);
+
+    if (state.health === 1 && !state.lowHealthWarningPlayed) {
+        playSfx('warning', { volume: 0.52, minInterval: 250 });
+        state.lowHealthWarningPlayed = true;
+    }
+
+    // Update Health Bar UI
+    const pct = (state.health / CONFIG.maxHealth) * 100;
+    healthBar.style.width = `${Math.max(0, pct)}%`;
+
+    // Screen shake effect
+    const container = document.getElementById('game-container');
+    container.style.transform = `translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px)`;
+    setTimeout(() => container.style.transform = 'none', 50);
+
+    if (state.health <= 0) {
+        endGame();
+    }
+}
+
+function draw() {
+    // Clear & Background
+    const bgGradient = ctx.createLinearGradient(0, 0, 0, state.height);
+    bgGradient.addColorStop(0, '#101935');
+    bgGradient.addColorStop(0.55, '#0a1020');
+    bgGradient.addColorStop(1, '#05070d');
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, state.width, state.height);
+
+    // Ambient lane lights
+    ctx.save();
+    for (let i = 1; i <= 4; i++) {
+        const y = (state.height / 5) * i;
+        ctx.strokeStyle = `rgba(99, 242, 255, ${0.03 + i * 0.008})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(state.width, y);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Character pulse rings around the paddle lane
+    ctx.save();
+    for (const band of pulseBands) {
+        ctx.globalAlpha = band.life * 0.28;
+        ctx.strokeStyle = band.color;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.ellipse(state.width / 2, paddle.y - 20, band.radius * 1.5, band.radius * 0.24, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Draw Lane Guide (faint line where paddle is)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, paddle.y + paddle.height / 2);
+    ctx.lineTo(state.width, paddle.y + paddle.height / 2);
+    ctx.stroke();
+
+    // Draw Notes as glowing beats
+    ctx.shadowBlur = 14;
+    for (let note of notes) {
+        const noteGradient = ctx.createRadialGradient(note.x - note.radius * 0.2, note.y - note.radius * 0.2, 2, note.x, note.y, note.radius * 1.5);
+        noteGradient.addColorStop(0, '#ffffff');
+        noteGradient.addColorStop(0.18, '#fff5c9');
+        noteGradient.addColorStop(0.42, note.color);
+        noteGradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = noteGradient;
+        ctx.shadowColor = note.color;
+        ctx.beginPath();
+        ctx.arc(note.x, note.y, note.radius * 1.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.42)';
+        ctx.beginPath();
+        ctx.arc(note.x, note.y - note.radius * 0.8, note.radius * 0.34, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw Paddle as pulse runner board
+    const paddleGradient = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x + paddle.width, paddle.y);
+    paddleGradient.addColorStop(0, '#ff58cf');
+    paddleGradient.addColorStop(0.5, '#7cfff2');
+    paddleGradient.addColorStop(1, '#8b74ff');
+    ctx.shadowBlur = 24;
+    ctx.shadowColor = '#63f2ff';
+    ctx.fillStyle = paddleGradient;
+    ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillRect(paddle.x + 6, paddle.y + 3, Math.max(12, paddle.width - 12), Math.max(4, paddle.height - 6));
+
+    // Expressive rider core
+    const riderX = paddle.x + paddle.width / 2;
+    const riderY = paddle.y - 16;
+    ctx.shadowBlur = 16;
+    ctx.shadowColor = '#ffd86b';
+    ctx.fillStyle = '#ffd86b';
+    ctx.beginPath();
+    ctx.arc(riderX, riderY - 3, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1d2248';
+    ctx.beginPath();
+    ctx.arc(riderX - 3, riderY - 4, 1.3, 0, Math.PI * 2);
+    ctx.arc(riderX + 3, riderY - 4, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1d2248';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(riderX, riderY - 1, 3, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+
+    // Draw Particles
+    for (let p of particles) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+    ctx.shadowBlur = 0;
+}
+
+function loop(timestamp) {
+    if (!state.lastTime) state.lastTime = timestamp;
+    const dt = timestamp - state.lastTime;
+    state.lastTime = timestamp;
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+}
+
+function startGame() {
+    initAudio();
+    playSfx('start', { volume: 0.55, minInterval: 120 });
+    startBgm();
+
+    state.score = 0;
+    state.streak = 0;
+    state.health = CONFIG.maxHealth;
+    state.melodyIndex = 0;
+    state.spawnTimer = 0;
+    state.lowHealthWarningPlayed = false;
+    notes = [];
+    particles = [];
+    pulseBands = [];
+
+    scoreEl.textContent = '0';
+    streakEl.textContent = '0';
+    healthBar.style.width = '100%';
+    comboGif.classList.remove('visible');
+    missGif.classList.remove('visible');
+
+    state.playing = true;
+    startScreen.classList.add('hidden'); // Use opacity transition
+    gameOverScreen.classList.add('hidden');
+
+    resize();
+}
+
+function endGame() {
+    state.playing = false;
+    pauseBgm();
+    playSfx('gameOver', { volume: 0.6, minInterval: 200 });
+    finalScoreEl.textContent = state.score;
+    gameOverScreen.classList.remove('hidden');
+}
+
+// --- Input Handling ---
+
+function handleInput(x) {
+    let newX = x - paddle.width / 2;
+    // Clamp
+    if (newX < 0) newX = 0;
+    if (newX + paddle.width > state.width) newX = state.width - paddle.width;
+    paddle.x = newX;
+}
+
+// Touch
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    handleInput(touch.clientX - rect.left);
+}, { passive: false });
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    initAudio();
+    resumeBgm();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    handleInput(touch.clientX - rect.left);
+}, { passive: false });
+
+// Mouse (Desktop fallback)
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    handleInput(e.clientX - rect.left);
+});
+
+canvas.addEventListener('pointerdown', () => {
+    initAudio();
+    resumeBgm();
+}, { passive: true });
+
+// Controls
+startBtn.addEventListener('click', () => {
+    initAudio();
+    playSfx('uiClick', { volume: 0.45, minInterval: 100 });
+    startGame();
+});
+restartBtn.addEventListener('click', () => {
+    initAudio();
+    playSfx('uiClick', { volume: 0.45, minInterval: 100 });
+    startGame();
+});
+muteBtn.addEventListener('click', () => {
+    initAudio();
+    state.muted = !state.muted;
+    muteBtn.textContent = state.muted ? '🔇' : '🔊';
+
+    if (state.muted) {
+        pauseBgm();
+    } else if (state.playing) {
+        playSfx('uiClick', { volume: 0.4, minInterval: 100 });
+        resumeBgm();
+    }
+});
+
+// Resize Listener
+window.addEventListener('resize', resize);
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        pauseBgm();
+    } else if (state.playing && !state.muted) {
+        resumeBgm();
+    }
+});
+
+// Init
+resize();
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

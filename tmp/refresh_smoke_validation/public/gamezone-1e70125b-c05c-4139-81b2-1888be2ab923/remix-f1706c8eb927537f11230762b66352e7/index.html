@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Warp Relay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --font-main: "Exo 2", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-display: "Orbitron", "Exo 2", system-ui, sans-serif;
+        --color-bg-top: #070814;
+        --color-bg-bot: #1e2355;
+        --color-horizon: #6f65ff;
+        --color-panel: rgba(8, 14, 35, 0.72);
+        --color-panel-line: rgba(133, 225, 255, 0.55);
+        --color-accent: #85e1ff;
+        --color-accent-strong: #00f2fe;
+        --color-boost: #ff4d8d;
+        --color-warning: #ffd166;
+        --color-white: #ffffff;
+    }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at top, rgba(133, 225, 255, 0.12), transparent 35%),
+            linear-gradient(180deg, var(--color-bg-top), var(--color-bg-bot));
+        font-family: var(--font-main);
+        -webkit-user-select: none;
+        user-select: none;
+        color: var(--color-white);
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    #game-container::before,
+    #game-container::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    #game-container::before {
+        background:
+            radial-gradient(circle at 20% 20%, rgba(133, 225, 255, 0.2), transparent 18%),
+            radial-gradient(circle at 80% 18%, rgba(255, 77, 141, 0.14), transparent 15%),
+            radial-gradient(circle at 50% 75%, rgba(111, 101, 255, 0.2), transparent 28%);
+        opacity: 0.9;
+    }
+
+    #game-container::after {
+        background-image:
+            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mix-blend-mode: screen;
+        opacity: 0.35;
+    }
+
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+    }
+
+    /* UI Layer */
+    #ui-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 14px) 14px;
+        box-sizing: border-box;
+        z-index: 3;
+    }
+
+    .hud-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        text-shadow: 0 0 10px rgba(0,242,254,0.35);
+    }
+
+    .stat-box {
+        min-width: 108px;
+        text-align: center;
+        padding: 8px 10px 10px;
+        border: 1px solid var(--color-panel-line);
+        border-radius: 14px;
+        background:
+            linear-gradient(180deg, rgba(133, 225, 255, 0.12), rgba(8, 14, 35, 0.88)),
+            var(--color-panel);
+        box-shadow:
+            0 0 0 1px rgba(255,255,255,0.04) inset,
+            0 12px 24px rgba(0,0,0,0.24),
+            0 0 16px rgba(133,225,255,0.16);
+        backdrop-filter: blur(8px);
+    }
+
+    .stat-label {
+        font-size: 11px;
+        opacity: 0.82;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .stat-value {
+        font-family: var(--font-display);
+        font-size: clamp(24px, 7vw, 32px);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.05;
+        margin-top: 2px;
+    }
+
+    .instruction-container {
+        position: absolute;
+        top: 35%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(92vw, 560px);
+        text-align: center;
+        pointer-events: none;
+    }
+
+    .instruction {
+        font-family: var(--font-display);
+        font-size: clamp(28px, 8vw, 42px);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+        text-shadow: 0 0 18px rgba(133,225,255,0.5), 0 4px 0px rgba(0,0,0,0.45);
+        animation: pulse 0.8s infinite alternate;
+    }
+
+    .sub-instruction {
+        display: inline-block;
+        max-width: 100%;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(8, 14, 35, 0.66);
+        font-size: clamp(13px, 3.8vw, 16px);
+        opacity: 0.95;
+        letter-spacing: 2px;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+    }
+
+    #feedback-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+    }
+
+    .feedback-gif {
+        position: absolute;
+        width: clamp(88px, 24vw, 168px);
+        aspect-ratio: 1;
+        object-fit: cover;
+        border-radius: 18px;
+        border: 1px solid rgba(133, 225, 255, 0.4);
+        background: rgba(6, 11, 25, 0.55);
+        box-shadow: 0 14px 26px rgba(0, 0, 0, 0.34), 0 0 20px rgba(133, 225, 255, 0.22);
+        opacity: 0;
+        transform: translateY(8px) scale(0.92);
+        transition: opacity 180ms ease, transform 180ms ease;
+        mix-blend-mode: screen;
+    }
+
+    .feedback-gif.show {
+        opacity: 0.9;
+        transform: translateY(0) scale(1);
+    }
+
+    #warpGif {
+        right: 14px;
+        bottom: calc(env(safe-area-inset-bottom) + 20px);
+    }
+
+    #resultGif {
+        left: 14px;
+        bottom: calc(env(safe-area-inset-bottom) + 20px);
+    }
+
+    /* Result Screen */
+    #result-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        box-sizing: border-box;
+        background: rgba(7, 8, 20, 0.82);
+        backdrop-filter: blur(10px);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+        z-index: 20;
+    }
+
+    .result-card {
+        width: min(100%, 360px);
+        max-height: 90vh;
+        overflow-y: auto;
+        text-align: center;
+        padding: 24px 20px 20px;
+        border-radius: 24px;
+        border: 1px solid rgba(133,225,255,0.4);
+        background:
+            linear-gradient(180deg, rgba(133,225,255,0.14), rgba(8, 14, 35, 0.94)),
+            rgba(8, 14, 35, 0.92);
+        box-shadow: 0 24px 50px rgba(0,0,0,0.42), 0 0 26px rgba(133,225,255,0.12);
+        animation: slideUp 0.4s ease-out;
+    }
+
+    .result-title {
+        font-family: var(--font-display);
+        font-size: clamp(22px, 7vw, 24px);
+        color: var(--color-accent);
+        margin-bottom: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    .result-score {
+        font-family: var(--font-display);
+        font-size: clamp(48px, 15vw, 64px);
+        color: var(--color-white);
+        font-weight: 700;
+        margin: 10px 0;
+        text-shadow: 0 0 20px var(--color-accent);
+    }
+
+    .result-caption {
+        font-size: 14px;
+        line-height: 1.4;
+        opacity: 0.82;
+        letter-spacing: 0.8px;
+    }
+
+    .btn-restart {
+        font-family: var(--font-main);
+        background: linear-gradient(180deg, var(--color-accent), var(--color-accent-strong));
+        color: var(--color-bg-top);
+        border: 1px solid rgba(255,255,255,0.2);
+        padding: 16px 28px;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        border-radius: 14px;
+        margin-top: 24px;
+        cursor: pointer;
+        touch-action: manipulation;
+        box-shadow: 0 0 15px rgba(133,225,255,0.35);
+        transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
+    }
+
+    .btn-restart:hover,
+    .btn-restart:focus-visible {
+        box-shadow: 0 0 24px rgba(133,225,255,0.5);
+        filter: brightness(1.08);
+    }
+
+    .btn-restart:active {
+        transform: scale(0.95);
+    }
+
+    /* Glitch Effect for High Speed */
+    .glitch {
+        animation: glitch-anim 0.3s infinite;
+        color: var(--color-boost);
+    }
+
+    @keyframes pulse {
+        from { transform: scale(1); opacity: 0.8; }
+        to { transform: scale(1.05); opacity: 1; }
+    }
+
+    @keyframes slideUp {
+        from { transform: translateY(50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes glitch-anim {
+        0% { transform: translate(0) }
+        20% { transform: translate(-2px, 2px) }
+        40% { transform: translate(-2px, -2px) }
+        60% { transform: translate(2px, 2px) }
+        80% { transform: translate(2px, -2px) }
+        100% { transform: translate(0) }
+    }
+
+    @media (max-width: 600px) {
+        .hud-top {
+            gap: 8px;
+        }
+
+        .stat-box {
+            min-width: 92px;
+            padding: 7px 8px 8px;
+        }
+
+        .instruction-container {
+            top: 32%;
+        }
+
+        .result-card {
+            padding: 20px 16px 18px;
+        }
+
+        .feedback-gif {
+            width: clamp(76px, 22vw, 116px);
+            border-radius: 14px;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- [agent-note][stage3] resolved-font: title/ui -> catalogs/fonts.json using Orbitron + Exo 2 -->
+    <!-- [agent-note][stage4] repaired: mobile tap safety | action: scoped touch suppression to canvas so menu/result actions keep native tap behavior -->
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="stat-box">
+                <div class="stat-label">Signal</div>
+                <div class="stat-value" id="distDisplay">0m</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Velocity</div>
+                <div class="stat-value" id="speedDisplay">0</div>
+            </div>
+        </div>
+
+        <div class="instruction-container" id="instructContainer">
+            <div class="instruction" id="mainInstruct">TAP TO CHARGE</div>
+            <div class="sub-instruction" id="subInstruct">LAND ON THE RED BOOST PAD</div>
+        </div>
+    </div>
+
+    <!-- [agent-note][stage3] resolved-gif: warp + result feedback -> catalogs/gifs.json -->
+    <div id="feedback-layer" aria-hidden="true">
+        <img
+            id="warpGif"
+            class="feedback-gif"
+            src="https://i.giphy.com/1zmG8avB83Uvm.webp"
+            alt=""
+            loading="lazy"
+            decoding="async"
+        >
+        <img
+            id="resultGif"
+            class="feedback-gif"
+            src="https://i.giphy.com/3qKs2fWAFDCJQmndSt.webp"
+            alt=""
+            loading="lazy"
+            decoding="async"
+        >
+    </div>
+
+    <div id="result-screen">
+        <div class="result-card">
+            <div class="result-title" id="resultTitle">RELAY COMPLETE</div>
+            <div class="result-score" id="finalScore">0m</div>
+            <div class="result-caption" id="resultCaption">Dial in the charge and thread the warp gate for a relay-grade launch.</div>
+            <button class="btn-restart" id="restartBtn">SEND AGAIN</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO SYSTEM
+ * Catalog-backed media layer with gesture-safe playback.
+ */
+const AudioSys = (() => {
+    const tracks = {
+        start: { src: 'https://gamezone-virid.vercel.app/assets/audios/ui/start_game_01.mp3', volume: 0.45 },
+        lock: { src: 'https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3', volume: 0.4 },
+        launch: { src: 'https://gamezone-virid.vercel.app/assets/audios/sfx/shoot_02.mp3', volume: 0.42 },
+        bounce: { src: 'https://gamezone-virid.vercel.app/assets/audios/sfx/land_02.mp3', volume: 0.32 },
+        warp: { src: 'https://gamezone-virid.vercel.app/assets/audios/sfx/powerup_02.mp3', volume: 0.5 },
+        win: { src: 'https://gamezone-virid.vercel.app/assets/audios/ui/level_complete_01.mp3', volume: 0.5 },
+        fail: { src: 'https://gamezone-virid.vercel.app/assets/audios/ui/game_over_02.mp3', volume: 0.48 },
+        restart: { src: 'https://gamezone-virid.vercel.app/assets/audios/ui/menu_close_01.mp3', volume: 0.4 }
+    };
+
+    const poolSize = 3;
+    const pools = {};
+    let bgm = null;
+    let unlocked = false;
+
+    function buildPool(key) {
+        const config = tracks[key];
+        pools[key] = Array.from({ length: poolSize }, () => {
+            const audio = new Audio(config.src);
+            audio.preload = 'auto';
+            audio.volume = config.volume;
+            audio.crossOrigin = 'anonymous';
+            return audio;
+        });
+    }
+
+    function unlock() {
+        if (unlocked) return;
+        unlocked = true;
+
+        Object.keys(tracks).forEach((key) => buildPool(key));
+
+        bgm = new Audio('https://gamezone-virid.vercel.app/assets/audios/music/action_loop_02.mp3');
+        bgm.preload = 'auto';
+        bgm.loop = true;
+        bgm.volume = 0.2;
+        bgm.crossOrigin = 'anonymous';
+    }
+
+    function play(key) {
+        if (!unlocked || !pools[key]) return;
+        const audio = pools[key].find((item) => item.paused || item.ended) || pools[key][0];
+        try {
+            audio.currentTime = 0;
+            audio.volume = tracks[key].volume;
+            void audio.play().catch(() => {});
+        } catch (_) {}
+    }
+
+    function startLoop() {
+        if (!unlocked || !bgm) return;
+        if (!bgm.paused) return;
+        try {
+            void bgm.play().catch(() => {});
+        } catch (_) {}
+    }
+
+    function stopLoop() {
+        if (!bgm) return;
+        bgm.pause();
+        try {
+            bgm.currentTime = 0;
+        } catch (_) {}
+    }
+
+    function pauseLoop() {
+        if (!bgm) return;
+        bgm.pause();
+    }
+
+    return {
+        unlock,
+        play,
+        startLoop,
+        stopLoop,
+        pauseLoop
+    };
+})();
+
+/**
+ * GAME ENGINE & LOGIC
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+// UI Elements
+const uiDist = document.getElementById('distDisplay');
+const uiSpeed = document.getElementById('speedDisplay');
+const uiInstruct = document.getElementById('mainInstruct');
+const uiSubInstruct = document.getElementById('subInstruct');
+const uiContainer = document.getElementById('instructContainer');
+const uiResult = document.getElementById('result-screen');
+const uiFinalScore = document.getElementById('finalScore');
+const uiResultTitle = document.getElementById('resultTitle');
+const uiResultCaption = document.getElementById('resultCaption');
+const btnRestart = document.getElementById('restartBtn');
+const warpGif = document.getElementById('warpGif');
+const resultGif = document.getElementById('resultGif');
+
+// Constants
+const G = 0.6;
+const GROUND_RATIO = 0.75;
+const METER_SCALE = 10; // 10px = 1m
+const BOOSTER_X_M = 150; // Booster at 150m
+const BOOSTER_W_M = 10;  // Wide target
+const MAX_POWER = 45;
+
+// State
+let width, height, groundY;
+let state = 'START'; // START, POWER, ANGLE, FLYING, END
+let frameId;
+let gameTime = 0;
+
+// Physics Objects
+let ball = { x: 0, y: 0, r: 10, vx: 0, vy: 0, rot: 0 };
+let player = { x: 0, y: 0 };
+let camera = { x: 0, shake: 0 };
+let particles = [];
+let speedLines = [];
+
+// Input Variables
+let powerVal = 0;
+let powerDir = 2;
+let angleVal = 45;
+let angleDir = 1.5;
+let isWarping = false;
+let distance = 0;
+
+function flashGif(el, duration = 1200) {
+    el.classList.add('show');
+    window.clearTimeout(el._hideTimer);
+    el._hideTimer = window.setTimeout(() => {
+        el.classList.remove('show');
+    }, duration);
+}
+
+function hideGifs() {
+    warpGif.classList.remove('show');
+    resultGif.classList.remove('show');
+    window.clearTimeout(warpGif._hideTimer);
+    window.clearTimeout(resultGif._hideTimer);
+}
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+    groundY = height * GROUND_RATIO;
+
+    if (state === 'START' || state === 'POWER' || state === 'ANGLE') {
+        resetPositions();
+    }
+}
+
+function resetPositions() {
+    player.x = width * 0.15;
+    player.y = groundY;
+    ball.x = player.x;
+    ball.y = groundY - ball.r;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.rot = 0;
+    camera.x = 0;
+    camera.shake = 0;
+    distance = 0;
+    isWarping = false;
+    particles = [];
+    speedLines = [];
+    powerVal = 0;
+    powerDir = 2;
+    angleVal = 45;
+    angleDir = 1.5;
+
+    // UI Reset
+    uiDist.innerText = "0m";
+    uiSpeed.innerText = "0";
+    uiSpeed.classList.remove('glitch');
+    uiContainer.style.display = 'block';
+    uiInstruct.innerText = "TAP TO CHARGE";
+    uiSubInstruct.innerText = "LAND ON THE RED BOOST PAD";
+    uiResultCaption.innerText = "Dial in the charge and thread the warp gate for a relay-grade launch.";
+    hideGifs();
+    AudioSys.stopLoop();
+}
+
+function spawnParticles(x, y, count, color, speed) {
+    for(let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = Math.random() * speed;
+        particles.push({
+            x: x,
+            y: y,
+            vx: Math.cos(ang) * spd + (isWarping ? -10 : 0),
+            vy: Math.sin(ang) * spd,
+            life: 1.0,
+            color: color,
+            size: Math.random() * 3 + 1
+        });
+    }
+}
+
+function updateParticles() {
+    // Normal particles
+    for(let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.03;
+        if(p.life <= 0) particles.splice(i, 1);
+    }
+
+    // Speed lines
+    if (Math.abs(ball.vx) > 30 || isWarping) {
+        if (Math.random() > 0.5) {
+            speedLines.push({
+                x: camera.x + width + Math.random() * 200,
+                y: Math.random() * height,
+                w: Math.random() * 100 + 50,
+                speed: Math.random() * 20 + 30
+            });
+        }
+    }
+
+    for(let i = speedLines.length - 1; i >= 0; i--) {
+        let s = speedLines[i];
+        s.x -= s.speed;
+        if (s.x + s.w < camera.x) {
+            speedLines.splice(i, 1);
+        }
+    }
+}
+
+function handleInput(e) {
+    e.preventDefault();
+    AudioSys.unlock();
+
+    if (state === 'START') {
+        state = 'POWER';
+        uiInstruct.innerText = "LOCK CHARGE";
+        AudioSys.play('start');
+        AudioSys.startLoop();
+    } else if (state === 'POWER') {
+        state = 'ANGLE';
+        uiInstruct.innerText = "LOCK ANGLE";
+        AudioSys.play('lock');
+    } else if (state === 'ANGLE') {
+        state = 'FLYING';
+        uiContainer.style.display = 'none';
+
+        // Launch
+        const rad = angleVal * (Math.PI / 180);
+        const totalPower = 15 + (powerVal / 100) * MAX_POWER;
+
+        ball.vx = Math.cos(rad) * totalPower;
+        ball.vy = -Math.sin(rad) * totalPower;
+
+        AudioSys.play('launch');
+        spawnParticles(ball.x, ball.y, 30, '#fff', 5);
+
+        // Add initial camera shake
+        camera.shake = 10;
+    }
+}
+
+function endRun() {
+    state = 'END';
+    uiResult.style.display = 'flex';
+    uiFinalScore.innerText = Math.floor(distance) + "m";
+
+    if (isWarping) {
+        uiResultTitle.innerText = "RELAY LOCKED";
+        uiResultCaption.innerText = "Warp gate synced cleanly. The signal stayed hot all the way through the lane.";
+        AudioSys.play('win');
+        flashGif(resultGif, 2200);
+    } else {
+        uiResultTitle.innerText = "SIGNAL LOST";
+        uiResultCaption.innerText = "Close miss. Charge timing and trajectory need a tighter handoff into the gate.";
+        AudioSys.play('fail');
+        flashGif(resultGif, 2200);
+    }
+
+    AudioSys.pauseLoop();
+}
+
+function update() {
+    gameTime++;
+
+    if (state === 'POWER') {
+        powerVal += powerDir;
+        if (powerVal >= 100) { powerVal = 100; powerDir = -2; }
+        if (powerVal <= 0) { powerVal = 0; powerDir = 2; }
+        uiSubInstruct.innerText = "CHARGE: " + powerVal + "%";
+    } else if (state === 'ANGLE') {
+        angleVal += angleDir;
+        if (angleVal >= 80) { angleVal = 80; angleDir = -1.5; }
+        if (angleVal <= 10) { angleVal = 10; angleDir = 1.5; }
+        uiSubInstruct.innerText = "TRAJECTORY: " + Math.floor(angleVal) + "°";
+    } else if (state === 'FLYING') {
+        // Physics
+        if (!isWarping) {
+            ball.vy += G;
+            ball.vx *= 0.995;
+        } else {
+            ball.vy = 0;
+            if (ball.vx > 100) ball.vx *= 0.999;
+            camera.shake = 5;
+        }
+
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+        ball.rot += ball.vx * 0.05;
+
+        // Ground Collision
+        if (ball.y + ball.r > groundY) {
+            ball.y = groundY - ball.r;
+
+            // Check Booster Collision
+            const boosterPx = player.x + (BOOSTER_X_M * METER_SCALE);
+            const boosterWidthPx = BOOSTER_W_M * METER_SCALE;
+
+            if (Math.abs(ball.x - boosterPx) < boosterWidthPx / 2) {
+                if (!isWarping) {
+                    isWarping = true;
+                    ball.vx = 200;
+                    ball.vy = -5;
+                    ball.y = groundY - ball.r - 10;
+                    AudioSys.play('warp');
+                    camera.shake = 50;
+                    spawnParticles(ball.x, ball.y, 100, '#00f2fe', 20);
+                    uiSpeed.classList.add('glitch');
+                    flashGif(warpGif, 1400);
+                }
+            } else {
+                ball.vy *= -0.6;
+                ball.vx *= 0.9;
+                if (Math.abs(ball.vy) > 2) AudioSys.play('bounce');
+            }
+
+            if (Math.abs(ball.vx) < 0.1 && Math.abs(ball.vy) < 0.5) {
+                endRun();
+            }
+        }
+
+        // Camera Logic
+        let targetX = ball.x - width * 0.3;
+        camera.x += (targetX - camera.x) * 0.1;
+        if (camera.shake > 0) {
+            camera.x += (Math.random() - 0.5) * camera.shake;
+            camera.shake *= 0.9;
+        }
+
+        // Update UI
+        distance = Math.max(0, (ball.x - player.x) / METER_SCALE);
+        uiDist.innerText = Math.floor(distance) + "m";
+
+        let speedDisplay = Math.floor(ball.vx * 10);
+        if (isWarping) speedDisplay = "INF " + Math.floor(Math.random() * 999);
+        uiSpeed.innerText = speedDisplay;
+    }
+
+    updateParticles();
+}
+
+function draw() {
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+    skyGrad.addColorStop(0, isWarping ? '#01030a' : '#070814');
+    skyGrad.addColorStop(0.55, isWarping ? '#07111f' : '#141c42');
+    skyGrad.addColorStop(1, isWarping ? '#020408' : '#1e2355');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.globalAlpha = isWarping ? 0.22 : 0.38;
+    for (let i = 0; i < 40; i++) {
+        const px = (i * 173 + gameTime * 0.15) % (width + 120);
+        const py = (i * 97) % (groundY - 30);
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(133,225,255,0.95)' : 'rgba(255,255,255,0.85)';
+        ctx.fillRect(px, py, i % 5 === 0 ? 3 : 2, i % 5 === 0 ? 3 : 2);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(-camera.x * 0.5, 0);
+    ctx.strokeStyle = isWarping ? 'rgba(133, 225, 255, 0.10)' : 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 2;
+    const gridSize = 100;
+    const startGrid = Math.floor(camera.x * 0.5 / gridSize) * gridSize;
+    for (let x = startGrid; x < startGrid + width + gridSize; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(111, 101, 255, 0.18)';
+    for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(camera.x * 0.5 + width * 0.62, groundY - 30, 90 + i * 55, Math.PI, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(-camera.x, 0);
+
+    const floorGrad = ctx.createLinearGradient(0, groundY, 0, height);
+    floorGrad.addColorStop(0, '#161127');
+    floorGrad.addColorStop(1, '#05060d');
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(camera.x, groundY, width, height - groundY);
+
+    ctx.strokeStyle = '#85e1ff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(camera.x, groundY);
+    ctx.lineTo(camera.x + width, groundY);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(133,225,255,0.12)';
+    ctx.lineWidth = 1;
+    for (let x = camera.x - (camera.x % 48); x < camera.x + width; x += 48) {
+        ctx.beginPath();
+        ctx.moveTo(x, groundY + 8);
+        ctx.lineTo(x + 18, height);
+        ctx.stroke();
+    }
+
+    const boosterX = player.x + (BOOSTER_X_M * METER_SCALE);
+    const boosterW = BOOSTER_W_M * METER_SCALE;
+
+    const glowIntensity = (Math.sin(gameTime * 0.2) + 1) * 0.5;
+    ctx.shadowBlur = 20 + glowIntensity * 20;
+    ctx.shadowColor = '#ff4d8d';
+    const boosterGrad = ctx.createLinearGradient(boosterX, groundY, boosterX, groundY + 12);
+    boosterGrad.addColorStop(0, `rgba(255, 209, 102, ${0.7 + glowIntensity * 0.2})`);
+    boosterGrad.addColorStop(1, `rgba(255, 77, 141, ${0.7 + glowIntensity * 0.3})`);
+    ctx.fillStyle = boosterGrad;
+    ctx.fillRect(boosterX - boosterW / 2, groundY, boosterW, 10);
+
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = `700 18px ${getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim()}`;
+    ctx.shadowBlur = 0;
+    ctx.fillText("WARP GATE", boosterX, groundY + 30);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.font = `600 12px ${getComputedStyle(document.documentElement).getPropertyValue('--font-main').trim()}`;
+    const startM = Math.floor(camera.x / METER_SCALE / 50) * 50;
+    for (let m = startM; m < startM + (width / METER_SCALE) + 100; m += 50) {
+        if (m === 0) continue;
+        const mx = player.x + m * METER_SCALE;
+        ctx.fillRect(mx, groundY, 2, 10);
+        ctx.fillText(m + "m", mx, groundY + 25);
+    }
+
+    ctx.strokeStyle = isWarping ? 'rgba(133,225,255,0.35)' : 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 2;
+    for (let s of speedLines) {
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x + s.w, s.y);
+        ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(player.x, groundY);
+    ctx.fillStyle = '#d6ecff';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-22, 0);
+    ctx.lineTo(0, -46);
+    ctx.lineTo(22, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#85e1ff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -46);
+    ctx.lineTo(0, -72);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, -76, 8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(133,225,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(0, -76, 18 + Math.sin(gameTime * 0.12) * 2, -Math.PI * 0.85, -Math.PI * 0.15);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.translate(ball.x, ball.y);
+    ctx.rotate(ball.rot);
+
+    if (isWarping || Math.abs(ball.vx) > 20) {
+        ctx.fillStyle = 'rgba(133,225,255,0.22)';
+        ctx.beginPath();
+        ctx.arc(-20, 0, ball.r * 0.95, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-42, 0, ball.r * 0.72, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = isWarping ? '#00f2fe' : '#85e1ff';
+    const orbGrad = ctx.createRadialGradient(-3, -4, 2, 0, 0, ball.r + 2);
+    orbGrad.addColorStop(0, '#ffffff');
+    orbGrad.addColorStop(0.4, '#85e1ff');
+    orbGrad.addColorStop(1, isWarping ? '#ff4d8d' : '#6f65ff');
+    ctx.fillStyle = orbGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, ball.r + 4 + Math.sin(gameTime * 0.2) * 1.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(-camera.x, 0);
+    for (let p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+
+    if (state === 'POWER' || state === 'ANGLE') {
+        drawGauges();
+    }
+}
+
+function drawGauges() {
+    const cx = width / 2;
+    const cy = height * 0.3;
+    const r = 80;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 16, Math.PI, 0);
+    ctx.lineWidth = 24;
+    ctx.strokeStyle = 'rgba(8,14,35,0.55)';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, Math.PI, 0);
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.stroke();
+
+    if (state === 'POWER') {
+        const rad = Math.PI + (powerVal / 100) * Math.PI;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI, rad);
+        ctx.strokeStyle = '#ff4d8d';
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = '#ff4d8d';
+        ctx.stroke();
+    } else if (state === 'ANGLE') {
+        const rad = -angleVal * (Math.PI / 180);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(rad) * r, cy + Math.sin(rad) * r);
+        ctx.strokeStyle = '#85e1ff';
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = '#85e1ff';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI, 0);
+    }
+    ctx.restore();
+}
+
+function loop() {
+    update();
+    draw();
+    frameId = requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', resize);
+canvas.addEventListener('pointerdown', handleInput);
+
+btnRestart.addEventListener('click', () => {
+    AudioSys.unlock();
+    AudioSys.play('restart');
+    uiResult.style.display = 'none';
+    state = 'START';
+    resetPositions();
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        AudioSys.pauseLoop();
+    } else if (!document.hidden && state !== 'START' && state !== 'END') {
+        AudioSys.startLoop();
+    }
+});
+
+resize();
+resetPositions();
+loop();
+</script>
+</body>
+</html>

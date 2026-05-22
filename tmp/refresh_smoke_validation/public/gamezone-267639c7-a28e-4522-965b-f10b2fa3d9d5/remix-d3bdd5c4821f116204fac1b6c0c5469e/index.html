@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Clay Doll Dressup</title>
+<!-- [agent-note][stage4] repaired: catalog-font-link | title: Bangers | ui: Rajdhani -->
+<link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg-top: #d8f1ff;
+        --bg-bottom: #8fd3ff;
+        --sky-glow: rgba(255, 255, 255, 0.32);
+        --panel-shell: rgba(255, 255, 255, 0.9);
+        --panel-border: rgba(255, 255, 255, 0.75);
+        --panel-shadow: rgba(46, 96, 155, 0.25);
+        --title-ink: #0f3b68;
+        --copy-ink: #375978;
+        --accent-pink: #ff78b2;
+        --accent-gold: #ffd166;
+        --accent-mint: #66e5c5;
+        --accent-violet: #9584ff;
+        --stage-outline: rgba(15, 59, 104, 0.22);
+    }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom)); touch-action: none; font-family: 'Rajdhani', system-ui, sans-serif; }
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(circle at 20% 18%, rgba(255,255,255,0.72), transparent 22%),
+            radial-gradient(circle at 80% 14%, rgba(255,255,255,0.42), transparent 18%),
+            radial-gradient(circle at 50% 100%, rgba(255, 120, 178, 0.18), transparent 24%);
+        opacity: 0.95;
+    }
+    #game-container { position: relative; width: 100%; height: 100%; }
+    canvas { display: block; touch-action: none; width: 100%; height: 100%; }
+    #ui-layer { position: absolute; inset: 0; z-index: 50; pointer-events: none; }
+    .font-clay { font-family: 'Bangers', 'Trebuchet MS', sans-serif; letter-spacing: 0.04em; }
+    .feedback-gif {
+        position: absolute;
+        width: min(24vw, 110px);
+        max-width: 110px;
+        aspect-ratio: 1;
+        object-fit: cover;
+        border-radius: 18px;
+        border: 3px solid rgba(255, 255, 255, 0.78);
+        box-shadow: 0 14px 28px rgba(15, 59, 104, 0.22);
+        opacity: 0;
+        transform: scale(0.82);
+        transition: opacity 180ms ease, transform 180ms ease;
+        pointer-events: none;
+        z-index: 60;
+        background: rgba(255, 255, 255, 0.68);
+    }
+    .feedback-gif.is-visible {
+        opacity: 0.95;
+        transform: scale(1);
+    }
+    #gif-celebrate { top: max(12px, env(safe-area-inset-top)); right: 12px; }
+    #gif-bloop { left: 12px; bottom: calc(40% + 12px); }
+</style>
+<script id="game-config" type="application/x-game-config">
+{
+    "skinTone": { "type": "color", "label": "Performer Tone", "value": "#FFD1B3" },
+    "bgTop": { "type": "color", "label": "Studio Glow Top", "value": "#E0F2FE" },
+    "bgBottom": { "type": "color", "label": "Studio Glow Bottom", "value": "#BAE6FD" }
+}
+</script>
+</head>
+<body>
+<div id="game-container" class="select-none font-clay">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-layer">
+        <!-- Pure canvas UI for seamless drag and drop -->
+    </div>
+    <!-- [agent-note][stage3] resolved-gif: celebration/fail feedback -> catalogs/gifs.json | keep-gif-off-playfield -->
+    <img id="gif-celebrate" class="feedback-gif" src="https://i.giphy.com/ye080RbECtcCnkrSyD.webp" alt="Celebration reaction" loading="lazy" decoding="async">
+    <img id="gif-bloop" class="feedback-gif" src="https://i.giphy.com/3O4qbhHu6KACE8lkOT.webp" alt="Oops reaction" loading="lazy" decoding="async">
+</div>
+
+<!-- Media Assets -->
+<!-- [agent-note][stage3] resolved-audio: bgm/ui/collect/fail -> catalogs/audios.json -->
+<audio id="bgm_main" data-editable="audio" data-label="Wardrobe Jam Loop" src="https://gamezone-virid.vercel.app/assets/audios/music/music_loop_02.mp3" preload="auto" loop></audio>
+<audio id="sfx_ui" src="https://gamezone-virid.vercel.app/assets/audios/ui/ui_click_02.mp3" preload="auto"></audio>
+<audio id="sfx_collect" src="https://gamezone-virid.vercel.app/assets/audios/sfx/pickup_02.mp3" preload="auto"></audio>
+<audio id="sfx_success" src="https://gamezone-virid.vercel.app/assets/audios/ui/success_02.mp3" preload="auto"></audio>
+<audio id="sfx_fail" src="https://gamezone-virid.vercel.app/assets/audios/ui/fail_02.mp3" preload="auto"></audio>
+
+<script>
+// --- Configuration ---
+let gameConfig = {};
+try {
+    const configEl = document.getElementById('game-config');
+    if (configEl) {
+        const defs = JSON.parse(configEl.textContent);
+        window.gameConfigDefs = defs;
+        for (let k in defs) gameConfig[k] = defs[k].value;
+    }
+} catch (e) { console.error("Config parse error", e); }
+
+window.updateGameConfig = (key, val) => {
+    gameConfig[key] = val;
+};
+
+// --- Audio System ---
+const AudioSys = {
+    ctx: null,
+    bgm: null,
+    unlocked: false,
+    clips: {},
+    clipCooldowns: {},
+    init() {
+        try {
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        } catch (e) { console.warn("Audio init failed", e); }
+        this.bgm = document.getElementById('bgm_main');
+        this.clips = {
+            ui: document.getElementById('sfx_ui'),
+            collect: document.getElementById('sfx_collect'),
+            success: document.getElementById('sfx_success'),
+            fail: document.getElementById('sfx_fail')
+        };
+        if (this.bgm) {
+            this.bgm.volume = 0.2;
+            this.bgm.muted = true;
+        }
+        Object.values(this.clips).forEach((clip) => {
+            if (clip) clip.volume = 0.55;
+        });
+    },
+    unlock() {
+        if (!this.unlocked) {
+            this.unlocked = true;
+            if (this.ctx?.state === 'suspended') this.ctx.resume().catch(() => {});
+            if (this.bgm) {
+                this.bgm.muted = false;
+                this.bgm.play().catch(() => {});
+            }
+            this.play('ui', 0.85, 0);
+            return;
+        }
+        if (this.ctx?.state === 'suspended') this.ctx.resume().catch(() => {});
+    },
+    play(name, volume = 1, cooldownMs = 120) {
+        const clip = this.clips[name];
+        const now = performance.now();
+        if (!clip) return;
+        if (cooldownMs > 0 && this.clipCooldowns[name] && now - this.clipCooldowns[name] < cooldownMs) return;
+        this.clipCooldowns[name] = now;
+        try {
+            clip.pause();
+            clip.currentTime = 0;
+            clip.volume = Math.min(1, Math.max(0.05, volume));
+            clip.play().catch(() => {});
+        } catch (_) {}
+    },
+    setBgmActive(active) {
+        if (!this.bgm) return;
+        try {
+            if (active && this.unlocked) {
+                this.bgm.muted = false;
+                this.bgm.play().catch(() => {});
+            } else {
+                this.bgm.pause();
+            }
+        } catch (_) {}
+    },
+    playSynth(type) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        const now = this.ctx.currentTime;
+        if (type === 'pop') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'snap') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+            gain.gain.setValueAtTime(0.16, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        }
+    },
+    vibrate(style = 'light') {
+        window.webkit?.messageHandlers?.gamezoneBridge?.postMessage({
+            action: 'vibrate', requestId: 'h5-' + Date.now(), version: '1.0',
+            params: { style }
+        });
+    }
+};
+
+// --- Game State & Logic ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let cw = 0, ch = 0, dpr = 1;
+let initialized = false;
+let gameState = 'INIT'; // INIT, PLAYING
+let lastTime = 0;
+
+// Doll bounds
+let dollX = 0, dollY = 0, dollScale = 1;
+
+// UI bounds
+let uiY = 0, uiH = 0;
+const tabs = ['Hair', 'Top', 'Bottom', 'Shoes'];
+const tabLabels = { Hair: 'Hair', Top: 'Top', Bottom: 'Bottom', Shoes: 'Shoes' };
+let activeTab = 'Hair';
+let tabBounds = [];
+
+// Item Database
+const items = {
+    'Hair': [
+        { id: 'h1', color: '#8B4513', type: 'short', name: 'Short Cut' },
+        { id: 'h2', color: '#FFD700', type: 'long', name: 'Long Flow' },
+        { id: 'h3', color: '#FF69B4', type: 'buns', name: 'Twin Buns' }
+    ],
+    'Top': [
+        { id: 't1', color: '#FF6347', type: 'tshirt', name: 'Stage Tee' },
+        { id: 't2', color: '#4682B4', type: 'sweater', name: 'Cozy Knit' },
+        { id: 't3', color: '#32CD32', type: 'tank', name: 'Spotlight Tank' }
+    ],
+    'Bottom': [
+        { id: 'b1', color: '#1E90FF', type: 'jeans', name: 'Denim Beat' },
+        { id: 'b2', color: '#FFB6C1', type: 'skirt', name: 'Twirl Skirt' },
+        { id: 'b3', color: '#8A2BE2', type: 'shorts', name: 'Dance Shorts' }
+    ],
+    'Shoes': [
+        { id: 's1', color: '#FFFFFF', type: 'sneakers', name: 'Sneakers' },
+        { id: 's2', color: '#A52A2A', type: 'boots', name: 'Show Boots' }
+    ]
+};
+
+let equipped = { 'Hair': null, 'Top': null, 'Bottom': null, 'Shoes': null };
+let inventoryBounds = []; // Current tab's item bounds
+
+// Drag State
+let dragInfo = null; // { item, source: 'inventory'|'doll', offsetX, offsetY, x, y }
+
+// Particles
+let particles = [];
+let feedbackTimer = 0;
+let feedbackMode = 'celebrate';
+const feedbackEls = {
+    celebrate: document.getElementById('gif-celebrate'),
+    bloop: document.getElementById('gif-bloop')
+};
+
+function initGame() {
+    AudioSys.init();
+    equipped = { 'Hair': items['Hair'][0], 'Top': items['Top'][0], 'Bottom': items['Bottom'][0], 'Shoes': items['Shoes'][0] };
+    gameState = 'PLAYING';
+    AudioSys.setBgmActive(true);
+    showFeedback('celebrate', 1100);
+}
+
+function showFeedback(mode = 'celebrate', duration = 1400) {
+    feedbackMode = mode;
+    feedbackTimer = duration;
+    Object.entries(feedbackEls).forEach(([key, el]) => {
+        if (!el) return;
+        el.classList.toggle('is-visible', key === mode);
+    });
+}
+
+function spawnParticles(x, y) {
+    showFeedback('celebrate', 1500);
+    for(let i=0; i<15; i++) {
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 400,
+            vy: (Math.random() - 0.5) * 400 - 100,
+            life: 1.0,
+            color: ['#FFD700', '#FF69B4', '#00BFFF', '#32CD32'][Math.floor(Math.random()*4)]
+        });
+    }
+}
+
+function update(dt) {
+    if (feedbackTimer > 0) {
+        feedbackTimer -= dt * 1000;
+        if (feedbackTimer <= 0) {
+            Object.values(feedbackEls).forEach((el) => el?.classList.remove('is-visible'));
+        }
+    }
+    if (gameState !== 'PLAYING') return;
+    
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 800 * dt; // gravity
+        p.life -= dt * 1.5;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+// --- Rendering ---
+function drawRoundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function applyClayStyle(color, depth = 5) {
+    ctx.fillStyle = color;
+    ctx.shadowColor = 'rgba(0,0,0,0.2)';
+    ctx.shadowBlur = depth * 2;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = depth;
+}
+
+function resetShadow() {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+}
+
+function drawDollBase(x, y, scale) {
+    const skin = gameConfig.skinTone || '#FFD1B3';
+
+    ctx.save();
+
+    // Stage shadow
+    resetShadow();
+    ctx.fillStyle = 'rgba(43, 83, 124, 0.12)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 128 * scale, 78 * scale, 20 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Spotlight ring
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 5 * scale;
+    ctx.beginPath();
+    ctx.arc(x, y + 128 * scale, 62 * scale, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Legs
+    applyClayStyle(skin, 3);
+    drawRoundedRect(ctx, x - 25 * scale, y + 40 * scale, 16 * scale, 60 * scale, 8 * scale); ctx.fill();
+    drawRoundedRect(ctx, x + 9 * scale, y + 40 * scale, 16 * scale, 60 * scale, 8 * scale); ctx.fill();
+
+    // Shoes socks accent
+    resetShadow();
+    ctx.fillStyle = '#f8fbff';
+    drawRoundedRect(ctx, x - 26 * scale, y + 92 * scale, 18 * scale, 12 * scale, 6 * scale); ctx.fill();
+    drawRoundedRect(ctx, x + 8 * scale, y + 92 * scale, 18 * scale, 12 * scale, 6 * scale); ctx.fill();
+
+    // Arms
+    applyClayStyle(skin, 3);
+    drawRoundedRect(ctx, x - 45 * scale, y - 20 * scale, 16 * scale, 70 * scale, 8 * scale); ctx.fill();
+    drawRoundedRect(ctx, x + 29 * scale, y - 20 * scale, 16 * scale, 70 * scale, 8 * scale); ctx.fill();
+
+    // Torso
+    applyClayStyle(skin, 4);
+    drawRoundedRect(ctx, x - 30 * scale, y - 30 * scale, 60 * scale, 80 * scale, 15 * scale); ctx.fill();
+
+    // Head
+    applyClayStyle(skin, 5);
+    ctx.beginPath();
+    ctx.arc(x, y - 70 * scale, 40 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cheeks
+    resetShadow();
+    ctx.fillStyle = 'rgba(255, 120, 178, 0.35)';
+    ctx.beginPath(); ctx.arc(x - 19 * scale, y - 64 * scale, 7 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 19 * scale, y - 64 * scale, 7 * scale, 0, Math.PI * 2); ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#163f63';
+    ctx.beginPath(); ctx.arc(x - 15 * scale, y - 75 * scale, 5 * scale, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 15 * scale, y - 75 * scale, 5 * scale, 0, Math.PI*2); ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(x - 13.5 * scale, y - 77 * scale, 1.6 * scale, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 16.5 * scale, y - 77 * scale, 1.6 * scale, 0, Math.PI*2); ctx.fill();
+
+    // Smile
+    ctx.strokeStyle = '#163f63';
+    ctx.lineWidth = 2.5 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(x, y - 60 * scale, 8 * scale, 0.15, Math.PI - 0.15, false);
+    ctx.stroke();
+
+    // Hair clip accent
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    ctx.arc(x + 23 * scale, y - 95 * scale, 7 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff78b2';
+    ctx.beginPath();
+    ctx.arc(x + 23 * scale, y - 95 * scale, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function drawItemShape(item, x, y, scale, isDragging = false) {
+    if (!item) return;
+    const depth = isDragging ? 10 : 4;
+    applyClayStyle(item.color, depth);
+    
+    ctx.save();
+    ctx.translate(x, y);
+    if (isDragging) {
+        ctx.scale(1.1, 1.1); // slight pop when dragging
+    }
+
+    if (item.id.startsWith('h')) { // Hair
+        if (item.type === 'short') {
+            ctx.beginPath(); ctx.arc(0, -85 * scale, 45 * scale, Math.PI, 0); 
+            ctx.lineTo(45*scale, -60*scale); ctx.lineTo(-45*scale, -60*scale); ctx.closePath(); ctx.fill();
+        } else if (item.type === 'long') {
+            ctx.beginPath(); ctx.arc(0, -80 * scale, 45 * scale, Math.PI, 0);
+            ctx.lineTo(50*scale, 0); ctx.lineTo(30*scale, 0); ctx.lineTo(20*scale, -60*scale);
+            ctx.lineTo(-20*scale, -60*scale); ctx.lineTo(-30*scale, 0); ctx.lineTo(-50*scale, 0);
+            ctx.closePath(); ctx.fill();
+        } else if (item.type === 'buns') {
+            ctx.beginPath(); ctx.arc(0, -85 * scale, 42 * scale, Math.PI, 0); ctx.fill();
+            ctx.beginPath(); ctx.arc(-35*scale, -95*scale, 20*scale, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(35*scale, -95*scale, 20*scale, 0, Math.PI*2); ctx.fill();
+        }
+    } else if (item.id.startsWith('t')) { // Top
+        if (item.type === 'tshirt') {
+            drawRoundedRect(ctx, -32*scale, -32*scale, 64*scale, 50*scale, 5*scale); ctx.fill();
+            drawRoundedRect(ctx, -48*scale, -30*scale, 20*scale, 25*scale, 5*scale); ctx.fill();
+            drawRoundedRect(ctx, 28*scale, -30*scale, 20*scale, 25*scale, 5*scale); ctx.fill();
+        } else if (item.type === 'sweater') {
+            drawRoundedRect(ctx, -34*scale, -34*scale, 68*scale, 55*scale, 8*scale); ctx.fill();
+            drawRoundedRect(ctx, -50*scale, -30*scale, 22*scale, 60*scale, 8*scale); ctx.fill();
+            drawRoundedRect(ctx, 28*scale, -30*scale, 22*scale, 60*scale, 8*scale); ctx.fill();
+        } else if (item.type === 'tank') {
+            drawRoundedRect(ctx, -25*scale, -30*scale, 50*scale, 45*scale, 5*scale); ctx.fill();
+        }
+    } else if (item.id.startsWith('b')) { // Bottom
+        if (item.type === 'jeans') {
+            drawRoundedRect(ctx, -28*scale, 10*scale, 56*scale, 20*scale, 2*scale); ctx.fill();
+            drawRoundedRect(ctx, -26*scale, 25*scale, 20*scale, 60*scale, 4*scale); ctx.fill();
+            drawRoundedRect(ctx, 6*scale, 25*scale, 20*scale, 60*scale, 4*scale); ctx.fill();
+        } else if (item.type === 'skirt') {
+            ctx.beginPath(); ctx.moveTo(-25*scale, 10*scale); ctx.lineTo(25*scale, 10*scale);
+            ctx.lineTo(35*scale, 45*scale); ctx.lineTo(-35*scale, 45*scale); ctx.closePath(); ctx.fill();
+        } else if (item.type === 'shorts') {
+            drawRoundedRect(ctx, -28*scale, 10*scale, 56*scale, 20*scale, 2*scale); ctx.fill();
+            drawRoundedRect(ctx, -26*scale, 25*scale, 22*scale, 20*scale, 4*scale); ctx.fill();
+            drawRoundedRect(ctx, 4*scale, 25*scale, 22*scale, 20*scale, 4*scale); ctx.fill();
+        }
+    } else if (item.id.startsWith('s')) { // Shoes
+        drawRoundedRect(ctx, -28*scale, 90*scale, 22*scale, 20*scale, 8*scale); ctx.fill();
+        drawRoundedRect(ctx, 6*scale, 90*scale, 22*scale, 20*scale, 8*scale); ctx.fill();
+        if (item.type === 'boots') {
+            drawRoundedRect(ctx, -26*scale, 70*scale, 18*scale, 25*scale, 2*scale); ctx.fill();
+            drawRoundedRect(ctx, 8*scale, 70*scale, 18*scale, 25*scale, 2*scale); ctx.fill();
+        }
+    }
+    
+    ctx.restore();
+    resetShadow();
+}
+
+function drawHeader() {
+    const pad = Math.max(16, cw * 0.04);
+    const cardW = Math.min(cw - pad * 2, 440);
+    const cardH = Math.max(92, ch * 0.135);
+    const cardX = (cw - cardW) / 2;
+    const cardY = pad;
+    applyClayStyle('rgba(255,255,255,0.82)', 4);
+    drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 26);
+    ctx.fill();
+    resetShadow();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.76)';
+    ctx.lineWidth = 2;
+    drawRoundedRect(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, 22);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255, 120, 178, 0.18)';
+    drawRoundedRect(ctx, cardX + 14, cardY + 12, 88, 20, 10);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(102, 229, 197, 0.18)';
+    drawRoundedRect(ctx, cardX + cardW - 102, cardY + 12, 88, 20, 10);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#0f3b68';
+    ctx.font = `bold ${Math.max(22, cw * 0.051)}px 'Bangers', 'Trebuchet MS', sans-serif`;
+    ctx.fillText('Runway Star Lab', cw / 2, cardY + 14);
+
+    ctx.fillStyle = '#375978';
+    ctx.font = `600 ${Math.max(13, cw * 0.025)}px 'Rajdhani', system-ui, sans-serif`;
+    ctx.fillText('Drag a glam card onto the spotlight to style your clay idol.', cw / 2, cardY + 50);
+    ctx.fillText('Tap worn pieces to pop them back into the studio tray.', cw / 2, cardY + 69);
+}
+
+function drawDropHint() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.26)';
+    ctx.beginPath();
+    ctx.arc(dollX, dollY, 104 * dollScale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(15, 59, 104, 0.24)';
+    ctx.lineWidth = Math.max(2, 3 * dollScale);
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.arc(dollX, dollY, 96 * dollScale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#0f3b68';
+    ctx.font = `bold ${Math.max(13, cw * 0.026)}px 'Rajdhani', system-ui, sans-serif`;
+    ctx.fillText('SPOTLIGHT DROP', dollX, dollY - 126 * dollScale);
+    ctx.restore();
+}
+
+function render() {
+    // Background gradient
+    const grd = ctx.createLinearGradient(0, 0, 0, ch);
+    grd.addColorStop(0, gameConfig.bgTop || '#E0F2FE');
+    grd.addColorStop(1, gameConfig.bgBottom || '#BAE6FD');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, cw, ch);
+
+    drawHeader();
+
+    // Draw Doll
+    drawDropHint();
+    drawDollBase(dollX, dollY, dollScale);
+    
+    // Draw Equipped Items (Bottom to Top layer order)
+    const layerOrder = ['Shoes', 'Bottom', 'Top', 'Hair'];
+    layerOrder.forEach(cat => {
+        if (equipped[cat] && (!dragInfo || dragInfo.item !== equipped[cat])) {
+            drawItemShape(equipped[cat], dollX, dollY, dollScale);
+        }
+    });
+
+    // Draw UI Panel Background
+    applyClayStyle('#FFFFFF', 2);
+    drawRoundedRect(ctx, 10, uiY, cw - 20, uiH - 10, 20);
+    ctx.fill();
+    resetShadow();
+
+    // Draw Tabs
+    tabBounds = [];
+    const tabW = (cw - 40) / tabs.length;
+    const tabH = 40;
+    const tabY = uiY + 15;
+    
+    ctx.font = `bold ${Math.max(13, cw*0.03)}px 'Bangers', 'Trebuchet MS', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    tabs.forEach((tab, i) => {
+        const tx = 20 + i * tabW;
+        const isActive = tab === activeTab;
+        
+        tabBounds.push({ x: tx, y: tabY, w: tabW - 5, h: tabH, name: tab });
+        
+        if (isActive) {
+            applyClayStyle('#ffe0f0', 2);
+        } else {
+            applyClayStyle('rgba(239, 248, 255, 0.98)', 1);
+        }
+        drawRoundedRect(ctx, tx, tabY, tabW - 5, tabH, 10);
+        ctx.fill();
+        resetShadow();
+        
+        ctx.fillStyle = isActive ? '#0f3b68' : '#5d7894';
+        ctx.fillText(tabLabels[tab], tx + (tabW-5)/2, tabY + tabH/2);
+    });
+
+    // Draw Inventory Items for Active Tab
+    inventoryBounds = [];
+    const invItems = items[activeTab];
+    const itemW = (cw - 60) / 3; // max 3 items per row
+    const itemH = uiH - tabH - 40;
+    const itemY = tabY + tabH + 10;
+
+    invItems.forEach((item, i) => {
+        const ix = 30 + (i % 3) * (itemW + 10);
+        const iy = itemY;
+        
+        inventoryBounds.push({ x: ix, y: iy, w: itemW, h: itemH, item: item });
+        
+        applyClayStyle('rgba(248, 251, 255, 0.96)', 3);
+        drawRoundedRect(ctx, ix, iy, itemW, itemH, 15);
+        ctx.fill();
+        resetShadow();
+
+        // Draw item preview
+        const previewScale = Math.min(itemW, itemH) / 200;
+        // Adjust preview center based on item type
+        let pyOffset = 0;
+        if (item.id.startsWith('h')) pyOffset = 80 * previewScale;
+        else if (item.id.startsWith('t')) pyOffset = 30 * previewScale;
+        else if (item.id.startsWith('b')) pyOffset = -20 * previewScale;
+        else if (item.id.startsWith('s')) pyOffset = -80 * previewScale;
+
+        // Don't draw if it's currently being dragged from inventory
+        if (!dragInfo || dragInfo.item !== item || dragInfo.source !== 'inventory') {
+            drawItemShape(item, ix + itemW/2, iy + itemH/2 + pyOffset, previewScale);
+        }
+
+        ctx.fillStyle = '#375978';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.font = `600 ${Math.max(12, cw * 0.023)}px 'Rajdhani', system-ui, sans-serif`;
+        ctx.fillText(item.name, ix + itemW / 2, iy + itemH - 12);
+    });
+
+    // Draw Dragged Item
+    if (dragInfo) {
+        drawItemShape(dragInfo.item, dragInfo.x, dragInfo.y, dollScale, true);
+    }
+
+    // Draw Particles
+    particles.forEach(p => {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4 + p.life * 4, 0, Math.PI*2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+}
+
+// --- Input Handling ---
+function handleGlobalInput(e) {
+    AudioSys.unlock();
+    e.preventDefault();
+    
+    if (gameState !== 'PLAYING') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (e.type === 'pointerdown') {
+        // Check Tabs
+        for (let t of tabBounds) {
+            if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
+                activeTab = t.name;
+                AudioSys.play('ui', 0.44, 80);
+                AudioSys.playSynth('pop');
+                AudioSys.vibrate('light');
+                return;
+            }
+        }
+
+        // Check Inventory Items
+        for (let b of inventoryBounds) {
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                dragInfo = {
+                    item: b.item,
+                    source: 'inventory',
+                    offsetX: 0, offsetY: 0,
+                    x: x, y: y
+                };
+                AudioSys.play('collect', 0.5, 100);
+                AudioSys.playSynth('pop');
+                AudioSys.vibrate('light');
+                return;
+            }
+        }
+
+        // Check Equipped Items (reverse layer order for top-most selection)
+        const layerOrder = ['Hair', 'Top', 'Bottom', 'Shoes'];
+        for (let cat of layerOrder) {
+            if (equipped[cat]) {
+                // Rough bounding box around doll center
+                let hitY = dollY, hitH = 100 * dollScale;
+                if (cat === 'Hair') { hitY = dollY - 100*dollScale; hitH = 60*dollScale; }
+                else if (cat === 'Top') { hitY = dollY - 40*dollScale; hitH = 60*dollScale; }
+                else if (cat === 'Bottom') { hitY = dollY + 10*dollScale; hitH = 60*dollScale; }
+                else if (cat === 'Shoes') { hitY = dollY + 70*dollScale; hitH = 40*dollScale; }
+
+                if (Math.abs(x - dollX) < 60 * dollScale && y > hitY && y < hitY + hitH) {
+                    dragInfo = {
+                        item: equipped[cat],
+                        source: 'doll',
+                        offsetX: dollX - x,
+                        offsetY: dollY - y,
+                        x: x + (dollX - x),
+                        y: y + (dollY - y)
+                    };
+                    equipped[cat] = null; // Unequip while dragging
+                    AudioSys.play('ui', 0.4, 80);
+                    AudioSys.playSynth('pop');
+                    AudioSys.vibrate('light');
+                    return;
+                }
+            }
+        }
+    } 
+    else if (e.type === 'pointermove') {
+        if (dragInfo) {
+            dragInfo.x = x + dragInfo.offsetX;
+            dragInfo.y = y + dragInfo.offsetY;
+        }
+    }
+    else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+        if (dragInfo) {
+            // Check drop zone (near doll)
+            const dist = Math.hypot(dragInfo.x - dollX, dragInfo.y - dollY);
+            if (dist < 150 * dollScale) {
+                // Equip
+                const cat = getCategory(dragInfo.item);
+                equipped[cat] = dragInfo.item;
+                AudioSys.play('success', 0.62, 120);
+                AudioSys.playSynth('snap');
+                AudioSys.vibrate('medium');
+                spawnParticles(dollX, dollY);
+            } else {
+                // Discard (if from doll, it just disappears back to inventory)
+                // If from inventory, it just snaps back (disappears)
+                showFeedback('bloop', 1300);
+                AudioSys.play('fail', 0.5, 120);
+                AudioSys.playSynth('pop');
+            }
+            dragInfo = null;
+        }
+    }
+}
+
+function getCategory(item) {
+    if (item.id.startsWith('h')) return 'Hair';
+    if (item.id.startsWith('t')) return 'Top';
+    if (item.id.startsWith('b')) return 'Bottom';
+    if (item.id.startsWith('s')) return 'Shoes';
+    return 'Hair';
+}
+
+canvas.addEventListener('pointerdown', handleGlobalInput, { passive: false });
+canvas.addEventListener('pointermove', handleGlobalInput, { passive: false });
+canvas.addEventListener('pointerup', handleGlobalInput, { passive: false });
+canvas.addEventListener('pointercancel', handleGlobalInput, { passive: false });
+
+document.addEventListener('visibilitychange', () => {
+    AudioSys.setBgmActive(!document.hidden);
+});
+
+// --- Core Loop & Resize ---
+function resize(entries) {
+    if (!entries || entries.length === 0) return;
+    const rect = entries[0].contentRect;
+    if (rect.width === 0 || rect.height === 0) return;
+
+    cw = rect.width;
+    ch = rect.height;
+    
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Layout calculations
+    dollX = cw / 2;
+    dollY = ch * 0.39; // Doll center slightly above middle
+    dollScale = Math.min(cw / 200, ch / 400) * 0.78;
+
+    uiH = ch * 0.38;
+    uiY = ch - uiH;
+
+    if (!initialized) {
+        initGame();
+        initialized = true;
+        requestAnimationFrame(loop);
+    }
+}
+
+function loop(timestamp) {
+    requestAnimationFrame(loop);
+    if (!lastTime) lastTime = timestamp;
+    let dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    if (dt > 0.1) dt = 0.1;
+
+    try {
+        update(dt);
+        render();
+    } catch (e) {
+        console.error("Loop error", e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    dpr = window.devicePixelRatio || 1;
+    const ro = new ResizeObserver(resize);
+    ro.observe(document.getElementById('game-container'));
+});
+
+</script>
+</body>
+</html>
