@@ -110,6 +110,21 @@
       min-width: 0;
     }
 
+    .brand-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 18px;
+      text-decoration: none;
+      flex: 0 0 auto;
+    }
+
+    .brand-link:focus-visible,
+    .install-button:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.9);
+      outline-offset: 3px;
+    }
+
     .logo-badge {
       width: 52px;
       height: 52px;
@@ -225,6 +240,42 @@
     .share-button.copied {
       background: linear-gradient(90deg, rgba(110, 244, 194, 0.94), rgba(83, 216, 255, 0.92));
       color: #071119;
+    }
+
+    .install-button {
+      min-width: 112px;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(14, 14, 16, 0.98), rgba(2, 2, 4, 0.98));
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      box-shadow:
+        0 14px 28px rgba(0, 0, 0, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      transition: 0.2s ease;
+    }
+
+    .install-button:hover,
+    .install-button:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.42);
+      box-shadow:
+        0 16px 32px rgba(0, 0, 0, 0.36),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .install-glyph {
+      font-size: 1rem;
+      line-height: 1;
     }
 
     .share-glyph {
@@ -348,13 +399,19 @@
     <aside class="title-rail">
       <div class="title-rail-card">
         <div class="brand-lockup">
-          <img class="logo-badge" data-logo alt="FriendJam logo" />
+          <a class="brand-link" data-install-link href="https://apps.apple.com/us/app/id6745799162" target="_blank" rel="noreferrer" aria-label="Open FriendJam on the App Store">
+            <img class="logo-badge" data-logo alt="FriendJam logo" />
+          </a>
           <div class="brand-text">
             <p class="brand-label">FriendJam</p>
             <h1 id="rail-title">FriendJam</h1>
           </div>
         </div>
         <div class="rail-actions">
+          <a class="install-button" data-install-link href="https://apps.apple.com/us/app/id6745799162" target="_blank" rel="noreferrer" aria-label="Install the FriendJam app">
+            <span class="install-glyph"></span>
+            <span>Get App</span>
+          </a>
           <button class="share-button" data-share-button type="button" aria-label="Copy share link">
             <span class="share-glyph">⤴</span>
             <span>Share</span>
@@ -366,12 +423,18 @@
     <section class="main-panel">
       <div class="topbar">
         <div class="brand-lockup topbar-brand">
-          <img class="logo-badge" data-logo alt="FriendJam logo" />
+          <a class="brand-link" data-install-link href="https://apps.apple.com/us/app/id6745799162" target="_blank" rel="noreferrer" aria-label="Open FriendJam on the App Store">
+            <img class="logo-badge" data-logo alt="FriendJam logo" />
+          </a>
           <div class="brand-text">
             <h1 class="topbar-title" id="player-title">FriendJam</h1>
           </div>
         </div>
         <div class="controls">
+          <a class="install-button" data-install-link href="https://apps.apple.com/us/app/id6745799162" target="_blank" rel="noreferrer" aria-label="Install the FriendJam app">
+            <span class="install-glyph"></span>
+            <span>Get App</span>
+          </a>
           <button class="share-button" data-share-button type="button" aria-label="Copy share link">
             <span class="share-glyph">⤴</span>
             <span>Share</span>
@@ -396,12 +459,17 @@
 
   <script>
     const FRIENDJAM_LOGO_URL = "https://www.krea.ai/api/img?f=webp&i=https%3A%2F%2Fapp-uploads.krea.ai%2Fpublic%2Fffc6baa2-4556-4517-9f21-bfc9227e6d56.png&s=1024";
+    const APP_STORE_URL = "https://apps.apple.com/us/app/id6745799162";
     const FRAME_RATIO_WIDTH = 9;
     const FRAME_RATIO_HEIGHT = 16;
+    const MIXPANEL_TOKEN = "919399d0433ce2ef7ba9e515b1c8567a";
+    const MIXPANEL_INSTANCE_NAME = "friendjam";
+    const ANALYTICS_PRODUCT = "friendjam-webplayer";
 
     const el = {
       shell: document.getElementById("player-shell"),
       logos: document.querySelectorAll("[data-logo]"),
+      installLinks: document.querySelectorAll("[data-install-link]"),
       shareButtons: document.querySelectorAll("[data-share-button]"),
       railTitle: document.getElementById("rail-title"),
       title: document.getElementById("player-title"),
@@ -415,10 +483,18 @@
 
     let playerTitle = "FriendJam";
     let shareFeedbackTimer = null;
-    let titlePollInterval = null;
-    let titlePollTimeout = null;
 
     const FALLBACK_VISIBLE_TITLE = "Play Now";
+    const analytics = {
+      ready: false,
+      queue: [],
+      sessionStartedAt: Date.now(),
+      heartbeatId: null,
+      sessionEnded: false,
+      targetUrl: "",
+      title: "",
+      gameId: ""
+    };
 
     function shortenTitle(value) {
       const normalized = String(value || "").trim();
@@ -435,15 +511,161 @@
       el.railTitle.textContent = playerTitle;
     }
 
-    function stopTitlePolling() {
-      if (titlePollInterval) {
-        window.clearInterval(titlePollInterval);
-        titlePollInterval = null;
+    function currentLayoutMode() {
+      return el.shell.classList.contains("landscape") ? "landscape" : "portrait";
+    }
+
+    function readGameIdParam() {
+      const params = new URLSearchParams(window.location.search);
+      const gameId = params.get("gameId");
+      return String(gameId || "").trim();
+    }
+
+    function analyticsProperties(extra = {}) {
+      return {
+        product: ANALYTICS_PRODUCT,
+        url: analytics.targetUrl || "",
+        title: analytics.title || "",
+        gameId: analytics.gameId || "",
+        page_url: window.location.href,
+        layout_mode: currentLayoutMode(),
+        viewport_w: window.innerWidth,
+        viewport_h: window.innerHeight,
+        elapsed_ms: Date.now() - analytics.sessionStartedAt,
+        ...extra
+      };
+    }
+
+    function ensureMixpanelBootstrap() {
+      if (window.mixpanel?.__SV) return;
+
+      (function(documentRef, mixpanelName) {
+        if (window[mixpanelName] && window[mixpanelName].__SV) return;
+        const mixpanel = window[mixpanelName] = window[mixpanelName] || [];
+        mixpanel._i = mixpanel._i || [];
+        mixpanel.__SV = 1.2;
+
+        function factory(target, methodName) {
+          return function() {
+            target.push([methodName].concat(Array.prototype.slice.call(arguments, 0)));
+          };
+        }
+
+        function createStub(instanceName) {
+          const instance = [];
+          const methods = "disable time_event track track_pageview track_links track_forms track_with_groups add_group set_group remove_group register register_once alias unregister identify name_tag set_config reset people.set people.set_once people.unset people.increment people.append people.union people.track_charge people.clear_charges people.delete_user people.remove".split(" ");
+          let methodIndex = 0;
+
+          for (; methodIndex < methods.length; methodIndex += 1) {
+            const methodName = methods[methodIndex];
+            const parts = methodName.split(".");
+            if (parts.length === 2) {
+              instance[parts[0]] = instance[parts[0]] || [];
+              instance[parts[0]][parts[1]] = factory(instance, methodName);
+            } else {
+              instance[methodName] = factory(instance, methodName);
+            }
+          }
+
+          if (!instance.get_group) {
+            instance.get_group = function() {
+              const args = ["get_group"].concat(Array.prototype.slice.call(arguments, 0));
+              const groupStub = [];
+              const groupMethods = ["set", "set_once", "union", "unset", "remove", "delete"];
+              for (let groupIndex = 0; groupIndex < groupMethods.length; groupIndex += 1) {
+                const groupMethodName = groupMethods[groupIndex];
+                groupStub[groupMethodName] = function() {
+                  const groupArgs = [groupMethodName].concat(Array.prototype.slice.call(arguments, 0));
+                  instance.push(args.concat([groupArgs]));
+                };
+              }
+              return groupStub;
+            };
+          }
+
+          return instance;
+        }
+
+        mixpanel.init = function(token, config, instanceName) {
+          const targetName = instanceName || "mixpanel";
+          const instance = createStub(targetName);
+          mixpanel[targetName] = instance;
+          mixpanel._i.push([token, config, targetName]);
+        };
+
+        const script = documentRef.createElement("script");
+        script.type = "text/javascript";
+        script.async = true;
+        script.src = "https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js";
+
+        const firstScript = documentRef.getElementsByTagName("script")[0];
+        if (firstScript?.parentNode) {
+          firstScript.parentNode.insertBefore(script, firstScript);
+        } else {
+          documentRef.head.appendChild(script);
+        }
+      })(document, "mixpanel");
+    }
+
+    function getMixpanelTracker() {
+      return window.mixpanel?.[MIXPANEL_INSTANCE_NAME] || null;
+    }
+
+    function flushAnalyticsQueue() {
+      const tracker = getMixpanelTracker();
+      if (!analytics.ready || !tracker?.track) return;
+      analytics.queue.splice(0).forEach(({ event, props }) => {
+        tracker.track(event, props);
+      });
+    }
+
+    function trackAnalytics(event, extra = {}) {
+      const props = analyticsProperties(extra);
+      const tracker = getMixpanelTracker();
+      if (analytics.ready && tracker?.track) {
+        tracker.track(event, props);
+        return;
       }
-      if (titlePollTimeout) {
-        window.clearTimeout(titlePollTimeout);
-        titlePollTimeout = null;
-      }
+      analytics.queue.push({ event, props });
+    }
+
+    function loadMixpanel() {
+      ensureMixpanelBootstrap();
+      if (!window.mixpanel?.init) return;
+
+      window.mixpanel.init(MIXPANEL_TOKEN, { track_pageview: false }, MIXPANEL_INSTANCE_NAME);
+
+      if (!getMixpanelTracker()?.track) return;
+      analytics.ready = true;
+      flushAnalyticsQueue();
+    }
+
+    function stopAliveHeartbeat() {
+      if (!analytics.heartbeatId) return;
+      window.clearInterval(analytics.heartbeatId);
+      analytics.heartbeatId = null;
+    }
+
+    function startAliveHeartbeat() {
+      stopAliveHeartbeat();
+      analytics.heartbeatId = window.setInterval(() => {
+        trackAnalytics("play_alive");
+      }, 5000);
+    }
+
+    function endAnalyticsSession(reason) {
+      if (analytics.sessionEnded) return;
+      analytics.sessionEnded = true;
+      stopAliveHeartbeat();
+      trackAnalytics("player_session_ended", {
+        reason,
+        duration_ms: Date.now() - analytics.sessionStartedAt
+      });
+      flushAnalyticsQueue();
+    }
+
+    function activeRequestedTitle() {
+      return readTitleParam();
     }
 
     function showStatus(title, message) {
@@ -452,11 +674,13 @@
       el.statusLayer.classList.remove("hidden");
       el.iframe.classList.remove("ready");
       el.iframe.removeAttribute("src");
-      setPlayerTitle(FALLBACK_VISIBLE_TITLE);
+      const requestedTitle = activeRequestedTitle();
+      setPlayerTitle(requestedTitle ? shortenTitle(requestedTitle) : FALLBACK_VISIBLE_TITLE, requestedTitle || null);
     }
 
     function showPlayer(url) {
-      setPlayerTitle(FALLBACK_VISIBLE_TITLE);
+      const requestedTitle = activeRequestedTitle();
+      setPlayerTitle(requestedTitle ? shortenTitle(requestedTitle) : FALLBACK_VISIBLE_TITLE, requestedTitle || null);
       el.iframe.src = url;
       el.iframe.classList.add("ready");
       el.statusLayer.classList.add("hidden");
@@ -495,6 +719,12 @@
         throw new Error("Only http and https URLs are supported.");
       }
       return parsed.toString();
+    }
+
+    function readTitleParam() {
+      const params = new URLSearchParams(window.location.search);
+      const title = params.get("title");
+      return String(title || "").trim();
     }
 
     function updateLayoutMode() {
@@ -559,55 +789,48 @@
 
     async function handleShare() {
       try {
+        trackAnalytics("share_clicked");
         await copyShareUrl();
         window.clearTimeout(shareFeedbackTimer);
         setShareButtonState(true);
         shareFeedbackTimer = window.setTimeout(() => setShareButtonState(false), 1400);
+        trackAnalytics("share_copied");
       } catch (error) {
         // Ignore clipboard failures silently.
       }
     }
 
-    function tryUpdateTitleFromIframe() {
-      try {
-        const frameTitle = el.iframe.contentWindow?.document?.title;
-        if (frameTitle && frameTitle.trim()) {
-          const trimmed = frameTitle.trim();
-          setPlayerTitle(shortenTitle(trimmed), trimmed);
-          stopTitlePolling();
-          return true;
-        }
-      } catch (error) {
-        // Cross-origin iframe titles are not readable. Keep FriendJam fallback.
-      }
-
-      return false;
-    }
-
-    function beginTitlePolling() {
-      stopTitlePolling();
-
-      tryUpdateTitleFromIframe();
-
-      titlePollInterval = window.setInterval(() => {
-        tryUpdateTitleFromIframe();
-      }, 1000);
-
-      titlePollTimeout = window.setTimeout(() => {
-        stopTitlePolling();
-      }, 60000);
+    function handleInstallTap(event) {
+      const trigger = event.currentTarget?.classList.contains("brand-link") ? "logo" : "button";
+      trackAnalytics("install_clicked", {
+        destination_url: APP_STORE_URL,
+        trigger
+      });
     }
 
     function initialize() {
       updateLayoutMode();
+      loadMixpanel();
+      el.installLinks.forEach(node => {
+        node.href = APP_STORE_URL;
+      });
       el.logos.forEach(node => {
         node.src = FRIENDJAM_LOGO_URL;
       });
       setShareButtonState(false);
-      setPlayerTitle(FALLBACK_VISIBLE_TITLE);
+      const requestedTitle = activeRequestedTitle();
+      analytics.title = requestedTitle;
+      analytics.gameId = readGameIdParam();
+      setPlayerTitle(requestedTitle ? shortenTitle(requestedTitle) : FALLBACK_VISIBLE_TITLE, requestedTitle || null);
 
       try {
         const target = readTargetUrl();
+        analytics.targetUrl = target || "";
+        trackAnalytics("player_page_loaded", {
+          has_title_param: Boolean(requestedTitle),
+          has_game_id: Boolean(analytics.gameId),
+          target_present: Boolean(target)
+        });
 
         if (!target) {
           showStatus("Connecting", "Pass a URL in ?url=... or a base64 URL in ?url_b64=... to start the player.");
@@ -615,13 +838,23 @@
         }
 
         showPlayer(target);
+        startAliveHeartbeat();
       } catch (error) {
+        trackAnalytics("player_page_loaded", {
+          has_title_param: Boolean(requestedTitle),
+          has_game_id: Boolean(analytics.gameId),
+          target_present: false
+        });
         showStatus("Unable to connect", error.message || "The provided URL could not be decoded.");
       }
     }
 
     el.shareButtons.forEach(button => {
       button.addEventListener("click", handleShare);
+    });
+
+    el.installLinks.forEach(link => {
+      link.addEventListener("click", handleInstallTap);
     });
 
     if (window.ResizeObserver) {
@@ -635,10 +868,12 @@
       if (!el.iframe.src) return;
       el.statusLayer.classList.add("hidden");
       el.iframe.classList.add("ready");
-      beginTitlePolling();
+      trackAnalytics("player_iframe_loaded");
     });
 
     window.addEventListener("resize", updateLayoutMode);
+    window.addEventListener("pagehide", () => endAnalyticsSession("pagehide"));
+    window.addEventListener("beforeunload", () => endAnalyticsSession("beforeunload"));
 
     initialize();
   </script>

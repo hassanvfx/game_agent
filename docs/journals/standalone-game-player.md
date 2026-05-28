@@ -237,6 +237,184 @@ Refined the visual shell so the main stage reads much darker and the landscape s
 
 ---
 
+### 2026-05-27 21:22 - Query-driven title handling and poller removal
+
+**Achievement:**
+Simplified the title system by removing unreliable iframe title polling and switching to an explicit optional `title` query parameter.
+
+**Implementation Details:**
+- Modified `tools/game_player/index.html` to:
+  - add optional `?title=...` query support
+  - use the first 18 characters of `title` for the visible UI title when provided
+  - use `FriendJam - <full title>` for the browser title when provided
+  - keep `Play Now` / `FriendJam` fallbacks when `title` is absent
+  - remove cross-origin iframe title polling logic entirely
+- Kept share behavior based on `window.location.href`, which preserves all currently loaded query params automatically.
+
+**Technical Decisions:**
+- Query-driven title state is deterministic and avoids the unreliability of cross-origin iframe title reads.
+- Sharing the full current URL ensures `url`, `url_b64`, `title`, and any future params are preserved without custom URL rebuilding.
+
+**Next Steps:**
+- [ ] Verify `title` param updates visible title and browser title correctly
+- [ ] Verify share keeps all query params intact
+- [ ] Verify fallback title remains `Play Now` when `title` is omitted
+
+**Status:** In Progress
+
+---
+
+### 2026-05-27 21:24 - Title param overwrite fix
+
+**Achievement:**
+Fixed a regression where the query-driven title was parsed correctly on startup but then overwritten during player load.
+
+**Implementation Details:**
+- Modified `tools/game_player/index.html` so both `showPlayer()` and `showStatus()` re-apply the active query-driven title instead of forcing the fallback title.
+- Centralized query-title access through a small helper so the behavior stays consistent across initialization and state changes.
+
+**Technical Decisions:**
+- The player should treat the query param as the source of truth for title state whenever it exists.
+- Fallback to `Play Now` now happens only when no explicit title was provided.
+
+**Next Steps:**
+- [ ] Verify the provided `title` param remains visible after iframe load
+- [ ] Verify fallback still works when `title` is absent
+
+**Status:** In Progress
+
+---
+
+### 2026-05-27 21:39 - Mixpanel heartbeat and lifecycle analytics
+
+**Achievement:**
+Added Mixpanel browser analytics to the standalone player with a 5-second alive heartbeat and lifecycle/share tracking.
+
+**Implementation Details:**
+- Modified `tools/game_player/index.html` to load Mixpanel from the browser CDN using token `919399d0433ce2ef7ba9e515b1c8567a`.
+- Added tracked events:
+  - `player_page_loaded`
+  - `player_iframe_loaded`
+  - `share_clicked`
+  - `share_copied`
+  - `play_alive` every 5 seconds
+  - `player_session_ended`
+- Added event properties on all analytics calls:
+  - `product: "friendjam-webplayer"`
+  - iframe target `url`
+  - query-driven `title`
+  - optional `gameId`
+  - `page_url`
+  - `layout_mode`
+  - viewport width / height
+  - elapsed time
+
+**Technical Decisions:**
+- `player_page_loaded` is sent immediately, while `play_alive` begins on the first 5-second interval rather than also firing at `0s`.
+- Share analytics reuse `window.location.href`, so copied URLs and tracked context stay aligned.
+- Session end is emitted on `pagehide` / `beforeunload` with duration.
+
+**Next Steps:**
+- [ ] Verify Mixpanel loads successfully from CDN
+- [ ] Verify `play_alive` fires every 5 seconds after startup
+- [ ] Verify `gameId`, `title`, and target `url` are attached to all events
+
+**Status:** In Progress
+
+---
+
+### 2026-05-27 22:01 - Mixpanel bootstrap initialization fix
+
+**Achievement:**
+Fixed the standalone player's Mixpanel startup path so the browser SDK is initialized through a supported bootstrap flow instead of direct script injection.
+
+**Implementation Details:**
+- Modified `tools/game_player/index.html` to replace the previous custom `loadMixpanel()` script append approach with a bootstrap helper that mirrors Mixpanel's expected queued-init pattern.
+- Added a dedicated named Mixpanel instance (`friendjam`) and updated analytics dispatch to track through that initialized instance instead of the global root object.
+- Preserved the existing event model and shared event properties for:
+  - `player_page_loaded`
+  - `player_iframe_loaded`
+  - `share_clicked`
+  - `share_copied`
+  - `play_alive`
+  - `player_session_ended`
+
+**Technical Decisions:**
+- The prior approach loaded `mixpanel-2-latest.min.js` directly and then called `mixpanel.init(...)` after load, which can produce the `"mixpanel" object not initialized` error because it bypasses the expected bootstrap/stub queue.
+- Using a named instance avoids ambiguity between the global bootstrap container and the actual tracker used for event emission.
+- Browser-extension content-script errors and runtime warnings from the embedded game were treated as unrelated noise because they originate outside the standalone player shell.
+
+**Next Steps:**
+- [ ] Verify the Mixpanel initialization error no longer appears in the console
+- [ ] Verify the named tracker still sends the existing lifecycle/share/heartbeat events
+- [ ] Verify the embedded-game console noise is unchanged and non-blocking
+
+**Status:** In Progress
+
+---
+
+### 2026-05-27 22:08 - App Store install CTA and tappable logo
+
+**Achievement:**
+Added a dedicated App Store install CTA to the standalone player and made the FriendJam logo itself open the iOS app listing.
+
+**Implementation Details:**
+- Modified `tools/game_player/index.html` to wrap the FriendJam logo in a tappable App Store link in both layouts:
+  - portrait top bar
+  - landscape title rail
+- Added a new `Install App` CTA next to `Share` using an Apple-style white-on-black treatment.
+- Reused a shared App Store target URL:
+  - `https://apps.apple.com/us/app/id6745799162`
+- Kept the CTA placement consistent with the existing chrome instead of moving actions into a separate section.
+
+**Technical Decisions:**
+- The install CTA was implemented as a normal anchor so it behaves predictably across mobile and desktop browsers.
+- The logo link and the install button share the same destination to reduce ambiguity in the chrome.
+- The visual styling intentionally contrasts with the colorful Share button so the install action reads as a platform/store action rather than a gameplay action.
+
+**Next Steps:**
+- [ ] Verify the logo opens the App Store link in both portrait and landscape layouts
+- [ ] Verify the `Install App` button sits correctly next to `Share`
+- [ ] Verify the white-on-black CTA remains readable against the dark shell
+
+**Status:** In Progress
+
+---
+
+### 2026-05-27 22:10 - Install CTA Mixpanel tracking
+
+**Achievement:**
+Added Mixpanel tracking for App Store install taps so the install CTA now emits analytics in the same interaction style as the Share action.
+
+**Implementation Details:**
+- Modified `tools/game_player/index.html` to attach click handlers to all install links.
+- Added a new analytics event:
+  - `install_clicked`
+- Included extra event context for install taps:
+  - `destination_url`
+  - `trigger` (`logo` or `button`)
+- Kept the shared analytics payload intact so install events also inherit the existing player context:
+  - `product`
+  - `url`
+  - `title`
+  - `gameId`
+  - `page_url`
+  - `layout_mode`
+  - viewport metadata
+  - elapsed time
+
+**Technical Decisions:**
+- The install event mirrors the Share interaction pattern by firing on tap/click rather than on downstream store completion.
+- Tracking is bound to both the logo link and the dedicated Install App button so either install surface is measurable.
+
+**Next Steps:**
+- [ ] Verify `install_clicked` fires for both logo and button taps
+- [ ] Verify the event includes `trigger`, `destination_url`, and the shared player context
+
+**Status:** In Progress
+
+---
+
 ## 🐛 Known Issues
 
 ### Cross-Origin / Embedding Restrictions
