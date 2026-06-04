@@ -1,6 +1,6 @@
 # Standalone Game Player Implementation Journal
 
-**Last Updated:** 2026-05-27  
+**Last Updated:** 2026-06-04  
 **Feature Spec:** Standalone fullscreen HTML player extracted from `dashboard/annotator_template.html`  
 **Backend Reference:** N/A
 
@@ -412,6 +412,114 @@ Added Mixpanel tracking for App Store install taps so the install CTA now emits 
 - [ ] Verify the event includes `trigger`, `destination_url`, and the shared player context
 
 **Status:** In Progress
+
+---
+
+### 2026-06-04 07:28 - Mobile gesture suppression planning
+
+**Achievement:**
+Planned hardening for the standalone iframe player so mobile browsers keep a stable game viewport and do not interpret gameplay gestures as page zoom, long-press selection, callouts, or scroll/pull interactions.
+
+**Implementation Plan:**
+- Update `tools/game_player/player.html` viewport metadata to disable user scaling with `maximum-scale=1` and `user-scalable=no`, while keeping `viewport-fit=cover`.
+- Add root-level CSS gesture guards on `html`, `body`, `.player-shell`, `.iframe-wrap`, `.iframe-frame`, and `iframe`:
+  - `touch-action: none`
+  - `overscroll-behavior: none`
+  - `-webkit-user-select: none`
+  - `user-select: none`
+  - `-webkit-touch-callout: none`
+  - `-webkit-tap-highlight-color: transparent`
+- Add non-passive event listeners on the parent document for gesture-only browser behaviors:
+  - prevent `gesturestart`, `gesturechange`, and `gestureend` for iOS Safari pinch gestures
+  - prevent multi-touch `touchmove` on the parent document as a fallback
+  - prevent `contextmenu` to suppress long-press menus outside the embedded game
+  - prevent double-tap zoom by cancelling rapid repeated `touchend` events on non-interactive chrome
+- Keep Share and App Store links functional by excluding buttons, anchors, inputs, textareas, selects, and contenteditable nodes from generic tap cancellation.
+- Prefer parent-shell hardening over attempting to inject scripts into iframe contents, because most embedded games are cross-origin and browser security will block direct access.
+
+**Technical Decisions:**
+- CSS `touch-action: none` is the primary modern control, but iOS Safari still needs `gesture*` and multi-touch fallbacks.
+- Long-press suppression should apply to the player shell and iframe boundary; the embedded game may still need its own CSS if it is same-origin or controlled by us.
+- Disabling zoom has accessibility tradeoffs, so this should be scoped only to the dedicated fullscreen game player page rather than reused globally.
+
+**Testing:**
+- Verify on iOS Safari and iOS Chrome that pinch zoom does not scale the page.
+- Verify on Android Chrome that pinch zoom, double-tap zoom, and pull-to-refresh are suppressed.
+- Verify long-press does not show text/image/link callouts on the player chrome.
+- Verify iframe taps, drags, and rapid taps still reach the embedded game.
+- Verify Share and App Store CTAs still work in portrait and landscape.
+
+**Next Steps:**
+- [ ] Implement viewport, CSS, and event listener hardening in `tools/game_player/player.html`
+- [ ] Test on physical iOS Safari because simulator/desktop emulation may miss WebKit gesture behavior
+- [ ] Test at least one iframe game with drag controls and one with rapid tap controls
+
+**Status:** Planned
+
+---
+
+### 2026-06-04 07:54 - Parent-only mobile gesture shield implementation
+
+**Achievement:**
+Implemented the mobile gesture hardening as an origin-agnostic parent-page shield in `tools/game_player/player.html`, without attempting to inspect, inject into, or mutate cross-origin iframe content.
+
+**Implementation Details:**
+- Updated the viewport meta tag with `maximum-scale=1` and `user-scalable=no` while preserving `viewport-fit=cover`.
+- Added CSS gesture guards across the player document, shell, iframe wrapper, iframe frame, and iframe element:
+  - `touch-action: none`
+  - `overscroll-behavior: none`
+  - `-webkit-touch-callout: none`
+  - `-webkit-user-select: none`
+  - `user-select: none`
+  - `-webkit-tap-highlight-color: transparent`
+- Kept player chrome controls tappable with `touch-action: manipulation` on buttons and app links.
+- Added parent-document JavaScript fallbacks for iOS/WebKit and desktop trackpad zoom:
+  - prevent `gesturestart`, `gesturechange`, and `gestureend`
+  - prevent multi-touch parent `touchmove`
+  - prevent parent `contextmenu`
+  - prevent rapid double-tap zoom on non-interactive parent targets
+  - prevent `ctrlKey` wheel zoom on the player page
+
+**Technical Decisions:**
+- The implementation deliberately stays iframe-origin agnostic. It does not access `iframe.contentWindow` or assume the embedded game is same-origin.
+- The shield focuses on browser gestures applied to the outer player document and iframe element boundary.
+- Interactive chrome is excluded from double-tap cancellation so Share and App Store actions remain usable.
+
+**Testing:**
+- Parsed the inline script with Node to catch syntax errors.
+- Served the player locally at `http://127.0.0.1:8765/tools/game_player/player.html`.
+- Verified in the in-app browser that:
+  - the page reaches the expected `Connecting` state
+  - the viewport meta contains `maximum-scale=1` and `user-scalable=no`
+  - computed `.player-shell` and `iframe` `touch-action` values are `none`
+  - computed `.player-shell` `overscroll-behavior` is `none`
+  - Share and App Store chrome remains present
+- Physical mobile verification is still required for actual pinch/long-press behavior, especially on iOS Safari.
+
+**Next Steps:**
+- [ ] Test on a physical iPhone in Safari with a real cross-origin iframe game
+- [ ] Test on Android Chrome with pinch, double-tap, long-press, rapid tap, and drag gestures
+- [ ] Confirm no iframe game loses normal tap/drag input from parent-level suppression
+
+**Status:** In Progress
+
+---
+
+### 2026-06-04 07:57 - Commit preparation
+
+**Achievement:**
+Prepared the standalone player gesture-shield work for commit using the repository's ClineFlow workflow.
+
+**Implementation Details:**
+- Included the completed parent-only mobile gesture shield in `tools/game_player/player.html`.
+- Preserved the journal planning and implementation notes in `docs/journals/standalone-game-player.md`.
+- Noted that the working tree also contains a pre-existing `tools/game_player/index.html` deletion and untracked `tmp/` utility artifacts, which are being staged because the project commit workflow requests all changes on `please commit`.
+
+**Testing:**
+- Inline player script parse check passed with Node.
+- Local browser runtime check confirmed the player shell loaded, the gesture meta/CSS guards were active, and player chrome remained present.
+
+**Status:** Ready for Commit
 
 ---
 

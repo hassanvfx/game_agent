@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, viewport-fit=cover">
+    <title>Portal Sprint</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Orbitron:wght@400;700&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-top: #06120f;
+            --bg-bottom: #102014;
+            --panel: rgba(5, 18, 13, 0.84);
+            --panel-border: rgba(113, 255, 91, 0.9);
+            --panel-shadow: rgba(0, 0, 0, 0.45);
+            --text-main: #f4fbff;
+            --text-soft: #b9ffca;
+            --accent: #71ff5b;
+            --accent-strong: #18e87d;
+            --sunset: #ffdc5e;
+            --danger: #ff5c7a;
+            --boost: #fff06a;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(113, 255, 91, 0.28), transparent 30%),
+                radial-gradient(circle at 75% 18%, rgba(47, 215, 255, 0.16), transparent 26%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+            font-family: 'Exo 2', Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            color: var(--text-main);
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none; /* Keep gameplay gestures on the play surface without blocking menu taps */
+            background:
+                radial-gradient(circle at 18% 18%, rgba(113, 255, 91, 0.18), transparent 20%),
+                radial-gradient(circle at 78% 12%, rgba(47, 215, 255, 0.14), transparent 22%),
+                radial-gradient(circle at 50% 70%, rgba(176, 78, 255, 0.09), transparent 28%);
+        }
+        #game-container::before,
+        #game-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+        #game-container::before {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.08), transparent 18%, transparent 82%, rgba(0,0,0,0.2)),
+                repeating-linear-gradient(
+                    90deg,
+                    rgba(113, 255, 91, 0.055) 0 2px,
+                    transparent 2px 68px
+                ),
+                repeating-linear-gradient(
+                    0deg,
+                    transparent 0 17px,
+                    rgba(47, 215, 255, 0.035) 17px 18px
+                );
+            opacity: 0.68;
+            animation: labScanDrift 12s linear infinite;
+        }
+        #game-container::after {
+            background:
+                radial-gradient(circle at center, transparent 55%, rgba(2, 8, 22, 0.38) 100%);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 0;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 5;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .screen {
+            pointer-events: auto;
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(ellipse at 18% 8%, rgba(113, 255, 91, 0.22), transparent 34%),
+                radial-gradient(ellipse at 86% 95%, rgba(47, 215, 255, 0.18), transparent 34%),
+                linear-gradient(180deg, rgba(6, 22, 18, 0.92), rgba(5, 10, 24, 0.94));
+            padding: 18px 18px 20px;
+            border-radius: 18px;
+            color: var(--text-main);
+            width: min(100%, 340px);
+            max-width: 80%;
+            border: 2px solid var(--panel-border);
+            box-shadow:
+                0 14px 40px var(--panel-shadow),
+                0 0 24px rgba(113, 255, 91, 0.2),
+                inset 0 1px 0 rgba(255,255,255,0.12);
+            backdrop-filter: blur(6px);
+        }
+        .screen::before,
+        .screen::after {
+            content: "";
+            position: absolute;
+            pointer-events: none;
+            inset: auto;
+        }
+        .screen::before {
+            width: 130px;
+            height: 76px;
+            right: -42px;
+            top: -26px;
+            border: 4px solid rgba(113, 255, 91, 0.34);
+            border-radius: 50%;
+            box-shadow:
+                0 0 16px rgba(113, 255, 91, 0.24),
+                inset 0 0 18px rgba(47, 215, 255, 0.18);
+            transform: rotate(-18deg);
+            animation: portalPulse 3.6s ease-in-out infinite;
+        }
+        .screen::after {
+            left: 12px;
+            right: 12px;
+            bottom: 8px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(126, 243, 255, 0.52), transparent);
+        }
+        /* [agent-note][stage2] preserve: hud-layout | reason: already mobile-safe, styling only */
+        /* [agent-note][stage4] repaired: mobile-action-path | element: start/restart buttons | action: native taps kept separate from gameplay touch suppression */
+        /* [agent-note][stage4] remap-font: title/hud/buttons -> Orbitron, ui/body -> Exo 2 via catalogs/fonts.json */
+        /* [agent-note][world-design-v4] rick-and-morty: generic city backdrop is non-protected; canvas background should become procedural portal dimensions, not stock scene ownership. */
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: clamp(1.7rem, 5vw, 2.2rem);
+            font-family: 'Bangers', 'Orbitron', Impact, sans-serif;
+            color: var(--boost);
+            text-shadow: 0 0 14px rgba(113, 255, 91, 0.44), 0 2px 0 rgba(0,0,0,0.65);
+            letter-spacing: 2.2px;
+            line-height: 1.05;
+        }
+        p {
+            margin: 10px 0;
+            font-size: clamp(1rem, 4vw, 1.08rem);
+            color: var(--text-soft);
+            line-height: 1.4;
+            font-family: 'Exo 2', Arial, sans-serif;
+            font-weight: 600;
+        }
+        button {
+            background: linear-gradient(180deg, var(--sunset), #91ff4f);
+            color: #09111f;
+            border: none;
+            padding: 14px 22px;
+            font-size: clamp(1rem, 4vw, 1.05rem);
+            font-family: 'Orbitron', Impact, sans-serif;
+            border-radius: 999px;
+            cursor: pointer;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow:
+                0 5px 0 #3fb336,
+                0 10px 20px rgba(0,0,0,0.24),
+                0 0 20px rgba(255, 174, 87, 0.25);
+            transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow:
+                0 1px 0 #3fb336,
+                0 5px 10px rgba(0,0,0,0.2),
+                0 0 12px rgba(255, 174, 87, 0.18);
+            filter: brightness(1.02);
+        }
+        #hud {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            width: auto;
+            min-width: 134px;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+            font-size: clamp(1.45rem, 6.2vw, 2.15rem);
+            font-weight: 700;
+            font-family: 'Orbitron', Impact, sans-serif;
+            color: var(--text-main);
+            text-shadow: 0 0 14px rgba(126, 243, 255, 0.45), 0 2px 0 rgba(0,0,0,0.9);
+            display: none;
+            z-index: 10;
+            letter-spacing: 1.5px;
+            padding: 8px 15px 9px;
+            border-radius: 999px;
+            border: 1px solid rgba(113, 255, 91, 0.55);
+            background:
+                radial-gradient(circle at 18% 0%, rgba(113, 255, 91, 0.22), transparent 36%),
+                linear-gradient(180deg, rgba(4, 18, 15, 0.68), rgba(5, 10, 24, 0.72));
+            box-shadow:
+                0 0 18px rgba(113, 255, 91, 0.16),
+                inset 0 0 12px rgba(47, 215, 255, 0.12);
+            backdrop-filter: blur(5px);
+        }
+        #hud .hud-label {
+            display: block;
+            font-family: 'Exo 2', Arial, sans-serif;
+            font-size: 0.54rem;
+            line-height: 1;
+            letter-spacing: 1.4px;
+            color: var(--text-soft);
+            text-shadow: none;
+        }
+        #hud .hud-score {
+            display: block;
+            line-height: 1;
+        }
+        #mute-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(180deg, rgba(12, 25, 46, 0.85), rgba(6, 15, 30, 0.95));
+            border: 2px solid rgba(126, 243, 255, 0.78);
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 20;
+            box-shadow: 0 0 18px rgba(126, 243, 255, 0.16);
+        }
+        #feedback-overlay {
+            position: absolute;
+            left: 50%;
+            bottom: 88px;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: min(82vw, 260px);
+            max-width: min(86vw, 320px);
+            padding: 10px 14px;
+            border-radius: 18px;
+            background: rgba(4, 12, 24, 0.78);
+            border: 1px solid rgba(126, 243, 255, 0.42);
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+            z-index: 12;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+        #feedback-overlay.active {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-8px);
+        }
+        #feedback-overlay.fail {
+            border-color: rgba(255, 92, 122, 0.65);
+        }
+        #feedback-overlay img {
+            width: 64px;
+            height: 64px;
+            object-fit: cover;
+            border-radius: 12px;
+            flex: 0 0 auto;
+            background: rgba(255,255,255,0.06);
+        }
+        #feedback-text {
+            font-family: 'Orbitron', Impact, sans-serif;
+            font-size: clamp(0.78rem, 2.8vw, 0.98rem);
+            line-height: 1.15;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+        }
+        .hidden { display: none !important; }
+        @keyframes labScanDrift {
+            from { background-position: 0 0, 0 0, 0 0; }
+            to { background-position: 0 0, 136px 0, 0 72px; }
+        }
+        @keyframes portalPulse {
+            0%, 100% { transform: rotate(-18deg) scale(0.96); opacity: 0.55; }
+            50% { transform: rotate(-10deg) scale(1.06); opacity: 0.88; }
+        }
+        @media (max-width: 480px) {
+            .screen {
+                padding: 16px 14px 18px;
+                border-radius: 16px;
+                width: min(100%, 300px);
+            }
+            #hud {
+                top: 16px;
+            }
+            #feedback-overlay {
+                bottom: 74px;
+                min-width: min(88vw, 240px);
+                gap: 8px;
+                padding: 8px 10px;
+            }
+            #feedback-overlay img {
+                width: 54px;
+                height: 54px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="hud">0</div>
+    
+    <div id="mute-btn">🔊</div>
+
+    <!-- [agent-note][stage3] resolved-gif: pickup/fail feedback overlay -> catalogs/gifs.json -->
+    <!-- [agent-note][stage3] caution: keep-gif-off-playfield | reason: protect controls -->
+    <div id="feedback-overlay" aria-hidden="true">
+        <img id="feedback-gif" alt="Run feedback animation">
+        <div id="feedback-text"></div>
+    </div>
+
+    <div id="ui-layer">
+        <div id="start-screen" class="screen">
+            <h1>PORTAL SPRINT</h1>
+            <p>Keep Morty's portal sled aloft through Rick's unstable rifts.</p>
+            <p>Tap or press Space to boost and grab mega seeds.</p>
+            <button id="start-btn">OPEN PORTAL</button>
+        </div>
+        
+        <div id="game-over-screen" class="screen hidden">
+            <h1>TIMELINE LOST</h1>
+            <p>Dimension Streak: <span id="final-score">0</span></p>
+            <button id="restart-btn">RE-RICK-START</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * 1. ASSET CONFIGURATION & MANAGEMENT
+ */
+const ASSETS_CONFIG = {
+    player: "https://gamezone-virid.vercel.app/assets/images/sprites/runner/player_runner.png",
+    obstacle: "https://gamezone-virid.vercel.app/assets/images/sprites/runner/spike.png",
+    collectible: "https://gamezone-virid.vercel.app/assets/images/sprites/runner/coin.png",
+    // Approved catalog URL retained only as fallback media; world-design marks the generic city as non-protected.
+    bg: "https://gamezone-virid.vercel.app/assets/images/backgrounds/runner/city.png"
+};
+
+const MEDIA_CONFIG = {
+    audio: {
+        // [agent-note][stage4] optional-audio-disabled: prior non-catalog UI/SFX URLs produced reproducible 404 console errors; keep audio manager safe and silent rather than swapping to unrelated unavailable media.
+        flap: null,
+        pass: null,
+        collect: null,
+        crash: null,
+        start: null,
+        click: null,
+        loop: null
+    },
+    gifs: {
+        collect: "https://i.giphy.com/Y4nmq4GOnLf4XIgALX.webp",
+        fail: "https://i.giphy.com/NP6vhfTYwxlV4Wc7ms.webp"
+    }
+};
+
+const images = {};
+let assetsLoaded = 0;
+const totalAssets = Object.keys(ASSETS_CONFIG).length;
+
+function preloadAssets(callback) {
+    for (const [key, url] of Object.entries(ASSETS_CONFIG)) {
+        const img = new Image();
+        img.src = url;
+        img.onload = () => {
+            assetsLoaded++;
+            if (assetsLoaded === totalAssets) callback();
+        };
+        img.onerror = () => {
+            console.warn(`Failed to load ${key}, using fallback.`);
+            assetsLoaded++;
+            if (assetsLoaded === totalAssets) callback();
+        };
+        images[key] = img;
+    }
+}
+
+/**
+ * 2. AUDIO MANAGER
+ * Catalog-backed one-shots + a gameplay loop, all gesture-safe and failure tolerant.
+ */
+const AudioManager = {
+    isMuted: false,
+    initialized: false,
+    loopTrack: null,
+    sfx: {},
+    
+    init() {
+        if (this.initialized) {
+            this.resumeLoop();
+            return;
+        }
+
+        this.initialized = true;
+        const createAudio = (src, volume, loop = false) => {
+            if (!src) return null;
+            const audio = new Audio(src);
+            audio.preload = 'auto';
+            audio.volume = volume;
+            audio.loop = loop;
+            audio.playsInline = true;
+            return audio;
+        };
+
+        this.sfx = {
+            flap: createAudio(MEDIA_CONFIG.audio.flap, 0.26),
+            pass: createAudio(MEDIA_CONFIG.audio.pass, 0.24),
+            collect: createAudio(MEDIA_CONFIG.audio.collect, 0.26),
+            crash: createAudio(MEDIA_CONFIG.audio.crash, 0.34),
+            start: createAudio(MEDIA_CONFIG.audio.start, 0.3),
+            click: createAudio(MEDIA_CONFIG.audio.click, 0.22)
+        };
+
+        this.loopTrack = createAudio(MEDIA_CONFIG.audio.loop, 0.18, true);
+        this.resumeLoop();
+    },
+
+    playSfx(name) {
+        if (this.isMuted || !this.initialized) return;
+        const source = this.sfx[name];
+        if (!source) return;
+
+        try {
+            const clone = source.cloneNode();
+            clone.volume = source.volume;
+            clone.playsInline = true;
+            const playPromise = clone.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {});
+            }
+        } catch (err) {
+            // Audio failure must not affect controls or loop.
+        }
+    },
+
+    resumeLoop() {
+        if (this.isMuted || !this.loopTrack) return;
+        const playPromise = this.loopTrack.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+    },
+
+    pauseLoop() {
+        if (this.loopTrack) {
+            this.loopTrack.pause();
+        }
+    },
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        const btn = document.getElementById('mute-btn');
+        btn.textContent = this.isMuted ? '🔇' : '🔊';
+
+        if (this.loopTrack) {
+            this.loopTrack.muted = this.isMuted;
+        }
+
+        if (this.isMuted) this.pauseLoop();
+        else this.resumeLoop();
+    }
+};
+
+/**
+ * 3. GIF FEEDBACK
+ */
+const feedbackOverlay = document.getElementById('feedback-overlay');
+const feedbackGif = document.getElementById('feedback-gif');
+const feedbackText = document.getElementById('feedback-text');
+let feedbackTimer = null;
+
+function showFeedback(type, text) {
+    const src = MEDIA_CONFIG.gifs[type];
+    if (!src) return;
+
+    feedbackGif.src = src;
+    feedbackText.textContent = text;
+    feedbackOverlay.classList.toggle('fail', type === 'fail');
+    feedbackOverlay.classList.add('active');
+
+    clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+        feedbackOverlay.classList.remove('active', 'fail');
+    }, type === 'fail' ? 1700 : 1100);
+}
+
+/**
+ * 4. GAME LOGIC
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game State
+let gameState = 'START'; // START, PLAYING, GAMEOVER
+let frames = 0;
+let score = 0;
+let speed = 3;
+let startGraceFrames = 0;
+
+// Physics Constants
+const GRAVITY = 0.25;
+const FLAP_STRENGTH = -5.5;
+
+// Entities
+const player = {
+    x: 50,
+    y: 150,
+    width: 40,
+    height: 40,
+    velocity: 0,
+    rotation: 0,
+    
+    reset() {
+        this.x = canvas.width * 0.2;
+        this.y = canvas.height / 2;
+        this.velocity = 0;
+        this.rotation = 0;
+    },
+    
+    flap() {
+        this.velocity = FLAP_STRENGTH;
+        AudioManager.playSfx('flap');
+    },
+    
+    update() {
+        this.velocity += GRAVITY;
+        this.y += this.velocity;
+        
+        if (this.velocity < 0) this.rotation = -25 * Math.PI / 180;
+        else if (this.velocity > 0) {
+            this.rotation += 2 * Math.PI / 180;
+            if (this.rotation > 90 * Math.PI / 180) this.rotation = 90 * Math.PI / 180;
+        }
+
+        if (this.y + this.height >= canvas.height) {
+            this.y = canvas.height - this.height;
+            if (startGraceFrames <= 0) {
+                gameOver();
+            } else {
+                this.velocity = Math.min(this.velocity, 0);
+            }
+        }
+        if (this.y < 0) {
+            this.y = 0;
+            this.velocity = 0;
+        }
+    },
+    
+    draw() {
+        ctx.save();
+        ctx.translate(this.x + this.width/2, this.y + this.height/2);
+        ctx.rotate(this.rotation);
+        
+        // Procedural Morty-like portal sled courier; drawing stays inside the existing 40x40 hitbox.
+        ctx.shadowColor = 'rgba(113, 255, 91, 0.55)';
+        ctx.shadowBlur = 14;
+        ctx.strokeStyle = 'rgba(113, 255, 91, 0.72)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(-this.width * 0.18, this.height * 0.18, this.width * 0.48, this.height * 0.22, -0.12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.shadowColor = 'rgba(126, 243, 255, 0.45)';
+        ctx.shadowBlur = 10;
+        const sledGrad = ctx.createLinearGradient(-this.width * 0.46, this.height * 0.05, this.width * 0.44, this.height * 0.28);
+        sledGrad.addColorStop(0, '#2fd7ff');
+        sledGrad.addColorStop(0.52, '#71ff5b');
+        sledGrad.addColorStop(1, '#163a2d');
+        ctx.fillStyle = sledGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, this.height * 0.16, this.width * 0.45, this.height * 0.14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = 'rgba(113, 255, 91, 0.28)';
+        ctx.beginPath();
+        ctx.moveTo(-this.width * 0.42, this.height * 0.16);
+        ctx.lineTo(-this.width * 0.5, this.height * 0.04);
+        ctx.lineTo(-this.width * 0.48, this.height * 0.27);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fff06a';
+        ctx.strokeStyle = '#2b1908';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(-this.width * 0.08, -this.height * 0.06, this.width * 0.28, this.height * 0.34, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f3c28a';
+        ctx.beginPath();
+        ctx.arc(this.width * 0.06, -this.height * 0.22, this.width * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#2b1908';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+
+        ctx.fillStyle = '#5b3420';
+        ctx.beginPath();
+        ctx.arc(this.width * 0.0, -this.height * 0.35, this.width * 0.17, Math.PI * 0.98, Math.PI * 1.95);
+        ctx.lineTo(this.width * 0.19, -this.height * 0.22);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#111827';
+        ctx.beginPath();
+        ctx.arc(this.width * 0.12, -this.height * 0.24, 1.7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(126, 243, 255, 0.95)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-this.width * 0.32, -this.height * 0.08);
+        ctx.lineTo(-this.width * 0.48, -this.height * 0.2);
+        ctx.moveTo(-this.width * 0.26, -this.height * 0.02);
+        ctx.lineTo(-this.width * 0.46, -this.height * 0.02);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+};
+
+const obstacles = {
+    list: [],
+    spawnTimer: 0,
+    gap: 160,
+    width: 60,
+    
+    reset() {
+        this.list = [];
+        this.spawnTimer = 0;
+    },
+    
+    update() {
+        if (frames % 120 === 0) {
+            const minHeight = 50;
+            const maxHeight = canvas.height - this.gap - minHeight;
+            const topHeight = Math.floor(Math.random() * (maxHeight - minHeight + 1) + minHeight);
+            
+            this.list.push({
+                x: canvas.width,
+                y: 0,
+                width: this.width,
+                height: topHeight,
+                passed: false,
+                type: 'top'
+            });
+            
+            this.list.push({
+                x: canvas.width,
+                y: topHeight + this.gap,
+                width: this.width,
+                height: canvas.height - topHeight - this.gap,
+                type: 'bottom'
+            });
+            
+            if (Math.random() > 0.5) {
+                collectibles.spawn(canvas.width + this.width/2, topHeight + this.gap/2);
+            }
+        }
+        
+        for (let i = 0; i < this.list.length; i++) {
+            let p = this.list[i];
+            p.x -= speed;
+            
+            if (
+                player.x < p.x + p.width &&
+                player.x + player.width > p.x &&
+                player.y < p.y + p.height &&
+                player.y + player.height > p.y
+            ) {
+                gameOver();
+            }
+            
+            if (p.type === 'top' && !p.passed && player.x > p.x + p.width) {
+                p.passed = true;
+                score++;
+                speed += 0.05;
+                updateScore();
+                AudioManager.playSfx('pass');
+            }
+        }
+        
+        if (this.list.length > 0 && this.list[0].x < -this.width) {
+            this.list.shift();
+        }
+    },
+    
+    draw() {
+        const phase = getVisualPhase();
+        for (let p of this.list) {
+            ctx.save();
+            const shutterGrad = ctx.createLinearGradient(p.x, p.y, p.x + p.width, p.y);
+            shutterGrad.addColorStop(0, phase.hazardDark);
+            shutterGrad.addColorStop(0.48, phase.hazardMid);
+            shutterGrad.addColorStop(1, '#08101c');
+            ctx.fillStyle = shutterGrad;
+            ctx.fillRect(p.x, p.y, p.width, p.height);
+
+            ctx.fillStyle = 'rgba(4, 8, 15, 0.34)';
+            for (let y = p.y + 10; y < p.y + p.height; y += 26) {
+                ctx.fillRect(p.x + 5, y, p.width - 10, 3);
+            }
+
+            ctx.fillStyle = phase.scanFill;
+            const scanY = p.y + ((frames * 1.2 + p.x) % Math.max(32, p.height + 32)) - 16;
+            ctx.fillRect(p.x + 7, scanY, p.width - 14, 4);
+
+            ctx.shadowColor = phase.edge;
+            ctx.shadowBlur = 10;
+            ctx.strokeStyle = phase.edge;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(p.x + 1, p.y + 1, p.width - 2, p.height - 2);
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            ctx.fillRect(p.x + 8, p.y, 5, p.height);
+            ctx.fillStyle = 'rgba(113, 255, 91, 0.12)';
+            ctx.fillRect(p.x + p.width - 14, p.y, 6, p.height);
+
+            const capY = p.type === 'top' ? p.y + p.height - 16 : p.y + 16;
+            ctx.strokeStyle = 'rgba(113, 255, 91, 0.62)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(p.x + p.width / 2, capY, p.width * 0.42, 9, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 240, 106, 0.18)';
+            ctx.fillRect(p.x + 16, capY - 2, p.width - 32, 4);
+            ctx.restore();
+        }
+    }
+};
+
+const collectibles = {
+    list: [],
+    
+    spawn(x, y) {
+        this.list.push({ x: x, y: y, size: 30, collected: false });
+    },
+    
+    reset() {
+        this.list = [];
+    },
+    
+    update() {
+        for (let i = 0; i < this.list.length; i++) {
+            let c = this.list[i];
+            c.x -= speed;
+            
+            const dx = (player.x + player.width/2) - c.x;
+            const dy = (player.y + player.height/2) - c.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < c.size + player.width/2) {
+                c.collected = true;
+                score += 5;
+                updateScore();
+                AudioManager.playSfx('collect');
+                showFeedback('collect', 'mega seed +5');
+            }
+        }
+        this.list = this.list.filter(c => !c.collected && c.x > -50);
+    },
+    
+    draw() {
+        for (let c of this.list) {
+            ctx.save();
+            const pulse = 1 + Math.sin(frames * 0.12 + c.x * 0.04) * 0.08;
+            ctx.translate(c.x, c.y);
+            ctx.scale(pulse, pulse);
+            ctx.shadowColor = 'rgba(255, 240, 106, 0.65)';
+            ctx.shadowBlur = 16;
+            const seedGrad = ctx.createRadialGradient(-4, -6, 2, 0, 0, c.size * 0.58);
+            seedGrad.addColorStop(0, '#fff8b8');
+            seedGrad.addColorStop(0.58, '#91ff4f');
+            seedGrad.addColorStop(1, '#2dbb58');
+            ctx.fillStyle = seedGrad;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, c.size * 0.31, c.size * 0.52, -0.35, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(4, 24, 12, 0.88)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.46)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-3, -c.size * 0.26);
+            ctx.quadraticCurveTo(5, -2, -1, c.size * 0.28);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(113, 255, 91, 0.42)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, c.size * 0.58, c.size * 0.34, frames * 0.04, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+};
+
+let bgX = 0;
+const VISUAL_PHASES = [
+    {
+        min: 0,
+        name: 'GARAGE WARM-UP',
+        top: '#06120f',
+        mid: '#102014',
+        bottom: '#04080f',
+        accent: '#71ff5b',
+        secondary: '#2fd7ff',
+        glow: 'rgba(113, 255, 91, 0.38)',
+        hazardDark: '#133023',
+        hazardMid: '#235a40',
+        edge: '#71ff5b',
+        scanFill: 'rgba(126, 243, 255, 0.28)'
+    },
+    {
+        min: 6,
+        name: 'CITADEL COMMUTE',
+        top: '#071426',
+        mid: '#0d2430',
+        bottom: '#061019',
+        accent: '#2fd7ff',
+        secondary: '#91ff4f',
+        glow: 'rgba(47, 215, 255, 0.34)',
+        hazardDark: '#142a3a',
+        hazardMid: '#2d5268',
+        edge: '#2fd7ff',
+        scanFill: 'rgba(113, 255, 91, 0.24)'
+    },
+    {
+        min: 14,
+        name: 'CROMULON SKY',
+        top: '#16051f',
+        mid: '#241047',
+        bottom: '#060512',
+        accent: '#b04eff',
+        secondary: '#71ff5b',
+        glow: 'rgba(176, 78, 255, 0.34)',
+        hazardDark: '#351545',
+        hazardMid: '#5b2b79',
+        edge: '#b04eff',
+        scanFill: 'rgba(255, 240, 106, 0.22)'
+    },
+    {
+        min: 24,
+        name: 'FEDERATION RUN',
+        top: '#18090d',
+        mid: '#27131b',
+        bottom: '#06070c',
+        accent: '#ff5c7a',
+        secondary: '#91ff4f',
+        glow: 'rgba(255, 92, 122, 0.32)',
+        hazardDark: '#40151f',
+        hazardMid: '#743043',
+        edge: '#ff5c7a',
+        scanFill: 'rgba(255, 240, 106, 0.2)'
+    },
+    {
+        min: 36,
+        name: 'COLLAPSING RIFT',
+        top: '#030914',
+        mid: '#09210f',
+        bottom: '#020407',
+        accent: '#91ff4f',
+        secondary: '#2fd7ff',
+        glow: 'rgba(145, 255, 79, 0.42)',
+        hazardDark: '#162718',
+        hazardMid: '#355f28',
+        edge: '#91ff4f',
+        scanFill: 'rgba(47, 215, 255, 0.28)'
+    }
+];
+
+function getVisualPhase() {
+    let phase = VISUAL_PHASES[0];
+    for (const candidate of VISUAL_PHASES) {
+        if (score >= candidate.min) phase = candidate;
+    }
+    return phase;
+}
+
+function drawPortalRing(x, y, rx, phase, rotation, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.shadowColor = phase.glow;
+    ctx.shadowBlur = 16;
+    ctx.strokeStyle = phase.accent;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, rx * 0.62, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = phase.secondary;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, rx * 0.58, frames * 0.024, frames * 0.024 + Math.PI * 1.35);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawBackground() {
+    // [agent-note][world-design-v4] authored-background: procedural portal garage/Citadel/Cromulon/Federation/rift motifs replace generic static city ownership while preserving scroll timing.
+    const phase = getVisualPhase();
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, phase.top);
+    grad.addColorStop(0.52, phase.mid);
+    grad.addColorStop(1, phase.bottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const drift = gameState === 'PLAYING' ? bgX : 0;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.strokeStyle = 'rgba(126, 243, 255, 0.12)';
+    ctx.lineWidth = 1;
+    for (let x = ((-drift * 0.08) % 64); x < w + 64; x += 64) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x - 38, h);
+        ctx.stroke();
+    }
+    for (let y = 38; y < h; y += 58) {
+        ctx.fillStyle = y % 116 === 0 ? 'rgba(113, 255, 91, 0.055)' : 'rgba(47, 215, 255, 0.035)';
+        ctx.fillRect(0, y, w, 1);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    for (let i = 0; i < 9; i++) {
+        const towerW = 18 + (i % 4) * 10;
+        const towerH = h * (0.18 + (i % 5) * 0.055);
+        const x = ((i * w * 0.17) - drift * 0.12) % (w + 120) - 60;
+        ctx.fillStyle = i % 2 ? phase.secondary : phase.accent;
+        ctx.fillRect(x, h - towerH, towerW, towerH);
+        ctx.fillStyle = 'rgba(4, 8, 15, 0.6)';
+        ctx.fillRect(x + 3, h - towerH + 8, towerW - 6, 3);
+        ctx.fillRect(x + 3, h - towerH + 23, towerW - 6, 3);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.46;
+    for (let i = 0; i < 6; i++) {
+        const ringX = ((i * w * 0.33) - drift * (0.22 + i * 0.018)) % (w + 210) - 105;
+        const ringY = h * (0.17 + (i % 4) * 0.18);
+        const radius = 34 + (i % 3) * 14 + Math.sin(frames * 0.018 + i) * 3;
+        drawPortalRing(ringX, ringY, radius, phase, Math.sin(frames * 0.012 + i) * 0.28, 0.8);
+    }
+    ctx.restore();
+
+    if (phase.name === 'CROMULON SKY') {
+        ctx.save();
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = '#b04eff';
+        ctx.beginPath();
+        ctx.ellipse(w * 0.76 - drift * 0.04, h * 0.2, 74, 95, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(w * 0.72 - drift * 0.04, h * 0.19, 18, 4);
+        ctx.fillRect(w * 0.78 - drift * 0.04, h * 0.19, 18, 4);
+        ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.34;
+    for (let i = 0; i < 18; i++) {
+        const x = ((i * 83) - drift * 0.35) % (w + 80) - 40;
+        const y = (i * 47 + frames * (gameState === 'PLAYING' ? 0.35 : 0.1)) % h;
+        ctx.fillStyle = i % 3 === 0 ? phase.secondary : phase.accent;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 5, y + 2);
+        ctx.lineTo(x + 1, y + 8);
+        ctx.closePath();
+        ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.fillStyle = phase.glow;
+    ctx.fillRect(0, h * 0.88, w, h * 0.12);
+
+    if (gameState === 'PLAYING') {
+        bgX -= speed * 0.2;
+        if (bgX <= -canvas.width) bgX = 0;
+    }
+}
+
+/**
+ * 5. GAME LOOP & CONTROL
+ */
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    player.reset();
+}
+
+function startGame() {
+    AudioManager.init();
+    AudioManager.playSfx('start');
+    gameState = 'PLAYING';
+    score = 0;
+    speed = 3;
+    frames = 0;
+    bgX = 0;
+    startGraceFrames = 45;
+    
+    player.reset();
+    player.velocity = FLAP_STRENGTH;
+    obstacles.reset();
+    collectibles.reset();
+    
+    updateScore();
+    feedbackOverlay.classList.remove('active', 'fail');
+    
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('hud').style.display = 'block';
+    
+    loop();
+}
+
+function gameOver() {
+    if (gameState === 'GAMEOVER') return;
+    gameState = 'GAMEOVER';
+    AudioManager.playSfx('crash');
+    AudioManager.pauseLoop();
+    showFeedback('fail', 'portal wipeout');
+    
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('game-over-screen').classList.remove('hidden');
+}
+
+function updateScore() {
+    const phase = getVisualPhase();
+    document.getElementById('hud').innerHTML = `<span class="hud-label">${phase.name}</span><span class="hud-score">${score}</span>`;
+}
+
+function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
+    
+    if (gameState === 'PLAYING') {
+        frames++;
+        if (startGraceFrames > 0) startGraceFrames--;
+        player.update();
+        obstacles.update();
+        collectibles.update();
+    }
+    
+    obstacles.draw();
+    collectibles.draw();
+    player.draw();
+    
+    if (gameState === 'PLAYING') {
+        requestAnimationFrame(loop);
+    }
+}
+
+function handleInput(e) {
+    if (e.type === 'touchstart') e.preventDefault();
+    
+    if (gameState === 'PLAYING') {
+        player.flap();
+    }
+}
+
+window.addEventListener('resize', resize);
+canvas.addEventListener('mousedown', handleInput);
+canvas.addEventListener('touchstart', handleInput, { passive: false });
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') handleInput(e);
+});
+
+document.getElementById('start-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    AudioManager.init();
+    AudioManager.playSfx('click');
+    startGame();
+});
+
+document.getElementById('restart-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    AudioManager.init();
+    AudioManager.playSfx('click');
+    startGame();
+});
+
+document.getElementById('mute-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    AudioManager.toggleMute();
+});
+
+window.addEventListener('blur', () => {
+    AudioManager.pauseLoop();
+});
+
+window.addEventListener('focus', () => {
+    if (gameState === 'PLAYING' && !AudioManager.isMuted) {
+        AudioManager.resumeLoop();
+    }
+});
+
+resize();
+preloadAssets(() => {
+    drawBackground();
+    player.draw();
+});
+</script>
+</body>
+</html>
