@@ -202,6 +202,118 @@ The publish lifecycle is easiest to reason about as:
 
 Use this flow when published content already exists and something needs repair.
 
+### Orchestration recipe: in-place remix replacement for already-deployed feed entries
+
+Use this recipe when a published remix entry must be **moderated, replaced, or refreshed in place**
+without changing the outer feed slot or its published path.
+
+This is especially useful for live feed curation where the catalog position should remain stable,
+but the deployed contents under that position need to be swapped.
+
+#### Intended use cases
+
+- moderation of already-shipped content
+- replacing a weak remix with a better candidate
+- late-breaking content updates after a release has already shipped
+- targeted feed curation without rebuilding the whole published catalog
+
+#### Important scope rule
+
+This workflow changes the **published folder contents** behind an existing deployed entry.
+
+It does **not** inherently change:
+- root metadata catalogs
+- feed ranking manifests
+- app-level artifact views
+
+If you need the published catalog metadata itself to change, that is a separate operation.
+
+#### Standard orchestration sequence
+
+1. **Identify source and target composite keys**
+   - source = the remix whose contents should be copied from
+   - target = the already-deployed remix slot whose contents should be overwritten
+
+2. **Validate presence in both published roots before any write**
+   - `games/published/public/<game_id>/<remix_id>`
+   - `games/published/obfuscated/<game_id>/<remix_id>`
+   - fail early if any required path is missing
+
+3. **Create a backup of the target before overwrite**
+   - back up both public and obfuscated target remix folders
+   - use a timestamped temp backup directory so rollback is possible
+
+4. **Copy source remix contents into the target remix folder**
+   - overwrite public target from public source
+   - overwrite obfuscated target from obfuscated source
+   - keep source untouched
+
+5. **Run selective remote sync only for the affected top-level gamezone**
+   - use per-item sync
+   - target only the top-level `gamezone-*` directory that owns the overwritten target slot
+   - prefer a sync dry-run first, then the real sync
+
+6. **Invalidate downstream caches if needed**
+   - once remote sync completes, invalidate CDN/cache layers for the affected URLs
+   - do this after sync, not before
+
+7. **Record the operation in the journal / commit message**
+   - note source slot, target slot, purpose, and whether the change was moderation or curation
+   - explicitly call out whether feed positions were preserved
+
+#### Recommended implementation pattern in this repo
+
+For safety and repeatability, use a temporary helper script that:
+
+- accepts `--source` and `--target` composite keys
+- validates all four required directories exist
+- supports `--dry-run`
+- creates a temp backup of the target
+- performs the local overwrite in both roots
+- optionally invokes selective `sync_to_gcs.py` follow-up
+
+#### Sync guidance for this workflow
+
+After the local overwrite is complete, the safest remote follow-up is usually:
+
+```bash
+python3 tools/game_publish_pipeline/scripts/sync_to_gcs.py \
+  --target both \
+  --mode per-item \
+  --only-item <target-gamezone-id> \
+  --project jabali-prod
+```
+
+This is preferred over a broad publish-pipeline sync because it limits remote writes to the
+single affected top-level gamezone.
+
+#### Cache invalidation guidance
+
+If the published endpoints are fronted by a CDN or other cache layer, treat cache invalidation as
+the final step after the real sync succeeds.
+
+Operationally, the order should be:
+
+1. local overwrite
+2. selective sync to remote storage
+3. cache invalidation for the affected published URLs
+
+#### Example: top 10 remix items shipped in v3.3.3
+
+This technique was used to curate already-deployed entries in the **top 10 taxonomy-diverse remix
+set shipped in v3.3.3**.
+
+Notable characteristics of that session:
+
+- ranks **1, 2, and 4** were overwritten in place
+- rank **3** was intentionally left unchanged
+- the operation preserved the outer feed positions while replacing the deployed remix contents
+  behind those positions
+
+This is the right mental model for future moderation/update tasks of the same kind: preserve the
+published slot, replace the shipped content underneath it, then selectively sync and invalidate
+caches as needed.
+
 ### Example: fixing audio problems
 
 1. Fix the source problem first
