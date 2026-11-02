@@ -1,5 +1,42 @@
 # game_generator
 
+## Overview and pipeline position
+
+This is the top-level prompt orchestrator. It calls sibling tools through CLI/JSON
+contracts and records progress, command output, events, and dashboard data. It
+currently launches `creative_remix_v5` in `game_refactoring` after matching.
+
+```text
+prompt + optional remix prompt
+              |
+              v
+       game_matcher_v2 ---> ranked games + source references
+              |
+              v
+       game_refactoring -> final output folders
+              |
+              v  (--publish)
+   game_publish_pipeline -> public + obfuscated bundles + report
+              |
+              v  (--upload, after publish)
+           GCS sync
+
+All stages -> pipeline_runs/<run_id>/ -> observer / live dashboard
+Results    -> output/<run_id>/
+```
+
+Inputs require a populated catalog and resolvable local sources. Publishing and
+uploading are opt-in; use `--publish --upload` together for the full cloud path.
+Cloud upload here uses GCS; the R2 uploader is a separate tool.
+`--resume-from-run` continues an existing run from publish/finalize rather than
+restarting every stage. Batch execution is serial and has separate persisted state.
+
+All commands below run from `tools/game_generator/`. From the repository root,
+prefix script paths with `tools/game_generator/`.
+
+See the [workspace overview](../../README.md) and
+[publishing tool](../game_publish_pipeline/README.md).
+
 Observable orchestration CLI for game generation runs.
 
 ## Primary CLI scripts
@@ -23,7 +60,7 @@ Arguments (from `parse_args`):
 - `--publish`
 - `--upload`
 - `--poll-seconds`
-- `--matcher-mode` (`v1` or `v2`)
+- `--matcher-mode` (`legacy` or `v2`; default `v2`)
 - `--resume-from-run`
 
 When `--upload` is enabled, `run_pipeline.py` now performs a **non-interactive gcloud auth preflight** before expensive work starts. It fails fast if no active `gcloud` account is available.

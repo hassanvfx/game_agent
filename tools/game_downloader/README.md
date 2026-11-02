@@ -1,5 +1,38 @@
 # Game Downloader
 
+## Overview and pipeline position
+
+This is a standalone ingestion tool for browser-game sources. It consumes known
+game URLs, mirrors HTML and recursively discovered assets, builds local replay
+packages, and records queue progress and offline-readiness reports.
+
+```text
+URL manifest / nested game catalog
+                  |
+         run scaffold + worker queue
+                  |
+    fetch HTML -> discover/download assets
+                  |          ^
+                  +----------+ recursive references
+                  |
+          rewritten replay package
+                  |
+         summaries + offline QA
+                  |
+     local mirrors for source corpus preparation
+```
+
+Source discovery happens outside this tool. Downloader artifacts remain in its own
+run/output layout; prepare selected mirrors as source directories/manifests before
+passing them to refactoring. A completed download is distinct from an offline-ready replay; review run
+summaries before reusing mirrored sources.
+
+All commands below run from `tools/game_downloader/`. From the repository root,
+prefix script paths with `tools/game_downloader/`.
+
+See the [refactoring tool](../game_refactoring/README.md) and
+[workspace overview](../../README.md).
+
 A standalone manifest-driven game downloader and local mirroring runtime.
 
 ## Scope

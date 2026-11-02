@@ -1,5 +1,34 @@
 # game_editorial
 
+## Overview and pipeline position
+
+This is an alternative batch entrypoint for remixing the raw corpus. It chooses
+repeatable themed prompt combinations and creates manifests for the existing
+refactoring workflow, allowing multiple variants per source game.
+
+```text
+games/raw + remix_ideas.json + offset / seed / variant count
+                             |
+                  deterministic prompt assignment
+                             |
+                  expanded source-game manifest
+                             |
+                  sanitized copies (copy mode)
+                             |
+                  game_refactoring: creative_remix_v5
+                             |
+                  output runs -> separate publish step
+```
+
+This path bypasses prompt matching. Stable game order and seed settings make prompt
+assignment repeatable; actual AI-generated results can still vary. `--no-launch`
+prepares the batch without starting refactoring. Review the configured output root
+below before launching on a different machine.
+
+All commands below run from the repository root. See the
+[refactoring tool](../game_refactoring/README.md) and
+[workspace overview](../../README.md).
+
 `game_editorial` now provides a deterministic raw-game remix manifest builder for `creative_remix_v5`.
 
 ## Purpose

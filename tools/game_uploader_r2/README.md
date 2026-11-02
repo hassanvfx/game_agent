@@ -1,4 +1,35 @@
-y# Game Uploader R2
+# Game Uploader R2
+
+## Overview and pipeline position
+
+This utility uploads existing local game artifacts to Cloudflare R2. It resolves a
+source, stages a copy, checks the destination, and transfers files through the
+S3-compatible API.
+
+```text
+local game folder / file
+           |
+    source resolution
+           |
+    temporary staging copy
+           |
+    destination existence check
+           |
+    Cloudflare R2: bucket / prefix / destination-name
+
+--dry-run -> plan only; no staging or upload
+--force   -> permit an existing destination
+```
+
+This is a separately invoked distribution path. The generator's `--upload` flag
+uses GCS instead. Configure the R2 environment variables below before real uploads.
+
+Run the existing `scripts/upload_game.py` examples from `tools/game_uploader_r2/`.
+From the repository root, use `python3 tools/game_uploader_r2/scripts/upload_game.py`;
+source path resolution still follows the repository-root / `games/` rules below.
+
+See the [publish pipeline](../game_publish_pipeline/README.md) and
+[workspace overview](../../README.md).
 
 A standalone game artifact uploader for copying local game files into a staging area and pushing them to a specific Cloudflare R2 destination.
 

@@ -1,242 +1,219 @@
-# Docker + Celery + Playwright + Cline proof
+# game_agent
 
-This project is a minimal end-to-end proof that a Docker image can run:
+A Python-centered toolchain for matching, remixing, and publishing browser games.
+Given a prompt and a local game corpus, the CLI pipeline selects relevant games,
+runs AI refactoring workflows, and optionally packages, obfuscates, and uploads the
+results. A FastAPI service exposes background mock and refactoring jobs through
+Celery and Redis.
 
-- Python Celery worker
-- Playwright with Chromium
-- Cline CLI
+## How the pieces fit
 
-The worker executes two mocked tools sequentially with a delay:
+```text
+                         game_generator
+                  orchestration + state + events
+                               |
+Prompt ------------------------+
+                               v
+                      game_matcher_v2
+                 select tags + rank catalog games
+                               |
+                    selected games + sources
+                               v
+                      game_refactoring <----- game_editorial
+                 AI operator workflows        seeded batch manifests
+                               |
+                      final output folders
+                               v
+                    game_publish_pipeline
+                               |
+                               v
+                          game_deploy
+                        public game bundles
+                               |
+                               v
+                       game_obfuscator
+                      obfuscated game bundles
+                               |
+                 catalog / screenshots / reports
+                               |
+                       optional GCS sync
 
-1. `tools/tool_cline.py` proves the Cline CLI command runs inside the container.
-2. `tools/tool_playwright.py` proves Playwright can launch a browser inside the container.
-
-## Project structure
-
-- `app/celery_app.py` - Celery configuration
-- `app/tasks.py` - mock workflow task
-- `app/trigger.py` - enqueues the task
-- `tools/tool_cline.py` - Cline runtime proof
-- `tools/tool_playwright.py` - Playwright runtime proof
-- `Dockerfile` - container image
-- `docker-compose.yml` - local Redis + worker + trigger
-
-## Required environment variables
-
-### Celery
-- `CELERY_BROKER_URL`
-- `CELERY_RESULT_BACKEND`
-
-### Optional app settings
-- `CELERY_TASK_DELAY_SECONDS=2`
-- `LOG_LEVEL=INFO`
-- `PYTHONUNBUFFERED=1`
-
-### Playwright
-- `PLAYWRIGHT_HEADLESS=true`
-- `PLAYWRIGHT_BROWSER=chromium`
-
-### Cline / LiteLLM
-Use the exact values required by your Cline CLI setup.
-
-Recommended variables to set in Railway:
-- `CLINE_MODEL`
-- `CLINE_BASE_URL`
-- `CLINE_API_KEY`
-
-If your LiteLLM/OpenAI flow needs them directly, also set:
-- `LITELLM_BASE_URL`
-- `LITELLM_API_KEY`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-
-For the basic runtime proof in this repository, the default command is:
-- `CLINE_CHECK_COMMAND="clite --help"`
-
-You can change that to a model-backed command once your CLI configuration is ready.
-
-## Local run
-
-Build and start the worker and Redis:
-
-```bash
-docker compose up --build worker redis
+Supporting paths (invoked separately):
+URL manifest -> game_downloader -> local mirrors -> source corpus preparation
+Local files  -> game_uploader_r2 -> Cloudflare R2
 ```
 
-In another terminal, enqueue the test task:
+`game_generator` currently launches the `creative_remix_v5` workflow. Matching uses
+metadata from `games/published/public/app.json`; refactoring also needs resolvable
+local source folders. The downloader has its own run/output layout, so its mirrors
+must be prepared as source inputs rather than assumed to appear in `games/raw`.
 
-```bash
-docker compose run --rm trigger
+Matching and refactoring run by default. `--publish` adds local packaging and
+obfuscation; `--upload` requests GCS sync after publishing. Use both flags when you
+want the full publish-and-upload path. R2 upload is a separate utility.
+
+## Main tools
+
+| Tool | Responsibility | Documentation |
+| --- | --- | --- |
+| `game_generator` | Prompt pipeline, durable serial batches, resume, state/events, dashboards | [README](tools/game_generator/README.md) |
+| `game_matcher_v2` | Catalog artifacts, prompt-to-tags selection, deterministic ranking | [README](tools/game_matcher_v2/README.md) |
+| `game_refactoring` | Named AI workflows, per-game operators, concurrency, status/results | [README](tools/game_refactoring/README.md) |
+| `game_editorial` | Deterministic themed remix manifests and batch planning | [README](tools/game_editorial/README.md) |
+| `game_deploy` | Package HTML, assets, screenshots, and metadata into public bundles | [README](tools/game_deploy/README.md) |
+| `game_obfuscator` | Deterministic obfuscation/minification with a synchronous CLI | [README](tools/game_obfuscator/README.md) |
+| `game_publish_pipeline` | Coordinate deploy, obfuscation, artifact refresh, reports, and sync | [README](tools/game_publish_pipeline/README.md) |
+| `game_downloader` | Manifest-driven downloads, recursive asset mirroring, replay/QA | [README](tools/game_downloader/README.md) |
+| `game_uploader_r2` | Stage local artifacts and upload them to Cloudflare R2 | [README](tools/game_uploader_r2/README.md) |
+| `game_actor_mock` | Exercise async submission and persisted run state with mock work | [README](tools/game_actor_mock/README.md) |
+
+Additional media integrations are available through [Giphy](tools/giphy_api/README.md)
+and [KIE](tools/kie-api/README.md). See [tools/README.md](tools/README.md) for the
+workspace inventory, including deprecated tools.
+
+## Repository layout
+
+```text
+game_agent/
++-- app/                 FastAPI endpoints and Celery tasks/configuration
++-- tools/               Pipeline CLIs, integrations, and shared asset library
+|   +-- library/         Shared assets and audio catalog scripts
+|   +-- deprecated/      Previous matcher, remix editor, and crawler
++-- games/               Local raw games, templates, and published builds
++-- dashboard/           HTML annotation/review templates and launchers
++-- scripts/             Queue supervisors, metadata, and manifest utilities
++-- docs/                Maintenance guides, manifests, and task journals
++-- clineflow/           Persistent documentation workflow and journal template
++-- Dockerfile           Python 3.11, Chromium/Playwright, and Cline CLI runtime
++-- docker-compose.yml   API, Celery worker, Redis, and trigger services
 ```
 
-View worker logs:
+Game data under `games/` is local-only and ignored by Git, apart from its README.
+CLI tools also persist their own run artifacts, logs, events, and output folders.
+
+## Run a prompt pipeline
+
+From the repository root:
 
 ```bash
-docker compose logs -f worker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Match existing games and refactor up to two results.
+python3 tools/game_generator/scripts/run_pipeline.py "a neon flappy bird game" --limit 2
+
+# Also package and obfuscate the results locally.
+python3 tools/game_generator/scripts/run_pipeline.py "a neon flappy bird game" --limit 2 --publish
+
+# Also upload the published results to GCS.
+python3 tools/game_generator/scripts/run_pipeline.py "a neon flappy bird game" --limit 2 --publish --upload
 ```
 
-Expected outcome:
-- Celery worker starts
-- Cline tool returns success output
-- Playwright launches Chromium and returns title/body text
-- task completes successfully
+The root requirements install the API/worker and shared Python dependencies.
+Individual tools may require additional Python or Node dependencies, AI CLI/model
+configuration, Playwright browsers, and local catalogs/assets. Follow the component
+READMEs and the [refactoring launch manual](GAME_REFACTORING_LAUNCH_MANUAL.md) before
+starting a real generation run. GCS uploads require an authenticated `gcloud`
+account; the generator checks authentication before expensive work begins.
 
-## Railway deployment
+Generation records live in `tools/game_generator/pipeline_runs/<run_id>/`, with
+final copied outputs in `tools/game_generator/output/<run_id>/`. See the generator
+README for dashboard, batch, observation, and resume commands.
 
-Recommended setup:
-- create a GitHub repo for this project
-- create a Railway project
-- add a Redis service
-- add an API service from this repo
-- add a worker service from this repo
-- use the root `Dockerfile` for both services
+## Run the API and worker
 
-### API service start command
-
-```bash
-uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8000}
+```text
+HTTP client -> FastAPI :8000 -> Redis -> Celery worker
+                   ^                         |
+                   |                         +-> game_actor_mock
+                   |                         |   mock jobs and events
+                   |                         |
+                   |                         +-> game_refactoring
+                   |                             real workflow subprocess
+                   +---- poll state/results -----+
 ```
 
-### Worker service start command
+From the repository root, with Docker Compose installed:
 
 ```bash
-celery -A app.tasks worker --loglevel=INFO
+docker compose up --build api worker redis
 ```
 
-### Railway environment variables for both API and worker
-- `CELERY_BROKER_URL`
-- `CELERY_RESULT_BACKEND`
-- `LOG_LEVEL`
-- `PYTHONUNBUFFERED`
+The image includes Python dependencies, Chromium/Playwright, and the Cline CLI.
+Compose mounts the repository at `/app`, including local game sources. Configure
+AI provider credentials for real refactoring jobs; starting these services does not
+run the full prompt-to-publish CLI pipeline.
 
-### Optional runtime settings
-- `CELERY_TASK_DELAY_SECONDS`
-- `PLAYWRIGHT_HEADLESS`
-- `PLAYWRIGHT_BROWSER`
-- `CLINE_CHECK_COMMAND`
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | API process health check |
+| `POST /jobs` | Submit a mock game actor job |
+| `GET /jobs/{run_id}` | Poll mock job state and results |
+| `POST /jobs/game-refactoring` | Validate raw game IDs and enqueue a real named workflow |
+| `GET /jobs/celery/{task_id}` | Poll Celery state and available workflow results |
 
-And for LiteLLM/Cline as needed:
-- `CLINE_MODEL`
-- `CLINE_BASE_URL`
-- `CLINE_API_KEY`
-- `LITELLM_BASE_URL`
-- `LITELLM_API_KEY`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-
-### API test flow
-
-Once the API service is deployed, Railway should assign it a public URL. Use that URL for:
+Test mock submission:
 
 ```bash
-curl https://<api-service>.up.railway.app/health
-```
-
-Submit a mock async run:
-
-```bash
-curl -X POST https://<api-service>.up.railway.app/jobs \
-  -H "Content-Type: application/json" \
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/jobs \
+  -H 'Content-Type: application/json' \
   -d '{"prompt":"spider man","games":["game_a","game_b"]}'
 ```
 
-Poll by run id:
+Real refactoring requests use a workflow `id` and `raw_game_ids` that exist under
+`/app/games/raw`. The request model and response contracts are in
+[app/api.py](app/api.py). Interactive API documentation is available at
+`http://localhost:8000/docs` while the service is running.
+
+Celery uses `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND`; Compose sets both to
+Redis URLs. Configure the `CLINE_*`, `LITELLM_*`, or `OPENAI_*` variables required by
+your chosen AI execution path. Credentials belong in the local environment.
+
+For hosted API/worker services, use the root Dockerfile with separate commands:
 
 ```bash
-curl https://<api-service>.up.railway.app/jobs/<run_id>
+uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8000}
+celery -A app.tasks worker --loglevel=INFO
 ```
 
-## R2 game upload utility
+Both services need Redis connectivity and access to the required game sources and
+workflow assets. Run state is filesystem-backed, so retain the relevant run data.
 
-This repository now includes a root-level uploader utility for copying a local game directory or file into a staging area and pushing it to a specific Cloudflare R2 destination.
+## Review published games
 
-### Required environment variables
-
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-
-And one of:
-- `R2_ENDPOINT_URL`
-- `R2_ACCOUNT_ID`
-
-Optional defaults:
-- `R2_BUCKET`
-
-### Install dependency
+The **public dashboard** serves `games/published/public`; the **obfuscated dashboard**
+serves `games/published/obfuscated`. These labels refer to build variants.
 
 ```bash
-pip install -r requirements.txt
+python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target public --open-browser
+python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target obfuscated --open-browser
 ```
 
-### Example usage
+The launcher manages the local dashboard server on port `43177`, replaces the
+previous server for the target, and opens the browser. Logs are written to
+`.annotator_server.log` under the selected published root.
 
-Dry-run a game upload without copying or uploading files:
+## Upload artifacts to R2
+
+The standalone uploader uses `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and either
+`R2_ENDPOINT_URL` or `R2_ACCOUNT_ID`. `R2_BUCKET` supplies an optional default bucket.
 
 ```bash
-python scripts/upload_game_to_r2.py \
+python3 tools/game_uploader_r2/scripts/upload_game.py \
   --source games/published/my-game \
   --bucket my-r2-bucket \
   --prefix published/2026 \
   --dry-run
 ```
 
-Upload a game directory to a specific destination folder in R2:
+Remove `--dry-run` to upload. Existing destinations require `--force`. See the
+[uploader README](tools/game_uploader_r2/README.md) for staging and path resolution.
 
-```bash
-python scripts/upload_game_to_r2.py \
-  --source games/published/my-game \
-  --bucket my-r2-bucket \
-  --prefix published/2026 \
-  --destination-name harry-potter-flappy
-```
+## Development and project history
 
-If the destination already exists, require explicit overwrite permission:
-
-```bash
-python scripts/upload_game_to_r2.py \
-  --source games/published/my-game \
-  --bucket my-r2-bucket \
-  --prefix published/2026 \
-  --destination-name harry-potter-flappy \
-  --force
-```
-
-Notes:
-- Relative `--source` paths resolve from the repository root and then from `games/`.
-- Directories are copied into a temporary staging area before upload.
-- The destination object root is formed as `{prefix}/{destination-name}`.
-- Content types are inferred automatically when possible.
-
-## Published dashboard launch commands
-
-When referring to dashboards in this repository:
-
-- **public dashboard** = `games/published/public`
-- **play-obfuscated dashboard** or **obfuscated dashboard** = `games/published/obfuscated`
-
-Use the dedicated launcher so the repo manages the exclusive local port, replaces the previous dashboard server for that target, and opens the browser automatically.
-
-### Open the public dashboard
-
-```bash
-python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target public --open-browser
-```
-
-### Open the play-obfuscated dashboard
-
-```bash
-python3 tools/game_publish_pipeline/scripts/launch_annotator_entry.py --target obfuscated --open-browser
-```
-
-### Operational notes
-
-- Default local dashboard port: `43177`
-- Public dashboard log: `games/published/public/.annotator_server.log`
-- Obfuscated dashboard log: `games/published/obfuscated/.annotator_server.log`
-
-## Notes
-
-- This repository is designed to prove runtime readiness, not full product behavior.
-- `tool_cline.py` currently validates that the Cline CLI executable (`clite`) works inside the container.
-- `tool_playwright.py` validates that Playwright can launch a browser inside the container.
-- Once your exact Cline model invocation is finalized, `CLINE_CHECK_COMMAND` can be changed to a deeper proof command.
+Read [AGENTS.md](AGENTS.md) for repository conventions. Every task is documented in
+`docs/journals/` using the ClineFlow workflow. Component directories may contain
+additional instructions. The [publishing maintenance guide](docs/game-publish-maintenance-workflow.md)
+covers ongoing artifact and deployment operations.

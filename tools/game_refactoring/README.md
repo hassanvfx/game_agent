@@ -1,5 +1,47 @@
 # game_refactoring
 
+## Overview and pipeline position
+
+This is the AI transformation engine. It accepts source-game manifests, launches
+named workflows or operator pipelines, tracks per-game execution, and exposes
+status and final output directories for downstream publishing.
+
+```text
+game_generator ----+
+                   |
+game_editorial ----+--> source manifest + workflow / remix prompt
+                   |                     |
+API / manual CLI --+                     v
+                              per-game operator execution
+                              AI agent + assets + browser tools
+                                         |
+                              run state / events / dashboard
+                                         |
+                              result: final_output_dirs
+                                         |
+                              game_publish_pipeline
+```
+
+The generator currently selects `creative_remix_v5`; other named workflows are
+defined in `scripts/game_workflow.py`. Copy mode prepares run-local sources, while
+inplace mode works against source directories. Configure the AI runtime and browser
+requirements before real runs; concurrency, timeouts, and heartbeat options are
+available on the CLI.
+
+All commands below run from `tools/game_refactoring/`. To launch the named workflow
+used by the generator:
+
+```bash
+python3 scripts/game_workflow.py --json --id creative_remix_v5 \
+  --games-manifest-source /absolute/path/to/games_manifest.json \
+  --remix-prompt "a neon arcade remix"
+```
+
+The source manifest contains a `games` array with `game_id`, `display_name`, and
+`source_path` entries. Use the returned run ID to poll status and resolve results.
+Publishing is handled by the [publish pipeline](../game_publish_pipeline/README.md).
+See also the [launch manual](../../GAME_REFACTORING_LAUNCH_MANUAL.md).
+
 Operator-pipeline CLI repository for creative refactor/transformation runs.
 
 ## Primary CLI

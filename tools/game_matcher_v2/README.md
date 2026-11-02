@@ -1,5 +1,34 @@
 # game_matcher_v2
 
+## Overview and pipeline position
+
+This tool turns a natural-language request into ranked existing games. A selector
+chooses tags, then deterministic scoring ranks the catalog; the AI selection step
+and the ranking step have separate responsibilities.
+
+```text
+games/published/public/app.json -> build tag-family artifacts
+                                              |
+prompt -> tag selector -> validate selected tags
+                                              |
+                                              v
+                                     deterministic scoring
+                                              |
+                                     ranked game results
+                                              |
+                                  game_generator -> refactoring
+```
+
+Inputs are catalog metadata plus a prompt or explicitly selected tags. Outputs
+include artifact metadata, selected tags, and ranked results. Source game files
+are resolved downstream; matching itself does not download or transform games.
+
+All commands below run from `tools/game_matcher_v2/`. From the repository root,
+prefix CLI paths with `tools/game_matcher_v2/`.
+
+See the [orchestrator](../game_generator/README.md) and
+[workspace overview](../../README.md).
+
 Deterministic matcher pipeline driven by tag-family artifacts derived from `games/published/public/app.json`.
 
 ## CLI entrypoints

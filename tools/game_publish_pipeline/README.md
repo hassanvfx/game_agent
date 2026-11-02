@@ -1,5 +1,41 @@
 # game_publish_pipeline
 
+## Overview and pipeline position
+
+This is the publishing coordinator. It takes completed refactoring outputs through
+public packaging and obfuscation, then refreshes application artifacts and records
+a report. Validation and GCS sync options support deployment operations.
+
+```text
+refactoring output folders / manifest
+                   |
+          prepare raw remix staging
+                   |
+              game_deploy
+                   |
+       games/published/public/<game_id>/remix-<hash>
+                   |
+            game_obfuscator
+                   |
+       games/published/obfuscated/<game_id>/remix-<hash>
+                   |
+       artifact refresh + dashboards + report
+                   |
+            optional validation / GCS sync
+```
+
+`game_generator --publish` calls this tool. Direct `publish_games.py` accepts input
+folders or a manifest; `publish_all_raw.py` instead selects unpublished raw games
+and requests GCS sync automatically. Local build variant names `public` and
+`obfuscated` describe the output trees.
+
+All commands below run from `tools/game_publish_pipeline/`. From the repository
+root, prefix script paths with `tools/game_publish_pipeline/`. Start with `--dry-run`
+when reviewing a publish plan.
+
+See the [packager](../game_deploy/README.md),
+[obfuscator](../game_obfuscator/README.md), and [workspace overview](../../README.md).
+
 Orchestration CLI that stages refactor outputs, deploys public bundles, runs obfuscation, and writes a pipeline report.
 
 ## Main entrypoint

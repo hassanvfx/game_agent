@@ -1,5 +1,33 @@
 # game_deploy
 
+## Overview and pipeline position
+
+This tool packages completed game folders into the public build layout. It is the
+packaging stage used by `game_publish_pipeline`; a successful local deploy produces
+files and metadata for the next stage.
+
+```text
+refactoring output folders / input manifest
+                     |
+             content hash + packaging
+                     |
+     games/published/public/<game_id>/remix-<hash>/
+                     |
+       index.html + assets + screenshots + metadata
+                     |
+      JSON results -> game_publish_pipeline -> obfuscator
+```
+
+Inputs are source folders or a manifest. Outputs include the deployed directory,
+remix identifier, and metadata path. Cloud synchronization is coordinated separately
+by the publish pipeline or upload utilities.
+
+All commands below run from `tools/game_deploy/`. From the repository root, prefix
+script paths with `tools/game_deploy/`.
+
+See the [publish pipeline](../game_publish_pipeline/README.md) and
+[workspace overview](../../README.md).
+
 Deploy-packaging CLI that converts `game_refactoring` output directories into published public remix bundles.
 
 ## CLI entrypoint

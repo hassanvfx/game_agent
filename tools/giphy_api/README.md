@@ -1,5 +1,24 @@
 # giphy_api
 
+## Overview and pipeline position
+
+This optional media utility retrieves GIF results from Giphy for asset exploration.
+It exposes a small Python CLI with human-readable or JSON output.
+
+```text
+query / phrase / tag
+         |
+    giphy CLI -> service / configuration -> Giphy API
+                                              |
+                               GIF results -> text / JSON output
+```
+
+This is a separately invoked integration; it is not a mandatory stage in the
+match/refactor/publish chain. Install this Python package and configure the service
+credentials before using the installed `giphy` command.
+
+See the [workspace overview](../../README.md) and [tool inventory](../README.md).
+
 Thin Python CLI wrapper around Giphy.
 
 ## Installed CLI command

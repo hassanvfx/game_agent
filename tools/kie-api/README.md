@@ -1,5 +1,28 @@
 # kie-api
 
+## Overview and pipeline position
+
+This optional media utility provides CLI access to KIE image, video, language,
+and audio workflows. It constructs requests, stores job information, and supports
+status checks and polling for asynchronous work.
+
+```text
+prompt / media / upload
+          |
+       kie-cli -> payload + client -> KIE backend
+          ^                               |
+          |                            job / result
+          +------ status / wait ----------+
+                         |
+                   JSON / media output
+```
+
+This is a separately invoked integration; the generator does not require it as a
+fixed pipeline stage. Install this Python package and configure its service
+credentials before using the installed `kie-cli` command.
+
+See the [workspace overview](../../README.md) and [tool inventory](../README.md).
+
 Focused Python CLI for KIE API workflows.
 
 ## Installed CLI command
